@@ -1,0 +1,25 @@
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  role      Role     @default(OPERATOR)
+  
+  // Профиль
+  firstName String?
+  lastName  String?
+  phone     String?
+  avatarUrl String?
+  
+  // Мета
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  sessions Session[]
+  auths    AuthCode[]
+}
+
+enum Role {
+  OPERATOR   // текущая роль — менеджер/оператор
+  COURIER    // будущая роль — свой UI и логика
+  ADMIN      // суперадмин, добавить потом
+}

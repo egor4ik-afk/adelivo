@@ -1,26 +1,35 @@
-@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --font: 'Manrope', system-ui, sans-serif;
+  --bg: #f5f4f0;
+  --bg-card: #ffffff;
+  --bg-hover: #f0efe9;
+  --bg-selected: #eef3ff;
+  --border: #e8e6df;
+  --border-focus: #4a7aff;
+  --text: #1a1a18;
+  --text2: #6b6860;
+  --text3: #a8a49c;
+  --accent: #4a7aff;
+  --accent2: #3d66e8;
+  --green: #1a9e5c;
+  --red: #d94040;
+  --amber: #c8780a;
+  --purple: #7c4dff;
+  --slot-1: #1a9e5c;
+  --slot-2: #4a7aff;
+  --slot-3: #7c4dff;
+  --slot-4: #c8780a;
+  --slot-5: #d94040;
+  --slot-6: #e0548a;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
+html, body { height: 100%; font-family: var(--font); font-size: 13px; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+button { font-family: var(--font); cursor: pointer; }
+input, select, textarea { font-family: var(--font); }
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
