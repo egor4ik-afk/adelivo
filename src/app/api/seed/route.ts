@@ -1,40 +1,92 @@
+// src/app/api/seed/route.ts
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { upsertOrder } from "@/lib/crm";
 
-// 5 тестовых заказов с реальными координатами
 const ORDERS = [
-  { id: "test-1", ext: "ORD-101", addr: "г. Москва, ул. Тверская, 7", lat: 55.7583, lng: 37.6108, from: "10:00", to: "12:00", cur: "Иванов А.", items: "Розы красные 15 шт." },
-  { id: "test-2", ext: "ORD-102", addr: "г. Москва, Ленинский проспект, 45", lat: 55.7056, lng: 37.5732, from: "12:00", to: "14:00", cur: "Петров В.", items: "Тюльпаны 21 шт." },
-  { id: "test-3", ext: "ORD-103", addr: "г. Москва, ул. Арбат, 10", lat: 55.7516, lng: 37.5954, from: "14:00", to: "16:00", cur: "Смирнов Д.", items: "Пионы 9 шт." },
-  { id: "test-4", ext: "ORD-104", addr: "г. Москва, проспект Мира, 119", lat: 55.8304, lng: 37.6321, from: "16:00", to: "18:00", cur: "Иванов А.", items: "Сборный букет" },
-  { id: "test-5", ext: "ORD-105", addr: "г. Москва, Ильменский проезд 14к3", lat: 55.8598, lng: 37.5451, from: "20:00", to: "22:00", cur: "Шульга Сергей", items: "Гвоздика розовая 40 шт., Подъезд 2" }
+  {
+    id: 1001,
+    number: "ORD-101",
+    status: "new",
+    customerComment: "Подъезд 2, домофон 374, этаж 5. Позвоните за 15 минут.",
+    delivery: {
+      time: "с 10:00 до 12:00",
+      cost: 1500,
+      address: { text: "г. Москва, ул. Тверская, 7" },
+      service: { name: "Иванов А." },
+    },
+    items: [{ productName: "Розы красные", quantity: 15 }],
+  },
+  {
+    id: 1002,
+    number: "ORD-102",
+    status: "new",
+    customerComment: "Оставить у двери, код домофона 1234#",
+    delivery: {
+      time: "с 12:00 до 14:00",
+      cost: 2000,
+      address: { text: "г. Москва, Ленинский проспект, 45" },
+      service: { name: "Петров В." },
+    },
+    items: [{ productName: "Тюльпаны", quantity: 21 }],
+  },
+  {
+    id: 1003,
+    number: "ORD-103",
+    status: "new",
+    customerComment: "",
+    delivery: {
+      time: "с 14:00 до 16:00",
+      // Кривой адрес — геокодер не найдёт, пометит как невалидный
+      address: { text: "Москва, улица Несуществующая, корпус 999, офис 0" },
+      service: { name: "Смирнов Д." },
+    },
+    items: [{ productName: "Пионы", quantity: 9 }],
+  },
+  {
+    id: 1004,
+    number: "ORD-104",
+    status: "new",
+    customerComment: "Это подарок, пожалуйста не звоните в дверь — сюрприз!",
+    delivery: {
+      time: "с 16:00 до 18:00",
+      cost: 1600,
+      address: { text: "г. Москва, проспект Мира, 119" },
+      service: { name: "Иванов А." },
+    },
+    items: [{ productName: "Сборный букет", quantity: 1 }],
+  },
+  {
+    id: 1005,
+    number: "ORD-105",
+    status: "new",
+    customerComment: "Подъезд 2 (Репин 2). Домофон: 30665. Этаж 37.",
+    delivery: {
+      time: "с 20:00 до 22:00",
+      cost: 2800,
+      address: { text: "г. Москва, Ильменский проезд, д. 14к3, кв. 665" },
+      service: { name: "Шульга Сергей" },
+    },
+    items: [{ productName: "Гвоздика розовая", quantity: 40 }],
+  },
 ];
 
 export async function GET() {
   try {
+    // Сначала чистим старые тестовые заказы чтобы пересоздать и получить уведомления
+    const { prisma } = await import("@/lib/prisma");
+    await prisma.order.deleteMany({
+      where: { crmId: { in: ORDERS.map(o => String(o.id)) } },
+    });
+
     for (const o of ORDERS) {
-      await prisma.order.upsert({
-        where: { crmId: o.id },
-        update: {},
-        create: {
-          crmId: o.id,
-          externalId: o.ext,
-          status: "NEW",
-          address: o.addr,
-          courier: o.cur,
-          price: Math.floor(Math.random() * 2000) + 1500,
-          slotFrom: o.from,
-          slotTo: o.to,
-          slotRaw: `с ${o.from} до ${o.to}`,
-          items: o.items,
-          lat: o.lat,
-          lng: o.lng,
-          crmCreatedAt: new Date(),
-        },
-      });
+      await upsertOrder(o as any);
     }
-    return NextResponse.json({ success: true, message: "✅ 5 точек успешно добавлены! Откройте дашборд." });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+
+    return NextResponse.json({
+      ok: true,
+      message: `✅ ${ORDERS.length} заказов добавлено. Уведомления отправлены. ORD-103 — кривой адрес.`,
+    });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
