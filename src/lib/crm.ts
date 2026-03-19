@@ -133,11 +133,17 @@ export async function geocodeAddress(address: string) {
 }
 
 // ── Geocode new orders + notify invalid ───────────────────
+// ЗАМЕНИТЕ geocodeNewOrders в src/lib/crm.ts
+// Остальной код crm.ts не трогайте
+
 export async function geocodeNewOrders() {
   const orders = await prisma.order.findMany({
     where: { geocoded: false, address: { not: null } },
     take: 20,
   });
+
+  if (orders.length === 0) return;
+  console.log(`[Geocode] Processing ${orders.length} orders`);
 
   const invalidOrders: Array<{
     externalId: string | null;
@@ -148,65 +154,83 @@ export async function geocodeNewOrders() {
   for (const order of orders) {
     if (!order.address) continue;
 
-    const geo = await geocodeAddress(order.address);
+    try {
+      const geo = await geocodeAddress(order.address);
 
-    if (!geo) {
-      await prisma.order.update({
-        where: { id: order.id },
-        data: {
-          geocoded: true,
-          isInvalid: true,
-          invalidReason: "Адрес не найден геокодером",
-          status: OrderStatus.INVALID_ADDRESS,
-        },
-      });
-      invalidOrders.push({
-        externalId: order.externalId,
-        address: order.address,
-        reason: "Адрес не найден",
-      });
-      continue;
-    }
+      if (!geo) {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            geocoded: true,
+            isInvalid: true,
+            invalidReason: "Адрес не найден геокодером",
+            status: OrderStatus.INVALID_ADDRESS,
+          },
+        });
+        invalidOrders.push({
+          externalId: order.externalId,
+          address: order.address,
+          reason: "Адрес не найден",
+        });
+        console.log(`[Geocode] Not found: ${order.address}`);
+        continue;
+      }
 
-    if (!geo.isExact) {
+      if (!geo.isExact) {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            lat: geo.lat,
+            lng: geo.lng,
+            geocoded: true,
+            isInvalid: true,
+            invalidReason: `Неточный геокод: ${geo.precision}`,
+            status: OrderStatus.INVALID_ADDRESS,
+          },
+        });
+        invalidOrders.push({
+          externalId: order.externalId,
+          address: order.address,
+          reason: `Неточный геокод: ${geo.precision}`,
+        });
+        console.log(`[Geocode] Imprecise (${geo.precision}): ${order.address}`);
+        continue;
+      }
+
       await prisma.order.update({
         where: { id: order.id },
         data: {
           lat: geo.lat,
           lng: geo.lng,
           geocoded: true,
-          isInvalid: true,
-          invalidReason: `Неточный геокод: ${geo.precision}`,
-          status: OrderStatus.INVALID_ADDRESS,
+          isInvalid: false,
+          status:
+            order.status === OrderStatus.NEW
+              ? OrderStatus.GEOCODED
+              : order.status,
         },
       });
-      invalidOrders.push({
-        externalId: order.externalId,
-        address: order.address,
-        reason: `Неточный геокод: ${geo.precision}`,
-      });
-      continue;
-    }
+      console.log(`[Geocode] OK: ${order.address} → ${geo.lat},${geo.lng}`);
 
-    await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        lat: geo.lat,
-        lng: geo.lng,
-        geocoded: true,
-        isInvalid: false,
-        status:
-          order.status === OrderStatus.NEW ? OrderStatus.GEOCODED : order.status,
-      },
-    });
+    } catch (err) {
+      // Один сломанный адрес НЕ останавливает обработку остальных
+      console.error(`[Geocode] Error for order ${order.id}:`, err);
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          geocoded: true,
+          isInvalid: true,
+          invalidReason: "Ошибка геокодирования",
+          status: OrderStatus.INVALID_ADDRESS,
+        },
+      }).catch(() => {});
+    }
   }
 
-  // Уведомление о проблемных адресах — одним письмом
   if (invalidOrders.length > 0) {
     notify({ type: "address.invalid", orders: invalidOrders }).catch(console.error);
   }
 }
-
 // ── Fallback polling ──────────────────────────────────────
 export async function pollCrmOrders() {
   if (!CRM_URL || !CRM_KEY) {
