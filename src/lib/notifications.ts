@@ -3,11 +3,15 @@ import webpush from "web-push";
 import { prisma } from "./prisma";
 import { sendNewOrderAlert, sendOrderUpdateAlert, sendInvalidAddressAlert } from "./mailer";
 
-webpush.setVapidDetails(
-  process.env.VAPID_MAILTO ?? "mailto:admin@example.com",
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "",
-  process.env.VAPID_PRIVATE_KEY ?? ""
-);
+// стало — вызывается только в runtime
+function initWebPush() {
+  const mailto = process.env.VAPID_MAILTO ?? "mailto:admin@example.com";
+  const pubKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
+  const privKey = process.env.VAPID_PRIVATE_KEY ?? "";
+  if (!pubKey || !privKey) return false;
+  webpush.setVapidDetails(mailto, pubKey, privKey);
+  return true;
+}
 
 export type NotificationEvent =
   | { type: "order.new"; order: OrderPayload }
@@ -32,6 +36,11 @@ interface InvalidOrderPayload {
 }
 
 async function pushToAllOperators(title: string, body: string, data?: object) {
+  if (!initWebPush()) {
+    console.warn("[Push] VAPID keys not set, skipping push");
+    return;
+  }
+
   const subs = await prisma.pushSubscription.findMany({
     include: { user: { select: { role: true } } },
   });
