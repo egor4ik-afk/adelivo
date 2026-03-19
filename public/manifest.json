@@ -1,0 +1,10 @@
+{
+    "name": "FlowerOps",
+    "short_name": "FlowerOps",
+    "description": "Платформа управления доставкой цветов",
+    "start_url": "/dashboard",
+    "display": "standalone",
+    "background_color": "#f5f4f0",
+    "theme_color": "#4a7aff",
+    "icons": []
+  }
