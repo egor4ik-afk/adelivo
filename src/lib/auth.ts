@@ -132,6 +132,7 @@ export async function verifyAuthCode(email: string, code: string) {
     where: { id: authCode.id },
     data: { used: true },
   });
+  await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
   return user;
 }
