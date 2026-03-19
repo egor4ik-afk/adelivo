@@ -43,4 +43,4 @@ export async function DELETE(req: NextRequest) {
   await prisma.pushSubscription.deleteMany({ where: { endpoint, userId: user.id } });
 
   return NextResponse.json({ ok: true });
-}
+}QA
