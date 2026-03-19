@@ -14,6 +14,7 @@ interface Order {
   price: number | null; courier: string | null; comment: string | null;
   opComment: string | null; items: string | null;
   slotFrom: string | null; slotTo: string | null; slotRaw: string | null;
+  deliveryType: string | null;
   isInvalid: boolean; invalidReason: string | null;
   crmCreatedAt: string | null; updatedAt: string;
 }
@@ -70,6 +71,7 @@ export function DashboardClient({ user }: { user: User }) {
   const [savingComment, setSavingComment] = useState(false);
   const [commentSaved, setCommentSaved] = useState(false);
   const [opComment, setOpComment] = useState("");
+  const [dismissedInvalid, setDismissedInvalid] = useState(false);
 
   const selected = orders.find(o => o.id === selectedId) ?? null;
   const invalid = orders.filter(o => o.isInvalid);
@@ -77,8 +79,6 @@ export function DashboardClient({ user }: { user: User }) {
     const s = SLOTS.find(x => x.label === slot);
     return s ? o.slotFrom === s.from && o.slotTo === s.to : true;
   });
-
-  // Таблица: сортировка по updatedAt desc
   const tableOrders = [...orders].sort(
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   );
@@ -91,7 +91,10 @@ export function DashboardClient({ user }: { user: User }) {
         if (s) params.set("slot", `${s.from}-${s.to}`);
       }
       const res = await fetch(`/api/orders?${params}`);
-      if (res.ok) { setOrders(await res.json()); setLastSync(new Date().toLocaleTimeString("ru")); }
+      if (res.ok) {
+        setOrders(await res.json());
+        setLastSync(new Date().toLocaleTimeString("ru"));
+      }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, [slot]);
@@ -102,7 +105,9 @@ export function DashboardClient({ user }: { user: User }) {
     return () => clearInterval(t);
   }, [fetchOrders]);
 
-  // Sync comment field when selection changes
+  // Сбрасываем dismiss баннера при новых данных
+  useEffect(() => { setDismissedInvalid(false); }, [orders]);
+
   useEffect(() => {
     setOpComment(selected?.opComment ?? "");
     setCommentSaved(false);
@@ -119,7 +124,6 @@ export function DashboardClient({ user }: { user: User }) {
     return () => navigator.serviceWorker?.removeEventListener("message", handler);
   }, [fetchOrders]);
 
-  // Init map
   useEffect(() => {
     let mounted = true;
     loadYMaps().then(() => {
@@ -133,7 +137,6 @@ export function DashboardClient({ user }: { user: User }) {
     return () => { mounted = false; };
   }, []);
 
-  // Update pins
   useEffect(() => {
     const clusterer = clustererRef.current;
     if (!clusterer || typeof window === "undefined" || !window.ymaps) return;
@@ -188,6 +191,7 @@ export function DashboardClient({ user }: { user: User }) {
 
   return (
     <div style={s.app}>
+
       {/* ── Topbar ── */}
       <div style={s.topbar}>
         <div style={s.logo}><span style={s.logoDot} />FlowerOps</div>
@@ -207,13 +211,32 @@ export function DashboardClient({ user }: { user: User }) {
         <button style={s.userBtn} onClick={() => { setProfileOpen(!profileOpen); setAlertsOpen(false); }}>{initials}</button>
       </div>
 
-      {/* ── Body: left panel + map ── */}
+      {/* ── Invalid address banner ── */}
+      {invalid.length > 0 && !dismissedInvalid && (
+        <div style={s.invalidBanner}>
+          <span style={{ fontSize: 14, flexShrink: 0 }}>⚠</span>
+          <span style={{ fontSize: 12 }}>
+            <b>{invalid.length} заказ{invalid.length === 1 ? "" : invalid.length < 5 ? "а" : "ов"}</b> с проблемными адресами —{" "}
+            {invalid.map((o, i) => (
+              <span key={o.id}>
+                <span style={s.invalidBannerLink} onClick={() => setSelectedId(o.id)}>
+                  {o.externalId ?? o.crmId}
+                </span>
+                {i < invalid.length - 1 ? ", " : ""}
+              </span>
+            ))}
+          </span>
+          <button style={s.invalidBannerClose} onClick={() => setDismissedInvalid(true)}>✕</button>
+        </div>
+      )}
+
+      {/* ── Body: left + map ── */}
       <div style={s.body}>
 
         {/* ── Left panel ── */}
         <div style={s.leftPanel}>
 
-          {/* Top half: order cards */}
+          {/* Top 50%: cards */}
           <div style={s.cardsSection}>
             <div style={s.sectionHeader}>
               <span style={s.sectionTitle}>Заказы</span>
@@ -234,20 +257,16 @@ export function DashboardClient({ user }: { user: User }) {
             </div>
           </div>
 
-          {/* Divider */}
-          <div style={s.panelDivider} />
-
-          {/* Bottom half: selected order detail */}
+          {/* Bottom 50%: detail */}
           <div style={s.detailSection}>
             {!selected ? (
               <div style={s.detailEmpty}>
-                <div style={{ fontSize: 13, color: "#a8a49c", textAlign: "center" as const }}>
-                  Выберите заказ на карте или в списке
+                <div style={{ fontSize: 12, color: "#a8a49c", textAlign: "center" as const }}>
+                  Выберите заказ<br />на карте или в списке
                 </div>
               </div>
             ) : (
               <div style={s.detailScroll}>
-                {/* Header */}
                 <div style={s.detailHeader}>
                   <span style={{ ...s.statusDotLg, background: slotColor(selected) }} />
                   <div style={{ flex: 1 }}>
@@ -258,10 +277,9 @@ export function DashboardClient({ user }: { user: User }) {
                 </div>
 
                 {selected.isInvalid && (
-                  <div style={s.invalidBanner}>⚠ {selected.invalidReason ?? "Проблемный адрес"}</div>
+                  <div style={s.detailInvalidBanner}>⚠ {selected.invalidReason ?? "Проблемный адрес"}</div>
                 )}
 
-                {/* Fields grid */}
                 <div style={s.fieldsGrid}>
                   <DetailField label="Слот" value={selected.slotRaw ?? `${selected.slotFrom}–${selected.slotTo}`} />
                   <DetailField label="Статус" value={STATUS_LABELS[selected.status] ?? selected.status} />
@@ -275,7 +293,6 @@ export function DashboardClient({ user }: { user: User }) {
                     <div style={s.detailBlockValue}>{selected.items}</div>
                   </div>
                 )}
-
                 {selected.comment && (
                   <div style={s.detailBlock}>
                     <div style={s.detailBlockLabel}>Комментарий клиента</div>
@@ -314,13 +331,26 @@ export function DashboardClient({ user }: { user: User }) {
         <div style={s.tableHeader}>
           <span style={s.sectionTitle}>Все заказы</span>
           <span style={s.countBadge}>{tableOrders.length}</span>
-          <span style={{ fontSize: 11, color: "#a8a49c", marginLeft: 8 }}>сортировка по изменению</span>
+          <span style={{ fontSize: 11, color: "#a8a49c", marginLeft: 6 }}>по дате изменения</span>
         </div>
+        {/* Обёртка с ОБОИМИ скроллами */}
         <div style={s.tableWrap}>
           <table style={s.table}>
             <thead>
               <tr>
-                {["ID", "Адрес", "Слот", "Курьер", "Статус", "Состав", "Стоимость", "Комментарий", "Дата"].map(h => (
+                {[
+                  "Внешний ID",
+                  "Время доставки",
+                  "Адрес доставки",
+                  "Курьер",
+                  "Стоимость",
+                  "Тип доставки",
+                  "Статус",
+                  "Комментарий клиента",
+                  "Комментарий оператора",
+                  "Состав",
+                  "Дата и время",
+                ].map(h => (
                   <th key={h} style={s.th}>{h}</th>
                 ))}
               </tr>
@@ -339,25 +369,40 @@ export function DashboardClient({ user }: { user: User }) {
                     }}
                     onClick={() => setSelectedId(p => p === o.id ? null : o.id)}
                   >
-                    <td style={{ ...s.td, fontFamily: "monospace", fontSize: 10, color: "#a8a49c", whiteSpace: "nowrap" }}>
+                    <td style={{ ...s.td, whiteSpace: "nowrap" as const }}>
                       <span style={{ ...s.statusDot, background: color }} />
-                      {o.externalId ?? o.crmId}
+                      <span style={{ fontFamily: "monospace", fontSize: 10, color: "#a8a49c" }}>
+                        {o.externalId ?? o.crmId}
+                      </span>
                     </td>
-                    <td style={{ ...s.td, maxWidth: 200 }}>{o.address ?? "—"}</td>
-                    <td style={{ ...s.td, whiteSpace: "nowrap", color }}>{o.slotRaw ?? `${o.slotFrom}–${o.slotTo}`}</td>
-                    <td style={{ ...s.td, whiteSpace: "nowrap" }}>{o.courier ?? <span style={{ color: "#d94040" }}>—</span>}</td>
-                    <td style={{ ...s.td, whiteSpace: "nowrap" }}>
+                    <td style={{ ...s.td, whiteSpace: "nowrap" as const, color }}>
+                      {o.slotRaw ?? (o.slotFrom ? `${o.slotFrom}–${o.slotTo}` : "—")}
+                    </td>
+                    <td style={{ ...s.td, minWidth: 180, maxWidth: 240 }}>{o.address ?? "—"}</td>
+                    <td style={{ ...s.td, whiteSpace: "nowrap" as const }}>
+                      {o.courier ?? <span style={{ color: "#d94040" }}>—</span>}
+                    </td>
+                    <td style={{ ...s.td, whiteSpace: "nowrap" as const }}>
+                      {o.price ? `${o.price} ₽` : "—"}
+                    </td>
+                    <td style={{ ...s.td, whiteSpace: "nowrap" as const, color: "#6b6860" }}>
+                      {o.deliveryType ?? "—"}
+                    </td>
+                    <td style={{ ...s.td, whiteSpace: "nowrap" as const }}>
                       <span style={{ padding: "2px 7px", borderRadius: 10, fontSize: 10, fontWeight: 500, background: `${color}18`, color }}>
                         {STATUS_LABELS[o.status] ?? o.status}
                       </span>
                     </td>
-                    <td style={{ ...s.td, maxWidth: 220, color: "#6b6860" }}>{o.items ?? "—"}</td>
-                    <td style={{ ...s.td, whiteSpace: "nowrap" }}>{o.price ? `${o.price} ₽` : "—"}</td>
-                    <td style={{ ...s.td, maxWidth: 180, color: "#6b6860" }}>
-                      {o.comment ?? ""}
-                      {o.opComment ? <span style={{ color: "#4a7aff" }}> [{o.opComment}]</span> : ""}
+                    <td style={{ ...s.td, minWidth: 160, maxWidth: 220, color: "#6b6860" }}>
+                      {o.comment ?? "—"}
                     </td>
-                    <td style={{ ...s.td, whiteSpace: "nowrap", color: "#a8a49c", fontSize: 10 }}>
+                    <td style={{ ...s.td, minWidth: 140, maxWidth: 200, color: "#4a7aff" }}>
+                      {o.opComment ?? "—"}
+                    </td>
+                    <td style={{ ...s.td, minWidth: 160, maxWidth: 240, color: "#6b6860" }}>
+                      {o.items ?? "—"}
+                    </td>
+                    <td style={{ ...s.td, whiteSpace: "nowrap" as const, color: "#a8a49c", fontSize: 10 }}>
                       {o.crmCreatedAt ? new Date(o.crmCreatedAt).toLocaleString("ru") : "—"}
                     </td>
                   </tr>
@@ -399,7 +444,10 @@ export function DashboardClient({ user }: { user: User }) {
 
 function SlotBtn({ label, active, color, onClick }: { label: string; active: boolean; color: string; onClick: () => void }) {
   return (
-    <button style={{ ...s.slotBtn, ...(active ? { background: color, borderColor: color, color: "#fff" } : {}) }} onClick={onClick}>
+    <button
+      style={{ ...s.slotBtn, ...(active ? { background: color, borderColor: color, color: "#fff" } : {}) }}
+      onClick={onClick}
+    >
       {label}
     </button>
   );
@@ -408,12 +456,17 @@ function SlotBtn({ label, active, color, onClick }: { label: string; active: boo
 function OrderCard({ order, selected, onSelect }: { order: Order; selected: boolean; onSelect: () => void }) {
   const color = slotColor(order);
   return (
-    <div style={{ ...s.card, ...(selected ? s.cardSelected : {}), ...(order.isInvalid ? s.cardInvalid : {}) }} onClick={onSelect}>
+    <div
+      style={{ ...s.card, ...(selected ? s.cardSelected : {}), ...(order.isInvalid ? s.cardInvalid : {}) }}
+      onClick={onSelect}
+    >
       <div style={s.cardRow1}>
         <span style={{ ...s.statusDot, background: color }} />
         <span style={s.extId}>{order.externalId ?? order.crmId}</span>
         {order.isInvalid && <span style={s.invalidTag}>⚠</span>}
-        <span style={{ ...s.statusTag, background: `${color}18`, color }}>{STATUS_LABELS[order.status] ?? order.status}</span>
+        <span style={{ ...s.statusTag, background: `${color}18`, color }}>
+          {STATUS_LABELS[order.status] ?? order.status}
+        </span>
       </div>
       <div style={s.cardAddr}>{order.address ?? "—"}</div>
       <div style={s.cardMeta}>
@@ -436,44 +489,89 @@ function DetailField({ label, value, highlight }: { label: string; value: string
 
 // ── Styles ────────────────────────────────────────────────
 const s: Record<string, React.CSSProperties> = {
-  app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", overflow: "hidden" },
+  app: {
+    display: "flex", flexDirection: "column", height: "100vh",
+    fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", overflow: "hidden",
+  },
 
   // Topbar
-  topbar: { display: "flex", alignItems: "center", gap: 8, padding: "0 16px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 10, position: "relative" },
+  topbar: {
+    display: "flex", alignItems: "center", gap: 8, padding: "0 16px",
+    height: 52, background: "#fff", borderBottom: "1px solid #e8e6df",
+    flexShrink: 0, zIndex: 10, position: "relative",
+  },
   logo: { fontSize: 15, fontWeight: 600, color: "#1a1a18", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap" },
   logoDot: { display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "#4a7aff" },
   slotBar: { display: "flex", gap: 4, marginLeft: 12 },
-  slotBtn: { padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 500, border: "1px solid #e8e6df", background: "transparent", color: "#6b6860", cursor: "pointer", whiteSpace: "nowrap" },
+  slotBtn: {
+    padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 500,
+    border: "1px solid #e8e6df", background: "transparent", color: "#6b6860",
+    cursor: "pointer", whiteSpace: "nowrap",
+  },
   syncLabel: { fontSize: 11, color: "#a8a49c", whiteSpace: "nowrap" },
-  alertBadge: { display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 500, background: "rgba(217,64,64,0.08)", border: "1px solid rgba(217,64,64,0.2)", color: "#d94040", cursor: "pointer", whiteSpace: "nowrap" },
-  userBtn: { width: 32, height: 32, borderRadius: "50%", background: "#4a7aff", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, color: "#fff", flexShrink: 0 },
+  alertBadge: {
+    display: "flex", alignItems: "center", gap: 5, padding: "4px 10px",
+    borderRadius: 20, fontSize: 11, fontWeight: 500,
+    background: "rgba(217,64,64,0.08)", border: "1px solid rgba(217,64,64,0.2)",
+    color: "#d94040", cursor: "pointer", whiteSpace: "nowrap",
+  },
+  userBtn: {
+    width: 32, height: 32, borderRadius: "50%", background: "#4a7aff",
+    border: "none", cursor: "pointer", display: "flex", alignItems: "center",
+    justifyContent: "center", fontSize: 11, fontWeight: 600, color: "#fff", flexShrink: 0,
+  },
 
-  // Body (map row)
+  // Invalid banner
+  invalidBanner: {
+    display: "flex", alignItems: "center", gap: 8, padding: "7px 16px",
+    background: "rgba(217,64,64,0.07)", borderBottom: "1px solid rgba(217,64,64,0.15)",
+    color: "#d94040", flexShrink: 0,
+  },
+  invalidBannerLink: {
+    fontFamily: "monospace", fontWeight: 600, cursor: "pointer",
+    textDecoration: "underline",
+  },
+  invalidBannerClose: {
+    marginLeft: "auto", background: "none", border: "none",
+    color: "#d94040", cursor: "pointer", fontSize: 14, flexShrink: 0, padding: 2,
+  },
+
+  // Body
   body: { display: "flex", flex: 1, overflow: "hidden", minHeight: 0 },
 
-  // Left panel — fixed width, split in half vertically
-  leftPanel: { width: 300, minWidth: 260, background: "#fff", borderRight: "1px solid #e8e6df", display: "flex", flexDirection: "column", flexShrink: 0, overflow: "hidden" },
+  // Left panel
+  leftPanel: {
+    width: 300, minWidth: 260, background: "#fff", borderRight: "1px solid #e8e6df",
+    display: "flex", flexDirection: "column", flexShrink: 0, overflow: "hidden",
+  },
 
-  // Cards top section (~50%)
-  cardsSection: { flex: "0 0 50%", display: "flex", flexDirection: "column", overflow: "hidden", borderBottom: "1px solid #e8e6df" },
-  sectionHeader: { padding: "10px 14px 8px", display: "flex", alignItems: "center", gap: 6, flexShrink: 0, borderBottom: "1px solid #f0efe9" },
+  // Cards section (top 50%)
+  cardsSection: {
+    flex: "0 0 50%", display: "flex", flexDirection: "column",
+    overflow: "hidden", borderBottom: "1px solid #e8e6df",
+  },
+  sectionHeader: {
+    padding: "10px 14px 8px", display: "flex", alignItems: "center",
+    gap: 6, flexShrink: 0, borderBottom: "1px solid #f0efe9",
+  },
   sectionTitle: { fontSize: 11, fontWeight: 600, color: "#a8a49c", textTransform: "uppercase", letterSpacing: "0.5px" },
   countBadge: { padding: "2px 7px", borderRadius: 10, background: "#f5f4f0", fontSize: 11, color: "#6b6860", fontWeight: 500 },
   cardsList: { flex: 1, overflowY: "auto", padding: 6 },
   empty: { padding: 24, textAlign: "center", color: "#a8a49c", fontSize: 12 },
 
-  panelDivider: { height: 0, flexShrink: 0 },
-
-  // Detail bottom section (~50%)
-  detailSection: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" },
+  // Detail section (bottom 50%)
+  detailSection: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", borderTop: "1px solid #e8e6df" },
   detailEmpty: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 },
   detailScroll: { flex: 1, overflowY: "auto", padding: "12px 14px" },
   detailHeader: { display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 10 },
-  statusDotLg: { width: 8, height: 8, borderRadius: "50%", flexShrink: 0, marginTop: 5, display: "inline-block" },
+  statusDotLg: { width: 8, height: 8, borderRadius: "50%", flexShrink: 0, marginTop: 4, display: "inline-block" },
   detailExtId: { fontSize: 10, fontWeight: 600, color: "#a8a49c", fontFamily: "monospace", marginBottom: 2 },
   detailAddr: { fontSize: 13, fontWeight: 600, color: "#1a1a18", lineHeight: "1.3" },
   detailClose: { background: "none", border: "none", color: "#a8a49c", fontSize: 14, cursor: "pointer", padding: 2, flexShrink: 0 },
-  invalidBanner: { fontSize: 11, padding: "5px 9px", borderRadius: 6, background: "rgba(217,64,64,0.08)", color: "#d94040", marginBottom: 10 },
+  detailInvalidBanner: {
+    fontSize: 11, padding: "5px 9px", borderRadius: 6,
+    background: "rgba(217,64,64,0.08)", color: "#d94040", marginBottom: 10,
+  },
   fieldsGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 },
   detailField: { background: "#f5f4f0", borderRadius: 7, padding: "7px 9px" },
   detailFieldLabel: { fontSize: 10, color: "#a8a49c", textTransform: "uppercase" as const, letterSpacing: ".3px", marginBottom: 2 },
@@ -481,35 +579,80 @@ const s: Record<string, React.CSSProperties> = {
   detailBlock: { marginBottom: 10 },
   detailBlockLabel: { fontSize: 10, color: "#a8a49c", textTransform: "uppercase" as const, letterSpacing: ".3px", marginBottom: 4 },
   detailBlockValue: { fontSize: 12, color: "#1a1a18", lineHeight: "1.4" },
-  commentArea: { width: "100%", padding: "7px 9px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 12, fontFamily: "Manrope, system-ui, sans-serif", resize: "none", outline: "none", color: "#1a1a18", background: "#fafaf8", display: "block" },
-  saveCommentBtn: { marginTop: 5, padding: "5px 12px", borderRadius: 6, border: "none", color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer" },
+  commentArea: {
+    width: "100%", padding: "7px 9px", borderRadius: 6,
+    border: "1px solid #e8e6df", fontSize: 12,
+    fontFamily: "Manrope, system-ui, sans-serif", resize: "none",
+    outline: "none", color: "#1a1a18", background: "#fafaf8", display: "block",
+  },
+  saveCommentBtn: {
+    marginTop: 5, padding: "5px 12px", borderRadius: 6,
+    border: "none", color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer",
+  },
 
   // Map
   map: { flex: 1 },
 
-  // Bottom table
-  tableSection: { flexShrink: 0, background: "#fff", borderTop: "2px solid #e8e6df", height: 220, display: "flex", flexDirection: "column", overflow: "hidden" },
-  tableHeader: { display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderBottom: "1px solid #f0efe9", flexShrink: 0 },
-  tableWrap: { flex: 1, overflowX: "auto", overflowY: "auto" },
-  table: { width: "100%", borderCollapse: "collapse", fontSize: 12 },
-  th: { padding: "7px 10px", textAlign: "left" as const, fontSize: 10, fontWeight: 600, color: "#a8a49c", textTransform: "uppercase" as const, letterSpacing: ".4px", background: "#fafaf8", borderBottom: "1px solid #e8e6df", whiteSpace: "nowrap", position: "sticky" as const, top: 0 },
-  td: { padding: "7px 10px", borderBottom: "0.5px solid #f0efe9", verticalAlign: "top", fontSize: 12, color: "#1a1a18", overflow: "hidden", textOverflow: "ellipsis" },
+  // Table
+  tableSection: {
+    flexShrink: 0, background: "#fff", borderTop: "2px solid #e8e6df",
+    height: 220, display: "flex", flexDirection: "column", overflow: "hidden",
+  },
+  tableHeader: {
+    display: "flex", alignItems: "center", gap: 6,
+    padding: "7px 16px", borderBottom: "1px solid #f0efe9", flexShrink: 0,
+  },
+  // Ключевое: overflow: auto по обеим осям
+  tableWrap: {
+    flex: 1,
+    overflowX: "auto",
+    overflowY: "auto",
+  },
+  table: {
+    // min-content чтобы таблица не сжималась и появлялся горизонтальный скролл
+    width: "max-content",
+    minWidth: "100%",
+    borderCollapse: "collapse",
+    fontSize: 12,
+  },
+  th: {
+    padding: "7px 12px", textAlign: "left" as const, fontSize: 10, fontWeight: 600,
+    color: "#a8a49c", textTransform: "uppercase" as const, letterSpacing: ".4px",
+    background: "#fafaf8", borderBottom: "1px solid #e8e6df",
+    whiteSpace: "nowrap", position: "sticky" as const, top: 0, zIndex: 1,
+  },
+  td: {
+    padding: "7px 12px", borderBottom: "0.5px solid #f0efe9",
+    verticalAlign: "top", fontSize: 12, color: "#1a1a18",
+  },
 
-  // Misc
+  // Cards
   statusDot: { width: 6, height: 6, borderRadius: "50%", flexShrink: 0, display: "inline-block", marginRight: 4, verticalAlign: "middle" },
-  card: { padding: "9px 11px", borderRadius: 8, marginBottom: 4, background: "#fafaf8", border: "1px solid #e8e6df", cursor: "pointer", transition: "all .12s" },
+  card: {
+    padding: "9px 11px", borderRadius: 8, marginBottom: 4,
+    background: "#fafaf8", border: "1px solid #e8e6df", cursor: "pointer", transition: "all .12s",
+  },
   cardSelected: { background: "#eef3ff", borderColor: "#4a7aff" },
   cardInvalid: { borderColor: "rgba(217,64,64,0.3)", background: "#fff8f8" },
   cardRow1: { display: "flex", alignItems: "center", gap: 5, marginBottom: 4 },
   extId: { fontSize: 10, fontWeight: 600, color: "#a8a49c", fontFamily: "monospace" },
   invalidTag: { fontSize: 10, color: "#d94040", fontWeight: 700 },
   statusTag: { marginLeft: "auto", fontSize: 10, padding: "1px 6px", borderRadius: 10, fontWeight: 500 },
-  cardAddr: { fontSize: 12, color: "#1a1a18", lineHeight: "1.3", marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  cardAddr: {
+    fontSize: 12, color: "#1a1a18", lineHeight: "1.3", marginBottom: 4,
+    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+  },
   cardMeta: { display: "flex", alignItems: "center", gap: 6 },
   slotTag: { fontSize: 10, fontWeight: 600 },
   courierTag: { fontSize: 10, color: "#a8a49c", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 },
   priceTag: { fontSize: 10, color: "#6b6860", flexShrink: 0 },
-  popup: { position: "fixed", top: 52, right: 8, background: "#fff", border: "1px solid #e8e6df", borderRadius: 12, padding: 16, zIndex: 200, width: 280, boxShadow: "0 4px 24px rgba(0,0,0,0.1)" },
+
+  // Popups
+  popup: {
+    position: "fixed", top: 52, right: 8, background: "#fff",
+    border: "1px solid #e8e6df", borderRadius: 12, padding: 16,
+    zIndex: 200, width: 280, boxShadow: "0 4px 24px rgba(0,0,0,0.1)",
+  },
   overlay: { position: "fixed", inset: 0, zIndex: 199 },
   alertTitle: { fontSize: 11, fontWeight: 700, color: "#d94040", textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 10 },
   alertItem: { padding: "7px 0", borderBottom: "0.5px solid #f5f4f0", cursor: "pointer" },
