@@ -1,35 +1,63 @@
+// src/app/api/orders/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { updateCrmOrderStatus } from "@/lib/crm";
+import { notify } from "@/lib/notifications";
+import { OrderStatus } from "@prisma/client";
+import { z } from "zod";
 
-export async function GET(req: NextRequest) {
+const patchSchema = z.object({
+  status: z.nativeEnum(OrderStatus).optional(),
+  courier: z.string().optional(),
+  opComment: z.string().optional(),
+  isInvalid: z.boolean().optional(),
+  invalidReason: z.string().optional(),
+});
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   const user = await getSession(req);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { searchParams } = new URL(req.url);
-  const slot = searchParams.get("slot");
-  const date = searchParams.get("date");
-  const invalid = searchParams.get("invalid");
+  const { id } = await params;
+  const order = await prisma.order.findUnique({ where: { id } });
+  if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const where: Record<string, unknown> = {};
+  return NextResponse.json(order);
+}
 
-  if (slot && slot !== "all") {
-    const [from, to] = slot.split("-");
-    if (from) where.slotFrom = from;
-    if (to) where.slotTo = to;
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const user = await getSession(req);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await params;
+  const body = await req.json();
+  const data = patchSchema.parse(body);
+
+  const prev = await prisma.order.findUnique({ where: { id } });
+  if (!prev) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const order = await prisma.order.update({ where: { id }, data });
+
+  // Синхронизируем статус обратно в CRM
+  if (data.status && order.crmId) {
+    updateCrmOrderStatus(order.crmId, data.status).catch(console.error);
   }
-  if (date) {
-    const start = new Date(date); start.setHours(0, 0, 0, 0);
-    const end = new Date(date); end.setHours(23, 59, 59, 999);
-    where.crmCreatedAt = { gte: start, lte: end };
+
+  // Уведомление при смене статуса
+  if (data.status && prev.status !== data.status) {
+    notify({
+      type: "order.updated",
+      order,
+      previousStatus: prev.status,
+    }).catch(console.error);
   }
-  if (invalid === "true") where.isInvalid = true;
 
-  const orders = await prisma.order.findMany({
-    where,
-    orderBy: [{ slotFrom: "asc" }, { crmCreatedAt: "desc" }],
-    take: 500,
-  });
-
-  return NextResponse.json(orders);
+  return NextResponse.json(order);
 }
