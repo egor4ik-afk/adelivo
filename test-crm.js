@@ -7,21 +7,22 @@ const axios = require('axios');
     const res = await axios.get("https://kaktusfiori.retailcrm.ru/api/v5/orders", {
       params: { 
         apiKey: process.env.RETAILCRM_API_KEY || 'JQLXCkIYDfGlU1ZeOTJArjo5HnbkoeP7', 
-        limit: 5 // Берем 5 последних заказов
+        limit: 5 
       }
     });
 
     const orders = res.data.orders;
-    console.log("=== ДАННЫЕ ДОСТАВКИ ИЗ CRM ===");
+    console.log("=== ДАННЫЕ О ЗАКАЗАХ ===");
     orders.forEach(o => {
       console.log(`\nЗаказ: ${o.number}`);
-      // Выводим весь объект доставки, чтобы найти нужное поле
+      console.log("Служба доставки:", o.delivery?.service?.name);
       console.dir(o.delivery, { depth: null, colors: true });
-      // Также выводим кастомные поля на всякий случай
       console.log("Custom Fields:", o.customFields);
     });
 
   } catch (err) {
-    console.error(err.message);
+    // ВЫВОДИМ ТОЧНУЮ ОШИБКУ ОТ RETAILCRM
+    console.error("❌ Ошибка от CRM:");
+    console.error(err.response?.data || err.message);
   }
 })();
