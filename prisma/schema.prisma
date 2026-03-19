@@ -99,6 +99,7 @@ model Order {
   slotTo        String?
   slotRaw       String?
   deliveryType  String?
+  deliveryDate  String?     // <--- ДОБАВИТЬ ЭТУ СТРОКУ
   crmStatus     String?
   isInvalid     Boolean     @default(false)
   invalidReason String?

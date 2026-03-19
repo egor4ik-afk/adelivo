@@ -14,7 +14,7 @@ interface Order {
   price: number | null; courier: string | null; comment: string | null;
   opComment: string | null; items: string | null;
   slotFrom: string | null; slotTo: string | null; slotRaw: string | null;
-  deliveryType: string | null;
+  deliveryType: string | null; deliveryDate: string | null;
   isInvalid: boolean; invalidReason: string | null;
   crmCreatedAt: string | null; updatedAt: string;
 }
@@ -76,8 +76,18 @@ export function DashboardClient({ user }: { user: User }) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const clustererRef = useRef<any>(null);
 
+  // Mobile state
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const checkMob = () => setIsMobile(window.innerWidth < 768);
+    checkMob();
+    window.addEventListener("resize", checkMob);
+    return () => window.removeEventListener("resize", checkMob);
+  }, []);
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [slot, setSlot] = useState("all");
+  const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
@@ -92,31 +102,32 @@ export function DashboardClient({ user }: { user: User }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  // Фильтрация заказов по выбранной дате
+  const dateOrders = orders.filter(o => {
+    const oDate = o.deliveryDate || (o.crmCreatedAt ? o.crmCreatedAt.split('T')[0] : null);
+    return oDate === filterDate;
+  });
+
   const selected = orders.find(o => o.id === selectedId) ?? null;
-  const invalid = orders.filter(o => o.isInvalid);
+  const invalid = dateOrders.filter(o => o.isInvalid);
   const couriers = getCouriers(orders);
 
-  const filtered = slot === "all" ? orders : orders.filter(o => {
+  const filtered = slot === "all" ? dateOrders : dateOrders.filter(o => {
     const s = SLOTS.find(x => x.label === slot);
     return s ? o.slotFrom === s.from && o.slotTo === s.to : true;
   });
 
-  const tableOrders = [...orders].sort(
+  const tableOrders = [...dateOrders].sort(
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   );
 
   const fetchOrders = useCallback(async () => {
     try {
-      const params = new URLSearchParams();
-      if (slot !== "all") {
-        const s = SLOTS.find(x => x.label === slot);
-        if (s) params.set("slot", `${s.from}-${s.to}`);
-      }
-      const res = await fetch(`/api/orders?${params}`);
+      const res = await fetch(`/api/orders`);
       if (res.ok) { setOrders(await res.json()); setLastSync(new Date().toLocaleTimeString("ru")); }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }, [slot]);
+  }, []);
 
   useEffect(() => {
     fetchOrders();
@@ -159,17 +170,25 @@ export function DashboardClient({ user }: { user: User }) {
     return () => { mounted = false; };
   }, []);
 
-  // Update pins
+  // Update pins (Имена курьеров и контуры)
   useEffect(() => {
     const clusterer = clustererRef.current;
     if (!clusterer || typeof window === "undefined" || !window.ymaps) return;
     clusterer.removeAll();
     const placemarks = filtered.filter(o => o.lat && o.lng).map(order => {
       const color = slotColor(order);
+      const isSelected = selectedId === order.id;
+
+      // Если есть курьер - делаем вытянутую иконку с текстом. Выбранную - желтой!
+      const preset = order.courier 
+        ? (isSelected ? "islands#yellowStretchyIcon" : "islands#blueStretchyIcon") 
+        : (isSelected ? "islands#yellowDotIcon" : "islands#dotIcon");
+
       const pm = new window.ymaps.Placemark(
         [order.lat!, order.lng!],
         {
           balloonContentHeader: order.externalId ?? order.crmId,
+          iconContent: order.courier ? `<span style="font-size:10px; font-weight:bold; color:#000">${order.courier}</span>` : undefined,
           balloonContentBody: `<div style="font-size:13px;line-height:1.6">
             <b>${order.address ?? "—"}</b><br>
             <span style="color:#888">${order.slotRaw ?? "—"}</span><br>
@@ -179,7 +198,10 @@ export function DashboardClient({ user }: { user: User }) {
           </div>`,
           hintContent: order.address ?? "—",
         },
-        { preset: selectedId === order.id ? "islands#redDotIcon" : "islands#dotIcon", iconColor: color }
+        { 
+          preset, 
+          iconColor: isSelected && !order.courier ? '#facc15' : (order.courier ? (isSelected ? '#facc15' : color) : color)
+        }
       );
       pm.events.add("click", () => setSelectedId(p => p === order.id ? null : order.id));
       return pm;
@@ -188,8 +210,12 @@ export function DashboardClient({ user }: { user: User }) {
   }, [filtered, selectedId]);
 
   useEffect(() => {
+    if (selected?.lat && selected?.lng && isMobile) {
+      // На мобилках плавно скроллим наверх к карте при выборе
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
     if (selected?.lat && selected?.lng) ymapRef.current?.panTo([selected.lat, selected.lng], { flying: true });
-  }, [selected]);
+  }, [selected, isMobile]);
 
   async function saveChanges() {
     if (!selected) return;
@@ -226,29 +252,53 @@ export function DashboardClient({ user }: { user: User }) {
   const initials = ((user.firstName?.[0] ?? "") + (user.lastName?.[0] ?? "")).toUpperCase() || user.email.slice(0, 2).toUpperCase();
 
   return (
-    <div style={s.app}>
+    <div style={isMobile ? sm.app : s.app}>
 
       {/* ── Topbar ── */}
-      <div style={s.topbar}>
+      <div style={isMobile ? sm.topbar : s.topbar}>
         <div style={s.logo}><span style={s.logoDot} />FlowerOps</div>
-        <div style={s.slotBar}>
-          <SlotBtn label="Все" active={slot === "all"} color="#4a7aff" onClick={() => setSlot("all")} />
-          {SLOTS.map(sl => (
-            <SlotBtn key={sl.label} label={sl.label} active={slot === sl.label} color={sl.color} onClick={() => setSlot(sl.label)} />
-          ))}
-        </div>
+        
+        <button onClick={() => router.push('/orders')} style={s.navBtn}>≡ Заказы</button>
+        
+        <input 
+          type="date" 
+          value={filterDate} 
+          onChange={e => setFilterDate(e.target.value)} 
+          style={s.datePicker}
+        />
+
+        {!isMobile && (
+          <div style={s.slotBar}>
+            <SlotBtn label="Все" active={slot === "all"} color="#4a7aff" onClick={() => setSlot("all")} />
+            {SLOTS.map(sl => (
+              <SlotBtn key={sl.label} label={sl.label} active={slot === sl.label} color={sl.color} onClick={() => setSlot(sl.label)} />
+            ))}
+          </div>
+        )}
+        
         <div style={{ flex: 1 }} />
-        {lastSync && <span style={s.syncLabel}>обновлено {lastSync}</span>}
+        {!isMobile && lastSync && <span style={s.syncLabel}>обновлено {lastSync}</span>}
+        
         {invalid.length > 0 && (
           <button style={s.alertBadge} onClick={() => { setAlertsOpen(!alertsOpen); setProfileOpen(false); }}>
-            ⚠ {invalid.length} проблем{invalid.length === 1 ? "а" : "ы"}
+            ⚠ {!isMobile && `${invalid.length} проблем`}
           </button>
         )}
         <button style={s.userBtn} onClick={() => { setProfileOpen(!profileOpen); setAlertsOpen(false); }}>{initials}</button>
       </div>
 
-      {/* ── Invalid banner ── */}
-      {invalid.length > 0 && !dismissedInvalid && (
+      {/* Mobile Slots row */}
+      {isMobile && (
+        <div style={sm.mobileSlotsWrap}>
+           <SlotBtn label="Все" active={slot === "all"} color="#4a7aff" onClick={() => setSlot("all")} />
+            {SLOTS.map(sl => (
+              <SlotBtn key={sl.label} label={sl.label} active={slot === sl.label} color={sl.color} onClick={() => setSlot(sl.label)} />
+            ))}
+        </div>
+      )}
+
+      {/* ── Invalid banner (Desktop only) ── */}
+      {!isMobile && invalid.length > 0 && !dismissedInvalid && (
         <div style={s.invalidBanner}>
           <span style={{ fontSize: 14, flexShrink: 0 }}>⚠</span>
           <span style={{ fontSize: 12 }}>
@@ -267,210 +317,125 @@ export function DashboardClient({ user }: { user: User }) {
       )}
 
       {/* ── Body ── */}
-      <div style={s.body}>
+      <div style={isMobile ? sm.body : s.body}>
 
-        {/* Left panel */}
-        <div style={s.leftPanel}>
-
-          {/* Cards top 50% */}
-          <div style={s.cardsSection}>
-            <div style={s.sectionHeader}>
-              <span style={s.sectionTitle}>Заказы</span>
-              <span style={s.countBadge}>{filtered.length}</span>
-            </div>
-            <div style={s.cardsList}>
-              {loading ? (
-                <div style={s.empty}>Загрузка...</div>
-              ) : filtered.length === 0 ? (
-                <div style={s.empty}>Заказов нет</div>
-              ) : filtered.map(o => (
-                <OrderCard key={o.id} order={o} selected={selectedId === o.id}
-                  onSelect={() => setSelectedId(p => p === o.id ? null : o.id)} />
-              ))}
-            </div>
-          </div>
-
-          {/* Detail bottom 50% */}
-          <div style={s.detailSection}>
-            {!selected ? (
-              <div style={s.detailEmpty}>
-                <div style={{ fontSize: 12, color: "#a8a49c", textAlign: "center" as const }}>
-                  Выберите заказ<br />на карте или в списке
+        {/* --- DESKTOP LAYOUT --- */}
+        {!isMobile && (
+          <>
+            <div style={s.leftPanel}>
+              <div style={s.cardsSection}>
+                <div style={s.sectionHeader}>
+                  <span style={s.sectionTitle}>Заказы</span>
+                  <span style={s.countBadge}>{filtered.length}</span>
+                </div>
+                <div style={s.cardsList}>
+                  {loading ? (
+                    <div style={s.empty}>Загрузка...</div>
+                  ) : filtered.length === 0 ? (
+                    <div style={s.empty}>Заказов нет</div>
+                  ) : filtered.map(o => (
+                    <OrderCard key={o.id} order={o} selected={selectedId === o.id} onSelect={() => setSelectedId(p => p === o.id ? null : o.id)} />
+                  ))}
                 </div>
               </div>
-            ) : (
-              <div style={s.detailScroll}>
 
-                {/* Header */}
-                <div style={s.detailHeader}>
-                  <span style={{ ...s.statusDotLg, background: slotColor(selected) }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={s.detailExtId}>{selected.externalId ?? selected.crmId}</div>
-                    <div style={s.detailAddr}>{selected.address ?? "—"}</div>
-                  </div>
-                  <button style={s.detailClose} onClick={() => setSelectedId(null)}>✕</button>
-                </div>
-
-                {selected.isInvalid && (
-                  <div style={s.detailInvalidBanner}>⚠ {selected.invalidReason ?? "Проблемный адрес"}</div>
+              <div style={s.detailSection}>
+                {!selected ? (
+                  <div style={s.detailEmpty}><div style={{ fontSize: 12, color: "#a8a49c", textAlign: "center" as const }}>Выберите заказ<br />на карте или в списке</div></div>
+                ) : (
+                  <DetailPanelContent />
                 )}
+              </div>
+            </div>
+            <div ref={mapRef} style={s.map} />
+          </>
+        )}
 
-                {/* Slot + price (read-only) */}
-                <div style={s.fieldsGrid}>
-                  <div style={s.detailField}>
-                    <div style={s.detailFieldLabel}>Слот</div>
-                    <div style={{ ...s.detailFieldValue, color: slotColor(selected) }}>
-                      {selected.slotRaw ?? `${selected.slotFrom}–${selected.slotTo}`}
-                    </div>
-                  </div>
-                  <div style={s.detailField}>
-                    <div style={s.detailFieldLabel}>Стоимость</div>
-                    <div style={s.detailFieldValue}>{selected.price ? `${selected.price} ₽` : "—"}</div>
-                  </div>
+        {/* --- MOBILE LAYOUT --- */}
+        {isMobile && (
+          <>
+            <div ref={mapRef} style={sm.map} />
+            <div style={sm.panelsWrap}>
+              <div style={sm.cardsSection}>
+                <div style={s.cardsList}>
+                  {loading ? (
+                    <div style={s.empty}>Загрузка...</div>
+                  ) : filtered.length === 0 ? (
+                    <div style={s.empty}>Заказов нет</div>
+                  ) : filtered.map(o => (
+                    <OrderCard key={o.id} order={o} selected={selectedId === o.id} onSelect={() => setSelectedId(p => p === o.id ? null : o.id)} />
+                  ))}
                 </div>
+              </div>
 
-                {/* Editable: Status */}
-                <div style={s.editField}>
-                  <div style={s.editFieldLabel}>Статус</div>
-                  <select
-                    style={s.select}
-                    value={editStatus}
-                    onChange={e => setEditStatus(e.target.value)}
-                  >
-                    {STATUS_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </div>
+              <div style={sm.detailSection}>
+                {!selected ? (
+                  <div style={s.detailEmpty}><div style={{ fontSize: 12, color: "#a8a49c", textAlign: "center" as const }}>Выберите заказ</div></div>
+                ) : (
+                  <DetailPanelContent />
+                )}
+              </div>
+            </div>
+          </>
+        )}
 
-                {/* Editable: Courier */}
-                <div style={s.editField}>
-                  <div style={s.editFieldLabel}>Курьер</div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <select
-                      style={{ ...s.select, flex: 1 }}
-                      value={editCourier}
-                      onChange={e => setEditCourier(e.target.value)}
+      </div>
+
+      {/* ── Bottom table (Desktop only) ── */}
+      {!isMobile && (
+        <div style={s.tableSection}>
+          <div style={s.tableHeader}>
+            <span style={s.sectionTitle}>Все заказы ({filterDate})</span>
+            <span style={s.countBadge}>{tableOrders.length}</span>
+            <span style={{ fontSize: 11, color: "#a8a49c", marginLeft: 6 }}>по дате изменения</span>
+          </div>
+          <div style={s.tableWrap}>
+            <table style={s.table}>
+              <thead>
+                <tr>
+                  {["Внешний ID", "Время доставки", "Адрес доставки", "Курьер", "Стоимость",
+                    "Тип доставки", "Статус", "Комментарий клиента", "Комментарий оператора",
+                    "Состав", "Дата и время"].map(h => (
+                    <th key={h} style={s.th}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {tableOrders.map((o, i) => {
+                  const color = slotColor(o);
+                  const isSelected = selectedId === o.id;
+                  return (
+                    <tr
+                      key={o.id}
+                      style={{ background: isSelected ? "#eef3ff" : i % 2 === 0 ? "#fff" : "#fafaf8", cursor: "pointer", outline: isSelected ? "1px solid #4a7aff" : "none" }}
+                      onClick={() => setSelectedId(p => p === o.id ? null : o.id)}
                     >
-                      <option value="">— Не назначен —</option>
-                      {couriers.map(c => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
-                    {/* Ввести вручную */}
-                    <input
-                      style={{ ...s.input, width: 90 }}
-                      placeholder="Или вручную"
-                      value={couriers.includes(editCourier) ? "" : editCourier}
-                      onChange={e => setEditCourier(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                {/* Items read-only */}
-                {selected.items && (
-                  <div style={s.editField}>
-                    <div style={s.editFieldLabel}>Состав</div>
-                    <div style={{ fontSize: 12, color: "#1a1a18", lineHeight: "1.4" }}>{selected.items}</div>
-                  </div>
-                )}
-
-                {/* Comment клиента read-only */}
-                {selected.comment && (
-                  <div style={s.editField}>
-                    <div style={s.editFieldLabel}>Комментарий клиента</div>
-                    <div style={{ fontSize: 12, color: "#6b6860", lineHeight: "1.4" }}>{selected.comment}</div>
-                  </div>
-                )}
-
-                {/* Editable: op comment */}
-                <div style={s.editField}>
-                  <div style={s.editFieldLabel}>Комментарий оператора</div>
-                  <textarea
-                    style={s.textarea}
-                    rows={2}
-                    value={opComment}
-                    onChange={e => setOpComment(e.target.value)}
-                    placeholder="Заметка..."
-                  />
-                </div>
-
-                {/* Save button */}
-                <button
-                  style={{
-                    ...s.saveBtn,
-                    background: saved ? "#1a9e5c" : hasChanges ? "#4a7aff" : "#e8e6df",
-                    color: hasChanges || saved ? "#fff" : "#a8a49c",
-                    cursor: hasChanges ? "pointer" : "default",
-                  }}
-                  disabled={!hasChanges || saving}
-                  onClick={saveChanges}
-                >
-                  {saved ? "✓ Сохранено" : saving ? "Сохраняем..." : "Сохранить изменения"}
-                </button>
-
-              </div>
-            )}
+                      <td style={{ ...s.td, whiteSpace: "nowrap" as const }}>
+                        <span style={{ ...s.statusDot, background: color }} />
+                        <span style={{ fontFamily: "monospace", fontSize: 10, color: "#a8a49c" }}>{o.externalId ?? o.crmId}</span>
+                      </td>
+                      <td style={{ ...s.td, whiteSpace: "nowrap" as const, color }}>{o.slotRaw ?? (o.slotFrom ? `${o.slotFrom}–${o.slotTo}` : "—")}</td>
+                      <td style={{ ...s.td, minWidth: 180, maxWidth: 240 }}>{o.address ?? "—"}</td>
+                      <td style={{ ...s.td, whiteSpace: "nowrap" as const }}>{o.courier ?? <span style={{ color: "#d94040" }}>—</span>}</td>
+                      <td style={{ ...s.td, whiteSpace: "nowrap" as const }}>{o.price ? `${o.price} ₽` : "—"}</td>
+                      <td style={{ ...s.td, whiteSpace: "nowrap" as const, color: "#6b6860" }}>{o.deliveryType ?? "—"}</td>
+                      <td style={{ ...s.td, whiteSpace: "nowrap" as const }}>
+                        <span style={{ padding: "2px 7px", borderRadius: 10, fontSize: 10, fontWeight: 500, background: `${color}18`, color }}>{STATUS_LABELS[o.status] ?? o.status}</span>
+                      </td>
+                      <td style={{ ...s.td, minWidth: 160, maxWidth: 220, color: "#6b6860" }}>{o.comment ?? "—"}</td>
+                      <td style={{ ...s.td, minWidth: 140, maxWidth: 200, color: "#4a7aff" }}>{o.opComment ?? "—"}</td>
+                      <td style={{ ...s.td, minWidth: 160, maxWidth: 240, color: "#6b6860" }}>{o.items ?? "—"}</td>
+                      <td style={{ ...s.td, whiteSpace: "nowrap" as const, color: "#a8a49c", fontSize: 10 }}>
+                        {o.crmCreatedAt ? new Date(o.crmCreatedAt).toLocaleString("ru") : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
-
-        {/* Map */}
-        <div ref={mapRef} style={s.map} />
-      </div>
-
-      {/* ── Bottom table ── */}
-      <div style={s.tableSection}>
-        <div style={s.tableHeader}>
-          <span style={s.sectionTitle}>Все заказы</span>
-          <span style={s.countBadge}>{tableOrders.length}</span>
-          <span style={{ fontSize: 11, color: "#a8a49c", marginLeft: 6 }}>по дате изменения</span>
-        </div>
-        <div style={s.tableWrap}>
-          <table style={s.table}>
-            <thead>
-              <tr>
-                {["Внешний ID", "Время доставки", "Адрес доставки", "Курьер", "Стоимость",
-                  "Тип доставки", "Статус", "Комментарий клиента", "Комментарий оператора",
-                  "Состав", "Дата и время"].map(h => (
-                  <th key={h} style={s.th}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {tableOrders.map((o, i) => {
-                const color = slotColor(o);
-                const isSelected = selectedId === o.id;
-                return (
-                  <tr
-                    key={o.id}
-                    style={{ background: isSelected ? "#eef3ff" : i % 2 === 0 ? "#fff" : "#fafaf8", cursor: "pointer", outline: isSelected ? "1px solid #4a7aff" : "none" }}
-                    onClick={() => setSelectedId(p => p === o.id ? null : o.id)}
-                  >
-                    <td style={{ ...s.td, whiteSpace: "nowrap" as const }}>
-                      <span style={{ ...s.statusDot, background: color }} />
-                      <span style={{ fontFamily: "monospace", fontSize: 10, color: "#a8a49c" }}>{o.externalId ?? o.crmId}</span>
-                    </td>
-                    <td style={{ ...s.td, whiteSpace: "nowrap" as const, color }}>{o.slotRaw ?? (o.slotFrom ? `${o.slotFrom}–${o.slotTo}` : "—")}</td>
-                    <td style={{ ...s.td, minWidth: 180, maxWidth: 240 }}>{o.address ?? "—"}</td>
-                    <td style={{ ...s.td, whiteSpace: "nowrap" as const }}>{o.courier ?? <span style={{ color: "#d94040" }}>—</span>}</td>
-                    <td style={{ ...s.td, whiteSpace: "nowrap" as const }}>{o.price ? `${o.price} ₽` : "—"}</td>
-                    <td style={{ ...s.td, whiteSpace: "nowrap" as const, color: "#6b6860" }}>{o.deliveryType ?? "—"}</td>
-                    <td style={{ ...s.td, whiteSpace: "nowrap" as const }}>
-                      <span style={{ padding: "2px 7px", borderRadius: 10, fontSize: 10, fontWeight: 500, background: `${color}18`, color }}>{STATUS_LABELS[o.status] ?? o.status}</span>
-                    </td>
-                    <td style={{ ...s.td, minWidth: 160, maxWidth: 220, color: "#6b6860" }}>{o.comment ?? "—"}</td>
-                    <td style={{ ...s.td, minWidth: 140, maxWidth: 200, color: "#4a7aff" }}>{o.opComment ?? "—"}</td>
-                    <td style={{ ...s.td, minWidth: 160, maxWidth: 240, color: "#6b6860" }}>{o.items ?? "—"}</td>
-                    <td style={{ ...s.td, whiteSpace: "nowrap" as const, color: "#a8a49c", fontSize: 10 }}>
-                      {o.crmCreatedAt ? new Date(o.crmCreatedAt).toLocaleString("ru") : "—"}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      )}
 
       {/* Profile */}
       {profileOpen && (
@@ -497,6 +462,103 @@ export function DashboardClient({ user }: { user: User }) {
       )}
     </div>
   );
+
+  // Вынес детали заказа в компонент, чтобы не дублировать для мобильной и десктоп версии
+  function DetailPanelContent() {
+    if(!selected) return null;
+    return (
+      <div style={s.detailScroll}>
+        <div style={s.detailHeader}>
+          <span style={{ ...s.statusDotLg, background: slotColor(selected) }} />
+          <div style={{ flex: 1 }}>
+            <div style={s.detailExtId}>{selected.externalId ?? selected.crmId}</div>
+            <div style={s.detailAddr}>{selected.address ?? "—"}</div>
+          </div>
+          <button style={s.detailClose} onClick={() => setSelectedId(null)}>✕</button>
+        </div>
+
+        {selected.isInvalid && (
+          <div style={s.detailInvalidBanner}>⚠ {selected.invalidReason ?? "Проблемный адрес"}</div>
+        )}
+
+        <div style={s.fieldsGrid}>
+          <div style={s.detailField}>
+            <div style={s.detailFieldLabel}>Слот</div>
+            <div style={{ ...s.detailFieldValue, color: slotColor(selected) }}>
+              {selected.slotRaw ?? `${selected.slotFrom}–${selected.slotTo}`}
+            </div>
+          </div>
+          <div style={s.detailField}>
+            <div style={s.detailFieldLabel}>Стоимость</div>
+            <div style={s.detailFieldValue}>{selected.price ? `${selected.price} ₽` : "—"}</div>
+          </div>
+        </div>
+
+        <div style={s.editField}>
+          <div style={s.editFieldLabel}>Статус</div>
+          <select style={s.select} value={editStatus} onChange={e => setEditStatus(e.target.value)}>
+            {STATUS_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div style={s.editField}>
+          <div style={s.editFieldLabel}>Курьер</div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <select style={{ ...s.select, flex: 1 }} value={editCourier} onChange={e => setEditCourier(e.target.value)}>
+              <option value="">— Не назначен —</option>
+              {couriers.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <input
+              style={{ ...s.input, width: 90 }}
+              placeholder="Или вручную"
+              value={couriers.includes(editCourier) ? "" : editCourier}
+              onChange={e => setEditCourier(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {selected.items && (
+          <div style={s.editField}>
+            <div style={s.editFieldLabel}>Состав</div>
+            <div style={{ fontSize: 12, color: "#1a1a18", lineHeight: "1.4" }}>{selected.items}</div>
+          </div>
+        )}
+
+        {selected.comment && (
+          <div style={s.editField}>
+            <div style={s.editFieldLabel}>Комментарий клиента</div>
+            <div style={{ fontSize: 12, color: "#6b6860", lineHeight: "1.4" }}>{selected.comment}</div>
+          </div>
+        )}
+
+        <div style={s.editField}>
+          <div style={s.editFieldLabel}>Комментарий оператора</div>
+          <textarea
+            style={s.textarea}
+            rows={2}
+            value={opComment}
+            onChange={e => setOpComment(e.target.value)}
+            placeholder="Заметка..."
+          />
+        </div>
+
+        <button
+          style={{
+            ...s.saveBtn,
+            background: saved ? "#1a9e5c" : hasChanges ? "#4a7aff" : "#e8e6df",
+            color: hasChanges || saved ? "#fff" : "#a8a49c",
+            cursor: hasChanges ? "pointer" : "default",
+          }}
+          disabled={!hasChanges || saving}
+          onClick={saveChanges}
+        >
+          {saved ? "✓ Сохранено" : saving ? "Сохраняем..." : "Сохранить изменения"}
+        </button>
+      </div>
+    );
+  }
 }
 
 // ── Sub-components ────────────────────────────────────────
@@ -529,11 +591,17 @@ function OrderCard({ order, selected, onSelect }: { order: Order; selected: bool
   );
 }
 
+// ── Styles (Desktop) ───────────────────────────────────────
 const s: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", overflow: "hidden" },
   topbar: { display: "flex", alignItems: "center", gap: 8, padding: "0 16px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 10, position: "relative" },
   logo: { fontSize: 15, fontWeight: 600, color: "#1a1a18", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap" },
   logoDot: { display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "#4a7aff" },
+  
+  // Новые элементы для фильтрации
+  navBtn: { padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#1a1a18", whiteSpace: "nowrap", marginLeft: 4 },
+  datePicker: { padding: "4px 8px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 11, outline: "none", color: "#1a1a18", background: "#fff" },
+  
   slotBar: { display: "flex", gap: 4, marginLeft: 12 },
   slotBtn: { padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 500, border: "1px solid #e8e6df", background: "transparent", color: "#6b6860", cursor: "pointer", whiteSpace: "nowrap" },
   syncLabel: { fontSize: 11, color: "#a8a49c", whiteSpace: "nowrap" },
@@ -542,6 +610,7 @@ const s: Record<string, React.CSSProperties> = {
   invalidBanner: { display: "flex", alignItems: "center", gap: 8, padding: "7px 16px", background: "rgba(217,64,64,0.07)", borderBottom: "1px solid rgba(217,64,64,0.15)", color: "#d94040", flexShrink: 0 },
   invalidBannerLink: { fontFamily: "monospace", fontWeight: 600, cursor: "pointer", textDecoration: "underline" },
   invalidBannerClose: { marginLeft: "auto", background: "none", border: "none", color: "#d94040", cursor: "pointer", fontSize: 14, flexShrink: 0, padding: 2 },
+  
   body: { display: "flex", flex: 1, overflow: "hidden", minHeight: 0 },
   leftPanel: { width: 300, minWidth: 260, background: "#fff", borderRight: "1px solid #e8e6df", display: "flex", flexDirection: "column", flexShrink: 0, overflow: "hidden" },
   cardsSection: { flex: "0 0 50%", display: "flex", flexDirection: "column", overflow: "hidden", borderBottom: "1px solid #e8e6df" },
@@ -595,4 +664,16 @@ const s: Record<string, React.CSSProperties> = {
   alertItem: { padding: "7px 0", borderBottom: "0.5px solid #f5f4f0", cursor: "pointer" },
   alertAddr: { fontSize: 12, color: "#1a1a18", marginBottom: 2 },
   alertSub: { fontSize: 11, color: "#d94040", opacity: 0.8 },
+};
+
+// ── Styles (Mobile Overrides) ──────────────────────────────
+const sm: Record<string, React.CSSProperties> = {
+  app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0" },
+  topbar: { ...s.topbar, overflowX: "auto", padding: "0 10px", gap: 6 },
+  mobileSlotsWrap: { display: "flex", gap: 4, padding: "8px 10px", background: "#fff", borderBottom: "1px solid #e8e6df", overflowX: "auto", flexShrink: 0 },
+  body: { display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" },
+  map: { flex: "0 0 45%", minHeight: 250 },
+  panelsWrap: { flex: 1, display: "flex", flexDirection: "column", background: "#fff", overflow: "hidden" },
+  cardsSection: { flex: 1, display: "flex", flexDirection: "column", minHeight: 0 },
+  detailSection: { flex: "0 0 50%", display: "flex", flexDirection: "column", borderTop: "2px solid #4a7aff", background: "#fff", overflow: "hidden" }
 };
