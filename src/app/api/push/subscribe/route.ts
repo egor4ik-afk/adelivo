@@ -1,43 +1,46 @@
+// src/app/api/push/subscribe/route.ts
+// ВАЖНО: здесь НЕТ params — это не динамический роут
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { updateCrmOrderStatus } from "@/lib/crm";
-import { notify } from "@/lib/notifications";
-import { OrderStatus } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
-const patchSchema = z.object({
-  status: z.nativeEnum(OrderStatus).optional(),
-  opComment: z.string().optional(),
-  isInvalid: z.boolean().optional(),
-  invalidReason: z.string().optional(),
+const schema = z.object({
+  endpoint: z.string().url(),
+  keys: z.object({
+    p256dh: z.string(),
+    auth: z.string(),
+  }),
 });
 
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest) {
   const user = await getSession(req);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const { id } = await params;
-  const order = await prisma.order.findUnique({ where: { id } });
-  if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json(order);
+
+  const body = await req.json();
+  const { endpoint, keys } = schema.parse(body);
+
+  await prisma.pushSubscription.upsert({
+    where: { endpoint },
+    update: { p256dh: keys.p256dh, auth: keys.auth, userId: user.id },
+    create: {
+      userId: user.id,
+      endpoint,
+      p256dh: keys.p256dh,
+      auth: keys.auth,
+      userAgent: req.headers.get("user-agent") ?? undefined,
+    },
+  });
+
+  return NextResponse.json({ ok: true });
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest) {
   const user = await getSession(req);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { id } = await params;
-  const data = patchSchema.parse(await req.json());
+  const { endpoint } = await req.json();
+  await prisma.pushSubscription.deleteMany({ where: { endpoint, userId: user.id } });
 
-  const prev = await prisma.order.findUnique({ where: { id } });
-  const order = await prisma.order.update({ where: { id }, data });
-
-  if (data.status && order.crmId) {
-    updateCrmOrderStatus(order.crmId, data.status).catch(console.error);
-  }
-  if (data.status && prev?.status !== data.status) {
-    notify({ type: "order.updated", order, previousStatus: prev?.status }).catch(console.error);
-  }
-
-  return NextResponse.json(order);
+  return NextResponse.json({ ok: true });
 }

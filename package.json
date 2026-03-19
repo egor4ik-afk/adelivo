@@ -1,37 +1,42 @@
 {
-  "name": "out",
+  "name": "orders",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev -H 0.0.0.0",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:studio": "prisma studio",
+    "vapid:generate": "node -e \"const wp=require('web-push');const k=wp.generateVAPIDKeys();console.log('VAPID_PUBLIC_KEY='+k.publicKey+'\\nVAPID_PRIVATE_KEY='+k.privateKey)\""
   },
   "dependencies": {
-    "@types/nodemailer": "^7.0.11",
-    "axios": "^1.13.6",
+    "@prisma/client": "^6.19.2",
+    "axios": "^1.8.4",
     "jose": "^6.2.1",
     "next": "16.1.6",
-    "node-cron": "^4.2.1",
+    "node-cron": "^3.0.3",
     "nodemailer": "^8.0.3",
-    "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "web-push": "^3.6.7",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@prisma/client": "^6.19.2",
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^22",
     "@types/node-cron": "^3.0.11",
+    "@types/nodemailer": "^6.4.17",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@types/yandex-maps": "^2.1.36",
-    "autoprefixer": "^10.4.27",
+    "@types/web-push": "^3.6.4",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "postcss": "^8.5.8",
     "prisma": "^6.19.2",
     "tailwindcss": "^4.2.2",
-    "typescript": "^5"
+    "typescript": "^5.8.3"
   }
 }

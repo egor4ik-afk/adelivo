@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum Role {
@@ -25,19 +26,19 @@ enum OrderStatus {
 }
 
 model User {
-  id          String      @id @default(cuid())
-  email       String      @unique
-  role        Role        @default(OPERATOR)
+  id          String    @id @default(cuid())
+  email       String    @unique
+  role        Role      @default(OPERATOR)
   firstName   String?
   lastName    String?
   phone       String?
   lastLoginAt DateTime?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  
-  // Связи
-  sessions    Session[]
-  authCodes   AuthCode[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  sessions          Session[]
+  authCodes         AuthCode[]
+  pushSubscriptions PushSubscription[]
 }
 
 model Session {
@@ -46,8 +47,10 @@ model Session {
   token     String   @unique
   expiresAt DateTime
   createdAt DateTime @default(now())
-  
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
 }
 
 model AuthCode {
@@ -57,37 +60,74 @@ model AuthCode {
   used      Boolean  @default(false)
   expiresAt DateTime
   createdAt DateTime @default(now())
-  
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([code])
+}
+
+// Web Push подписки браузера
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Order {
   id            String      @id @default(cuid())
   crmId         String      @unique
-  externalId    String?     
+  externalId    String?
   status        OrderStatus @default(NEW)
   address       String?
   lat           Float?
   lng           Float?
   price         Float?
   courier       String?
-  comment       String?     
-  opComment     String?     
-  items         String?     
+  comment       String?
+  opComment     String?
+  items         String?
   slotFrom      String?
   slotTo        String?
   slotRaw       String?
+  deliveryType  String?
+  crmStatus     String?
   isInvalid     Boolean     @default(false)
   invalidReason String?
+  geocoded      Boolean     @default(false)
   crmCreatedAt  DateTime?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+
+  @@index([createdAt])
+  @@index([slotFrom, slotTo])
+  @@index([status])
+  @@index([isInvalid])
 }
 
+model SyncState {
+  id         Int      @id @default(1)
+  lastSyncAt DateTime @default(now())
+}
+
+// Лог уведомлений
 model NotificationLog {
   id        String   @id @default(cuid())
-  userId    String
-  title     String
-  body      String
+  type      String   // "order.new" | "order.updated" | "address.invalid"
+  channel   String   // "push" | "email"
+  payload   String   // JSON строка
+  success   Boolean
+  error     String?
   createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([type])
 }
