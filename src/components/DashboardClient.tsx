@@ -100,8 +100,8 @@ export function DashboardClient({ user }: { user: User }) {
     loadYMaps().then(() => {
       if (!mounted || !mapRef.current || ymapRef.current) return;
       const map = new window.ymaps.Map(mapRef.current, { center: [55.752, 37.617], zoom: 10, controls: ["zoomControl"] });
-      const clusterer = new window.ymaps.Clusterer({ clusterIconLayout: "default#pieChart", clusterIconPieChartRadius: 20, clusterIconPieChartCoreRadius: 12, clusterIconPieChartStrokeWidth: 2 });
-      map.geoObjects.add(clusterer);
+      const clusterer = new window.ymaps.Clusterer({ clusterIconLayout: "default#pieChart", clusterIconPieChartRadius: 20, clusterIconPieChartCoreRadius: 12, clusterIconPieChartStrokeWidth: 2 } as any);
+      map.geoObjects.add(clusterer as any);
       ymapRef.current = map;
       clustererRef.current = clusterer;
     });

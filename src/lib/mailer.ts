@@ -1,19 +1,22 @@
-// src/lib/mailer.ts
 import nodemailer from "nodemailer";
 
+// Используем переменные из вашего .env
 const transporter = nodemailer.createTransport({
-  host: "smtp.yandex.ru",
-  port: 465,
-  secure: true,
+  host: process.env.EMAIL_HOST || "smtp.gmail.com",
+  port: Number(process.env.EMAIL_PORT) || 587,
+  secure: false, // true для 465, false для остальных (включая 587)
   auth: {
-    user: process.env.YANDEX_EMAIL,
-    pass: process.env.YANDEX_PASSWORD,
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
   },
 });
 
+// Адрес отправителя по умолчанию
+const sender = `"FlowerOps" <${process.env.EMAIL_USER}>`;
+
 export async function sendAuthCode(email: string, code: string) {
   await transporter.sendMail({
-    from: `"FlowerOps" <${process.env.YANDEX_EMAIL}>`,
+    from: sender,
     to: email,
     subject: `Код входа: ${code}`,
     text: `Ваш код для входа: ${code}\n\nКод действителен 10 минут.\n\nЕсли вы не запрашивали код — игнорируйте это письмо.`,
@@ -40,8 +43,8 @@ export async function sendInvalidAddressAlert(
     .join("\n");
 
   await transporter.sendMail({
-    from: `"FlowerOps" <${process.env.YANDEX_EMAIL}>`,
-    to: operatorEmail,
+    from: sender,
+    to: operatorEmail, // Можно использовать process.env.RECIPIENT_EMAIL, если нужно отправлять всегда на один адрес
     subject: `⚠ ${orders.length} заказ(ов) с проблемными адресами`,
     text: `Требуют проверки:\n\n${list}`,
   });

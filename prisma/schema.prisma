@@ -1,25 +1,93 @@
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  role      Role     @default(OPERATOR)
-  
-  // Профиль
-  firstName String?
-  lastName  String?
-  phone     String?
-  avatarUrl String?
-  
-  // Мета
-  lastLoginAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+generator client {
+  provider = "prisma-client-js"
+}
 
-  sessions Session[]
-  auths    AuthCode[]
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 enum Role {
-  OPERATOR   // текущая роль — менеджер/оператор
-  COURIER    // будущая роль — свой UI и логика
-  ADMIN      // суперадмин, добавить потом
+  OPERATOR
+  COURIER
+  ADMIN
+}
+
+enum OrderStatus {
+  NEW
+  GEOCODED
+  INVALID_ADDRESS
+  ASSIGNED
+  IN_DELIVERY
+  DELIVERED
+  RETURNED
+  CANCELLED
+}
+
+model User {
+  id          String      @id @default(cuid())
+  email       String      @unique
+  role        Role        @default(OPERATOR)
+  firstName   String?
+  lastName    String?
+  phone       String?
+  lastLoginAt DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  // Связи
+  sessions    Session[]
+  authCodes   AuthCode[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuthCode {
+  id        String   @id @default(cuid())
+  userId    String
+  code      String
+  used      Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  crmId         String      @unique
+  externalId    String?     
+  status        OrderStatus @default(NEW)
+  address       String?
+  lat           Float?
+  lng           Float?
+  price         Float?
+  courier       String?
+  comment       String?     
+  opComment     String?     
+  items         String?     
+  slotFrom      String?
+  slotTo        String?
+  slotRaw       String?
+  isInvalid     Boolean     @default(false)
+  invalidReason String?
+  crmCreatedAt  DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model NotificationLog {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  createdAt DateTime @default(now())
 }

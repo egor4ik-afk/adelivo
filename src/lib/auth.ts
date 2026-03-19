@@ -74,7 +74,7 @@ export async function getSession(req?: NextRequest) {
 
   const session = await prisma.session.findUnique({
     where: { token },
-    include: { user: { select: { id: true, email: true, role: true, name: true } } },
+    include: { user: { select: { id: true, email: true, role: true, firstName: true, lastName: true } } },
   });
 
   if (!session || session.expiresAt < new Date()) {
