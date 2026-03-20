@@ -81,8 +81,7 @@ export function mapCrmOrder(order: CrmOrder) {
     try { dData = JSON.parse(dData); } catch (_) {}
   }
 
-  // ── Курьер: берём только из personalных данных курьера или customFields.
-  //    НЕ берём delivery.service.name — это название службы, не человек.
+  // 1. Попытка достать из интеграций (Dostavista, Yandex, Logisty)
   let parsedCourier: string | null = null;
   if (dData) {
     if (dData.firstName || dData.lastName) {
@@ -98,18 +97,26 @@ export function mapCrmOrder(order: CrmOrder) {
     }
   }
 
-  // customFields — только если delivery.data не дал результата
+  // 2. Попытка достать штатного курьера самой RetailCRM (ИСПРАВЛЕНИЕ)
+  if (!parsedCourier && order.delivery && (order.delivery as any).courier) {
+    const dc = (order.delivery as any).courier;
+    if (dc.firstName || dc.lastName) {
+      parsedCourier = [dc.firstName, dc.lastName].filter(Boolean).join(" ");
+    } else if (dc.name) {
+      parsedCourier = dc.name;
+    }
+  }
+
+  // 3. Попытка достать из кастомных полей
   if (!parsedCourier) {
     const cfCourier = cFields?.courier ?? cFields?.kurier;
     if (typeof cfCourier === "string" && cfCourier.trim()) {
       parsedCourier = cfCourier.trim();
     }
   }
-
   const courier = parsedCourier || null;
 
-  // ИСПРАВЛЕНИЕ ВРЕМЕНИ: RetailCRM отдает время без пояса ("2026-03-20 16:32:47"). 
-  // Жестко привязываем его к Москве (+03:00), чтобы браузер правильно конвертировал его.
+  // ИСПРАВЛЕНИЕ ВРЕМЕНИ: Жестко привязываем к Москве (+03:00)
   let parsedDate = null;
   if (order.createdAt) {
     const isoDate = order.createdAt.replace(" ", "T") + "+03:00";
@@ -144,7 +151,6 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     where: { crmId: data.crmId },
   });
 
-  // ── Строим финальный объект для UPDATE ──
   const updateFields: typeof data & {
     lat?: number | null;
     lng?: number | null;
@@ -156,7 +162,6 @@ export async function upsertOrder(crmOrder: CrmOrder) {
   } = { ...data };
 
   if (existing) {
-    // 1. Курьер
     if (existing.courierManual) {
       updateFields.courier = existing.courier;
       updateFields.courierManual = true;
@@ -166,12 +171,10 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       }
     }
 
-    // 2. Комментарий оператора — только наш
     if (existing.opComment) {
       updateFields.opComment = existing.opComment;
     }
 
-    // 3. Адрес + геокод — если мы уже геокодировали/исправили, не затираем CRM-сырым
     if (existing.geocoded) {
       updateFields.address       = existing.address;
       updateFields.lat           = existing.lat;
@@ -181,7 +184,6 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       updateFields.invalidReason = existing.invalidReason;
     }
 
-    // 4. changedAt
     const meaningfullyChanged =
       (existing.crmStatus ?? "") !== (updateFields.crmStatus ?? "") ||
       (existing.courier   ?? "") !== (updateFields.courier   ?? "") ||
@@ -202,19 +204,16 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     create: { ...data, isInvalid: false, geocoded: false, courierManual: false },
   });
 
-  // ── Умные уведомления (Сравниваем старое и новое) ──
   if (!existing) {
     notify({ type: "order.new", order }).catch(console.error);
     console.log(`[Push] Новый заказ ${order.crmId} создан.`);
   } else {
-    // Собираем массив изменений
     const changes = [];
     if (existing.status !== order.status) changes.push(`Статус: ${existing.status} -> ${order.status}`);
-    if (existing.courier !== order.courier) changes.push(`Курьер назначен: ${order.courier || 'Сброшен'}`);
+    if (existing.courier !== order.courier) changes.push(`Курьер: ${order.courier || 'Сброшен'}`);
     if (existing.address !== order.address) changes.push(`Адрес изменен`);
-    if (existing.slotRaw !== order.slotRaw) changes.push(`Время изменено: ${order.slotRaw}`);
+    if (existing.slotRaw !== order.slotRaw) changes.push(`Время: ${order.slotRaw}`);
 
-    // Если есть важные изменения, отправляем уведомление
     if (changes.length > 0) {
       console.log(`[Push] Заказ ${order.crmId} обновлен. Изменения:`, changes.join(', '));
       notify({ 
@@ -317,7 +316,8 @@ export async function pollCrmOrders() {
     return;
   }
 
-  const dateFrom = new Date(Date.now() - 3 * 24 * 3_600_000).toISOString().split("T")[0];
+  // ИСПРАВЛЕНИЕ: Вернули 7 дней
+  const dateFrom = new Date(Date.now() - 7 * 24 * 3_600_000).toISOString().split("T")[0];
   console.log(`[CRM Poll] Синхронизация начиная с ${dateFrom}`);
 
   let page = 1;
@@ -338,7 +338,6 @@ export async function pollCrmOrders() {
     const { orders = [], pagination } = res.data;
     total += orders.length;
 
-    // Последовательная обработка: защищает пул соединений БД от перегрузки
     for (const order of orders) {
       await upsertOrder(order);
     }
@@ -360,7 +359,7 @@ export async function pollCrmOrders() {
 // ── Update order in CRM ────────────────────────────────────
 export async function updateCrmOrder(
   crmId: string,
-  data: { status?: OrderStatus; courier?: string }
+  data: { status?: OrderStatus; courier?: string; opComment?: string; address?: string; deliveryType?: string | null }
 ) {
   if (!CRM_URL || !CRM_KEY) return;
 
@@ -370,15 +369,34 @@ export async function updateCrmOrder(
     orderPayload.status = STATUS_TO_CRM[data.status];
   }
 
+  if (data.opComment !== undefined) {
+    orderPayload.managerComment = data.opComment;
+  }
+
+  let deliveryUpdates: any = null;
+
+  if (data.address !== undefined) {
+    deliveryUpdates = deliveryUpdates || {};
+    deliveryUpdates.address = { text: data.address };
+  }
+
   if (data.courier !== undefined) {
     orderPayload.customFields = {
       courier: data.courier || "",
       kurier:  data.courier || "",
     };
+    
+    // ФИКС: Обход жесткого правила RetailCRM ("Нельзя выбрать курьера без типа доставки").
+    deliveryUpdates = deliveryUpdates || {};
+    deliveryUpdates.code = data.deliveryType || "logisty"; 
+  }
+
+  if (deliveryUpdates) {
+    orderPayload.delivery = deliveryUpdates;
   }
 
   if (Object.keys(orderPayload).length === 0) {
-    console.log(`[CRM] Нет данных для заказа ${crmId}`);
+    console.log(`[CRM] Нет данных для отправки заказа ${crmId}`);
     return;
   }
 
@@ -391,14 +409,11 @@ export async function updateCrmOrder(
     const resp = await axios.post(
       `${CRM_URL}/api/v5/orders/${crmId}/edit`,
       params.toString(),
-      {
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        timeout: 5000,
-      }
+      { headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 5000 }
     );
-    console.log(`[CRM] Заказ ${crmId}:`, resp.data?.success ? "OK" : resp.data);
-  } catch (err: unknown) {
-    // ...
+    console.log(`[CRM] Обновлен заказ ${crmId} в RetailCRM:`, resp.data?.success ? "УСПЕХ" : resp.data);
+  } catch (err: any) {
+    console.error(`[CRM] Ошибка обновления заказа ${crmId} в RetailCRM:`, err?.response?.data || err.message);
   }
 }
 
@@ -421,6 +436,7 @@ export interface CrmOrder {
     address?: { text?: string };
     service?: { name?: string; code?: string };
     data?: unknown;
+    courier?: unknown;
   };
   items?: Array<{
     productName?: string;

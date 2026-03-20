@@ -460,13 +460,33 @@ export function DashboardClient({ user }: { user: User }) {
     if (!selected) return;
     setSaving(true);
     const isAddressChanged = editAddress !== (selected.address ?? "");
-    if (isAddressChanged || previewGeo) await fetch(`/api/orders/${selected.id}/fix`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "commit", manualAddress: editAddress }) });
+    
+    // 1. Обновляем координаты, если адрес изменился или мы его геокодировали
+    if (isAddressChanged || previewGeo) {
+      await fetch(`/api/orders/${selected.id}/fix`, { 
+        method: "POST", headers: { "Content-Type": "application/json" }, 
+        body: JSON.stringify({ mode: "commit", manualAddress: editAddress }) 
+      });
+    }
+
+    // 2. ИСПРАВЛЕНИЕ: Отправляем ВСЕ текстовые поля (статус, курьер, коммент, и новый адрес) в PATCH для CRM
     const body: Record<string, string> = {};
     if (editStatus !== selected.status) body.status = editStatus;
     if (editCourier !== (selected.courier ?? "")) body.courier = editCourier;
     if (opComment !== (selected.opComment ?? "")) body.opComment = opComment;
-    if (Object.keys(body).length > 0) await fetch(`/api/orders/${selected.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    setPreviewGeo(null); await fetchOrders(); setSaving(false); setSaved(true);
+    if (isAddressChanged) body.address = editAddress; // <--- ДОБАВЛЯЕМ АДРЕС
+
+    if (Object.keys(body).length > 0) {
+      await fetch(`/api/orders/${selected.id}`, { 
+        method: "PATCH", headers: { "Content-Type": "application/json" }, 
+        body: JSON.stringify(body) 
+      });
+    }
+
+    setPreviewGeo(null); 
+    await fetchOrders(); 
+    setSaving(false); 
+    setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
 
