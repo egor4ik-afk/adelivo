@@ -159,7 +159,7 @@ export function DashboardClient({ user }: { user: User }) {
 
   const [mobileView, setMobileView] = useState<"split" | "map" | "panels">("split");
   const [isListVisible, setIsListVisible] = useState(true);
-  const [isDetailVisible, setIsDetailVisible] = useState(true); // <--- ВЕРНУЛИ СТЕЙТ
+  const [isDetailVisible, setIsDetailVisible] = useState(true);
   
   const [tableOpen, setTableOpen] = useState(true);
   const [tableHeight, setTableHeight] = useState(250);
@@ -300,111 +300,126 @@ export function DashboardClient({ user }: { user: User }) {
     return () => { mounted = false; };
   }, []);
 
+  // ── ПИНЫ НА КАРТЕ: УМНАЯ ЛОГИКА ──
   useEffect(() => {
-    if (ymapRef.current) setTimeout(() => ymapRef.current.container.fitToViewport(), 50);
-  }, [mobileView, isListVisible, isDetailVisible, tableOpen, tableHeight]);
+    const clusterer = clustererRef.current;
+    if (!clusterer || typeof window === "undefined" || !window.ymaps) return;
+    clusterer.removeAll();
 
- // ── ПИНЫ НА КАРТЕ: УМНАЯ ЛОГИКА ──
- useEffect(() => {
-  const clusterer = clustererRef.current;
-  if (!clusterer || typeof window === "undefined" || !window.ymaps) return;
-  clusterer.removeAll();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ymaps = (window as any).ymaps;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const ymaps = (window as any).ymaps;
+    // Плашка с хвостиком (показывается только при зуме для времени)
+    const StretchyLayout = ymaps.templateLayoutFactory.createClass(
+      '<div style="display:inline-flex;flex-direction:column;align-items:center;cursor:pointer;">' +
+        '<div style="background:{{ properties.pinColor }};color:#fff;padding:4px 10px;border-radius:12px;font-size:10px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.28);border:1.5px solid rgba(255,255,255,0.35);min-width:28px;text-align:center;line-height:1.4;">{{ properties.slotLabel }}</div>' +
+        '<div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid {{ properties.pinColor }};margin-top:-1px;"></div>' +
+        '{% if properties.showLabel %}' +
+          '<div style="margin-top:3px;font-size:9px;font-weight:700;color:#1a1a18;white-space:nowrap;background:rgba(255,255,255,0.96);padding:2px 6px;border-radius:4px;box-shadow:0 1px 5px rgba(0,0,0,0.15);line-height:1.4;letter-spacing:0.1px;">{{ properties.labelText }}</div>' +
+        '{% endif %}' +
+      '</div>'
+    );
 
-  // Плашка с хвостиком (показывается только при зуме для времени)
-  const StretchyLayout = ymaps.templateLayoutFactory.createClass(
-    '<div style="display:inline-flex;flex-direction:column;align-items:center;cursor:pointer;">' +
-      '<div style="background:{{ properties.pinColor }};color:#fff;padding:4px 10px;border-radius:12px;font-size:10px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.28);border:1.5px solid rgba(255,255,255,0.35);min-width:28px;text-align:center;line-height:1.4;">{{ properties.slotLabel }}</div>' +
-      '<div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid {{ properties.pinColor }};margin-top:-1px;"></div>' +
-      '{% if properties.showLabel %}' +
-        '<div style="margin-top:3px;font-size:9px;font-weight:700;color:#1a1a18;white-space:nowrap;background:rgba(255,255,255,0.96);padding:2px 6px;border-radius:4px;box-shadow:0 1px 5px rgba(0,0,0,0.15);line-height:1.4;letter-spacing:0.1px;">{{ properties.labelText }}</div>' +
-      '{% endif %}' +
-    '</div>'
-  );
+    const isAllSlots = selectedSlots.length === 0;
 
-  const isAllSlots = selectedSlots.length === 0;
+    const placemarks = filtered
+      .filter(o => (o.lat && o.lng) || (o.id === selectedId && previewGeo))
+      .map(order => {
+        const isSelected = selectedId === order.id;
+        const lat = isSelected && previewGeo ? previewGeo.lat : order.lat!;
+        const lng = isSelected && previewGeo ? previewGeo.lng : order.lng!;
+        
+        const color = slotColor(order);
+        const pinColor = isSelected ? (previewGeo ? '#9ca3af' : '#facc15') : color;
 
-  const placemarks = filtered
-    .filter(o => (o.lat && o.lng) || (o.id === selectedId && previewGeo))
-    .map(order => {
-      const isSelected = selectedId === order.id;
-      const lat = isSelected && previewGeo ? previewGeo.lat : order.lat!;
-      const lng = isSelected && previewGeo ? previewGeo.lng : order.lng!;
-      
-      const color = slotColor(order);
-      const pinColor = isSelected ? (previewGeo ? '#9ca3af' : '#facc15') : color;
+        // Показывать время если: зум крупный, чекбокс "Время" стоит, и слоты не фильтрованы
+        const displayTime = showTime && currentZoom >= 13 && !!order.slotRaw && isAllSlots;
+        
+        // Показывать имя если: чекбокс стоит, курьер назначен, и фильтр курьеров = "Все"
+        const displayName = showCourierNames && !!order.courier && filterCourier === "ALL";
 
-      // Показывать время если: зум крупный, чекбокс "Время" стоит, и слоты не фильтрованы
-      const displayTime = showTime && currentZoom >= 13 && !!order.slotRaw && isAllSlots;
-      
-      // Показывать имя если: чекбокс стоит, курьер назначен, и фильтр курьеров = "Все"
-      const displayName = showCourierNames && !!order.courier && filterCourier === "ALL";
+        const slotLabel = order.slotRaw ? order.slotRaw.replace("с ", "").replace(" до ", "-") : "";
 
-      const slotLabel = order.slotRaw ? order.slotRaw.replace("с ", "").replace(" до ", "-") : "";
+        // Тот самый подробный балун со всеми деталями (ДОБАВЛЕН ДЛЯ ОБОИХ ВИДОВ ПИНОВ)
+        const balloonContentBody = `
+          <div style="font-size:13px;line-height:1.5">
+            <b>${order.address ?? "—"}</b><br>
+            <span style="color:#888">${order.slotRaw ?? "—"}</span><br>
+            ${order.courier ? `<span style="color:#1a1a18; font-weight:600;">${order.courier}</span><br>` : ""}
+            ${order.items ? `<span style="color:#6b6860; font-size: 12px;">${order.items}</span>` : ""}
+            ${order.isInvalid ? `<br><span style="color:#d94040">⚠ ${order.invalidReason}</span>` : ""}
+          </div>`;
 
-      // Тот самый подробный балун со всеми деталями (ДОБАВЛЕН ДЛЯ ОБОИХ ВИДОВ ПИНОВ)
-      const balloonContentBody = `
-        <div style="font-size:13px;line-height:1.5">
-          <b>${order.address ?? "—"}</b><br>
-          <span style="color:#888">${order.slotRaw ?? "—"}</span><br>
-          ${order.courier ? `<span style="color:#1a1a18; font-weight:600;">${order.courier}</span><br>` : ""}
-          ${order.items ? `<span style="color:#6b6860; font-size: 12px;">${order.items}</span>` : ""}
-          ${order.isInvalid ? `<br><span style="color:#d94040">⚠ ${order.invalidReason}</span>` : ""}
-        </div>`;
+        let pm;
 
-      let pm;
-
-      if (displayTime) {
-        // ИСПОЛЬЗУЕМ ПЛАШКУ
-        pm = new window.ymaps.Placemark(
-          [lat, lng],
-          {
-            balloonContentHeader: order.externalId ?? order.crmId,
-            balloonContentBody, // <--- Подробный балун
-            hintContent: order.address ?? "—",
-            pinColor,
-            slotLabel,
-            showLabel: displayName,
-            labelText: order.courier ?? "",
-          },
-          {
-            iconLayout: StretchyLayout,
-            iconShape: { type: "Rectangle", coordinates: [[-40, -40], [40, 20]] },
-            iconOffset: [-15, -26]
-          }
-        );
-      } else {
+        if (displayTime) {
+          // ИСПОЛЬЗУЕМ ПЛАШКУ
+          pm = new window.ymaps.Placemark(
+            [lat, lng],
+            {
+              balloonContentHeader: order.externalId ?? order.crmId,
+              balloonContentBody,
+              hintContent: order.address ?? "—",
+              pinColor,
+              slotLabel,
+              showLabel: displayName,
+              labelText: order.courier ?? "",
+            },
+            {
+              iconLayout: StretchyLayout,
+              iconShape: { type: "Rectangle", coordinates: [[-40, -40], [40, 20]] },
+              iconOffset: [-15, -26]
+            }
+          );
+        } else {
         // ИСПОЛЬЗУЕМ РОДНОЙ ПИН С ХВОСТИКОМ (islands#icon)
         let preset = 'islands#redDotIcon';
         if (isSelected) preset = previewGeo ? "islands#grayIcon" : "islands#yellowIcon";
 
-        pm = new window.ymaps.Placemark(
-          [lat, lng],
-          {
-            balloonContentHeader: order.externalId ?? order.crmId,
-            balloonContentBody, // <--- Подробный балун ТЕПЕРЬ И ЗДЕСЬ
-            hintContent: order.address ?? "—",
-            // Нативное имя курьера прямо под стандартным пином
-            iconCaption: displayName ? order.courier : undefined, 
-          },
-          {
-            preset,
-            iconColor: isSelected ? undefined : color // Назначаем цвет родного пина
-          }
+          pm = new window.ymaps.Placemark(
+            [lat, lng],
+            {
+              balloonContentHeader: order.externalId ?? order.crmId,
+              balloonContentBody, 
+              hintContent: order.address ?? "—",
+              // Нативное имя курьера прямо под стандартным пином
+              iconCaption: displayName ? order.courier : undefined, 
+            },
+            {
+              preset,
+              iconColor: isSelected ? undefined : color // Назначаем цвет родного пина
+            }
+          );
+        }
+
+        pm.events.add("click", () => {
+          setSelectedId(p => p === order.id ? null : order.id);
+          if (!isMobile) setIsDetailVisible(true);
+        });
+        return pm;
+      });
+
+    if (placemarks.length > 0) clusterer.add(placemarks);
+  }, [filtered, selectedId, previewGeo, isMobile, showCourierNames, showTime, currentZoom, filterCourier, selectedSlots]);
+
+  // ── АВТОМАТИЧЕСКОЕ ЦЕНТРИРОВАНИЕ И ЗУМ ПРИ ВЫБОРЕ ЗАКАЗА ──
+  useEffect(() => {
+    if (selectedId && ymapRef.current && !previewGeo) {
+      const order = orders.find(o => o.id === selectedId);
+      if (order?.lat && order?.lng) {
+        if (isMobile && mobileView !== "panels") {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        // Плавно перемещаемся и делаем зум ближе (16)
+        ymapRef.current.setCenter(
+          [order.lat, order.lng], 
+          14, 
+          { duration: 500, timingFunction: 'ease-in-out' }
         );
       }
-
-      pm.events.add("click", () => {
-        setSelectedId(p => p === order.id ? null : order.id);
-        if (!isMobile) setIsDetailVisible(true);
-      });
-      return pm;
-    });
-
-  if (placemarks.length > 0) clusterer.add(placemarks);
-}, [filtered, selectedId, previewGeo, isMobile, showCourierNames, showTime, currentZoom, filterCourier, selectedSlots]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]); // Запускаем ТОЛЬКО при смене ID, чтобы не сбивать зум при авто-обновлении
 
   async function handleGeocode(mode: "ai" | "manual") {
     if (!selected) return;
