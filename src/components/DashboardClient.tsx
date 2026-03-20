@@ -6,14 +6,13 @@ import { ProfilePanel } from "./ProfilePanel";
 import { OrderDetail } from "./OrderDetail";
 import { Order, STATUS_OPTIONS, STATUS_LABELS, SLOTS, slotColor } from "@/lib/constants";
 
-interface User { id: string; email: string; role: string; firstName?: string | null; lastName?: string | null; }
+// 🔥 БАЗА: Большой Афанасьевский переулок, 39
+const STORE_LAT = 55.749511;
+const STORE_LNG = 37.596205;
+const STORE_COORDS = `${STORE_LAT},${STORE_LNG}`; 
 
-interface DbCourier {
-  id: number;
-  fullName: string;
-  isActive: boolean;
-  shifts: { date: string }[];
-}
+interface User { id: string; email: string; role: string; }
+interface DbCourier { id: number; fullName: string; isActive: boolean; shifts: { date: string }[]; }
 
 let ymapsReady: Promise<void> | null = null;
 function loadYMaps(): Promise<void> {
@@ -29,7 +28,7 @@ function loadYMaps(): Promise<void> {
   return ymapsReady;
 }
 
-function CustomSelect({ value, onChange, options, style, placeholder }: { value: string; onChange: (v: string) => void; options: {value: string, label: string}[]; style?: React.CSSProperties; placeholder?: string; }) {
+function CustomSelect({ value, onChange, options, style, placeholder }: any) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const [rect, setRect] = useState<{top: number, left: number, width: number} | null>(null);
@@ -42,7 +41,7 @@ function CustomSelect({ value, onChange, options, style, placeholder }: { value:
   }, [open]);
 
   const toggle = () => { if (!open && ref.current) { const r = ref.current.getBoundingClientRect(); setRect({ top: r.bottom, left: r.left, width: r.width }); } setOpen(p => !p); };
-  const current = options.find(o => o.value === value);
+  const current = options.find((o: any) => o.value === value);
 
   return (
     <div ref={ref} style={{ position: "relative", ...style }}>
@@ -50,10 +49,9 @@ function CustomSelect({ value, onChange, options, style, placeholder }: { value:
         <span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1, textAlign: "left" }}>{current?.label ?? placeholder ?? "—"}</span>
         <span style={{ fontSize: 8, color: "#a8a49c", flexShrink: 0, transition: "transform 0.15s", transform: open ? "rotate(180deg)" : "none" }}>▼</span>
       </button>
-
       {open && rect && typeof document !== "undefined" && createPortal(
         <div onClick={e => e.stopPropagation()} style={{ position: "fixed", top: rect.top + 4, left: rect.left, minWidth: Math.max(rect.width, 130), background: "#fff", borderRadius: 8, border: "1px solid #e8e6df", boxShadow: "0 4px 20px rgba(0,0,0,0.12)", zIndex: 99999, overflow: "hidden", maxHeight: 250, overflowY: "auto" }}>
-          {options.map(opt => (
+          {options.map((opt: any) => (
             <div key={opt.value} onClick={() => { onChange(opt.value); setOpen(false); }} style={{ padding: "8px 12px", fontSize: 11, fontWeight: 500, color: opt.value === value ? "#4a7aff" : "#1a1a18", background: opt.value === value ? "#f4f7ff" : "transparent", cursor: "pointer", whiteSpace: "nowrap", borderBottom: "1px solid #f5f4f0" }} onMouseEnter={e => { if (opt.value !== value) (e.currentTarget as HTMLDivElement).style.background = "#fafaf8"; }} onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = opt.value === value ? "#f4f7ff" : "transparent"; }}>
               {opt.label}
             </div>
@@ -84,19 +82,16 @@ export function DashboardClient({ user }: { user: User }) {
   const [tableHeight, setTableHeight] = useState(250);
   const [isDraggingTable, setIsDraggingTable] = useState(false);
 
-  // 🔥 ФИКС ЧАСОВОГО ПОЯСА: Жестко берем дату по Москве
-  const [filterDate, setFilterDate] = useState(() => {
-    return new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" });
-  });
+  const [showCourierNames, setShowCourierNames] = useState(true); 
+  const [showTime, setShowTime] = useState(true);
 
+  const [filterDate, setFilterDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }));
   const [orders, setOrders] = useState<Order[]>([]);
   const [dbCouriers, setDbCouriers] = useState<DbCourier[]>([]);
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
-  
   const [filterStatus, setFilterStatus] = useState("ALL");
   const [filterCourier, setFilterCourier] = useState("ALL");
-  
-  const [currentZoom, setCurrentZoom] = useState(10);
+  const [currentZoom, setCurrentZoom] = useState(11);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
@@ -106,7 +101,6 @@ export function DashboardClient({ user }: { user: User }) {
   const [previewGeo, setPreviewGeo] = useState<{lat: number, lng: number} | null>(null);
   const [fixingAI, setFixingAI] = useState(false); 
 
-  // ── РЕЖИМ МАРШРУТА И ТАБЫ ──
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [routeTab, setRouteTab] = useState<"map" | "list">("map");
   const [bulkSelectedIds, setBulkSelectedIds] = useState<string[]>([]);
@@ -125,7 +119,7 @@ export function DashboardClient({ user }: { user: User }) {
   const fetchData = useCallback(async () => {
     try {
       const [ordersRes, couriersRes] = await Promise.all([ fetch(`/api/orders`), fetch(`/api/couriers`) ]);
-      if (ordersRes.ok) { setOrders(await ordersRes.json()); setLastSync(new Date().toLocaleTimeString("ru")); }
+      if (ordersRes.ok) { setOrders(await ordersRes.json()); setLastSync(new Date().toLocaleTimeString("ru", { timeZone: "Europe/Moscow" })); }
       if (couriersRes.ok) setDbCouriers(await couriersRes.json());
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
@@ -169,6 +163,7 @@ export function DashboardClient({ user }: { user: User }) {
 
   const courierOptions = [{ value: "ALL", label: "Все курьеры" }, { value: "UNASSIGNED", label: "Не назначен" }, ...sortedCouriers];
 
+  // Строгая фильтрация
   const dateAndStatusOrders = orders.filter(o => {
     const oDate = o.deliveryDate || (o.crmCreatedAt ? o.crmCreatedAt.split('T')[0] : null);
     if (oDate !== filterDate) return false;
@@ -180,7 +175,6 @@ export function DashboardClient({ user }: { user: User }) {
   const selected = orders.find(o => o.id === selectedId) ?? null;
   const invalid = dateAndStatusOrders.filter(o => o.isInvalid);
   
-  // 🔥 ФИКС ФИЛЬТРОВ: filtered применяется ко всему (и карте, и таблице)
   const filtered = selectedSlots.length === 0 ? dateAndStatusOrders : dateAndStatusOrders.filter(o => {
     const s = SLOTS.find(x => x.from === o.slotFrom && x.to === o.slotTo);
     return s && selectedSlots.includes(s.label);
@@ -188,14 +182,26 @@ export function DashboardClient({ user }: { user: User }) {
 
   const tableOrders = [...filtered].sort((a, b) => new Date(b.updatedAt || "").getTime() - new Date(a.updatedAt || "").getTime());
 
+  // ИНИЦИАЛИЗАЦИЯ КАРТЫ С ТОЧКОЙ БАЗЫ
   useEffect(() => {
     let mounted = true;
     loadYMaps().then(() => {
       if (!mounted || !mapRef.current || ymapRef.current) return;
-      const map = new window.ymaps.Map(mapRef.current, { center: [55.752, 37.617], zoom: 10, controls: ["zoomControl"] }, {});
+      const map = new window.ymaps.Map(mapRef.current, { center: [STORE_LAT, STORE_LNG], zoom: 11, controls: ["zoomControl"] }, {});
       map.events.add('boundschange', (e: any) => { if (e.get('newZoom') !== e.get('oldZoom')) setCurrentZoom(e.get('newZoom')); });
+      
       const clusterer = new window.ymaps.Clusterer({ clusterIconLayout: "default#pieChart", clusterIconPieChartRadius: 20 });
       map.geoObjects.add(clusterer);
+      
+      // ДОБАВЛЯЕМ СТАТИЧНУЮ ЧЕРНУЮ ТОЧКУ БАЗЫ
+      const storePm = new window.ymaps.Placemark([STORE_LAT, STORE_LNG], {
+        hintContent: "БАЗА: Большой Афанасьевский переулок, 39",
+        balloonContent: "<b>Магазин / База</b><br/>Большой Афанасьевский пер., 39"
+      }, {
+        preset: 'islands#blackHomeIcon' // Черный домик
+      });
+      map.geoObjects.add(storePm as any);
+
       ymapRef.current = map;
       clustererRef.current = clusterer;
     });
@@ -205,7 +211,7 @@ export function DashboardClient({ user }: { user: User }) {
   const toggleBulkSelect = (id: string) => {
     setBulkSelectedIds(prev => {
       if (prev.includes(id)) return prev.filter(x => x !== id);
-      if (prev.length >= 50) { alert("Максимум 50 заказов для масс-назначения (Ограничение Яндекса)"); return prev; }
+      if (prev.length >= 50) { alert("Максимум 50 заказов для Яндекс Карт"); return prev; }
       return [...prev, id];
     });
   };
@@ -240,33 +246,40 @@ export function DashboardClient({ user }: { user: User }) {
         opacity = isBulkSelected ? 1 : 0.5;
       }
 
-      const displayTime = currentZoom >= 13 && !!order.slotRaw && selectedSlots.length === 0;
+      const displayTime = showTime && currentZoom >= 13 && !!order.slotRaw && selectedSlots.length === 0;
+      const displayName = showCourierNames && !!order.courier;
       const slotLabel = order.slotRaw ? order.slotRaw.replace("с ", "").replace(" до ", "-") : "";
       
       let pm;
       if (displayTime) {
         pm = new ymaps.Placemark([lat, lng], {
           balloonContentHeader: order.externalId ?? order.crmId, hintContent: order.address ?? "—",
-          pinColor, opacity, slotLabel, showLabel: !!order.courier, labelText: order.courier ?? "",
+          pinColor, opacity, slotLabel, showLabel: displayName, labelText: order.courier ?? "",
         }, { iconLayout: StretchyLayout, iconShape: { type: "Rectangle", coordinates: [[-40, -40], [40, 20]] }, iconOffset: [-15, -26] });
       } else {
         let preset = 'islands#dotIcon';
         if (isBulkMode) preset = isBulkSelected ? 'islands#greenDotIcon' : 'islands#grayDotIcon';
         else if (isSelected) preset = previewGeo ? "islands#grayDotIcon" : "islands#redDotIcon";
         pm = new ymaps.Placemark([lat, lng], {
-          balloonContentHeader: order.externalId ?? order.crmId, hintContent: order.address ?? "—", opacity
+          balloonContentHeader: order.externalId ?? order.crmId, hintContent: order.address ?? "—", opacity, iconCaption: displayName ? order.courier : undefined
         }, { preset, iconColor: (isBulkMode || isSelected) ? undefined : color });
       }
 
       pm.events.add("click", () => {
         if (isBulkMode) toggleBulkSelect(order.id);
-        else { setSelectedId(p => p === order.id ? null : order.id); if (!isMobile) setIsDetailVisible(true); }
+        else { 
+          setSelectedId(p => p === order.id ? null : order.id); 
+          if (!isMobile) {
+            setIsListVisible(true); 
+            setIsDetailVisible(true);
+          }
+        }
       });
       return pm;
     });
 
     if (placemarks.length > 0) clusterer.add(placemarks);
-  }, [filtered, selectedId, previewGeo, currentZoom, selectedSlots, isBulkMode, bulkSelectedIds]);
+  }, [filtered, selectedId, previewGeo, currentZoom, selectedSlots, isBulkMode, bulkSelectedIds, showTime, showCourierNames]);
 
   useEffect(() => {
     if (selectedId && ymapRef.current && !previewGeo && !isBulkMode) {
@@ -276,13 +289,15 @@ export function DashboardClient({ user }: { user: User }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, isBulkMode]); 
 
-  // ── ГЕНЕРАЦИЯ ССЫЛКИ НА МАРШРУТ ──
+  // ГЕНЕРАЦИЯ МАРШРУТА: СНАЧАЛА БАЗА
   const generateYandexUrl = (ordersToRoute: Order[]) => {
     const validOrders = ordersToRoute.filter(o => o.lat && o.lng && !o.isInvalid);
     if (validOrders.length === 0) return null;
     validOrders.sort((a, b) => (a.slotFrom || "23:59").localeCompare(b.slotFrom || "23:59"));
     if (validOrders.length > 50) validOrders.length = 50; 
-    const rtext = validOrders.map(o => `${o.lat},${o.lng}`).join("~");
+    
+    // Первая точка всегда БАЗА
+    const rtext = [STORE_COORDS, ...validOrders.map(o => `${o.lat},${o.lng}`)].join("~");
     return `https://yandex.ru/maps/?rtext=${rtext}&rtt=auto`;
   };
 
@@ -295,7 +310,6 @@ export function DashboardClient({ user }: { user: User }) {
   const handleShareRoute = async (ordersToRoute: Order[]) => {
     const url = generateYandexUrl(ordersToRoute);
     if (!url) { alert("Нет корректных координат"); return; }
-    
     if (navigator.share) {
       try { await navigator.share({ title: "Маршрут", url }); } catch (e) { console.log("Share failed", e); }
     } else {
@@ -349,6 +363,15 @@ export function DashboardClient({ user }: { user: User }) {
           </div>
         )}
         <div style={{ flex: 1 }} />
+
+        {/* ВОЗВРАЩЕННЫЕ ЧЕКБОКСЫ КАРТЫ */}
+        {!isMobile && (
+          <div style={{ display: 'flex', gap: 10, marginRight: 12, alignItems: 'center' }}>
+            <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 4, cursor: 'pointer' }}><input type="checkbox" checked={showCourierNames} onChange={e => setShowCourierNames(e.target.checked)} /> Имена</label>
+            <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 4, cursor: 'pointer' }}><input type="checkbox" checked={showTime} onChange={e => setShowTime(e.target.checked)} /> Время</label>
+          </div>
+        )}
+
         {!isMobile && lastSync && <span style={s.syncLabel}>обновлено {lastSync}</span>}
         <button style={s.userBtn} onClick={() => { setProfileOpen(!profileOpen); setAlertsOpen(false); }}>{user.email.slice(0, 2).toUpperCase()}</button>
       </div>
@@ -356,7 +379,6 @@ export function DashboardClient({ user }: { user: User }) {
       <div style={isMobile ? sm.body : s.body}>
         {!isMobile && (
           <div style={{ display: 'flex', width: '100%', height: '100%' }}>
-            {/* ЛЕВАЯ ПАНЕЛЬ */}
             {(isListVisible || isDetailVisible) && !isBulkMode && (
               <div style={s.leftPanel}>
                 {isListVisible && (
@@ -380,10 +402,7 @@ export function DashboardClient({ user }: { user: User }) {
               </div>
             )}
 
-            {/* ПРАВАЯ ПАНЕЛЬ (КАРТА ИЛИ ТАБЫ МАРШРУТА) */}
-            <div style={{ flex: 1, position: 'relative', display: "flex", flexDirection: "column" }}>
-              
-              {/* ТАБЫ НАД КАРТОЙ В РЕЖИМЕ МАРШРУТА */}
+            <div style={{ flex: 1, position: 'relative', display: "flex", flexDirection: "column", minWidth: 0 }}>
               {isBulkMode && (
                 <div style={{ display: "flex", background: "#fff", borderBottom: "1px solid #e8e6df", padding: "8px 16px", gap: 8, zIndex: 10 }}>
                   <button onClick={() => setRouteTab("map")} style={{ ...s.routeTabBtn, background: routeTab === "map" ? "#eef3ff" : "#fff", color: routeTab === "map" ? "#4a7aff" : "#6b6860" }}>📍 Выбор точек на карте</button>
@@ -391,10 +410,8 @@ export function DashboardClient({ user }: { user: User }) {
                 </div>
               )}
 
-              {/* КАРТА */}
               <div ref={mapRef} style={{ width: '100%', flex: 1, display: routeTab === "map" ? "block" : "none" }} />
               
-              {/* ПАНЕЛЬ ГОТОВОГО МАРШРУТА (ПОЯВЛЯЕТСЯ ВМЕСТО КАРТЫ) */}
               {isBulkMode && routeTab === "list" && (
                 <div style={{ flex: 1, background: "#f5f4f0", padding: 24, overflowY: "auto" }}>
                   <div style={{ maxWidth: 600, margin: "0 auto", background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 20 }}>
@@ -436,13 +453,14 @@ export function DashboardClient({ user }: { user: User }) {
                 </div>
               )}
 
-              {!isListVisible && !isBulkMode && <button onClick={() => setIsListVisible(true)} style={s.expandSideBtn}>▶</button>}
+              {!isListVisible && !isDetailVisible && !isBulkMode && (
+                <button onClick={() => { setIsListVisible(true); setIsDetailVisible(true); }} style={s.expandSideBtn}>▶</button>
+              )}
             </div>
           </div>
         )}
       </div>
 
-      {/* ФИКС СКРОЛЛА: Добавлен flex: 1 и minHeight: 0 для обертки таблицы */}
       {!isMobile && (
         <div style={{ ...s.tableSection, height: tableOpen ? tableHeight : 44, position: 'relative' }}>
           {tableOpen && <div onMouseDown={(e) => { e.preventDefault(); setIsDraggingTable(true); }} style={{ position: 'absolute', top: -4, left: 0, right: 0, height: 8, cursor: 'row-resize', zIndex: 200 }} />}
@@ -454,16 +472,16 @@ export function DashboardClient({ user }: { user: User }) {
             </button>
           </div>
           {tableOpen && (
-            <div style={s.tableWrap}>
+            <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
               <table style={s.table}>
                 <thead>
-                  <tr>{["Внешний ID", "Время", "Адрес доставки", "Курьер", "Стоимость", "Статус", "Комментарий", "Опер. Коммент", "Состав", "Создан"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
+                  <tr>{["Внешний ID", "Время", "Адрес доставки", "Курьер", "Стоимость", "Статус", "Комментарий", "Опер. Коммент", "Состав", "Изменен"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
                 </thead>
                 <tbody>
                   {tableOrders.map((o, i) => {
                     const color = slotColor(o);
                     return (
-                      <tr key={o.id} style={{ background: i % 2 === 0 ? "#fff" : "#fafaf8", cursor: "pointer" }} onClick={() => { setSelectedId(p => p === o.id ? null : o.id); }}>
+                      <tr key={o.id} style={{ background: i % 2 === 0 ? "#fff" : "#fafaf8", cursor: "pointer" }} onClick={() => { setSelectedId(p => p === o.id ? null : o.id); setIsListVisible(true); setIsDetailVisible(true); }}>
                         <td style={{ ...s.td, whiteSpace: "nowrap" }}><span style={{ ...s.statusDot, background: color }} /><span style={{ fontFamily: "monospace", fontSize: 10, color: "#a8a49c" }}>{o.externalId ?? o.crmId}</span></td>
                         <td style={{ ...s.td, whiteSpace: "nowrap", color }}>{o.slotRaw ?? "—"}</td>
                         <td style={{ ...s.td, minWidth: 180, maxWidth: 240 }}>{o.address ?? "—"}</td>
@@ -473,7 +491,7 @@ export function DashboardClient({ user }: { user: User }) {
                         <td style={{ ...s.td, minWidth: 160, maxWidth: 220, color: "#6b6860" }}>{o.comment ?? "—"}</td>
                         <td style={{ ...s.td, minWidth: 140, maxWidth: 200, color: "#4a7aff" }}>{o.opComment ?? "—"}</td>
                         <td style={{ ...s.td, minWidth: 160, maxWidth: 240, color: "#6b6860" }}>{o.items ?? "—"}</td>
-                        <td style={{ ...s.td, whiteSpace: "nowrap", color: "#a8a49c", fontSize: 10 }}>{o.crmCreatedAt ? new Date(o.crmCreatedAt).toLocaleString("ru", { timeZone: "Europe/Moscow", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
+                        <td style={{ ...s.td, whiteSpace: "nowrap", color: "#a8a49c", fontSize: 10 }}>{o.updatedAt ? new Date(o.updatedAt).toLocaleString("ru", { timeZone: "Europe/Moscow", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
                       </tr>
                     );
                   })}
@@ -483,17 +501,16 @@ export function DashboardClient({ user }: { user: User }) {
           )}
         </div>
       )}
-
       {profileOpen && <div style={{ position: "fixed", top: 52, right: 8, zIndex: 200 }}><ProfilePanel onClose={() => setProfileOpen(false)} onLogout={() => router.push("/login")} /></div>}
     </div>
   );
 }
 
-function SlotBtn({ label, active, color, onClick }: { label: string; active: boolean; color: string; onClick: () => void }) {
+function SlotBtn({ label, active, color, onClick }: any) {
   return <button style={{ ...s.slotBtn, ...(active ? { background: color, borderColor: color, color: "#fff" } : {}) }} onClick={onClick}>{label}</button>;
 }
 
-function OrderCard({ order, selected, isBulkMode, isBulkSelected, onSelect }: { order: Order; selected: boolean; isBulkMode: boolean; isBulkSelected: boolean; onSelect: () => void }) {
+function OrderCard({ order, selected, isBulkMode, isBulkSelected, onSelect }: any) {
   const color = slotColor(order);
   return (
     <div style={{ ...s.card, ...(selected || isBulkSelected ? s.cardSelected : {}), ...(order.isInvalid ? s.cardInvalid : {}) }} onClick={onSelect}>
@@ -546,7 +563,6 @@ const s: Record<string, React.CSSProperties> = {
   priceTag: { fontSize: 10, color: "#6b6860", flexShrink: 0 },
   tableSection: { flexShrink: 0, background: "#fff", borderTop: "2px solid #e8e6df", display: "flex", flexDirection: "column", overflow: "hidden" },
   tableHeader: { display: "flex", alignItems: "center", gap: 6, padding: "7px 16px", borderBottom: "1px solid #f0efe9", flexShrink: 0 },
-  tableWrap: { flex: 1, overflowX: "auto", overflowY: "auto", minHeight: 0 },
   table: { width: "max-content", minWidth: "100%", borderCollapse: "collapse", fontSize: 12 },
   th: { padding: "7px 12px", textAlign: "left" as const, fontSize: 10, fontWeight: 600, color: "#a8a49c", textTransform: "uppercase", letterSpacing: ".4px", background: "#fafaf8", borderBottom: "1px solid #e8e6df", whiteSpace: "nowrap", position: "sticky", top: 0, zIndex: 1 },
   td: { padding: "7px 12px", borderBottom: "0.5px solid #f0efe9", verticalAlign: "top", fontSize: 12, color: "#1a1a18" },
