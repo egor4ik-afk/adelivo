@@ -1,12 +1,10 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { createPortal } from "react-dom";
 import { ProfilePanel } from "./ProfilePanel";
 import { OrderDetail } from "./OrderDetail";
 import { Order, STATUS_OPTIONS, STATUS_LABELS, SLOTS, slotColor } from "@/lib/constants";
 
-// 🔥 БАЗА: Большой Афанасьевский переулок, 39
 const STORE_LAT = 55.749511;
 const STORE_LNG = 37.596205;
 const STORE_COORDS = `${STORE_LAT},${STORE_LNG}`; 
@@ -26,41 +24,6 @@ function loadYMaps(): Promise<void> {
     document.head.appendChild(s);
   });
   return ymapsReady;
-}
-
-function CustomSelect({ value, onChange, options, style, placeholder }: any) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const [rect, setRect] = useState<{top: number, left: number, width: number} | null>(null);
-
-  useEffect(() => {
-    const close = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    const updateRect = () => { if (open && ref.current) { const r = ref.current.getBoundingClientRect(); setRect({ top: r.bottom, left: r.left, width: r.width }); } };
-    document.addEventListener("mousedown", close); window.addEventListener("scroll", updateRect, true); window.addEventListener("resize", updateRect);
-    return () => { document.removeEventListener("mousedown", close); window.removeEventListener("scroll", updateRect, true); window.removeEventListener("resize", updateRect); };
-  }, [open]);
-
-  const toggle = () => { if (!open && ref.current) { const r = ref.current.getBoundingClientRect(); setRect({ top: r.bottom, left: r.left, width: r.width }); } setOpen(p => !p); };
-  const current = options.find((o: any) => o.value === value);
-
-  return (
-    <div ref={ref} style={{ position: "relative", ...style }}>
-      <button type="button" onClick={toggle} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", height: 30, padding: "0 10px", borderRadius: 8, border: "1px solid #e8e6df", background: "#fff", fontSize: 11, fontWeight: 600, color: "#1a1a18", cursor: "pointer", outline: "none", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", whiteSpace: "nowrap", gap: 6 }}>
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1, textAlign: "left" }}>{current?.label ?? placeholder ?? "—"}</span>
-        <span style={{ fontSize: 8, color: "#a8a49c", flexShrink: 0, transition: "transform 0.15s", transform: open ? "rotate(180deg)" : "none" }}>▼</span>
-      </button>
-      {open && rect && typeof document !== "undefined" && createPortal(
-        <div onClick={e => e.stopPropagation()} style={{ position: "fixed", top: rect.top + 4, left: rect.left, minWidth: Math.max(rect.width, 130), background: "#fff", borderRadius: 8, border: "1px solid #e8e6df", boxShadow: "0 4px 20px rgba(0,0,0,0.12)", zIndex: 99999, overflow: "hidden", maxHeight: 250, overflowY: "auto" }}>
-          {options.map((opt: any) => (
-            <div key={opt.value} onClick={() => { onChange(opt.value); setOpen(false); }} style={{ padding: "8px 12px", fontSize: 11, fontWeight: 500, color: opt.value === value ? "#4a7aff" : "#1a1a18", background: opt.value === value ? "#f4f7ff" : "transparent", cursor: "pointer", whiteSpace: "nowrap", borderBottom: "1px solid #f5f4f0" }} onMouseEnter={e => { if (opt.value !== value) (e.currentTarget as HTMLDivElement).style.background = "#fafaf8"; }} onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = opt.value === value ? "#f4f7ff" : "transparent"; }}>
-              {opt.label}
-            </div>
-          ))}
-        </div>,
-        document.body
-      )}
-    </div>
-  );
 }
 
 export function DashboardClient({ user }: { user: User }) {
@@ -89,8 +52,11 @@ export function DashboardClient({ user }: { user: User }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [dbCouriers, setDbCouriers] = useState<DbCourier[]>([]);
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
+  
+  // 🔥 ФИЛЬТРЫ: Нативные селекты
   const [filterStatus, setFilterStatus] = useState("ALL");
   const [filterCourier, setFilterCourier] = useState("ALL");
+  
   const [currentZoom, setCurrentZoom] = useState(11);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -163,7 +129,6 @@ export function DashboardClient({ user }: { user: User }) {
 
   const courierOptions = [{ value: "ALL", label: "Все курьеры" }, { value: "UNASSIGNED", label: "Не назначен" }, ...sortedCouriers];
 
-  // Строгая фильтрация
   const dateAndStatusOrders = orders.filter(o => {
     const oDate = o.deliveryDate || (o.crmCreatedAt ? o.crmCreatedAt.split('T')[0] : null);
     if (oDate !== filterDate) return false;
@@ -182,7 +147,6 @@ export function DashboardClient({ user }: { user: User }) {
 
   const tableOrders = [...filtered].sort((a, b) => new Date(b.updatedAt || "").getTime() - new Date(a.updatedAt || "").getTime());
 
-  // ИНИЦИАЛИЗАЦИЯ КАРТЫ С ТОЧКОЙ БАЗЫ
   useEffect(() => {
     let mounted = true;
     loadYMaps().then(() => {
@@ -193,13 +157,10 @@ export function DashboardClient({ user }: { user: User }) {
       const clusterer = new window.ymaps.Clusterer({ clusterIconLayout: "default#pieChart", clusterIconPieChartRadius: 20 });
       map.geoObjects.add(clusterer);
       
-      // ДОБАВЛЯЕМ СТАТИЧНУЮ ЧЕРНУЮ ТОЧКУ БАЗЫ
       const storePm = new window.ymaps.Placemark([STORE_LAT, STORE_LNG], {
         hintContent: "БАЗА: Большой Афанасьевский переулок, 39",
         balloonContent: "<b>Магазин / База</b><br/>Большой Афанасьевский пер., 39"
-      }, {
-        preset: 'islands#blackHomeIcon' // Черный домик
-      });
+      }, { preset: 'islands#blackHomeIcon' });
       map.geoObjects.add(storePm as any);
 
       ymapRef.current = map;
@@ -278,7 +239,7 @@ export function DashboardClient({ user }: { user: User }) {
       return pm;
     });
 
-    if (placemarks.length > 0) clusterer.add(placemarks);
+    if (placemarks.length > 0) clusterer.add(placemarks as any);
   }, [filtered, selectedId, previewGeo, currentZoom, selectedSlots, isBulkMode, bulkSelectedIds, showTime, showCourierNames]);
 
   useEffect(() => {
@@ -289,14 +250,11 @@ export function DashboardClient({ user }: { user: User }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, isBulkMode]); 
 
-  // ГЕНЕРАЦИЯ МАРШРУТА: СНАЧАЛА БАЗА
   const generateYandexUrl = (ordersToRoute: Order[]) => {
     const validOrders = ordersToRoute.filter(o => o.lat && o.lng && !o.isInvalid);
     if (validOrders.length === 0) return null;
     validOrders.sort((a, b) => (a.slotFrom || "23:59").localeCompare(b.slotFrom || "23:59"));
     if (validOrders.length > 50) validOrders.length = 50; 
-    
-    // Первая точка всегда БАЗА
     const rtext = [STORE_COORDS, ...validOrders.map(o => `${o.lat},${o.lng}`)].join("~");
     return `https://yandex.ru/maps/?rtext=${rtext}&rtt=auto`;
   };
@@ -307,14 +265,23 @@ export function DashboardClient({ user }: { user: User }) {
     else alert("Нет корректных координат для построения маршрута.");
   };
 
+  // 🔥 ЖЕЛЕЗОБЕТОННОЕ КОПИРОВАНИЕ 🔥
   const handleShareRoute = async (ordersToRoute: Order[]) => {
     const url = generateYandexUrl(ordersToRoute);
     if (!url) { alert("Нет корректных координат"); return; }
-    if (navigator.share) {
-      try { await navigator.share({ title: "Маршрут", url }); } catch (e) { console.log("Share failed", e); }
-    } else {
-      navigator.clipboard.writeText(url);
-      alert("Ссылка на маршрут скопирована в буфер обмена!");
+    
+    try {
+      await navigator.clipboard.writeText(url);
+      alert("✅ Ссылка на маршрут скопирована!");
+    } catch (e) {
+      // Фолбэк для старых устройств
+      const input = document.createElement("input");
+      input.value = url;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      document.body.removeChild(input);
+      alert("✅ Ссылка на маршрут скопирована!");
     }
   };
 
@@ -342,8 +309,14 @@ export function DashboardClient({ user }: { user: User }) {
         <button onClick={() => router.push('/couriers')} style={s.navBtn}>🚚 Курьеры</button>
         <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={s.datePicker} />
         
-        <CustomSelect value={filterStatus} onChange={setFilterStatus} options={STATUS_OPTIONS} style={{ width: 130, marginLeft: 4 }} />
-        <CustomSelect value={filterCourier} onChange={setFilterCourier} options={courierOptions} style={{ width: 130, marginLeft: 4 }} />
+        {/* НАТИВНЫЕ ФИЛЬТРЫ - РАБОТАЮТ БЕЗУПРЕЧНО */}
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{...s.select, marginLeft: 8, height: 30, padding: "0 10px"}}>
+          {STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+        </select>
+        
+        <select value={filterCourier} onChange={e => setFilterCourier(e.target.value)} style={{...s.select, marginLeft: 4, height: 30, padding: "0 10px"}}>
+          {courierOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+        </select>
 
         {filterCourier !== "ALL" && filterCourier !== "UNASSIGNED" && (
           <button onClick={() => handleOpenRoute(filtered)} style={{ ...s.navBtn, background: "#facc15", color: "#1a1a18", border: "1px solid #eab308", marginLeft: 4 }}>🗺️ Маршрут курьера</button>
@@ -364,7 +337,6 @@ export function DashboardClient({ user }: { user: User }) {
         )}
         <div style={{ flex: 1 }} />
 
-        {/* ВОЗВРАЩЕННЫЕ ЧЕКБОКСЫ КАРТЫ */}
         {!isMobile && (
           <div style={{ display: 'flex', gap: 10, marginRight: 12, alignItems: 'center' }}>
             <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 4, cursor: 'pointer' }}><input type="checkbox" checked={showCourierNames} onChange={e => setShowCourierNames(e.target.checked)} /> Имена</label>
@@ -418,8 +390,8 @@ export function DashboardClient({ user }: { user: User }) {
                     <h2 style={{ margin: "0 0 16px 0", fontSize: 18, color: "#1a1a18" }}>Маршрут на {bulkSelectedIds.length} точек</h2>
                     
                     <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
-                      <button onClick={() => handleOpenRoute(selectedRouteOrders)} style={{ ...s.saveBtn, flex: 1, background: "#facc15", color: "#1a1a18" }}>🗺️ Открыть в Яндекс.Картах</button>
-                      <button onClick={() => handleShareRoute(selectedRouteOrders)} style={{ ...s.saveBtn, flex: 1, background: "#fafaf8", border: "1px solid #e8e6df", color: "#1a1a18" }}>🔗 Копировать / Поделиться</button>
+                      <button onClick={() => handleOpenRoute(selectedRouteOrders)} style={{ ...s.saveBtn, flex: 1, background: "#facc15", color: "#1a1a18" }}>🗺️ Открыть в Яндексе</button>
+                      <button onClick={() => handleShareRoute(selectedRouteOrders)} style={{ ...s.saveBtn, flex: 1, background: "#fafaf8", border: "1px solid #e8e6df", color: "#1a1a18" }}>🔗 Копировать ссылку</button>
                     </div>
 
                     <div style={{ background: "#fafaf8", padding: 16, borderRadius: 8, marginBottom: 20 }}>

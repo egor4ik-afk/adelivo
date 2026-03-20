@@ -8,7 +8,6 @@ const CRM_URL = process.env.RETAILCRM_API_URL;
 const CRM_KEY = process.env.RETAILCRM_API_KEY;
 const GEO_KEY = process.env.YANDEX_GEOCODER_KEY;
 
-// Ищем ID в локальной базе по имени
 async function resolveCourierId(name: string): Promise<number | null> {
   if (!name) return null;
   const normalized = name.toLowerCase().trim();
@@ -46,12 +45,12 @@ export function mapCrmStatus(crmStatus?: string): OrderStatus {
   if (!crmStatus) return OrderStatus.NEW;
   return CRM_STATUS_MAP[crmStatus] ?? OrderStatus.NEW;
 }
+
 const STATUS_TO_CRM: Partial<Record<OrderStatus, string>> = {
   [OrderStatus.ASSIGNED]: "kurer-naznachen", [OrderStatus.IN_DELIVERY]: "delivering",
   [OrderStatus.DELIVERED]: "complete", [OrderStatus.RETURNED]: "return", [OrderStatus.CANCELLED]: "cancel-other",
 };
 
-// 🔥 ИСПРАВЛЕНИЕ: Асинхронный маппер, который ищет имя по ID и возвращает courierId
 export async function mapCrmOrder(order: CrmOrder) {
   const slot = parseSlot(order.delivery?.time);
   const items = order.items?.map(i => {
@@ -66,38 +65,31 @@ export async function mapCrmOrder(order: CrmOrder) {
   let parsedCourier: string | null = null;
   let finalCourierId: number | null = null;
 
-  // 1. ИЩЕМ КУРЬЕРА ПО ID В БАЗЕ (Для Logisty)
+  // 1. ИЩЕМ КУРЬЕРА В LOGISTY
   if (dData && dData.courier) {
     if (typeof dData.courier === 'number') finalCourierId = dData.courier;
     else if (typeof dData.courier === 'string' && !isNaN(Number(dData.courier))) finalCourierId = Number(dData.courier);
     else if (dData.courier.id) finalCourierId = Number(dData.courier.id);
   }
 
-  // Фолбэки, если ID нет, пытаемся достать имя из других полей
+  // 2. 🔥 ИЩЕМ СТАНДАРТНОГО КУРЬЕРА CRM (Раньше этого не было!) 🔥
+  if (!finalCourierId && order.delivery && (order.delivery as any).courier && (order.delivery as any).courier.id) {
+    finalCourierId = Number((order.delivery as any).courier.id);
+  }
+
   if (!finalCourierId && dData) {
     if (dData.firstName || dData.lastName) parsedCourier = [dData.firstName, dData.lastName].filter(Boolean).join(" ");
     else if (dData.courier?.name) parsedCourier = dData.courier.name;
-    else if (typeof dData.courier === "string" && dData.courier.trim()) parsedCourier = dData.courier.trim();
   }
   if (!finalCourierId && !parsedCourier && order.delivery && (order.delivery as any).courier) {
     const dc = (order.delivery as any).courier;
     if (typeof dc === "object") parsedCourier = [dc.firstName, dc.lastName].filter(Boolean).join(" ") || dc.name || null;
-    else if (typeof dc === "string") parsedCourier = dc.trim();
-  }
-  if (!finalCourierId && !parsedCourier) {
-    const cfCourier = cFields?.courier ?? cFields?.kurier;
-    if (typeof cfCourier === "string" && cfCourier.trim()) parsedCourier = cfCourier.trim();
   }
 
-  // 🔥 САМОЕ ВАЖНОЕ: Если у нас есть ID, жестко тянем имя из нашей базы
   if (finalCourierId) {
     const dbCourier = await prisma.courier.findUnique({ where: { id: finalCourierId } });
-    if (dbCourier) {
-      parsedCourier = dbCourier.fullName;
-    }
-  } 
-  // Если у нас есть ИМЯ (попало из фолбэка), но нет ID, пытаемся найти ID в базе по имени
-  else if (parsedCourier) {
+    if (dbCourier) parsedCourier = dbCourier.fullName;
+  } else if (parsedCourier) {
     const resolvedId = await resolveCourierId(parsedCourier);
     if (resolvedId) finalCourierId = resolvedId;
   }
@@ -109,26 +101,14 @@ export async function mapCrmOrder(order: CrmOrder) {
   }
 
   return {
-    crmId: String(order.id), 
-    externalId: order.externalId ?? order.number ?? null,
-    crmStatus: order.status ?? null, 
-    status: mapCrmStatus(order.status),
-    address: order.delivery?.address?.text ?? null, 
-    deliveryDate: order.delivery?.date ?? null,
-    
-    // 🔥 ВОЗВРАЩАЕМ И КЛЮЧ И ТЕКСТ
-    courierId: finalCourierId || null,
-    courier: parsedCourier || null, 
-    
-    price: order.delivery?.cost ?? null,
-    comment: order.customerComment ?? null, 
-    opComment: order.managerComment ?? null, 
-    items: items ?? null,
-    slotFrom: slot.from, 
-    slotTo: slot.to, 
-    slotRaw: slot.text,
-    deliveryType: order.delivery?.code ?? null, 
-    crmCreatedAt: parsedDate,
+    crmId: String(order.id), externalId: order.externalId ?? order.number ?? null,
+    crmStatus: order.status ?? null, status: mapCrmStatus(order.status),
+    address: order.delivery?.address?.text ?? null, deliveryDate: order.delivery?.date ?? null,
+    courierId: finalCourierId || null, courier: parsedCourier || null, 
+    price: order.delivery?.cost ?? null, comment: order.customerComment ?? null, 
+    opComment: order.managerComment ?? null, items: items ?? null,
+    slotFrom: slot.from, slotTo: slot.to, slotRaw: slot.text,
+    deliveryType: order.delivery?.code ?? null, crmCreatedAt: parsedDate,
   };
 }
 
@@ -140,33 +120,16 @@ export async function upsertOrder(crmOrder: CrmOrder) {
 
   if (existing) {
     if (existing.courierManual) { 
-      updateFields.courier = existing.courier; 
-      updateFields.courierId = existing.courierId; // Сохраняем и ID
-      updateFields.courierManual = true; 
-    } 
-    else { 
-      if (!data.courier && existing.courier) {
-        updateFields.courier = existing.courier;
-        updateFields.courierId = existing.courierId;
-      }
+      updateFields.courier = existing.courier; updateFields.courierId = existing.courierId; updateFields.courierManual = true; 
+    } else { 
+      if (!data.courier && existing.courier) { updateFields.courier = existing.courier; updateFields.courierId = existing.courierId; }
     }
     if (existing.opComment) updateFields.opComment = existing.opComment;
     if (existing.geocoded) {
       updateFields.address = existing.address; updateFields.lat = existing.lat; updateFields.lng = existing.lng;
       updateFields.geocoded = true; updateFields.isInvalid = existing.isInvalid; updateFields.invalidReason = existing.invalidReason;
     }
-    
-    // 🔥 Добавили проверку по courierId
-    const meaningfullyChanged = 
-      (existing.crmStatus ?? "") !== (updateFields.crmStatus ?? "") || 
-      (existing.courierId ?? 0) !== (updateFields.courierId ?? 0) || 
-      (existing.courier ?? "") !== (updateFields.courier ?? "") || 
-      (existing.address ?? "") !== (updateFields.address ?? "") || 
-      (existing.items ?? "") !== (updateFields.items ?? "") || 
-      (existing.slotFrom ?? "") !== (updateFields.slotFrom ?? "") || 
-      (existing.slotTo ?? "") !== (updateFields.slotTo ?? "") || 
-      (existing.price ?? 0) !== (updateFields.price ?? 0);
-      
+    const meaningfullyChanged = (existing.crmStatus ?? "") !== (updateFields.crmStatus ?? "") || (existing.courierId ?? 0) !== (updateFields.courierId ?? 0) || (existing.address ?? "") !== (updateFields.address ?? "") || (existing.items ?? "") !== (updateFields.items ?? "") || (existing.slotFrom ?? "") !== (updateFields.slotFrom ?? "") || (existing.slotTo ?? "") !== (updateFields.slotTo ?? "") || (existing.price ?? 0) !== (updateFields.price ?? 0);
     if (meaningfullyChanged) updateFields.changedAt = new Date();
   }
 
@@ -179,15 +142,9 @@ export async function upsertOrder(crmOrder: CrmOrder) {
   else {
     const changes = [];
     if (existing.status !== order.status) changes.push(`Статус: ${existing.status} -> ${order.status}`);
-    
-    // Уведомляем о смене курьера более умно
-    if (existing.courier !== order.courier) {
-      changes.push(`Курьер: ${order.courier || 'Сброшен'}`);
-    }
-
+    if (existing.courier !== order.courier) changes.push(`Курьер: ${order.courier || 'Сброшен'}`);
     if (existing.address !== order.address) changes.push(`Адрес изменен`);
     if (existing.slotRaw !== order.slotRaw) changes.push(`Время: ${order.slotRaw}`);
-    
     if (changes.length > 0) notify({ type: "order.updated", order, previousStatus: existing.status !== order.status ? existing.status : undefined }).catch(console.error);
   }
   return order;
@@ -210,19 +167,12 @@ export async function geocodeAddress(address: string) {
 export async function geocodeNewOrders() {
   const orders = await prisma.order.findMany({ where: { geocoded: false, address: { not: null } }, take: 20 });
   if (orders.length === 0) return;
-  const invalidOrders: Array<{ externalId: string | null; address: string | null; reason: string }> = [];
   for (const order of orders) {
     if (!order.address) continue;
     try {
       const geo = await geocodeAddress(order.address);
-      if (!geo) {
-        await prisma.order.update({ where: { id: order.id }, data: { geocoded: true, isInvalid: true, invalidReason: "Адрес не найден", status: OrderStatus.INVALID_ADDRESS } });
-        invalidOrders.push({ externalId: order.externalId, address: order.address, reason: "Адрес не найден" });
-        continue;
-      }
-      if (!geo.isExact) {
-        await prisma.order.update({ where: { id: order.id }, data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: true, invalidReason: `Неточный геокод: ${geo.precision}`, status: OrderStatus.INVALID_ADDRESS } });
-        invalidOrders.push({ externalId: order.externalId, address: order.address, reason: `Неточный геокод: ${geo.precision}` });
+      if (!geo || !geo.isExact) {
+        await prisma.order.update({ where: { id: order.id }, data: { lat: geo?.lat, lng: geo?.lng, geocoded: true, isInvalid: true, invalidReason: geo ? `Неточный геокод: ${geo.precision}` : "Адрес не найден", status: OrderStatus.INVALID_ADDRESS } });
         continue;
       }
       await prisma.order.update({ where: { id: order.id }, data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: false, status: order.status === OrderStatus.NEW ? OrderStatus.GEOCODED : order.status } });
@@ -230,7 +180,6 @@ export async function geocodeNewOrders() {
       await prisma.order.update({ where: { id: order.id }, data: { geocoded: true, isInvalid: true, invalidReason: "Ошибка геокодирования", status: OrderStatus.INVALID_ADDRESS } }).catch(() => {});
     }
   }
-  if (invalidOrders.length > 0) notify({ type: "address.invalid", orders: invalidOrders }).catch(console.error);
 }
 
 export async function pollCrmOrders() {
@@ -248,10 +197,10 @@ export async function pollCrmOrders() {
   geocodeNewOrders().catch(console.error);
 }
 
-// 🔥 ИСПРАВЛЕНИЕ ОТПРАВКИ: Строго передаем код доставки и ID
-export async function updateCrmOrder(crmId: string, data: { status?: OrderStatus; courier?: string; opComment?: string; address?: string; deliveryType?: string | null }) {
+export async function updateCrmOrder(crmId: string, data: { status?: OrderStatus; courier?: string; opComment?: string; address?: string }) {
   if (!CRM_URL || !CRM_KEY) return;
   const orderPayload: any = {};
+  
   if (data.status && STATUS_TO_CRM[data.status]) orderPayload.status = STATUS_TO_CRM[data.status];
   if (data.opComment !== undefined) orderPayload.managerComment = data.opComment;
 
@@ -268,17 +217,14 @@ export async function updateCrmOrder(crmId: string, data: { status?: OrderStatus
     if (courierName) {
       const courierId = await resolveCourierId(courierName);
       if (courierId) {
-        // Записываем прямо в интеграционные данные Logisty
-        deliveryUpdates.data = { courier: courierId }; 
+        deliveryUpdates.courier = { id: courierId }; // Для штатных курьеров
+        deliveryUpdates.data = { courier: courierId }; // Для Logisty
       }
     } else {
+      deliveryUpdates.courier = null;
       deliveryUpdates.data = null; 
     }
-    
-    // ВАЖНО: передаем тип доставки "5" или "logisty", иначе CRM не пустит
-    if (data.deliveryType) {
-      deliveryUpdates.code = data.deliveryType; 
-    }
+    // 🔥 МЫ БОЛЬШЕ НЕ ОТПРАВЛЯЕМ delivery.code ! Это ломало сохранение.
     orderPayload.customFields = { courier: courierName, kurier: courierName };
   }
 
@@ -292,7 +238,7 @@ export async function updateCrmOrder(crmId: string, data: { status?: OrderStatus
 
   try {
     const resp = await axios.post(`${CRM_URL}/api/v5/orders/${crmId}/edit`, params.toString(), { headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 5000 });
-    console.log(`[CRM] Обновлен заказ ${crmId} в RetailCRM:`, resp.data?.success ? "УСПЕХ" : resp.data);
+    console.log(`[CRM] Обновлен заказ ${crmId}:`, resp.data?.success ? "УСПЕХ" : resp.data);
   } catch (err: any) {
     console.error(`[CRM] Ошибка обновления заказа ${crmId}:`, err?.response?.data || err.message);
   }
