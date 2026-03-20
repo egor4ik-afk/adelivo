@@ -257,7 +257,14 @@ export function DashboardClient({ user }: { user: User }) {
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
-      if (e.data?.type === "NOTIFICATION_CLICK" && e.data.orderId) { setSelectedId(e.data.orderId); fetchOrders(); }
+      if (e.data?.type === "NOTIFICATION_CLICK" && e.data.orderId) {
+        setSelectedId(e.data.orderId);
+        setIsDetailVisible(true);
+        fetchOrders();
+      } else if (e.data?.type === "PUSH_RECEIVED") {
+        // Новый пуш пришёл в фоне — обновляем список сразу
+        fetchOrders();
+      }
     };
     navigator.serviceWorker?.addEventListener("message", handler);
     return () => navigator.serviceWorker?.removeEventListener("message", handler);
@@ -478,7 +485,7 @@ export function DashboardClient({ user }: { user: User }) {
       <div style={s.detailScroll}>
         <div style={s.detailHeader}>
           <div style={{ flex: 1 }}><div style={s.detailExtId}>{selected.externalId ?? selected.crmId}</div></div>
-          <button style={s.detailClose} onClick={() => { setSelectedId(null); setIsDetailVisible(false); }}>✕</button>
+          <button style={s.detailClose} onClick={() => setIsDetailVisible(false)} title="Свернуть панель">✕</button>
         </div>
         {selected.isInvalid && <div style={s.detailInvalidBanner}>⚠ {selected.invalidReason ?? "Проблемный адрес"}</div>}
         <div style={s.editField}>
@@ -600,9 +607,15 @@ export function DashboardClient({ user }: { user: User }) {
             )}
             <div style={{ flex: 1, position: 'relative' }}>
               <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
-              {!isListVisible && (
-                <button onClick={() => setIsListVisible(true)} style={s.expandSideBtn} title="Показать список">▶</button>
-              )}
+              {/* Кнопки разворачивания скрытых панелей */}
+              <div style={{ position: 'absolute', top: 12, left: 0, zIndex: 100, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {!isListVisible && (
+                  <button onClick={() => setIsListVisible(true)} style={s.expandSideBtn} title="Показать список">≡</button>
+                )}
+                {!isDetailVisible && selectedId && (
+                  <button onClick={() => setIsDetailVisible(true)} style={{ ...s.expandSideBtn, top: isListVisible ? 12 : 48 }} title="Показать карточку">☰</button>
+                )}
+              </div>
             </div>
           </div>
         )}
