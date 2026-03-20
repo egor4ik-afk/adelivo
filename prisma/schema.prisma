@@ -82,6 +82,36 @@ model PushSubscription {
   @@index([userId])
 }
 
+model Courier {
+  id          Int      @id // Внутренний ID курьера из CRM
+  firstName   String?
+  lastName    String?
+  patronymic  String?
+  fullName    String   // Склеенное ФИО для удобного поиска
+  phone       String?
+  email       String?
+  description String?  // Примечание из CRM
+  isActive    Boolean  @default(true) // Работает ли он вообще в компании
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Связь с графиком работы (смены)
+  shifts      CourierShift[]
+}
+
+// Таблица смен (график работы курьеров)
+model CourierShift {
+  id        String   @id @default(cuid())
+  courierId Int
+  date      String   // Строка в формате "YYYY-MM-DD"
+  
+  courier   Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
+
+  // Один курьер не может иметь две разные смены в один и тот же день
+  @@unique([courierId, date])
+}
+
 model Order {
   id            String      @id @default(cuid())
   crmId         String      @unique

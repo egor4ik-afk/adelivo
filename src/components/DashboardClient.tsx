@@ -550,6 +550,7 @@ export function DashboardClient({ user }: { user: User }) {
     <div style={isMobile ? sm.app : s.app}>
       <div style={isMobile ? sm.topbar : s.topbar}>
         <div style={s.logo}><span style={s.logoDot} />FlowerOps</div>
+        <button onClick={() => router.push('/couriers')} style={s.navBtn}>🚚 Курьеры</button>
         <button onClick={() => router.push('/orders')} style={s.navBtn}>≡ Заказы</button>
         <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={s.datePicker} />
         
