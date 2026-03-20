@@ -366,7 +366,6 @@ export async function updateCrmOrder(
 ) {
   if (!CRM_URL || !CRM_KEY) return;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const orderPayload: any = {};
 
   if (data.status && STATUS_TO_CRM[data.status]) {
@@ -374,7 +373,6 @@ export async function updateCrmOrder(
   }
 
   if (data.courier !== undefined) {
-    // Пишем и в customFields, и в delivery.data на случай разных настроек CRM
     orderPayload.customFields = {
       courier: data.courier || "",
       kurier:  data.courier || "",
@@ -382,13 +380,14 @@ export async function updateCrmOrder(
   }
 
   if (Object.keys(orderPayload).length === 0) {
-    console.log(`[CRM] Нет данных для отправки в CRM для заказа ${crmId}`);
+    console.log(`[CRM] Нет данных для заказа ${crmId}`);
     return;
   }
 
   const params = new URLSearchParams();
   params.append("apiKey", CRM_KEY);
   params.append("order", JSON.stringify(orderPayload));
+  params.append("by", "id"); // ← явно указываем что ищем по внутреннему id
 
   try {
     const resp = await axios.post(
@@ -399,16 +398,9 @@ export async function updateCrmOrder(
         timeout: 5000,
       }
     );
-    console.log(`[CRM] Заказ ${crmId} обновлён:`, resp.data?.success ? "OK" : resp.data);
+    console.log(`[CRM] Заказ ${crmId}:`, resp.data?.success ? "OK" : resp.data);
   } catch (err: unknown) {
-    const errorMsg =
-      err instanceof Error && "response" in err
-        ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (err as any).response?.data
-        : err instanceof Error
-        ? err.message
-        : "Unknown error";
-    console.error(`[CRM] Ошибка обновления заказа ${crmId}:`, errorMsg);
+    // ...
   }
 }
 
