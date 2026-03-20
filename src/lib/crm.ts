@@ -187,14 +187,17 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       updateFields.invalidReason = existing.invalidReason;
     }
 
-    // 4. changedAt — обновляем только если реально изменились значимые поля
-    //    (статус, курьер, адрес, состав заказа). CRON-прогоны без изменений не трогают это поле.
+    // 4. changedAt — только реальные изменения из CRM (не геокодирование, не наши правки)
+    //    Слушаем crmStatus (реальный CRM-статус), а не наш внутренний status,
+    //    чтобы геокодирование NEW→GEOCODED не считалось изменением.
     const meaningfullyChanged =
-      existing.status  !== updateFields.status  ||
-      existing.courier !== updateFields.courier ||
-      existing.address !== updateFields.address ||
-      existing.items   !== updateFields.items   ||
-      existing.slotFrom !== updateFields.slotFrom;
+      (existing.crmStatus ?? "") !== (updateFields.crmStatus ?? "") ||
+      (existing.courier   ?? "") !== (updateFields.courier   ?? "") ||
+      (existing.address   ?? "") !== (updateFields.address   ?? "") ||
+      (existing.items     ?? "") !== (updateFields.items     ?? "") ||
+      (existing.slotFrom  ?? "") !== (updateFields.slotFrom  ?? "") ||
+      (existing.slotTo    ?? "") !== (updateFields.slotTo    ?? "") ||
+      (existing.price     ?? 0)  !== (updateFields.price     ?? 0);
 
     if (meaningfullyChanged) {
       updateFields.changedAt = new Date();
@@ -209,7 +212,8 @@ export async function upsertOrder(crmOrder: CrmOrder) {
 
   if (!existing) {
     notify({ type: "order.new", order }).catch(console.error);
-  } else if (existing.status !== order.status) {
+  } else if ((existing.crmStatus ?? "") !== (order.crmStatus ?? "")) {
+    // Уведомляем только при реальном изменении CRM-статуса, игнорируем наш внутренний (GEOCODED и т.п.)
     notify({ type: "order.updated", order, previousStatus: existing.status }).catch(console.error);
   }
 

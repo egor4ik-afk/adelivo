@@ -180,10 +180,14 @@ export default function OrdersPage() {
                       </td>
                       <td style={{ padding: "10px 14px", whiteSpace: "nowrap", color: "#6b6860" }}>{o.slotRaw || "—"}</td>
                       <td style={{ padding: "10px 14px", whiteSpace: "nowrap", color: "#1a1a18" }}>{o.price ? `${o.price} ₽` : "—"}</td>
-                      <td style={{ padding: "10px 14px", whiteSpace: "nowrap", color: "#6b6860", fontSize: 11 }}>
-                        <span title={o.updatedAt ? `updatedAt: ${new Date(o.updatedAt).toLocaleString("ru")}` : ""}>
-                          {o.changedAt ? fmt(o.changedAt) : "—"}
-                        </span>
+                      <td style={{ padding: "10px 14px", whiteSpace: "nowrap", fontSize: 11 }}>
+                        {o.changedAt ? (
+                          <span style={{ color: "#1a1a18", fontWeight: 500 }}>
+                            {fmt(o.changedAt)}
+                          </span>
+                        ) : (
+                          <span style={{ color: "#a8a49c" }}>—</span>
+                        )}
                       </td>
                       <td style={{ padding: "10px 14px" }}>
                         <Link

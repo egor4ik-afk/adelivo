@@ -239,7 +239,7 @@ export function DashboardClient({ user }: { user: User }) {
         return s && selectedSlots.includes(s.label);
       });
 
-  const tableOrders = [...dateAndStatusOrders].sort((a, b) => new Date(b.updatedAt || "").getTime() - new Date(a.updatedAt || "").getTime());
+  const tableOrders = [...dateAndStatusOrders].sort((a, b) => new Date(b.changedAt || b.updatedAt || "").getTime() - new Date(a.changedAt || a.updatedAt || "").getTime());
 
   const fetchOrders = useCallback(async () => {
     try {
