@@ -406,6 +406,7 @@ export async function updateCrmOrder(
   }
 
   // ИСПРАВЛЕНИЕ: Конвертируем имя курьера в штатный ID пользователя RetailCRM
+  // src/lib/crm.ts -> внутри функции updateCrmOrder
   if (data.courier !== undefined) {
     const courierName = data.courier.trim();
     deliveryUpdates = deliveryUpdates || {};
@@ -414,19 +415,16 @@ export async function updateCrmOrder(
       const courierId = await resolveCourierId(courierName);
       if (courierId) {
         deliveryUpdates.courier = { id: courierId };
+        // 🔥 ИСПРАВЛЕНИЕ: Записываем курьера в данные интеграции (Logisty) 🔥
+        deliveryUpdates.data = { courier: courierId };
       }
     } else {
-      deliveryUpdates.courier = null; // Попытка очистить курьера
+      deliveryUpdates.courier = null;
+      deliveryUpdates.data = null;
     }
     
-    // Обязательное поле типа доставки для выбора курьера
     deliveryUpdates.code = data.deliveryType || "logisty"; 
-
-    // На всякий случай дублируем в кастомные поля (для совместимости)
-    orderPayload.customFields = {
-      courier: courierName,
-      kurier:  courierName,
-    };
+    orderPayload.customFields = { courier: courierName, kurier: courierName };
   }
 
   if (deliveryUpdates) {

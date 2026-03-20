@@ -1,43 +1,18 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import { ProfilePanel } from "./ProfilePanel";
+import { OrderDetail } from "./OrderDetail";
+import { Order, STATUS_OPTIONS, STATUS_LABELS, SLOTS, slotColor } from "@/lib/constants";
 
 interface User { id: string; email: string; role: string; firstName?: string | null; lastName?: string | null; }
-interface Order {
-  id: string; crmId: string; externalId: string | null; status: string;
-  address: string | null; lat: number | null; lng: number | null;
-  price: number | null; courier: string | null; comment: string | null;
-  opComment: string | null; items: string | null;
-  slotFrom: string | null; slotTo: string | null; slotRaw: string | null;
-  deliveryType: string | null; deliveryDate: string | null;
-  isInvalid: boolean; invalidReason: string | null;
-  crmCreatedAt: string | null; updatedAt?: string; changedAt?: string | null;
-}
 
-const SLOTS = [
-  { label: "10–12", from: "10:00", to: "12:00", color: "#1a9e5c" },
-  { label: "12–14", from: "12:00", to: "14:00", color: "#4a7aff" },
-  { label: "14–16", from: "14:00", to: "16:00", color: "#7c4dff" },
-  { label: "16–18", from: "16:00", to: "18:00", color: "#c8780a" },
-  { label: "18–20", from: "18:00", to: "20:00", color: "#d94040" },
-  { label: "20–22", from: "20:00", to: "22:00", color: "#e0548a" },
-];
-
-const STATUS_OPTIONS = [
-  { value: "ALL", label: "Все статусы" },
-  { value: "NEW", label: "Новый" }, { value: "ASSIGNED", label: "Назначен" },
-  { value: "IN_DELIVERY", label: "В пути" }, { value: "DELIVERED", label: "Доставлен" },
-  { value: "RETURNED", label: "Возврат" }, { value: "CANCELLED", label: "Отменён" },
-];
-const STATUS_LABELS: Record<string, string> = Object.fromEntries(STATUS_OPTIONS.map(o => [o.value, o.label]));
-
-function getCouriers(orders: Order[]): string[] {
-  return Array.from(new Set(orders.map(o => o.courier).filter(Boolean) as string[])).sort();
-}
-function slotColor(o: Order): string {
-  if (o.isInvalid) return "#d94040";
-  return SLOTS.find(s => s.from === o.slotFrom && s.to === o.slotTo)?.color ?? "#4a7aff";
+interface DbCourier {
+  id: number;
+  fullName: string;
+  isActive: boolean;
+  shifts: { date: string }[];
 }
 
 let ymapsReady: Promise<void> | null = null;
@@ -54,97 +29,52 @@ function loadYMaps(): Promise<void> {
   return ymapsReady;
 }
 
-// ── КАСТОМНЫЙ ДРОПДАУН ──
-// Без портала — выпадающий список внутри того же div, z-index 600 (выше карты и топбара).
-// Опции используют onMouseDown + e.preventDefault() вместо onClick —
-// это блокирует срабатывание outside-click хендлера до того как выбор зарегистрируется.
-function CustomSelect({
-  value, onChange, options, style,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  options: { value: string; label: string }[];
-  style?: React.CSSProperties;
-}) {
+// ── КРАСИВЫЙ КАСТОМНЫЙ ДРОПДАУН (С Z-INDEX ЧЕРЕЗ PORTAL) ──
+function CustomSelect({ value, onChange, options, style, placeholder }: { value: string; onChange: (v: string) => void; options: {value: string, label: string}[]; style?: React.CSSProperties; placeholder?: string; }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const [rect, setRect] = useState<{top: number, left: number, width: number} | null>(null);
 
   useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    const close = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const updateRect = () => {
+      if (open && ref.current) {
+        const r = ref.current.getBoundingClientRect();
+        setRect({ top: r.bottom, left: r.left, width: r.width });
+      }
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener("mousedown", close);
+    window.addEventListener("scroll", updateRect, true);
+    window.addEventListener("resize", updateRect);
+    return () => { document.removeEventListener("mousedown", close); window.removeEventListener("scroll", updateRect, true); window.removeEventListener("resize", updateRect); };
   }, [open]);
 
-  const sel = options.find(o => o.value === value);
+  const toggle = () => {
+    if (!open && ref.current) {
+      const r = ref.current.getBoundingClientRect();
+      setRect({ top: r.bottom, left: r.left, width: r.width });
+    }
+    setOpen(p => !p);
+  };
+
+  const current = options.find(o => o.value === value);
 
   return (
-    <div ref={ref} style={{ position: "relative", display: "inline-block", ...style }}>
-      <button
-        type="button"
-        onClick={() => setOpen(v => !v)}
-        style={{
-          display: "flex", alignItems: "center", gap: 5,
-          padding: "0 8px 0 10px", height: 28, borderRadius: 7,
-          border: open ? "1px solid #4a7aff" : "1px solid #e0dfd7",
-          background: open ? "#f5f7ff" : "#fff",
-          color: "#1a1a18", fontSize: 11, fontWeight: 500,
-          cursor: "pointer", whiteSpace: "nowrap",
-          boxShadow: open ? "0 0 0 3px rgba(74,122,255,0.1)" : "0 1px 3px rgba(0,0,0,0.06)",
-          transition: "all 0.12s", minWidth: 90,
-          fontFamily: "inherit", outline: "none",
-        }}
-      >
-        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", textAlign: "left" }}>
-          {sel?.label ?? "—"}
-        </span>
-        <svg width="9" height="9" viewBox="0 0 9 9" style={{ flexShrink: 0, marginLeft: 2, color: open ? "#4a7aff" : "#a8a49c", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
-          <path d="M1 2.5L4.5 6L8 2.5" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+    <div ref={ref} style={{ position: "relative", ...style }}>
+      <button type="button" onClick={toggle} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", height: 30, padding: "0 10px", borderRadius: 8, border: "1px solid #e8e6df", background: "#fff", fontSize: 11, fontWeight: 600, color: "#1a1a18", cursor: "pointer", outline: "none", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", whiteSpace: "nowrap", gap: 6 }}>
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1, textAlign: "left" }}>{current?.label ?? placeholder ?? "—"}</span>
+        <span style={{ fontSize: 8, color: "#a8a49c", flexShrink: 0, transition: "transform 0.15s", transform: open ? "rotate(180deg)" : "none" }}>▼</span>
       </button>
 
-      {open && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 4px)", left: 0,
-          minWidth: "100%", background: "#fff",
-          border: "1px solid #e8e6df", borderRadius: 10,
-          boxShadow: "0 12px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)",
-          zIndex: 600, padding: "4px",
-          maxHeight: 220, overflowY: "auto",
-        }}>
-          {options.map(opt => {
-            const isActive = opt.value === value;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                // onMouseDown + preventDefault: выбор происходит до срабатывания outside-click
-                onMouseDown={e => { e.preventDefault(); onChange(opt.value); setOpen(false); }}
-                style={{
-                  display: "flex", alignItems: "center", gap: 7,
-                  width: "100%", padding: "6px 10px",
-                  background: isActive ? "#eef3ff" : "transparent",
-                  border: "none", borderRadius: 6, cursor: "pointer", fontSize: 11,
-                  fontWeight: isActive ? 600 : 400,
-                  color: isActive ? "#4a7aff" : "#1a1a18",
-                  textAlign: "left", whiteSpace: "nowrap",
-                  fontFamily: "inherit", transition: "background 0.08s", outline: "none",
-                }}
-                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = "#f5f4f0"; }}
-                onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
-              >
-                <span style={{ flex: 1 }}>{opt.label}</span>
-                {isActive && (
-                  <svg width="11" height="11" viewBox="0 0 11 11" style={{ color: "#4a7aff", flexShrink: 0 }}>
-                    <path d="M1.5 5.5L4.5 8.5L9.5 2.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )}
-              </button>
-            );
-          })}
-        </div>
+      {open && rect && typeof document !== "undefined" && createPortal(
+        <div onClick={e => e.stopPropagation()} style={{ position: "fixed", top: rect.top + 4, left: rect.left, minWidth: Math.max(rect.width, 130), background: "#fff", borderRadius: 8, border: "1px solid #e8e6df", boxShadow: "0 4px 20px rgba(0,0,0,0.12)", zIndex: 99999, overflow: "hidden", maxHeight: 250, overflowY: "auto" }}>
+          {options.map(opt => (
+            <div key={opt.value} onClick={() => { onChange(opt.value); setOpen(false); }} style={{ padding: "8px 12px", fontSize: 11, fontWeight: 500, color: opt.value === value ? "#4a7aff" : "#1a1a18", background: opt.value === value ? "#f4f7ff" : "transparent", cursor: "pointer", whiteSpace: "nowrap", borderBottom: "1px solid #f5f4f0", transition: "background 0.1s" }} onMouseEnter={e => { if (opt.value !== value) (e.currentTarget as HTMLDivElement).style.background = "#fafaf8"; }} onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = opt.value === value ? "#f4f7ff" : "transparent"; }}>
+              {opt.label}
+            </div>
+          ))}
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -166,12 +96,12 @@ export function DashboardClient({ user }: { user: User }) {
   const [mobileView, setMobileView] = useState<"split" | "map" | "panels">("split");
   const [isListVisible, setIsListVisible] = useState(true);
   const [isDetailVisible, setIsDetailVisible] = useState(true);
-  
   const [tableOpen, setTableOpen] = useState(true);
   const [tableHeight, setTableHeight] = useState(250);
   const [isDraggingTable, setIsDraggingTable] = useState(false);
 
   const [orders, setOrders] = useState<Order[]>([]);
+  const [dbCouriers, setDbCouriers] = useState<DbCourier[]>([]);
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
   const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterStatus, setFilterStatus] = useState("ALL");
@@ -187,16 +117,15 @@ export function DashboardClient({ user }: { user: User }) {
   const [loading, setLoading] = useState(true);
   const [lastSync, setLastSync] = useState("");
   const [dismissedInvalid, setDismissedInvalid] = useState(false);
-
-  const [opComment, setOpComment] = useState("");
-  const [editStatus, setEditStatus] = useState("");
-  const [editCourier, setEditCourier] = useState("");
-  const [editAddress, setEditAddress] = useState(""); 
   
   const [previewGeo, setPreviewGeo] = useState<{lat: number, lng: number} | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [fixingAI, setFixingAI] = useState(false); 
+
+  // ── РЕЖИМ МАРШРУТА (МАССОВОЕ НАЗНАЧЕНИЕ) ──
+  const [isBulkMode, setIsBulkMode] = useState(false);
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<string[]>([]);
+  const [bulkCourier, setBulkCourier] = useState("");
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   useEffect(() => {
     if (!isDraggingTable) { document.body.style.userSelect = ""; return; }
@@ -211,12 +140,57 @@ export function DashboardClient({ user }: { user: User }) {
     return () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp); };
   }, [isDraggingTable]);
 
-  // Fix 3: пересчитываем размер карты при изменении видимости панелей
+  const fetchData = useCallback(async () => {
+    try {
+      const [ordersRes, couriersRes] = await Promise.all([ fetch(`/api/orders`), fetch(`/api/couriers`) ]);
+      if (ordersRes.ok) { setOrders(await ordersRes.json()); setLastSync(new Date().toLocaleTimeString("ru")); }
+      if (couriersRes.ok) setDbCouriers(await couriersRes.json());
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  }, []);
+
   useEffect(() => {
-    if (ymapRef.current) {
-      setTimeout(() => ymapRef.current!.container.fitToViewport(), 50);
-    }
-  }, [isListVisible, isDetailVisible, tableOpen, tableHeight]);
+    fetchData();
+    const t = setInterval(fetchData, 30_000);
+    return () => clearInterval(t);
+  }, [fetchData]);
+
+  useEffect(() => { setDismissedInvalid(false); }, [orders]);
+
+  const sortedCouriers = (() => {
+    const base = [...dbCouriers].filter(c => c.isActive);
+    const orderCounts: Record<string, number> = {};
+    orders.forEach(o => {
+      const oDate = o.deliveryDate || (o.crmCreatedAt ? o.crmCreatedAt.split('T')[0] : null);
+      if (oDate === filterDate && o.courier) orderCounts[o.courier] = (orderCounts[o.courier] || 0) + 1;
+    });
+
+    base.sort((a, b) => {
+      const aWorks = a.shifts.some(s => s.date === filterDate);
+      const bWorks = b.shifts.some(s => s.date === filterDate);
+      const aHasOrder = (orderCounts[a.fullName] || 0) > 0;
+      const bHasOrder = (orderCounts[b.fullName] || 0) > 0;
+      const scoreA = (aWorks ? 10 : 0) + (aHasOrder ? 5 : 0);
+      const scoreB = (bWorks ? 10 : 0) + (bHasOrder ? 5 : 0);
+      if (scoreA !== scoreB) return scoreB - scoreA;
+      return a.fullName.localeCompare(b.fullName);
+    });
+
+    return base.map(c => {
+       const works = c.shifts.some(s => s.date === filterDate);
+       const cnt = orderCounts[c.fullName] || 0;
+       let label = c.fullName;
+       if (works || cnt > 0) {
+         const flags = [];
+         if (works) flags.push("На смене");
+         if (cnt > 0) flags.push(`${cnt} зак.`);
+         label += ` (${flags.join(", ")})`;
+       }
+       return { value: c.fullName, label };
+    });
+  })();
+
+  const courierOptions = [{ value: "ALL", label: "Все курьеры" }, { value: "UNASSIGNED", label: "Не назначен" }, ...sortedCouriers];
 
   const dateAndStatusOrders = orders.filter(o => {
     const oDate = o.deliveryDate || (o.crmCreatedAt ? o.crmCreatedAt.split('T')[0] : null);
@@ -228,89 +202,22 @@ export function DashboardClient({ user }: { user: User }) {
 
   const selected = orders.find(o => o.id === selectedId) ?? null;
   const invalid = dateAndStatusOrders.filter(o => o.isInvalid);
-  const couriers = getCouriers(orders);
-  
   const showLeftPanel = isListVisible || isDetailVisible;
 
-  const filtered = selectedSlots.length === 0 
-    ? dateAndStatusOrders 
-    : dateAndStatusOrders.filter(o => {
-        const s = SLOTS.find(x => x.from === o.slotFrom && x.to === o.slotTo);
-        return s && selectedSlots.includes(s.label);
-      });
+  const filtered = selectedSlots.length === 0 ? dateAndStatusOrders : dateAndStatusOrders.filter(o => {
+    const s = SLOTS.find(x => x.from === o.slotFrom && x.to === o.slotTo);
+    return s && selectedSlots.includes(s.label);
+  });
 
-  const tableOrders = [...dateAndStatusOrders].sort((a, b) => new Date(b.changedAt || b.updatedAt || "").getTime() - new Date(a.changedAt || a.updatedAt || "").getTime());
+  const tableOrders = [...dateAndStatusOrders].sort((a, b) => new Date(b.updatedAt || "").getTime() - new Date(a.updatedAt || "").getTime());
 
-  const fetchOrders = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/orders`);
-      if (res.ok) { setOrders(await res.json()); setLastSync(new Date().toLocaleTimeString("ru")); }
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => {
-    fetchOrders();
-    const t = setInterval(fetchOrders, 30_000);
-    return () => clearInterval(t);
-  }, [fetchOrders]);
-
-  useEffect(() => {
-    const handler = (e: MessageEvent) => {
-      if (e.data?.type === "NOTIFICATION_CLICK" && e.data.orderId) {
-        setSelectedId(e.data.orderId);
-        setIsDetailVisible(true);
-        fetchOrders();
-      } else if (e.data?.type === "PUSH_RECEIVED") {
-        // Новый пуш пришёл в фоне — обновляем список сразу
-        fetchOrders();
-      }
-    };
-    navigator.serviceWorker?.addEventListener("message", handler);
-    return () => navigator.serviceWorker?.removeEventListener("message", handler);
-  }, [fetchOrders]);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const oid = params.get("orderId");
-      if (oid && orders.length > 0 && !selectedId) {
-        setSelectedId(oid);
-        const o = orders.find(x => x.id === oid);
-        if (o) {
-          const oDate = o.deliveryDate || (o.crmCreatedAt ? o.crmCreatedAt.split('T')[0] : null);
-          if (oDate) setFilterDate(oDate);
-        }
-        window.history.replaceState({}, '', '/dashboard');
-      }
-    }
-  }, [orders, selectedId]);
-
-  useEffect(() => { setDismissedInvalid(false); }, [orders]);
-
-  useEffect(() => {
-    setOpComment(selected?.opComment ?? "");
-    setEditStatus(selected?.status ?? "");
-    setEditCourier(selected?.courier ?? "");
-    setEditAddress(selected?.address ?? "");
-    setPreviewGeo(null); 
-    setSaved(false);
-  }, [selected?.id]); 
-
-  useEffect(() => {
-    if (selectedId && isMobile && mobileView === "map") setMobileView("split");
-  }, [selectedId, isMobile, mobileView]);
-
+  // ── ИНИЦИАЛИЗАЦИЯ КАРТЫ С ОТСЛЕЖИВАНИЕМ ЗУМА ──
   useEffect(() => {
     let mounted = true;
     loadYMaps().then(() => {
       if (!mounted || !mapRef.current || ymapRef.current) return;
       const map = new window.ymaps.Map(mapRef.current, { center: [55.752, 37.617], zoom: 10, controls: ["zoomControl"] }, {});
-      
-      map.events.add('boundschange', (e: any) => {
-        if (e.get('newZoom') !== e.get('oldZoom')) setCurrentZoom(e.get('newZoom'));
-      });
-
+      map.events.add('boundschange', (e: any) => { if (e.get('newZoom') !== e.get('oldZoom')) setCurrentZoom(e.get('newZoom')); });
       const clusterer = new window.ymaps.Clusterer({ clusterIconLayout: "default#pieChart", clusterIconPieChartRadius: 20 });
       map.geoObjects.add(clusterer);
       ymapRef.current = map;
@@ -319,252 +226,149 @@ export function DashboardClient({ user }: { user: User }) {
     return () => { mounted = false; };
   }, []);
 
+  useEffect(() => { if (ymapRef.current) setTimeout(() => ymapRef.current.container.fitToViewport(), 50); }, [mobileView, isListVisible, isDetailVisible, tableOpen, tableHeight]);
+
+  const toggleBulkSelect = (id: string) => {
+    setBulkSelectedIds(prev => {
+      if (prev.includes(id)) return prev.filter(x => x !== id);
+      if (prev.length >= 50) { alert("Максимум 50 заказов для масс-назначения"); return prev; }
+      return [...prev, id];
+    });
+  };
+
   // ── ПИНЫ НА КАРТЕ ──
   useEffect(() => {
     const clusterer = clustererRef.current;
     if (!clusterer || typeof window === "undefined" || !window.ymaps) return;
     clusterer.removeAll();
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ymaps = (window as any).ymaps;
 
     const StretchyLayout = ymaps.templateLayoutFactory.createClass(
-      '<div style="display:inline-flex;flex-direction:column;align-items:center;cursor:pointer;">' +
+      '<div style="display:inline-flex;flex-direction:column;align-items:center;cursor:pointer; opacity: {{ properties.opacity }};">' +
         '<div style="background:{{ properties.pinColor }};color:#fff;padding:4px 10px;border-radius:12px;font-size:10px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.28);border:1.5px solid rgba(255,255,255,0.35);min-width:28px;text-align:center;line-height:1.4;">{{ properties.slotLabel }}</div>' +
         '<div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid {{ properties.pinColor }};margin-top:-1px;"></div>' +
-        '{% if properties.showLabel %}' +
-          '<div style="margin-top:3px;font-size:9px;font-weight:700;color:#1a1a18;white-space:nowrap;background:rgba(255,255,255,0.96);padding:2px 6px;border-radius:4px;box-shadow:0 1px 5px rgba(0,0,0,0.15);line-height:1.4;letter-spacing:0.1px;">{{ properties.labelText }}</div>' +
-        '{% endif %}' +
+        '{% if properties.showLabel %}<div style="margin-top:3px;font-size:9px;font-weight:700;color:#1a1a18;white-space:nowrap;background:rgba(255,255,255,0.96);padding:2px 6px;border-radius:4px;box-shadow:0 1px 5px rgba(0,0,0,0.15);line-height:1.4;letter-spacing:0.1px;">{{ properties.labelText }}</div>{% endif %}' +
       '</div>'
     );
 
-    const isAllSlots = selectedSlots.length === 0;
+    const placemarks = filtered.filter(o => (o.lat && o.lng) || (o.id === selectedId && previewGeo)).map(order => {
+      const isSelected = selectedId === order.id;
+      const isBulkSelected = bulkSelectedIds.includes(order.id);
+      
+      const lat = isSelected && previewGeo ? previewGeo.lat : order.lat!;
+      const lng = isSelected && previewGeo ? previewGeo.lng : order.lng!;
+      
+      const color = slotColor(order);
+      let pinColor = isSelected ? (previewGeo ? '#9ca3af' : '#facc15') : color;
+      let opacity = 1;
 
-    const placemarks = filtered
-      .filter(o => (o.lat && o.lng) || (o.id === selectedId && previewGeo))
-      .map(order => {
-        const isSelected = selectedId === order.id;
-        const lat = isSelected && previewGeo ? previewGeo.lat : order.lat!;
-        const lng = isSelected && previewGeo ? previewGeo.lng : order.lng!;
-        
-        const color = slotColor(order);
-        const pinColor = isSelected ? (previewGeo ? '#9ca3af' : '#facc15') : color;
+      // Визуализация режима маршрута
+      if (isBulkMode) {
+        pinColor = isBulkSelected ? '#1a9e5c' : '#d1d5db';
+        opacity = isBulkSelected ? 1 : 0.6;
+      }
 
-        const displayTime = showTime && currentZoom >= 13 && !!order.slotRaw && isAllSlots;
-        const displayName = showCourierNames && !!order.courier && filterCourier === "ALL";
+      const displayTime = showTime && currentZoom >= 13 && !!order.slotRaw && selectedSlots.length === 0;
+      const displayName = showCourierNames && !!order.courier && filterCourier === "ALL";
+      const slotLabel = order.slotRaw ? order.slotRaw.replace("с ", "").replace(" до ", "-") : "";
+      
+      const balloonContentBody = `
+        <div style="font-size:13px;line-height:1.5">
+          <b>${order.address ?? "—"}</b><br>
+          <span style="color:#888">${order.slotRaw ?? "—"}</span><br>
+          ${order.courier ? `<span style="color:#1a1a18; font-weight:600;">${order.courier}</span><br>` : ""}
+          ${order.isInvalid ? `<br><span style="color:#d94040">⚠ ${order.invalidReason}</span>` : ""}
+        </div>`;
 
-        const slotLabel = order.slotRaw ? order.slotRaw.replace("с ", "").replace(" до ", "-") : "";
+      let pm;
+      if (displayTime) {
+        pm = new ymaps.Placemark([lat, lng], {
+          balloonContentHeader: order.externalId ?? order.crmId, balloonContentBody, hintContent: order.address ?? "—",
+          pinColor, opacity, slotLabel, showLabel: displayName, labelText: order.courier ?? "",
+        }, { iconLayout: StretchyLayout, iconShape: { type: "Rectangle", coordinates: [[-40, -40], [40, 20]] }, iconOffset: [-15, -26] });
+      } else {
+        let preset = 'islands#dotIcon';
+        if (isBulkMode) preset = isBulkSelected ? 'islands#greenDotIcon' : 'islands#grayDotIcon';
+        else if (isSelected) preset = previewGeo ? "islands#grayDotIcon" : "islands#redDotIcon";
 
-        const balloonContentBody = `
-          <div style="font-size:13px;line-height:1.5">
-            <b>${order.address ?? "—"}</b><br>
-            <span style="color:#888">${order.slotRaw ?? "—"}</span><br>
-            ${order.courier ? `<span style="color:#1a1a18; font-weight:600;">${order.courier}</span><br>` : ""}
-            ${order.items ? `<span style="color:#6b6860; font-size: 12px;">${order.items}</span>` : ""}
-            ${order.isInvalid ? `<br><span style="color:#d94040">⚠ ${order.invalidReason}</span>` : ""}
-          </div>`;
+        pm = new ymaps.Placemark([lat, lng], {
+          balloonContentHeader: order.externalId ?? order.crmId, balloonContentBody, hintContent: order.address ?? "—",
+          iconCaption: displayName ? order.courier : undefined, opacity
+        }, { preset, iconColor: (isBulkMode || isSelected) ? undefined : color });
+      }
 
-        let pm;
-
-        if (displayTime) {
-          pm = new window.ymaps.Placemark(
-            [lat, lng],
-            {
-              balloonContentHeader: order.externalId ?? order.crmId,
-              balloonContentBody,
-              hintContent: order.address ?? "—",
-              pinColor,
-              slotLabel,
-              showLabel: displayName,
-              labelText: order.courier ?? "",
-            },
-            {
-              iconLayout: StretchyLayout,
-              iconShape: { type: "Rectangle", coordinates: [[-40, -40], [40, 20]] },
-              iconOffset: [-15, -26]
-            }
-          );
+      pm.events.add("click", () => {
+        if (isBulkMode) {
+          toggleBulkSelect(order.id);
         } else {
-          let preset = 'islands#redDotIcon';
-          if (isSelected) preset = previewGeo ? "islands#grayIcon" : "islands#yellowIcon";
-
-          pm = new window.ymaps.Placemark(
-            [lat, lng],
-            {
-              balloonContentHeader: order.externalId ?? order.crmId,
-              balloonContentBody, 
-              hintContent: order.address ?? "—",
-              iconCaption: displayName ? order.courier : undefined, 
-            },
-            {
-              preset,
-              iconColor: isSelected ? undefined : color
-            }
-          );
-        }
-
-        pm.events.add("click", () => {
-          clickedFromMapRef.current = true;
           setSelectedId(p => p === order.id ? null : order.id);
           if (!isMobile) setIsDetailVisible(true);
-        });
-        return pm;
+        }
       });
+      return pm;
+    });
 
     if (placemarks.length > 0) clusterer.add(placemarks);
-  }, [filtered, selectedId, previewGeo, isMobile, showCourierNames, showTime, currentZoom, filterCourier, selectedSlots]);
+  }, [filtered, selectedId, previewGeo, isMobile, showCourierNames, showTime, currentZoom, filterCourier, selectedSlots, isBulkMode, bulkSelectedIds]);
 
-  // clickedFromMap=true — выбор через клик по пину, только пан без зума
-  const clickedFromMapRef = useRef(false);
-
+  // ── ЦЕНТРИРОВАНИЕ ──
   useEffect(() => {
-    if (selectedId && ymapRef.current && !previewGeo) {
+    if (selectedId && ymapRef.current && !previewGeo && !isBulkMode) {
       const order = orders.find(o => o.id === selectedId);
       if (order?.lat && order?.lng) {
         if (isMobile && mobileView !== "panels") window.scrollTo({ top: 0, behavior: 'smooth' });
-        if (clickedFromMapRef.current) {
-          // Клик по пину — только центрируем, зум не трогаем
-          ymapRef.current.setCenter([order.lat, order.lng], undefined, { duration: 400 });
-        } else {
-          // Выбор из списка — зумируем
-          ymapRef.current.setCenter([order.lat, order.lng], 14, { duration: 500 });
-        }
-        clickedFromMapRef.current = false;
+        ymapRef.current.setCenter([order.lat, order.lng], 16, { duration: 500, timingFunction: 'ease-in-out' });
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId]);
+  }, [selectedId, isBulkMode]); 
 
-  async function handleGeocode(mode: "ai" | "manual") {
-    if (!selected) return;
-    setFixingAI(true);
+  // ── МАССОВОЕ СОХРАНЕНИЕ ──
+  async function handleBulkAssign() {
+    if (!bulkCourier || bulkSelectedIds.length === 0) return;
+    setBulkSaving(true);
     try {
-      const apiMode = mode === "ai" ? "ai_preview" : "manual_preview";
-      const res = await fetch(`/api/orders/${selected.id}/fix`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: apiMode, manualAddress: editAddress }) });
-      if (res.ok) {
-        const data = await res.json();
-        if (mode === "ai" && data.suggestedAddress) {
-          setEditAddress(data.suggestedAddress); 
-          setOpComment(prev => { const oldInfo = `[Старый адрес: ${selected.address}]`; if (prev.includes(oldInfo)) return prev; return prev ? `${prev}\n${oldInfo}` : oldInfo; });
-        }
-        if (data.geo && data.geo.lat) {
-          setPreviewGeo({ lat: data.geo.lat, lng: data.geo.lng });
-          if (ymapRef.current) ymapRef.current.setCenter([data.geo.lat, data.geo.lng], 15, { duration: 400 });
-        } else { alert("Яндекс.Карты не смогли найти координаты по этому адресу."); }
+      for (const id of bulkSelectedIds) {
+        await fetch(`/api/orders/${id}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ courier: bulkCourier })
+        });
       }
-    } catch (e) { console.error(e); }
-    finally { setFixingAI(false); }
-  }
-
-  async function saveChanges() {
-    if (!selected) return;
-    setSaving(true);
-    const isAddressChanged = editAddress !== (selected.address ?? "");
-    
-    // 1. Обновляем координаты, если адрес изменился или мы его геокодировали
-    if (isAddressChanged || previewGeo) {
-      await fetch(`/api/orders/${selected.id}/fix`, { 
-        method: "POST", headers: { "Content-Type": "application/json" }, 
-        body: JSON.stringify({ mode: "commit", manualAddress: editAddress }) 
-      });
+      setBulkSelectedIds([]);
+      setIsBulkMode(false);
+      setBulkCourier("");
+      await fetchData();
+    } catch (e) {
+      console.error(e);
+      alert("Произошла ошибка при массовом назначении");
+    } finally {
+      setBulkSaving(false);
     }
-
-    // 2. ИСПРАВЛЕНИЕ: Отправляем ВСЕ текстовые поля (статус, курьер, коммент, и новый адрес) в PATCH для CRM
-    const body: Record<string, string> = {};
-    if (editStatus !== selected.status) body.status = editStatus;
-    if (editCourier !== (selected.courier ?? "")) body.courier = editCourier;
-    if (opComment !== (selected.opComment ?? "")) body.opComment = opComment;
-    if (isAddressChanged) body.address = editAddress; // <--- ДОБАВЛЯЕМ АДРЕС
-
-    if (Object.keys(body).length > 0) {
-      await fetch(`/api/orders/${selected.id}`, { 
-        method: "PATCH", headers: { "Content-Type": "application/json" }, 
-        body: JSON.stringify(body) 
-      });
-    }
-
-    setPreviewGeo(null); 
-    await fetchOrders(); 
-    setSaving(false); 
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
   }
-
-  const hasChanges = selected && (editStatus !== selected.status || editCourier !== (selected.courier ?? "") || opComment !== (selected.opComment ?? "") || editAddress !== (selected.address ?? "") || previewGeo !== null);
-
-  const courierOptions = [{ value: "ALL", label: "Все курьеры" }, { value: "UNASSIGNED", label: "Не назначен" }, ...couriers.map(c => ({ value: c, label: c }))];
 
   const toggleSlot = (label: string) => {
     if (label === "all") setSelectedSlots([]);
     else setSelectedSlots(prev => prev.includes(label) ? prev.filter(x => x !== label) : [...prev, label]);
   };
 
-  const renderDetailPanel = () => {
-    if(!selected) return null;
-    return (
-      <div style={s.detailScroll}>
-        <div style={s.detailHeader}>
-          <div style={{ flex: 1 }}><div style={s.detailExtId}>{selected.externalId ?? selected.crmId}</div></div>
-          <button style={s.detailClose} onClick={() => setIsDetailVisible(false)} title="Свернуть панель">✕</button>
-        </div>
-        {selected.isInvalid && <div style={s.detailInvalidBanner}>⚠ {selected.invalidReason ?? "Проблемный адрес"}</div>}
-        <div style={s.editField}>
-          <div style={s.editFieldLabel}>Адрес доставки</div>
-          <textarea style={s.textarea} rows={2} value={editAddress} onChange={e => setEditAddress(e.target.value)} />
-          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-            <button style={s.geoBtn} onClick={() => handleGeocode("manual")} disabled={fixingAI}>📍 На карте</button>
-            <button style={s.aiBtn} onClick={() => handleGeocode("ai")} disabled={fixingAI}>{fixingAI ? "✨ Думает..." : "🪄 AI Исправить"}</button>
-          </div>
-        </div>
-        <div style={s.fieldsGrid}>
-          <div style={s.detailField}><div style={s.detailFieldLabel}>Слот</div><div style={{ ...s.detailFieldValue, color: slotColor(selected) }}>{selected.slotRaw ?? `${selected.slotFrom}–${selected.slotTo}`}</div></div>
-          <div style={s.detailField}><div style={s.detailFieldLabel}>Стоимость</div><div style={s.detailFieldValue}>{selected.price ? `${selected.price} ₽` : "—"}</div></div>
-        </div>
-        <div style={s.editField}>
-          <div style={s.editFieldLabel}>Статус</div>
-          <select style={s.select} value={editStatus} onChange={e => setEditStatus(e.target.value)}>{STATUS_OPTIONS.slice(1).map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}</select>
-        </div>
-        <div style={s.editField}>
-          <div style={s.editFieldLabel}>Курьер</div>
-          <div style={{ display: "flex", gap: 6 }}>
-            <select style={{ ...s.select, flex: 1 }} value={editCourier} onChange={e => setEditCourier(e.target.value)}>
-              <option value="">— Не назначен —</option>{couriers.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <input style={{ ...s.input, width: 90 }} placeholder="Или вручную" value={couriers.includes(editCourier) ? "" : editCourier} onChange={e => setEditCourier(e.target.value)} />
-          </div>
-        </div>
-        {selected.items && <div style={s.editField}><div style={s.editFieldLabel}>Состав</div><div style={{ fontSize: 12, color: "#1a1a18", lineHeight: "1.4" }}>{selected.items}</div></div>}
-        {selected.comment && <div style={s.editField}><div style={s.editFieldLabel}>Комментарий клиента</div><div style={{ fontSize: 12, color: "#6b6860", lineHeight: "1.4" }}>{selected.comment}</div></div>}
-        <div style={s.editField}>
-          <div style={s.editFieldLabel}>Комментарий оператора</div>
-          <textarea style={s.textarea} rows={2} value={opComment} onChange={e => setOpComment(e.target.value)} placeholder="Заметка..." />
-        </div>
-        <button style={{ ...s.saveBtn, background: saved ? "#1a9e5c" : hasChanges ? "#4a7aff" : "#e8e6df", color: hasChanges || saved ? "#fff" : "#a8a49c", cursor: hasChanges ? "pointer" : "default" }} disabled={!hasChanges || saving} onClick={saveChanges}>
-          {saved ? "✓ Сохранено" : saving ? "Сохраняем..." : "Сохранить изменения"}
-        </button>
-      </div>
-    );
-  };
-
   return (
     <div style={isMobile ? sm.app : s.app}>
       <div style={isMobile ? sm.topbar : s.topbar}>
         <div style={s.logo}><span style={s.logoDot} />FlowerOps</div>
-        <button onClick={() => router.push('/couriers')} style={s.navBtn}>🚚 Курьеры</button>
         <button onClick={() => router.push('/orders')} style={s.navBtn}>≡ Заказы</button>
+        <button onClick={() => router.push('/couriers')} style={s.navBtn}>🚚 Курьеры</button>
         <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={s.datePicker} />
         
-        <CustomSelect value={filterStatus} onChange={setFilterStatus} options={STATUS_OPTIONS} style={{ width: 120, marginLeft: 4 }} />
-        <CustomSelect value={filterCourier} onChange={setFilterCourier} options={courierOptions} style={{ width: 110, marginLeft: 4 }} />
+        <CustomSelect value={filterStatus} onChange={setFilterStatus} options={STATUS_OPTIONS} style={{ width: 130, marginLeft: 4 }} />
+        <CustomSelect value={filterCourier} onChange={setFilterCourier} options={courierOptions} style={{ width: 130, marginLeft: 4 }} />
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 6 }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#6b6860", cursor: "pointer" }}>
-            <input type="checkbox" checked={showCourierNames} onChange={e => setShowCourierNames(e.target.checked)} /> Имена
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#6b6860", cursor: "pointer", opacity: selectedSlots.length === 0 ? 1 : 0.5 }} title={selectedSlots.length > 0 ? "Доступно только при всех слотах" : ""}>
-            <input type="checkbox" checked={showTime} disabled={selectedSlots.length > 0} onChange={e => setShowTime(e.target.checked)} /> Время
-          </label>
-        </div>
+        {/* КНОПКА МАРШРУТА */}
+        <button 
+          onClick={() => { setIsBulkMode(!isBulkMode); setBulkSelectedIds([]); setSelectedId(null); setIsDetailVisible(false); }} 
+          style={{ ...s.navBtn, background: isBulkMode ? "#1a1a18" : "#fff", color: isBulkMode ? "#fff" : "#1a1a18", border: isBulkMode ? "1px solid #1a1a18" : "1px solid #e8e6df", marginLeft: 12 }}
+        >
+          {isBulkMode ? "✕ Выйти из маршрута" : "📍 Маршрут"}
+        </button>
 
         {!isMobile && (
           <div style={s.slotBar}>
@@ -578,13 +382,6 @@ export function DashboardClient({ user }: { user: User }) {
         <button style={s.userBtn} onClick={() => { setProfileOpen(!profileOpen); setAlertsOpen(false); }}>{user.email.slice(0, 2).toUpperCase()}</button>
       </div>
 
-      {isMobile && (
-        <div style={sm.mobileSlotsWrap}>
-          <SlotBtn label="Все" active={selectedSlots.length === 0} color="#4a7aff" onClick={() => toggleSlot("all")} />
-          {SLOTS.map(sl => <SlotBtn key={sl.label} label={sl.label} active={selectedSlots.includes(sl.label)} color={sl.color} onClick={() => toggleSlot(sl.label)} />)}
-        </div>
-      )}
-
       {!isMobile && invalid.length > 0 && !dismissedInvalid && (
         <div style={s.invalidBanner}>
           <span style={{ fontSize: 14, flexShrink: 0 }}>⚠</span>
@@ -593,18 +390,25 @@ export function DashboardClient({ user }: { user: User }) {
         </div>
       )}
 
-      {isMobile && (
-        <div style={{ display: "flex", padding: "8px 10px", background: "#f5f4f0", gap: 8, flexShrink: 0, borderBottom: "1px solid #e8e6df" }}>
-          <ViewToggleBtn active={mobileView === "map"} onClick={() => setMobileView("map")}>🗺️ Карта</ViewToggleBtn>
-          <ViewToggleBtn active={mobileView === "split"} onClick={() => setMobileView("split")}>Вместе</ViewToggleBtn>
-          <ViewToggleBtn active={mobileView === "panels"} onClick={() => setMobileView("panels")}>📋 Список</ViewToggleBtn>
-        </div>
-      )}
-
       <div style={isMobile ? sm.body : s.body}>
         {!isMobile && (
-          <div style={{ display: 'flex', width: '100%', height: '100%' }}>
-            {showLeftPanel && (
+          <div style={{ display: 'flex', width: '100%', height: '100%', position: 'relative' }}>
+            
+            {/* ПЛАВАЮЩАЯ ПАНЕЛЬ МАРШРУТА */}
+            {isBulkMode && (
+              <div style={{ position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: '#fff', padding: '12px 20px', borderRadius: 12, boxShadow: '0 4px 30px rgba(0,0,0,0.15)', zIndex: 100, display: 'flex', alignItems: 'center', gap: 16, border: '2px solid #4a7aff' }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#1a1a18' }}>Маршрут: <span style={{ color: '#4a7aff' }}>{bulkSelectedIds.length}</span>/50</div>
+                <select style={s.select} value={bulkCourier} onChange={e => setBulkCourier(e.target.value)}>
+                   <option value="">— Выберите курьера —</option>
+                   {sortedCouriers.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+                <button style={{ ...s.saveBtn, width: 'auto', padding: '8px 20px', background: bulkCourier && bulkSelectedIds.length > 0 ? '#4a7aff' : '#e8e6df', color: bulkCourier && bulkSelectedIds.length > 0 ? '#fff' : '#a8a49c' }} disabled={!bulkCourier || bulkSelectedIds.length === 0 || bulkSaving} onClick={handleBulkAssign}>
+                  {bulkSaving ? "Назначаем..." : "Назначить маршрут"}
+                </button>
+              </div>
+            )}
+
+            {showLeftPanel && !isBulkMode && (
               <div style={s.leftPanel}>
                 {isListVisible && (
                   <div style={{ ...s.cardsSection, flex: isDetailVisible ? "0 0 50%" : 1, borderBottom: isDetailVisible ? "1px solid #e8e6df" : "none" }}>
@@ -615,42 +419,30 @@ export function DashboardClient({ user }: { user: User }) {
                       <button onClick={() => setIsListVisible(false)} style={s.panelToggleArrow} title="Скрыть список">◀</button>
                     </div>
                     <div style={s.cardsList}>
-                      {loading ? <div style={s.empty}>Загрузка...</div> : filtered.length === 0 ? <div style={s.empty}>Заказов нет</div> : filtered.map(o => <OrderCard key={o.id} order={o} selected={selectedId === o.id} onSelect={() => setSelectedId(p => p === o.id ? null : o.id)} />)}
+                      {loading ? <div style={s.empty}>Загрузка...</div> : filtered.length === 0 ? <div style={s.empty}>Заказов нет</div> : filtered.map(o => <OrderCard key={o.id} order={o} selected={selectedId === o.id} isBulkMode={isBulkMode} isBulkSelected={bulkSelectedIds.includes(o.id)} onSelect={() => isBulkMode ? toggleBulkSelect(o.id) : setSelectedId(p => p === o.id ? null : o.id)} />)}
                     </div>
                   </div>
                 )}
+
                 {isDetailVisible && (
                   <div style={{ ...s.detailSection, flex: isListVisible ? "0 0 50%" : 1 }}>
-                    {renderDetailPanel()}
+                    {selected ? (
+                      <OrderDetail selected={selected} couriers={sortedCouriers} onClose={() => { setSelectedId(null); setIsDetailVisible(false); }} onUpdateSuccess={fetchData} onPreviewGeo={(geo) => { setPreviewGeo(geo); if (geo && ymapRef.current) ymapRef.current.setCenter([geo.lat, geo.lng], 15, { duration: 400 }); }} fixingAI={fixingAI} setFixingAI={setFixingAI} />
+                    ) : (
+                      <div style={s.detailEmpty}><div style={{ fontSize: 12, color: "#a8a49c" }}>Выберите заказ</div></div>
+                    )}
                   </div>
                 )}
               </div>
             )}
+
             <div style={{ flex: 1, position: 'relative' }}>
               <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
-              {/* Кнопки разворачивания скрытых панелей */}
-              <div style={{ position: 'absolute', top: 12, left: 0, zIndex: 100, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {!isListVisible && (
-                  <button onClick={() => setIsListVisible(true)} style={s.expandSideBtn} title="Показать список">≡</button>
-                )}
-                {!isDetailVisible && selectedId && (
-                  <button onClick={() => setIsDetailVisible(true)} style={{ ...s.expandSideBtn, top: isListVisible ? 12 : 48 }} title="Показать карточку">☰</button>
-                )}
-              </div>
+              {!isListVisible && !isBulkMode && (
+                <button onClick={() => setIsListVisible(true)} style={s.expandSideBtn} title="Показать список">▶</button>
+              )}
             </div>
           </div>
-        )}
-
-        {isMobile && (
-          <>
-            <div ref={mapRef} style={{ ...sm.map, display: mobileView === "panels" ? "none" : "block", flex: mobileView === "map" ? 1 : "0 0 45%" }} />
-            <div style={{ ...sm.panelsWrap, display: mobileView === "map" ? "none" : "flex", flex: mobileView === "panels" ? 1 : undefined }}>
-              <div style={sm.cardsSection}>
-                <div style={s.cardsList}>{loading ? <div style={s.empty}>Загрузка...</div> : filtered.length === 0 ? <div style={s.empty}>Заказов нет</div> : filtered.map(o => <OrderCard key={o.id} order={o} selected={selectedId === o.id} onSelect={() => setSelectedId(p => p === o.id ? null : o.id)} />)}</div>
-              </div>
-              <div style={sm.detailSection}>{!selected ? <div style={s.detailEmpty}><div style={{ fontSize: 12, color: "#a8a49c", textAlign: "center" }}>Выберите заказ</div></div> : renderDetailPanel()}</div>
-            </div>
-          </>
         )}
       </div>
 
@@ -669,26 +461,28 @@ export function DashboardClient({ user }: { user: User }) {
             <div style={s.tableWrap}>
               <table style={s.table}>
                 <thead>
-                  <tr>{["Внешний ID", "Время доставки", "Адрес доставки", "Курьер", "Стоимость", "Тип доставки", "Статус", "Комментарий клиента", "Комментарий оператора", "Состав", "Создан", "Изменён"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
+                  <tr>{["Внешний ID", "Время", "Адрес доставки", "Курьер", "Стоимость", "Статус", "Комментарий", "Опер. Коммент", "Состав", "Создан"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
                 </thead>
                 <tbody>
                   {tableOrders.map((o, i) => {
                     const color = slotColor(o);
                     const isSelected = selectedId === o.id;
+                    const isBulkSelected = bulkSelectedIds.includes(o.id);
                     return (
-                      <tr key={o.id} style={{ background: isSelected ? "#eef3ff" : i % 2 === 0 ? "#fff" : "#fafaf8", cursor: "pointer", outline: isSelected ? "1px solid #4a7aff" : "none" }} onClick={() => setSelectedId(p => p === o.id ? null : o.id)}>
-                        <td style={{ ...s.td, whiteSpace: "nowrap" }}><span style={{ ...s.statusDot, background: color }} /><span style={{ fontFamily: "monospace", fontSize: 10, color: "#a8a49c" }}>{o.externalId ?? o.crmId}</span></td>
+                      <tr key={o.id} style={{ background: isBulkMode ? (isBulkSelected ? "#eef3ff" : "#fff") : (isSelected ? "#eef3ff" : i % 2 === 0 ? "#fff" : "#fafaf8"), cursor: "pointer", outline: (isSelected || isBulkSelected) ? "1px solid #4a7aff" : "none" }} onClick={() => isBulkMode ? toggleBulkSelect(o.id) : setSelectedId(p => p === o.id ? null : o.id)}>
+                        <td style={{ ...s.td, whiteSpace: "nowrap" }}>
+                          {isBulkMode && <input type="checkbox" checked={isBulkSelected} readOnly style={{ marginRight: 6, accentColor: "#4a7aff" }} />}
+                          <span style={{ ...s.statusDot, background: color }} /><span style={{ fontFamily: "monospace", fontSize: 10, color: "#a8a49c" }}>{o.externalId ?? o.crmId}</span>
+                        </td>
                         <td style={{ ...s.td, whiteSpace: "nowrap", color }}>{o.slotRaw ?? (o.slotFrom ? `${o.slotFrom}–${o.slotTo}` : "—")}</td>
                         <td style={{ ...s.td, minWidth: 180, maxWidth: 240 }}>{o.address ?? "—"}</td>
-                        <td style={{ ...s.td, whiteSpace: "nowrap" }}>{o.courier ?? <span style={{ color: "#d94040" }}>—</span>}</td>
+                        <td style={{ ...s.td, whiteSpace: "nowrap", fontWeight: 600 }}>{o.courier ?? <span style={{ color: "#d94040", fontWeight: 400 }}>—</span>}</td>
                         <td style={{ ...s.td, whiteSpace: "nowrap" }}>{o.price ? `${o.price} ₽` : "—"}</td>
-                        <td style={{ ...s.td, whiteSpace: "nowrap", color: "#6b6860" }}>{o.deliveryType ?? "—"}</td>
                         <td style={{ ...s.td, whiteSpace: "nowrap" }}><span style={{ padding: "2px 7px", borderRadius: 10, fontSize: 10, fontWeight: 500, background: `${color}18`, color }}>{STATUS_LABELS[o.status] ?? o.status}</span></td>
                         <td style={{ ...s.td, minWidth: 160, maxWidth: 220, color: "#6b6860" }}>{o.comment ?? "—"}</td>
                         <td style={{ ...s.td, minWidth: 140, maxWidth: 200, color: "#4a7aff" }}>{o.opComment ?? "—"}</td>
                         <td style={{ ...s.td, minWidth: 160, maxWidth: 240, color: "#6b6860" }}>{o.items ?? "—"}</td>
                         <td style={{ ...s.td, whiteSpace: "nowrap", color: "#a8a49c", fontSize: 10 }}>{o.crmCreatedAt ? new Date(o.crmCreatedAt).toLocaleString("ru", { timeZone: "Europe/Moscow", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
-                        <td style={{ ...s.td, whiteSpace: "nowrap", color: o.changedAt ? "#1a1a18" : "#a8a49c", fontSize: 10 }}>{o.changedAt ? new Date(o.changedAt).toLocaleString("ru") : "—"}</td>
                       </tr>
                     );
                   })}
@@ -700,37 +494,21 @@ export function DashboardClient({ user }: { user: User }) {
       )}
 
       {profileOpen && <div style={{ position: "fixed", top: 52, right: 8, zIndex: 200 }}><ProfilePanel onClose={() => setProfileOpen(false)} onLogout={async () => { await fetch("/api/auth/verify", { method: "DELETE" }); router.push("/login"); }} /></div>}
-      
-      {alertsOpen && invalid.length > 0 && (
-        <div style={{ ...s.popup, right: 52 }} onClick={e => e.stopPropagation()}>
-          <div style={s.alertTitle}>⚠ Проблемные адреса</div>
-          {invalid.map(o => (
-            <div key={o.id} style={s.alertItem} onClick={() => { setSelectedId(o.id); setAlertsOpen(false); }}>
-              <div style={s.alertAddr}>{o.address ?? "—"}</div>
-              <div style={s.alertSub}>{o.externalId} · {o.invalidReason ?? "Требует проверки"}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
       {(profileOpen || alertsOpen) && <div style={s.overlay} onClick={() => { setProfileOpen(false); setAlertsOpen(false); }} />}
     </div>
   );
-}
-
-function ViewToggleBtn({ active, onClick, children }: { active: boolean, onClick: () => void, children: React.ReactNode }) {
-  return <button onClick={onClick} style={{ flex: 1, padding: "6px", borderRadius: 8, fontSize: 11, fontWeight: 600, border: "none", cursor: "pointer", background: active ? "#4a7aff" : "#fff", color: active ? "#fff" : "#6b6860", boxShadow: active ? "0 2px 8px rgba(74,122,255,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", transition: "all 0.15s" }}>{children}</button>;
 }
 
 function SlotBtn({ label, active, color, onClick }: { label: string; active: boolean; color: string; onClick: () => void }) {
   return <button style={{ ...s.slotBtn, ...(active ? { background: color, borderColor: color, color: "#fff" } : {}) }} onClick={onClick}>{label}</button>;
 }
 
-function OrderCard({ order, selected, onSelect }: { order: Order; selected: boolean; onSelect: () => void }) {
+function OrderCard({ order, selected, isBulkMode, isBulkSelected, onSelect }: { order: Order; selected: boolean; isBulkMode: boolean; isBulkSelected: boolean; onSelect: () => void }) {
   const color = slotColor(order);
   return (
-    <div style={{ ...s.card, ...(selected ? s.cardSelected : {}), ...(order.isInvalid ? s.cardInvalid : {}) }} onClick={onSelect}>
+    <div style={{ ...s.card, ...(selected || isBulkSelected ? s.cardSelected : {}), ...(order.isInvalid ? s.cardInvalid : {}) }} onClick={onSelect}>
       <div style={s.cardRow1}>
+        {isBulkMode && <input type="checkbox" checked={isBulkSelected} readOnly style={{ marginRight: 6, pointerEvents: "none", accentColor: "#4a7aff" }} />}
         <span style={{ ...s.statusDot, background: color }} />
         <span style={s.extId}>{order.externalId ?? order.crmId}</span>
         <span style={{ ...s.statusTag, background: `${color}18`, color }}>{STATUS_LABELS[order.status] ?? order.status}</span>
@@ -754,8 +532,8 @@ const s: Record<string, React.CSSProperties> = {
   topbar: { display: "flex", alignItems: "center", gap: 8, padding: "0 16px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 10, position: "relative" },
   logo: { fontSize: 15, fontWeight: 600, color: "#1a1a18", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap" },
   logoDot: { display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "#4a7aff" },
-  navBtn: { padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#1a1a18", whiteSpace: "nowrap", marginLeft: 4 },
-  datePicker: { padding: "4px 8px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 11, outline: "none", color: "#1a1a18", background: "#fff" },
+  navBtn: { padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#1a1a18", whiteSpace: "nowrap" },
+  datePicker: { padding: "4px 8px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 11, outline: "none", color: "#1a1a18", background: "#fff", marginLeft: 12 },
   slotBar: { display: "flex", gap: 4, marginLeft: 12 },
   slotBtn: { padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 500, border: "1px solid #e8e6df", background: "transparent", color: "#6b6860", cursor: "pointer", whiteSpace: "nowrap" },
   syncLabel: { fontSize: 11, color: "#a8a49c", whiteSpace: "nowrap" },
@@ -774,21 +552,6 @@ const s: Record<string, React.CSSProperties> = {
   empty: { padding: 24, textAlign: "center", color: "#a8a49c", fontSize: 12 },
   detailSection: { display: "flex", flexDirection: "column", overflow: "hidden" },
   detailEmpty: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 },
-  detailScroll: { flex: 1, overflowY: "auto", padding: "12px 14px" },
-  detailHeader: { display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 10 },
-  detailExtId: { fontSize: 14, fontWeight: 700, color: "#1a1a18", fontFamily: "monospace" },
-  detailClose: { background: "none", border: "none", color: "#a8a49c", fontSize: 14, cursor: "pointer", padding: 2, flexShrink: 0 },
-  detailInvalidBanner: { fontSize: 11, padding: "5px 9px", borderRadius: 6, background: "rgba(217,64,64,0.08)", color: "#d94040", marginBottom: 10 },
-  fieldsGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 },
-  detailField: { background: "#f5f4f0", borderRadius: 7, padding: "7px 9px" },
-  detailFieldLabel: { fontSize: 10, color: "#a8a49c", textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 2 },
-  detailFieldValue: { fontSize: 12, fontWeight: 500, color: "#1a1a18" },
-  editField: { marginBottom: 10 },
-  editFieldLabel: { fontSize: 10, color: "#a8a49c", textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 4 },
-  select: { width: "100%", padding: "7px 9px", borderRadius: 7, border: "1px solid #e8e6df", background: "#fafaf8", color: "#1a1a18", fontSize: 12, outline: "none", cursor: "pointer" },
-  input: { padding: "7px 9px", borderRadius: 7, border: "1px solid #e8e6df", background: "#fafaf8", color: "#1a1a18", fontSize: 12, outline: "none" },
-  textarea: { width: "100%", padding: "7px 9px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 12, resize: "none", outline: "none", color: "#1a1a18", background: "#fafaf8", display: "block" },
-  saveBtn: { width: "100%", padding: "8px", borderRadius: 8, border: "none", fontSize: 12, fontWeight: 600, transition: "background .15s, color .15s" },
   panelToggleArrow: { background: "transparent", border: "none", cursor: "pointer", color: "#a8a49c", fontSize: 13, padding: "4px 8px", borderRadius: 4, transition: "color 0.15s" },
   expandSideBtn: { position: "absolute", top: 12, left: 0, zIndex: 100, background: "#fff", border: "1px solid #e8e6df", borderLeft: "none", borderRadius: "0 8px 8px 0", padding: "10px 8px", cursor: "pointer", color: "#6b6860", fontSize: 13, boxShadow: "2px 2px 8px rgba(0,0,0,0.06)" },
   card: { padding: "9px 11px", borderRadius: 8, marginBottom: 4, background: "#fafaf8", border: "1px solid #e8e6df", cursor: "pointer", transition: "all .12s" },
@@ -802,8 +565,6 @@ const s: Record<string, React.CSSProperties> = {
   slotTag: { fontSize: 10, fontWeight: 600 },
   courierTag: { fontSize: 10, color: "#a8a49c", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 },
   priceTag: { fontSize: 10, color: "#6b6860", flexShrink: 0 },
-  geoBtn: { flex: 1, padding: "7px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fff", fontSize: 11, cursor: "pointer", fontWeight: 600, color: "#1a1a18" },
-  aiBtn: { flex: 1, padding: "7px", borderRadius: 6, border: "none", background: "#7c4dff", fontSize: 11, cursor: "pointer", fontWeight: 600, color: "#fff" },
   tableSection: { flexShrink: 0, background: "#fff", borderTop: "2px solid #e8e6df", display: "flex", flexDirection: "column", overflow: "hidden" },
   tableHeader: { display: "flex", alignItems: "center", gap: 6, padding: "7px 16px", borderBottom: "1px solid #f0efe9", flexShrink: 0 },
   tableWrap: { flex: 1, overflowX: "auto", overflowY: "auto" },
@@ -811,21 +572,13 @@ const s: Record<string, React.CSSProperties> = {
   th: { padding: "7px 12px", textAlign: "left" as const, fontSize: 10, fontWeight: 600, color: "#a8a49c", textTransform: "uppercase", letterSpacing: ".4px", background: "#fafaf8", borderBottom: "1px solid #e8e6df", whiteSpace: "nowrap", position: "sticky", top: 0, zIndex: 1 },
   td: { padding: "7px 12px", borderBottom: "0.5px solid #f0efe9", verticalAlign: "top", fontSize: 12, color: "#1a1a18" },
   statusDot: { width: 6, height: 6, borderRadius: "50%", flexShrink: 0, display: "inline-block", marginRight: 4, verticalAlign: "middle" },
-  popup: { position: "fixed", top: 52, right: 8, background: "#fff", border: "1px solid #e8e6df", borderRadius: 12, padding: 16, zIndex: 200, width: 280, boxShadow: "0 4px 24px rgba(0,0,0,0.1)" },
   overlay: { position: "fixed", inset: 0, zIndex: 199 },
-  alertTitle: { fontSize: 11, fontWeight: 700, color: "#d94040", textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 10 },
-  alertItem: { padding: "7px 0", borderBottom: "0.5px solid #f5f4f0", cursor: "pointer" },
-  alertAddr: { fontSize: 12, color: "#1a1a18", marginBottom: 2 },
-  alertSub: { fontSize: 11, color: "#d94040", opacity: 0.8 },
+  select: { padding: "8px 12px", borderRadius: 8, border: "1px solid #e8e6df", fontSize: 13, outline: "none", cursor: "pointer", background: "#fff", color: "#1a1a18" },
+  saveBtn: { border: "none", fontSize: 13, fontWeight: 600, transition: "background .15s, color .15s", cursor: "pointer", borderRadius: 8 }
 };
 
 const sm: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0" },
   topbar: { ...s.topbar, overflowX: "auto", padding: "0 10px", gap: 6 },
-  mobileSlotsWrap: { display: "flex", gap: 4, padding: "8px 10px", background: "#fff", borderBottom: "1px solid #e8e6df", overflowX: "auto", flexShrink: 0 },
   body: { display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" },
-  map: { minHeight: 250 },
-  panelsWrap: { display: "flex", flexDirection: "column", background: "#fff", overflow: "hidden" },
-  cardsSection: { flex: 1, display: "flex", flexDirection: "column", minHeight: 0 },
-  detailSection: { flex: "0 0 55%", display: "flex", flexDirection: "column", borderTop: "2px solid #4a7aff", background: "#fff", overflow: "hidden", boxShadow: "0 -4px 12px rgba(0,0,0,0.05)" },
 };
