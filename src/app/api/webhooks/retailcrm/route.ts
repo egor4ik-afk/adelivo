@@ -1,4 +1,4 @@
-// src/app/api/webhook/route.ts
+// src/app/api/webhooks/retailcrm/route.ts
 import { NextResponse } from "next/server";
 import { upsertOrder, geocodeNewOrders, type CrmOrder } from "@/lib/crm";
 import axios from "axios";
@@ -31,51 +31,51 @@ export async function POST(req: Request) {
     const contentType = req.headers.get("content-type") ?? "";
     const rawText = await req.text();
 
-    console.log("[Webhook] Content-Type:", contentType);
-    console.log("[Webhook] Body:", rawText.slice(0, 300));
+    console.log("[Webhook] Получен сигнал от CRM. Content-Type:", contentType);
 
     let orderId: string | null = null;
     let orderPayload: CrmOrder | null = null;
 
-    if (contentType.includes("application/json")) {
-      const body = JSON.parse(rawText);
-
-      // Вариант 1: пришёл только ID — {"orderId":"123"} или {"crm_id":"123"}
-      orderId = body.orderId ?? body.crm_id ?? body.order?.id ?? null;
-
-      // Вариант 2: пришёл достаточно полный объект заказа (больше 2 полей)
-      if (body.order && typeof body.order === "object" && Object.keys(body.order).length > 2) {
-        orderPayload = body.order as CrmOrder;
+    // 1. Пытаемся вытащить ID из тела запроса
+    if (contentType.includes("application/json") || rawText.startsWith("{")) {
+      try {
+        const body = JSON.parse(rawText);
+        orderId = body.orderId ?? body.crm_id ?? body.order?.id ?? null;
+      } catch (e) {
+        console.error("[Webhook] Ошибка парсинга JSON:", e);
       }
     } else {
       // form-urlencoded fallback
       const params = new URLSearchParams(rawText);
       orderId = params.get("order[id]") ?? params.get("orderId") ?? null;
-      const orderStr = params.get("order");
-      if (orderStr) {
-        try { orderPayload = JSON.parse(orderStr); } catch { /* not json */ }
-      }
     }
 
-    // Если есть только ID — дозапрашиваем полный заказ из CRM
-    if (!orderPayload && orderId) {
-      console.log(`[Webhook] Запрашиваем заказ #${orderId} из CRM...`);
-      orderPayload = await fetchOrderFromCrm(orderId);
+    if (!orderId) {
+      console.warn("[Webhook] Не найден ID заказа в запросе.");
+      return NextResponse.json({ ok: false, reason: "missing orderId" });
     }
+
+    // 2. Всегда запрашиваем свежий заказ из CRM по ID (самый надежный способ)
+    console.log(`[Webhook] Запрашиваем актуальные данные заказа #${orderId} из CRM...`);
+    orderPayload = await fetchOrderFromCrm(orderId);
 
     if (!orderPayload?.id) {
-      console.warn("[Webhook] Не удалось получить данные заказа");
-      return NextResponse.json({ ok: false, reason: "no order data" });
+      console.warn(`[Webhook] Данные для заказа #${orderId} не получены из CRM.`);
+      return NextResponse.json({ ok: false, reason: "order fetch failed" });
     }
 
-    console.log(`[Webhook] Обрабатываем заказ #${orderPayload.id} (externalId: ${orderPayload.externalId})`);
+    console.log(`[Webhook] Начинаем обновление заказа #${orderPayload.id} (Внешний ID: ${orderPayload.externalId || 'Нет'})`);
+    
+    // 3. Сохраняем в БД (upsertOrder внутри себя уже сравнивает diff и рассылает Push-уведомления)
     await upsertOrder(orderPayload);
+    
+    // 4. Запускаем фоновое геокодирование, если это новый адрес
     geocodeNewOrders().catch(console.error);
 
     return NextResponse.json({ ok: true });
 
   } catch (e) {
-    console.error("[Webhook] Ошибка:", e);
-    return NextResponse.json({ ok: false, error: String(e) });
+    console.error("[Webhook] Критическая ошибка:", e);
+    return NextResponse.json({ ok: false, error: String(e) }, { status: 500 });
   }
 }

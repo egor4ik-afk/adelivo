@@ -207,14 +207,31 @@ export async function upsertOrder(crmOrder: CrmOrder) {
   const order = await prisma.order.upsert({
     where: { crmId: data.crmId },
     update: updateFields,
-    create: { ...data, isInvalid: false, geocoded: false, courierManual: false, changedAt: new Date() },
+    create: { ...data, isInvalid: false, geocoded: false, courierManual: false },
   });
 
+  // ── Умные уведомления (Сравниваем старое и новое) ──
   if (!existing) {
     notify({ type: "order.new", order }).catch(console.error);
-  } else if ((existing.crmStatus ?? "") !== (order.crmStatus ?? "")) {
-    // Уведомляем только при реальном изменении CRM-статуса, игнорируем наш внутренний (GEOCODED и т.п.)
-    notify({ type: "order.updated", order, previousStatus: existing.status }).catch(console.error);
+    console.log(`[Push] Новый заказ ${order.crmId} создан.`);
+  } else {
+    // Собираем массив изменений
+    const changes = [];
+    if (existing.status !== order.status) changes.push(`Статус: ${existing.status} -> ${order.status}`);
+    if (existing.courier !== order.courier) changes.push(`Курьер назначен: ${order.courier || 'Сброшен'}`);
+    if (existing.address !== order.address) changes.push(`Адрес изменен`);
+    if (existing.slotRaw !== order.slotRaw) changes.push(`Время изменено: ${order.slotRaw}`);
+
+    // Если есть важные изменения, отправляем уведомление
+    if (changes.length > 0) {
+      console.log(`[Push] Заказ ${order.crmId} обновлен. Изменения:`, changes.join(', '));
+      // Передаем previousStatus, чтобы push-уведомление показало текст изменения
+      notify({ 
+        type: "order.updated", 
+        order, 
+        previousStatus: existing.status !== order.status ? existing.status : undefined 
+      }).catch(console.error);
+    }
   }
 
   return order;
