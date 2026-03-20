@@ -166,17 +166,3 @@ model NotificationLog {
                   @@index([createdAt])
                     @@index([type])
 }
-
-}
-}
-}
-}
-}
-}
-}
-}
-}
-}
-}
-}
-}
