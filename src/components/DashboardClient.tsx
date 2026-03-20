@@ -12,7 +12,7 @@ interface Order {
   slotFrom: string | null; slotTo: string | null; slotRaw: string | null;
   deliveryType: string | null; deliveryDate: string | null;
   isInvalid: boolean; invalidReason: string | null;
-  crmCreatedAt: string | null; updatedAt?: string;
+  crmCreatedAt: string | null; updatedAt?: string; changedAt?: string | null;
 }
 
 const SLOTS = [
@@ -635,7 +635,7 @@ export function DashboardClient({ user }: { user: User }) {
             <div style={s.tableWrap}>
               <table style={s.table}>
                 <thead>
-                  <tr>{["Внешний ID", "Время доставки", "Адрес доставки", "Курьер", "Стоимость", "Тип доставки", "Статус", "Комментарий клиента", "Комментарий оператора", "Состав", "Создан", "Обновлён"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
+                  <tr>{["Внешний ID", "Время доставки", "Адрес доставки", "Курьер", "Стоимость", "Тип доставки", "Статус", "Комментарий клиента", "Комментарий оператора", "Состав", "Создан", "Изменён"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
                 </thead>
                 <tbody>
                   {tableOrders.map((o, i) => {
@@ -654,7 +654,7 @@ export function DashboardClient({ user }: { user: User }) {
                         <td style={{ ...s.td, minWidth: 140, maxWidth: 200, color: "#4a7aff" }}>{o.opComment ?? "—"}</td>
                         <td style={{ ...s.td, minWidth: 160, maxWidth: 240, color: "#6b6860" }}>{o.items ?? "—"}</td>
                         <td style={{ ...s.td, whiteSpace: "nowrap", color: "#a8a49c", fontSize: 10 }}>{o.crmCreatedAt ? new Date(o.crmCreatedAt).toLocaleString("ru") : "—"}</td>
-                        <td style={{ ...s.td, whiteSpace: "nowrap", color: "#6b6860", fontSize: 10 }}>{o.updatedAt ? new Date(o.updatedAt).toLocaleString("ru") : "—"}</td>
+                        <td style={{ ...s.td, whiteSpace: "nowrap", color: o.changedAt ? "#1a1a18" : "#a8a49c", fontSize: 10 }}>{o.changedAt ? new Date(o.changedAt).toLocaleString("ru") : "—"}</td>
                       </tr>
                     );
                   })}

@@ -151,7 +151,6 @@ export async function upsertOrder(crmOrder: CrmOrder) {
   });
 
   // ── Строим финальный объект для UPDATE ──
-  // mapCrmOrder не содержит гео-поля — расширяем тип явно
   const updateFields: typeof data & {
     lat?: number | null;
     lng?: number | null;
@@ -159,20 +158,15 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     isInvalid?: boolean;
     invalidReason?: string | null;
     courierManual?: boolean;
+    changedAt?: Date;
   } = { ...data };
 
   if (existing) {
     // 1. Курьер
-    //    courierManual=true  → оператор назначил руками → CRON никогда не перезаписывает
-    //    courierManual=false → курьер из CRM → обновляем из CRM (updateFields.courier уже = data.courier)
-    //    Буг: пустая строка "" — falsy, поэтому проверяем courierManual явно
     if (existing.courierManual) {
-      // Оператор назначил — сохраняем, даже если CRM прислала другого или пустого
       updateFields.courier = existing.courier;
       updateFields.courierManual = true;
     } else {
-      // Курьер из CRM — берём что прислала (data.courier)
-      // Но никогда не стираем непустой курьер пустым: null/""  → keep existing
       if (!data.courier && existing.courier) {
         updateFields.courier = existing.courier;
       }
@@ -192,12 +186,25 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       updateFields.isInvalid     = existing.isInvalid;
       updateFields.invalidReason = existing.invalidReason;
     }
+
+    // 4. changedAt — обновляем только если реально изменились значимые поля
+    //    (статус, курьер, адрес, состав заказа). CRON-прогоны без изменений не трогают это поле.
+    const meaningfullyChanged =
+      existing.status  !== updateFields.status  ||
+      existing.courier !== updateFields.courier ||
+      existing.address !== updateFields.address ||
+      existing.items   !== updateFields.items   ||
+      existing.slotFrom !== updateFields.slotFrom;
+
+    if (meaningfullyChanged) {
+      updateFields.changedAt = new Date();
+    }
   }
 
   const order = await prisma.order.upsert({
     where: { crmId: data.crmId },
     update: updateFields,
-    create: { ...data, isInvalid: false, geocoded: false, courierManual: false },
+    create: { ...data, isInvalid: false, geocoded: false, courierManual: false, changedAt: new Date() },
   });
 
   if (!existing) {

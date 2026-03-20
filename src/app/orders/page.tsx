@@ -24,6 +24,7 @@ interface Order {
   invalidReason: string | null;
   crmCreatedAt: string | null;
   updatedAt?: string;
+  changedAt?: string | null;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -95,7 +96,7 @@ export default function OrdersPage() {
         return true;
       })
       // Сортировка по updatedAt DESC (последние изменения сверху)
-      .sort((a, b) => new Date(b.updatedAt || "").getTime() - new Date(a.updatedAt || "").getTime());
+      .sort((a, b) => new Date(b.changedAt || b.updatedAt || "").getTime() - new Date(a.changedAt || a.updatedAt || "").getTime());
   }, [dateOrders, fStatus, fCourier, fSearch]);
 
   return (
@@ -143,9 +144,9 @@ export default function OrdersPage() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
                 <tr style={{ background: "#fafaf8", borderBottom: "1px solid #e8e6df" }}>
-                  {["ID", "Статус", "Курьер", "Адрес", "Слот", "Сумма", "Обновлён", "Карта"].map(h => (
+                  {["ID", "Статус", "Курьер", "Адрес", "Слот", "Сумма", "Изменён", "Карта"].map(h => (
                     <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 10, fontWeight: 700, color: "#a8a49c", textTransform: "uppercase", letterSpacing: ".4px", whiteSpace: "nowrap" }}>
-                      {h}{h === "Обновлён" && <span style={{ marginLeft: 4, color: "#4a7aff" }}>↓</span>}
+                      {h}{h === "Изменён" && <span style={{ marginLeft: 4, color: "#4a7aff" }}>↓</span>}
                     </th>
                   ))}
                 </tr>
@@ -180,7 +181,9 @@ export default function OrdersPage() {
                       <td style={{ padding: "10px 14px", whiteSpace: "nowrap", color: "#6b6860" }}>{o.slotRaw || "—"}</td>
                       <td style={{ padding: "10px 14px", whiteSpace: "nowrap", color: "#1a1a18" }}>{o.price ? `${o.price} ₽` : "—"}</td>
                       <td style={{ padding: "10px 14px", whiteSpace: "nowrap", color: "#6b6860", fontSize: 11 }}>
-                        {fmt(o.updatedAt)}
+                        <span title={o.updatedAt ? `updatedAt: ${new Date(o.updatedAt).toLocaleString("ru")}` : ""}>
+                          {o.changedAt ? fmt(o.changedAt) : "—"}
+                        </span>
                       </td>
                       <td style={{ padding: "10px 14px" }}>
                         <Link

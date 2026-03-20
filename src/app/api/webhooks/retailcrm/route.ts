@@ -1,13 +1,28 @@
 // src/app/api/webhook/route.ts
 import { NextResponse } from "next/server";
 import { upsertOrder, geocodeNewOrders, type CrmOrder } from "@/lib/crm";
+import axios from "axios";
 
-// RetailCRM шлёт вебхуки в form-urlencoded формате:
-// topic=orders&event=order_created&order[id]=123&order[status]=new&...
-// ИЛИ (если настроить тело вручную) как JSON: {"event":"...","order":{...}}
+const CRM_URL = process.env.RETAILCRM_API_URL;
+const CRM_KEY = process.env.RETAILCRM_API_KEY;
+
+// Получаем полный заказ из CRM по его внутреннему ID
+async function fetchOrderFromCrm(orderId: string): Promise<CrmOrder | null> {
+  if (!CRM_URL || !CRM_KEY) return null;
+  try {
+    const res = await axios.get(`${CRM_URL}/api/v5/orders/${orderId}`, {
+      params: { apiKey: CRM_KEY, by: "id" },
+      timeout: 8000,
+    });
+    return res.data?.order ?? null;
+  } catch (e) {
+    console.error(`[Webhook] Не удалось получить заказ ${orderId} из CRM:`, e);
+    return null;
+  }
+}
 
 export async function GET() {
-  // RetailCRM пингует эндпоинт перед активацией — должны ответить 200
+  // RetailCRM пингует эндпоинт перед активацией
   return NextResponse.json({ ok: true, service: "FlowerOps webhook" });
 }
 
@@ -17,66 +32,43 @@ export async function POST(req: Request) {
     const rawText = await req.text();
 
     console.log("[Webhook] Content-Type:", contentType);
-    console.log("[Webhook] Raw body (first 500):", rawText.slice(0, 500));
+    console.log("[Webhook] Body:", rawText.slice(0, 300));
 
+    let orderId: string | null = null;
     let orderPayload: CrmOrder | null = null;
 
     if (contentType.includes("application/json")) {
-      // Наша ручная настройка: {"event":"order_created","order":{...}}
       const body = JSON.parse(rawText);
-      orderPayload = typeof body.order === "string"
-        ? JSON.parse(body.order)
-        : body.order ?? null;
 
+      // Вариант 1: пришёл только ID — {"orderId":"123"} или {"crm_id":"123"}
+      orderId = body.orderId ?? body.crm_id ?? body.order?.id ?? null;
+
+      // Вариант 2: пришёл достаточно полный объект заказа (больше 2 полей)
+      if (body.order && typeof body.order === "object" && Object.keys(body.order).length > 2) {
+        orderPayload = body.order as CrmOrder;
+      }
     } else {
-      // RetailCRM стандартный формат: form-urlencoded
-      // topic=orders&event=order_created&order[id]=...&order[externalId]=...
+      // form-urlencoded fallback
       const params = new URLSearchParams(rawText);
-
-      // Вариант 1: order передан как JSON-строка в поле "order"
+      orderId = params.get("order[id]") ?? params.get("orderId") ?? null;
       const orderStr = params.get("order");
       if (orderStr) {
-        try {
-          orderPayload = JSON.parse(orderStr);
-        } catch {
-          // не JSON — идём дальше
-        }
+        try { orderPayload = JSON.parse(orderStr); } catch { /* not json */ }
       }
+    }
 
-      // Вариант 2: поля заказа переданы как order[field]=value (стандарт RetailCRM)
-      if (!orderPayload) {
-        const orderId = params.get("order[id]") ?? params.get("order%5Bid%5D");
-        if (orderId) {
-          // Собираем объект из отдельных полей
-          const obj: Record<string, unknown> = {};
-          for (const [key, val] of params.entries()) {
-            const m = key.match(/^order\[(.+)\]$/);
-            if (m) obj[m[1]] = val;
-          }
-          if (obj.id) {
-            orderPayload = { id: Number(obj.id), ...obj } as unknown as CrmOrder;
-          }
-        }
-      }
-
-      // Вариант 3: весь body — JSON (некоторые версии RetailCRM)
-      if (!orderPayload) {
-        try {
-          const body = JSON.parse(rawText);
-          orderPayload = body.order ?? (body.id ? body : null);
-        } catch {
-          // не JSON
-        }
-      }
+    // Если есть только ID — дозапрашиваем полный заказ из CRM
+    if (!orderPayload && orderId) {
+      console.log(`[Webhook] Запрашиваем заказ #${orderId} из CRM...`);
+      orderPayload = await fetchOrderFromCrm(orderId);
     }
 
     if (!orderPayload?.id) {
-      console.warn("[Webhook] Не удалось извлечь заказ из тела запроса");
-      // Возвращаем 200 чтобы CRM не деактивировала вебхук
-      return NextResponse.json({ ok: false, reason: "no order payload" });
+      console.warn("[Webhook] Не удалось получить данные заказа");
+      return NextResponse.json({ ok: false, reason: "no order data" });
     }
 
-    console.log(`[Webhook] Обрабатываем заказ #${orderPayload.id}`);
+    console.log(`[Webhook] Обрабатываем заказ #${orderPayload.id} (externalId: ${orderPayload.externalId})`);
     await upsertOrder(orderPayload);
     geocodeNewOrders().catch(console.error);
 
@@ -84,7 +76,6 @@ export async function POST(req: Request) {
 
   } catch (e) {
     console.error("[Webhook] Ошибка:", e);
-    // 200 чтобы CRM не деактивировала триггер после нескольких ошибок
     return NextResponse.json({ ok: false, error: String(e) });
   }
 }
