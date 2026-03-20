@@ -23,7 +23,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       updateData.courier = body.courier;
       updateData.courierManual = true;
       
-      // 🔥 Находим ID этого курьера в нашей базе и тоже записываем
+      // Находим ID этого курьера в нашей базе
       if (body.courier) {
         const dbCourier = await prisma.courier.findFirst({
           where: { fullName: body.courier }
@@ -40,12 +40,12 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       data: updateData,
     });
 
+    // 🔥 Убрали параметр deliveryType, так как мы больше не шлем его в CRM
     await updateCrmOrder(order.crmId, {
       status: body.status as OrderStatus,
       courier: body.courier,
       opComment: body.opComment,
       address: body.address, 
-      deliveryType: order.deliveryType, 
     });
 
     return NextResponse.json({ ok: true });
