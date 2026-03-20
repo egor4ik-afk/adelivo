@@ -1,23 +1,35 @@
-// src/types/yandex-maps.d.ts
-// Минимальные типы для Yandex Maps 2.1
-// @types/yandex-maps удалите из devDependencies — их типы неполные
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 declare namespace ymaps {
-  function ready(callback: () => void): void;
+  type Ready = (callback: () => void) => void;
+  export const ready: Ready;
 
   class Map {
     constructor(
-      element: HTMLElement | string,
-      state: { center: number[]; zoom: number; controls?: string[] },
-      options?: object
+      element: string | HTMLElement,
+      state: {
+        center: number[];
+        zoom: number;
+        controls: string[];
+      },
+      options: any
     );
+
     geoObjects: {
-      add(obj: Clusterer | Placemark): void;
-      remove(obj: Clusterer | Placemark): void;
+      add(clusterer: Clusterer): void;
     };
-    panTo(coords: number[], options?: { flying?: boolean; duration?: number }): void;
-    setCenter(coords: number[], zoom?: number): void;
-    destroy(): void;
+    container: {
+      fitToViewport(): void;
+    };
+    setCenter(
+      center: number[],
+      zoom: number,
+      options: { duration: number }
+    ): void;
+    events: {
+      add(event: string, handler: (e: any) => void): void;
+      remove(event: string, handler: (e: any) => void): void;
+    };
   }
 
   class Placemark {
