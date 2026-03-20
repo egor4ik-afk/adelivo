@@ -529,7 +529,7 @@ export function DashboardClient({ user }: { user: User }) {
         <CustomSelect value={filterStatus} onChange={setFilterStatus} options={STATUS_OPTIONS} style={{ width: 120, marginLeft: 4 }} />
         <CustomSelect value={filterCourier} onChange={setFilterCourier} options={courierOptions} style={{ width: 110, marginLeft: 4 }} />
 
-        <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 6 }}>
           <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#6b6860", cursor: "pointer" }}>
             <input type="checkbox" checked={showCourierNames} onChange={e => setShowCourierNames(e.target.checked)} /> Имена
           </label>
@@ -635,7 +635,7 @@ export function DashboardClient({ user }: { user: User }) {
             <div style={s.tableWrap}>
               <table style={s.table}>
                 <thead>
-                  <tr>{["Внешний ID", "Время доставки", "Адрес доставки", "Курьер", "Стоимость", "Тип доставки", "Статус", "Комментарий клиента", "Комментарий оператора", "Состав", "Дата и время"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
+                  <tr>{["Внешний ID", "Время доставки", "Адрес доставки", "Курьер", "Стоимость", "Тип доставки", "Статус", "Комментарий клиента", "Комментарий оператора", "Состав", "Создан", "Обновлён"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
                 </thead>
                 <tbody>
                   {tableOrders.map((o, i) => {
@@ -654,6 +654,7 @@ export function DashboardClient({ user }: { user: User }) {
                         <td style={{ ...s.td, minWidth: 140, maxWidth: 200, color: "#4a7aff" }}>{o.opComment ?? "—"}</td>
                         <td style={{ ...s.td, minWidth: 160, maxWidth: 240, color: "#6b6860" }}>{o.items ?? "—"}</td>
                         <td style={{ ...s.td, whiteSpace: "nowrap", color: "#a8a49c", fontSize: 10 }}>{o.crmCreatedAt ? new Date(o.crmCreatedAt).toLocaleString("ru") : "—"}</td>
+                        <td style={{ ...s.td, whiteSpace: "nowrap", color: "#6b6860", fontSize: 10 }}>{o.updatedAt ? new Date(o.updatedAt).toLocaleString("ru") : "—"}</td>
                       </tr>
                     );
                   })}
