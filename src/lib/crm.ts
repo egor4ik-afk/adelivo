@@ -348,6 +348,7 @@ export async function pollCrmOrders() {
 //   // после prisma.order.update(...)
 //   await updateCrmOrder(order.crmId, { status: body.status, courier: body.courier });
 //
+// ── Update order in CRM ────────────────────────────────────
 export async function updateCrmOrder(
   crmId: string,
   data: { status?: OrderStatus; courier?: string }
@@ -375,18 +376,16 @@ export async function updateCrmOrder(
   }
 
   const params = new URLSearchParams();
-  params.append("apiKey", CRM_KEY);
   params.append("order", JSON.stringify(orderPayload));
 
+  // ВАЖНО: Добавили ?apiKey=...&by=id , чтобы CRM искала именно по внутреннему ID
+  const url = `${CRM_URL}/api/v5/orders/${crmId}/edit?apiKey=${CRM_KEY}&by=id`;
+
   try {
-    const resp = await axios.post(
-      `${CRM_URL}/api/v5/orders/${crmId}/edit`,
-      params.toString(),
-      {
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        timeout: 5000,
-      }
-    );
+    const resp = await axios.post(url, params.toString(), {
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      timeout: 5000,
+    });
     console.log(`[CRM] Заказ ${crmId} обновлён:`, resp.data?.success ? "OK" : resp.data);
   } catch (err: unknown) {
     const errorMsg =

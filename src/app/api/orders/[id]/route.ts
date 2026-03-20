@@ -1,4 +1,3 @@
-// src/app/api/orders/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
@@ -13,26 +12,19 @@ const patchSchema = z.object({
   opComment: z.string().optional(),
   isInvalid: z.boolean().optional(),
   invalidReason: z.string().optional(),
+  address: z.string().optional(),
 });
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSession(req);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   const { id } = await params;
   const order = await prisma.order.findUnique({ where: { id } });
   if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
-
   return NextResponse.json(order);
 }
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSession(req);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -43,9 +35,9 @@ export async function PATCH(
   const prev = await prisma.order.findUnique({ where: { id } });
   if (!prev) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Если оператор явно задаёт курьера — фиксируем флаг courierManual=true
-  // Если курьера сбрасывают (пустая строка) — снимаем флаг
-  const courierUpdate: { courierManual?: boolean } = {};
+  // Обход кэша TS для нового поля
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const courierUpdate: any = {};
   if (data.courier !== undefined) {
     courierUpdate.courierManual = data.courier.trim().length > 0;
   }
@@ -54,15 +46,11 @@ export async function PATCH(
     where: { id },
     data: {
       ...data,
-      // Нормализуем пустую строку в null
-      courier: data.courier !== undefined
-        ? (data.courier.trim() || null)
-        : undefined,
+      courier: data.courier !== undefined ? (data.courier.trim() || null) : undefined,
       ...courierUpdate,
     },
   });
 
-  // Синхронизируем статус И курьера обратно в CRM
   if (order.crmId && (data.status !== undefined || data.courier !== undefined)) {
     updateCrmOrder(order.crmId, {
       ...(data.status !== undefined && { status: data.status }),
@@ -70,13 +58,8 @@ export async function PATCH(
     }).catch(console.error);
   }
 
-  // Уведомление при смене статуса
   if (data.status && prev.status !== data.status) {
-    notify({
-      type: "order.updated",
-      order,
-      previousStatus: prev.status,
-    }).catch(console.error);
+    notify({ type: "order.updated", order, previousStatus: prev.status }).catch(console.error);
   }
 
   return NextResponse.json(order);
