@@ -68,3 +68,7 @@ self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
+
+self.addEventListener('fetch', (event) => {
+  // Пока оставляем пустым, мы не кэшируем запросы, но браузер будет доволен
+});
