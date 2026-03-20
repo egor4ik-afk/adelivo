@@ -25,10 +25,17 @@ interface InvalidOrderPayload {
   reason: string;
 }
 
+// СКРЫВАЕМ ВНУТРЕННИЕ СТАТУСЫ: GEOCODED и INVALID_ADDRESS визуально превращаем в "Новый",
+// так как для оператора это всё еще новый необработанный заказ.
 const STATUS_LABELS: Record<string, string> = {
-  NEW: "Новый", GEOCODED: "Геокодирован", ASSIGNED: "Назначен",
-  IN_DELIVERY: "В пути", DELIVERED: "Доставлен",
-  RETURNED: "Возврат", CANCELLED: "Отменён", INVALID_ADDRESS: "Проблемный адрес",
+  NEW: "Новый", 
+  GEOCODED: "Новый", 
+  INVALID_ADDRESS: "Новый",
+  ASSIGNED: "Назначен",
+  IN_DELIVERY: "В пути", 
+  DELIVERED: "Доставлен",
+  RETURNED: "Возврат", 
+  CANCELLED: "Отменён",
 };
 
 function statusLabel(s: string) {
@@ -141,7 +148,15 @@ export async function notify(event: NotificationEvent) {
 
     case "order.updated": {
       const { order, previousStatus } = event;
-      if (previousStatus && previousStatus !== order.status) {
+      
+      const prevLabel = previousStatus ? statusLabel(previousStatus) : "";
+      const currLabel = statusLabel(order.status);
+      
+      // Защита от спама: если публичный статус не изменился (Новый -> Геокодирован),
+      // мы не показываем стрелочку "Новый -> Новый"
+      const statusHasReallyChanged = previousStatus && (prevLabel !== currLabel);
+
+      if (statusHasReallyChanged) {
         try {
           await sendOrderUpdateAlert({ ...order, previousStatus });
           await log("order.updated", "email", { order, previousStatus }, true);
@@ -149,13 +164,15 @@ export async function notify(event: NotificationEvent) {
           await log("order.updated", "email", { order, previousStatus }, false, String(e));
         }
       }
+
       try {
-        const statusChange = previousStatus
-          ? `${statusLabel(previousStatus)} → ${statusLabel(order.status)}`
-          : statusLabel(order.status);
+        const statusChangeStr = statusHasReallyChanged
+          ? `${prevLabel} → ${currLabel} · `
+          : ""; // Если поменялся только курьер, статус вообще не выводим в текст
+
         await pushToAllOperators(
           `📦 Заказ ${order.externalId ?? "—"} обновлён`,
-          `${statusChange} · ${orderBody(order)}`,
+          `${statusChangeStr}${orderBody(order)}`,
           { orderId: order.id, type: "order.updated" }
         );
         await log("order.updated", "push", { order, previousStatus }, true);

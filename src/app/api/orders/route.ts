@@ -24,10 +24,7 @@ export async function GET(req: NextRequest) {
     if (to)   where.slotTo   = to;
   }
 
-  // Фильтр по дате: смотрим deliveryDate первым (дата доставки),
-  // если не задана — fallback на дату создания в CRM.
-  // OR-условие через Prisma: заказы у которых deliveryDate=date ИЛИ
-  // (deliveryDate IS NULL AND crmCreatedAt в диапазоне дня)
+  // Фильтр по дате
   if (date) {
     const start = new Date(date);
     start.setHours(0, 0, 0, 0);
@@ -43,6 +40,17 @@ export async function GET(req: NextRequest) {
         crmCreatedAt: { gte: start, lte: end },
       },
     ];
+  } else {
+    // ИСПРАВЛЕНИЕ: Если фронтенд запрашивает все заказы (без конкретной даты),
+    // мы отдаем только заказы за последние 10 дней, чтобы не перегружать память
+    // и чтобы старые утренние заказы не вытесняли новые вечерние.
+    const tenDaysAgo = new Date();
+    tenDaysAgo.setDate(tenDaysAgo.getDate() - 7);
+    
+    where.OR = [
+      { crmCreatedAt: { gte: tenDaysAgo } },
+      { deliveryDate: { gte: tenDaysAgo.toISOString().split("T")[0] } }
+    ];
   }
 
   // Только проблемные адреса
@@ -52,8 +60,10 @@ export async function GET(req: NextRequest) {
 
   const orders = await prisma.order.findMany({
     where,
-    orderBy: [{ slotFrom: "asc" }, { crmCreatedAt: "desc" }],
-    take: 500,
+    // ИСПРАВЛЕНИЕ: Сортируем строго по дате (самые свежие сверху).
+    // Убрали slotFrom из сортировки БД, чтобы вечерние заказы (20:00) не падали в конец списка.
+    orderBy: { crmCreatedAt: "desc" },
+    take: 3500, // Увеличили лимит, чтобы база гарантированно отдавала все текущие заказы
   });
 
   return NextResponse.json(orders);
