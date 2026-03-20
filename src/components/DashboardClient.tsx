@@ -159,7 +159,7 @@ export function DashboardClient({ user }: { user: User }) {
 
   const [mobileView, setMobileView] = useState<"split" | "map" | "panels">("split");
   const [isListVisible, setIsListVisible] = useState(true);
-  
+  const [isDetailVisible, setIsDetailVisible] = useState(true); // <--- ВЕРНУЛИ СТЕЙТ
   
   const [tableOpen, setTableOpen] = useState(true);
   const [tableHeight, setTableHeight] = useState(250);
@@ -171,7 +171,6 @@ export function DashboardClient({ user }: { user: User }) {
   const [filterStatus, setFilterStatus] = useState("ALL");
   const [filterCourier, setFilterCourier] = useState("ALL");
   
-  // Настройки отображения точек на карте
   const [showCourierNames, setShowCourierNames] = useState(true); 
   const [showTime, setShowTime] = useState(true);
   const [currentZoom, setCurrentZoom] = useState(10);
@@ -218,10 +217,8 @@ export function DashboardClient({ user }: { user: User }) {
   const invalid = dateAndStatusOrders.filter(o => o.isInvalid);
   const couriers = getCouriers(orders);
   
-  // Автоматическое отображение карточки
-  const isDetailVisible = !!selected && !isMobile;
+  const showLeftPanel = isListVisible || isDetailVisible;
 
-  // Мульти-выбор слотов
   const filtered = selectedSlots.length === 0 
     ? dateAndStatusOrders 
     : dateAndStatusOrders.filter(o => {
@@ -307,8 +304,8 @@ export function DashboardClient({ user }: { user: User }) {
     if (ymapRef.current) setTimeout(() => ymapRef.current.container.fitToViewport(), 50);
   }, [mobileView, isListVisible, isDetailVisible, tableOpen, tableHeight]);
 
-// ── ПИНЫ НА КАРТЕ: УМНАЯ ЛОГИКА ──
-useEffect(() => {
+ // ── ПИНЫ НА КАРТЕ: УМНАЯ ЛОГИКА ──
+ useEffect(() => {
   const clusterer = clustererRef.current;
   if (!clusterer || typeof window === "undefined" || !window.ymaps) return;
   clusterer.removeAll();
@@ -327,6 +324,8 @@ useEffect(() => {
     '</div>'
   );
 
+  const isAllSlots = selectedSlots.length === 0;
+
   const placemarks = filtered
     .filter(o => (o.lat && o.lng) || (o.id === selectedId && previewGeo))
     .map(order => {
@@ -338,14 +337,14 @@ useEffect(() => {
       const pinColor = isSelected ? (previewGeo ? '#9ca3af' : '#facc15') : color;
 
       // Показывать время если: зум крупный, чекбокс "Время" стоит, и слоты не фильтрованы
-      const displayTime = showTime && currentZoom >= 13 && !!order.slotRaw;
+      const displayTime = showTime && currentZoom >= 13 && !!order.slotRaw && isAllSlots;
       
       // Показывать имя если: чекбокс стоит, курьер назначен, и фильтр курьеров = "Все"
       const displayName = showCourierNames && !!order.courier && filterCourier === "ALL";
 
       const slotLabel = order.slotRaw ? order.slotRaw.replace("с ", "").replace(" до ", "-") : "";
 
-      // Тот самый подробный балун со всеми деталями
+      // Тот самый подробный балун со всеми деталями (ДОБАВЛЕН ДЛЯ ОБОИХ ВИДОВ ПИНОВ)
       const balloonContentBody = `
         <div style="font-size:13px;line-height:1.5">
           <b>${order.address ?? "—"}</b><br>
@@ -363,7 +362,7 @@ useEffect(() => {
           [lat, lng],
           {
             balloonContentHeader: order.externalId ?? order.crmId,
-            balloonContentBody,
+            balloonContentBody, // <--- Подробный балун
             hintContent: order.address ?? "—",
             pinColor,
             slotLabel,
@@ -385,7 +384,7 @@ useEffect(() => {
           [lat, lng],
           {
             balloonContentHeader: order.externalId ?? order.crmId,
-            balloonContentBody,
+            balloonContentBody, // <--- Подробный балун ТЕПЕРЬ И ЗДЕСЬ
             hintContent: order.address ?? "—",
             // Нативное имя курьера прямо под стандартным пином
             iconCaption: displayName ? order.courier : undefined, 
@@ -405,7 +404,8 @@ useEffect(() => {
     });
 
   if (placemarks.length > 0) clusterer.add(placemarks);
-}, [filtered, selectedId, previewGeo, isMobile, showCourierNames, showTime, currentZoom, filterCourier]);
+}, [filtered, selectedId, previewGeo, isMobile, showCourierNames, showTime, currentZoom, filterCourier, selectedSlots]);
+
   async function handleGeocode(mode: "ai" | "manual") {
     if (!selected) return;
     setFixingAI(true);
@@ -442,7 +442,6 @@ useEffect(() => {
   }
 
   const hasChanges = selected && (editStatus !== selected.status || editCourier !== (selected.courier ?? "") || opComment !== (selected.opComment ?? "") || editAddress !== (selected.address ?? "") || previewGeo !== null);
-  const showLeftPanel = isListVisible || isDetailVisible;
 
   const courierOptions = [{ value: "ALL", label: "Все курьеры" }, { value: "UNASSIGNED", label: "Не назначен" }, ...couriers.map(c => ({ value: c, label: c }))];
 
@@ -458,7 +457,7 @@ useEffect(() => {
         <div style={s.detailHeader}>
           <div style={{ flex: 1 }}><div style={s.detailExtId}>{selected.externalId ?? selected.crmId}</div></div>
           {/* Крестик закрывает карточку */}
-          <button style={s.detailClose} onClick={() => setSelectedId(null)}>✕</button>
+          <button style={s.detailClose} onClick={() => { setSelectedId(null); setIsDetailVisible(false); }}>✕</button>
         </div>
         {selected.isInvalid && <div style={s.detailInvalidBanner}>⚠ {selected.invalidReason ?? "Проблемный адрес"}</div>}
         <div style={s.editField}>
@@ -508,7 +507,7 @@ useEffect(() => {
         
         {/* КРАСИВЫЕ ДРОПДАУНЫ С ПОРТАЛОМ */}
         <CustomSelect value={filterStatus} onChange={setFilterStatus} options={STATUS_OPTIONS} style={{ width: 130, marginLeft: 4 }} />
-        <CustomSelect value={filterCourier} onChange={setFilterCourier} options={courierOptions} style={{ width: 110, marginLeft: 4 }} />
+        <CustomSelect value={filterCourier} onChange={setFilterCourier} options={courierOptions} style={{ width: 130, marginLeft: 4 }} />
 
         {/* ЧЕКБОКСЫ ДЛЯ КАРТЫ */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginLeft: 12 }}>
