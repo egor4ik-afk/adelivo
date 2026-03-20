@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { createPortal } from "react-dom";
 import { ProfilePanel } from "./ProfilePanel";
 
 interface User { id: string; email: string; role: string; firstName?: string | null; lastName?: string | null; }
@@ -55,90 +54,97 @@ function loadYMaps(): Promise<void> {
   return ymapsReady;
 }
 
-// ── КРАСИВЫЙ КАСТОМНЫЙ ДРОПДАУН (С Z-INDEX ЧЕРЕЗ PORTAL) ──
-function CustomSelect({ value, onChange, options, style, placeholder }: { value: string; onChange: (v: string) => void; options: {value: string, label: string}[]; style?: React.CSSProperties; placeholder?: string; }) {
+// ── КАСТОМНЫЙ ДРОПДАУН ──
+// Без портала — выпадающий список внутри того же div, z-index 600 (выше карты и топбара).
+// Опции используют onMouseDown + e.preventDefault() вместо onClick —
+// это блокирует срабатывание outside-click хендлера до того как выбор зарегистрируется.
+function CustomSelect({
+  value, onChange, options, style,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  style?: React.CSSProperties;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const [rect, setRect] = useState<{top: number, left: number, width: number} | null>(null);
 
   useEffect(() => {
-    const close = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    const updateRect = () => {
-      if (open && ref.current) {
-        const r = ref.current.getBoundingClientRect();
-        setRect({ top: r.bottom, left: r.left, width: r.width });
-      }
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
-    document.addEventListener("mousedown", close);
-    window.addEventListener("scroll", updateRect, true);
-    window.addEventListener("resize", updateRect);
-    return () => {
-      document.removeEventListener("mousedown", close);
-      window.removeEventListener("scroll", updateRect, true);
-      window.removeEventListener("resize", updateRect);
-    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  const toggle = () => {
-    if (!open && ref.current) {
-      const r = ref.current.getBoundingClientRect();
-      setRect({ top: r.bottom, left: r.left, width: r.width });
-    }
-    setOpen(p => !p);
-  };
-
-  const current = options.find(o => o.value === value);
+  const sel = options.find(o => o.value === value);
 
   return (
-    <div ref={ref} style={{ position: "relative", ...style }}>
+    <div ref={ref} style={{ position: "relative", display: "inline-block", ...style }}>
       <button
         type="button"
-        onClick={toggle}
+        onClick={() => setOpen(v => !v)}
         style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          width: "100%", height: 30, padding: "0 10px",
-          borderRadius: 8, border: "1px solid #e8e6df",
-          background: "#fff", fontSize: 11, fontWeight: 600, color: "#1a1a18",
-          cursor: "pointer", outline: "none",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.04)", whiteSpace: "nowrap", gap: 6,
+          display: "flex", alignItems: "center", gap: 5,
+          padding: "0 8px 0 10px", height: 28, borderRadius: 7,
+          border: open ? "1px solid #4a7aff" : "1px solid #e0dfd7",
+          background: open ? "#f5f7ff" : "#fff",
+          color: "#1a1a18", fontSize: 11, fontWeight: 500,
+          cursor: "pointer", whiteSpace: "nowrap",
+          boxShadow: open ? "0 0 0 3px rgba(74,122,255,0.1)" : "0 1px 3px rgba(0,0,0,0.06)",
+          transition: "all 0.12s", minWidth: 90,
+          fontFamily: "inherit", outline: "none",
         }}
       >
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1, textAlign: "left" }}>
-          {current?.label ?? placeholder ?? "—"}
+        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", textAlign: "left" }}>
+          {sel?.label ?? "—"}
         </span>
-        <span style={{ fontSize: 8, color: "#a8a49c", flexShrink: 0, transition: "transform 0.15s", transform: open ? "rotate(180deg)" : "none" }}>▼</span>
+        <svg width="9" height="9" viewBox="0 0 9 9" style={{ flexShrink: 0, marginLeft: 2, color: open ? "#4a7aff" : "#a8a49c", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
+          <path d="M1 2.5L4.5 6L8 2.5" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </button>
 
-      {open && rect && typeof document !== "undefined" && createPortal(
-        <div 
-          onClick={e => e.stopPropagation()} 
-          style={{
-            position: "fixed", top: rect.top + 4, left: rect.left, 
-            minWidth: Math.max(rect.width, 130),
-            background: "#fff", borderRadius: 8, border: "1px solid #e8e6df",
-            boxShadow: "0 4px 20px rgba(0,0,0,0.12)", zIndex: 99999, // ВСЕГДА ПОВЕРХ
-            overflow: "hidden", maxHeight: 250, overflowY: "auto",
-          }}
-        >
-          {options.map(opt => (
-            <div
-              key={opt.value}
-              onClick={() => { onChange(opt.value); setOpen(false); }}
-              style={{
-                padding: "8px 12px", fontSize: 11, fontWeight: 500,
-                color: opt.value === value ? "#4a7aff" : "#1a1a18",
-                background: opt.value === value ? "#f4f7ff" : "transparent",
-                cursor: "pointer", whiteSpace: "nowrap",
-                borderBottom: "1px solid #f5f4f0", transition: "background 0.1s",
-              }}
-              onMouseEnter={e => { if (opt.value !== value) (e.currentTarget as HTMLDivElement).style.background = "#fafaf8"; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = opt.value === value ? "#f4f7ff" : "transparent"; }}
-            >
-              {opt.label}
-            </div>
-          ))}
-        </div>,
-        document.body
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", left: 0,
+          minWidth: "100%", background: "#fff",
+          border: "1px solid #e8e6df", borderRadius: 10,
+          boxShadow: "0 12px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)",
+          zIndex: 600, padding: "4px",
+          maxHeight: 220, overflowY: "auto",
+        }}>
+          {options.map(opt => {
+            const isActive = opt.value === value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                // onMouseDown + preventDefault: выбор происходит до срабатывания outside-click
+                onMouseDown={e => { e.preventDefault(); onChange(opt.value); setOpen(false); }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 7,
+                  width: "100%", padding: "6px 10px",
+                  background: isActive ? "#eef3ff" : "transparent",
+                  border: "none", borderRadius: 6, cursor: "pointer", fontSize: 11,
+                  fontWeight: isActive ? 600 : 400,
+                  color: isActive ? "#4a7aff" : "#1a1a18",
+                  textAlign: "left", whiteSpace: "nowrap",
+                  fontFamily: "inherit", transition: "background 0.08s", outline: "none",
+                }}
+                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = "#f5f4f0"; }}
+                onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+              >
+                <span style={{ flex: 1 }}>{opt.label}</span>
+                {isActive && (
+                  <svg width="11" height="11" viewBox="0 0 11 11" style={{ color: "#4a7aff", flexShrink: 0 }}>
+                    <path d="M1.5 5.5L4.5 8.5L9.5 2.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </button>
+            );
+          })}
+        </div>
       )}
     </div>
   );
@@ -204,6 +210,13 @@ export function DashboardClient({ user }: { user: User }) {
     window.addEventListener('mouseup', handleMouseUp);
     return () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp); };
   }, [isDraggingTable]);
+
+  // Fix 3: пересчитываем размер карты при изменении видимости панелей
+  useEffect(() => {
+    if (ymapRef.current) {
+      setTimeout(() => ymapRef.current!.container.fitToViewport(), 50);
+    }
+  }, [isListVisible, isDetailVisible, tableOpen, tableHeight]);
 
   const dateAndStatusOrders = orders.filter(o => {
     const oDate = o.deliveryDate || (o.crmCreatedAt ? o.crmCreatedAt.split('T')[0] : null);
@@ -281,7 +294,6 @@ export function DashboardClient({ user }: { user: User }) {
     if (selectedId && isMobile && mobileView === "map") setMobileView("split");
   }, [selectedId, isMobile, mobileView]);
 
-  // ── ИНИЦИАЛИЗАЦИЯ КАРТЫ С ОТСЛЕЖИВАНИЕМ ЗУМА ──
   useEffect(() => {
     let mounted = true;
     loadYMaps().then(() => {
@@ -300,7 +312,7 @@ export function DashboardClient({ user }: { user: User }) {
     return () => { mounted = false; };
   }, []);
 
-  // ── ПИНЫ НА КАРТЕ: УМНАЯ ЛОГИКА ──
+  // ── ПИНЫ НА КАРТЕ ──
   useEffect(() => {
     const clusterer = clustererRef.current;
     if (!clusterer || typeof window === "undefined" || !window.ymaps) return;
@@ -309,7 +321,6 @@ export function DashboardClient({ user }: { user: User }) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ymaps = (window as any).ymaps;
 
-    // Плашка с хвостиком (показывается только при зуме для времени)
     const StretchyLayout = ymaps.templateLayoutFactory.createClass(
       '<div style="display:inline-flex;flex-direction:column;align-items:center;cursor:pointer;">' +
         '<div style="background:{{ properties.pinColor }};color:#fff;padding:4px 10px;border-radius:12px;font-size:10px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.28);border:1.5px solid rgba(255,255,255,0.35);min-width:28px;text-align:center;line-height:1.4;">{{ properties.slotLabel }}</div>' +
@@ -332,15 +343,11 @@ export function DashboardClient({ user }: { user: User }) {
         const color = slotColor(order);
         const pinColor = isSelected ? (previewGeo ? '#9ca3af' : '#facc15') : color;
 
-        // Показывать время если: зум крупный, чекбокс "Время" стоит, и слоты не фильтрованы
         const displayTime = showTime && currentZoom >= 13 && !!order.slotRaw && isAllSlots;
-        
-        // Показывать имя если: чекбокс стоит, курьер назначен, и фильтр курьеров = "Все"
         const displayName = showCourierNames && !!order.courier && filterCourier === "ALL";
 
         const slotLabel = order.slotRaw ? order.slotRaw.replace("с ", "").replace(" до ", "-") : "";
 
-        // Тот самый подробный балун со всеми деталями (ДОБАВЛЕН ДЛЯ ОБОИХ ВИДОВ ПИНОВ)
         const balloonContentBody = `
           <div style="font-size:13px;line-height:1.5">
             <b>${order.address ?? "—"}</b><br>
@@ -353,7 +360,6 @@ export function DashboardClient({ user }: { user: User }) {
         let pm;
 
         if (displayTime) {
-          // ИСПОЛЬЗУЕМ ПЛАШКУ
           pm = new window.ymaps.Placemark(
             [lat, lng],
             {
@@ -372,9 +378,8 @@ export function DashboardClient({ user }: { user: User }) {
             }
           );
         } else {
-        // ИСПОЛЬЗУЕМ РОДНОЙ ПИН С ХВОСТИКОМ (islands#icon)
-        let preset = 'islands#redDotIcon';
-        if (isSelected) preset = previewGeo ? "islands#grayIcon" : "islands#yellowIcon";
+          let preset = 'islands#redDotIcon';
+          if (isSelected) preset = previewGeo ? "islands#grayIcon" : "islands#yellowIcon";
 
           pm = new window.ymaps.Placemark(
             [lat, lng],
@@ -382,17 +387,17 @@ export function DashboardClient({ user }: { user: User }) {
               balloonContentHeader: order.externalId ?? order.crmId,
               balloonContentBody, 
               hintContent: order.address ?? "—",
-              // Нативное имя курьера прямо под стандартным пином
               iconCaption: displayName ? order.courier : undefined, 
             },
             {
               preset,
-              iconColor: isSelected ? undefined : color // Назначаем цвет родного пина
+              iconColor: isSelected ? undefined : color
             }
           );
         }
 
         pm.events.add("click", () => {
+          clickedFromMapRef.current = true;
           setSelectedId(p => p === order.id ? null : order.id);
           if (!isMobile) setIsDetailVisible(true);
         });
@@ -402,24 +407,26 @@ export function DashboardClient({ user }: { user: User }) {
     if (placemarks.length > 0) clusterer.add(placemarks);
   }, [filtered, selectedId, previewGeo, isMobile, showCourierNames, showTime, currentZoom, filterCourier, selectedSlots]);
 
-  // ── АВТОМАТИЧЕСКОЕ ЦЕНТРИРОВАНИЕ И ЗУМ ПРИ ВЫБОРЕ ЗАКАЗА ──
+  // clickedFromMap=true — выбор через клик по пину, только пан без зума
+  const clickedFromMapRef = useRef(false);
+
   useEffect(() => {
     if (selectedId && ymapRef.current && !previewGeo) {
       const order = orders.find(o => o.id === selectedId);
       if (order?.lat && order?.lng) {
-        if (isMobile && mobileView !== "panels") {
-          window.scrollTo({ top: 0, behavior: 'smooth' });
+        if (isMobile && mobileView !== "panels") window.scrollTo({ top: 0, behavior: 'smooth' });
+        if (clickedFromMapRef.current) {
+          // Клик по пину — только центрируем, зум не трогаем
+          ymapRef.current.setCenter([order.lat, order.lng], undefined, { duration: 400 });
+        } else {
+          // Выбор из списка — зумируем
+          ymapRef.current.setCenter([order.lat, order.lng], 14, { duration: 500 });
         }
-        // Плавно перемещаемся и делаем зум ближе (16)
-        ymapRef.current.setCenter(
-          [order.lat, order.lng], 
-          14, 
-          { duration: 500, timingFunction: 'ease-in-out' }
-        );
+        clickedFromMapRef.current = false;
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId]); // Запускаем ТОЛЬКО при смене ID, чтобы не сбивать зум при авто-обновлении
+  }, [selectedId]);
 
   async function handleGeocode(mode: "ai" | "manual") {
     if (!selected) return;
@@ -471,7 +478,6 @@ export function DashboardClient({ user }: { user: User }) {
       <div style={s.detailScroll}>
         <div style={s.detailHeader}>
           <div style={{ flex: 1 }}><div style={s.detailExtId}>{selected.externalId ?? selected.crmId}</div></div>
-          {/* Крестик закрывает карточку */}
           <button style={s.detailClose} onClick={() => { setSelectedId(null); setIsDetailVisible(false); }}>✕</button>
         </div>
         {selected.isInvalid && <div style={s.detailInvalidBanner}>⚠ {selected.invalidReason ?? "Проблемный адрес"}</div>}
@@ -520,12 +526,10 @@ export function DashboardClient({ user }: { user: User }) {
         <button onClick={() => router.push('/orders')} style={s.navBtn}>≡ Заказы</button>
         <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={s.datePicker} />
         
-        {/* КРАСИВЫЕ ДРОПДАУНЫ С ПОРТАЛОМ */}
-        <CustomSelect value={filterStatus} onChange={setFilterStatus} options={STATUS_OPTIONS} style={{ width: 130, marginLeft: 4 }} />
-        <CustomSelect value={filterCourier} onChange={setFilterCourier} options={courierOptions} style={{ width: 130, marginLeft: 4 }} />
+        <CustomSelect value={filterStatus} onChange={setFilterStatus} options={STATUS_OPTIONS} style={{ width: 120, marginLeft: 4 }} />
+        <CustomSelect value={filterCourier} onChange={setFilterCourier} options={courierOptions} style={{ width: 110, marginLeft: 4 }} />
 
-        {/* ЧЕКБОКСЫ ДЛЯ КАРТЫ */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginLeft: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 6 }}>
           <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#6b6860", cursor: "pointer" }}>
             <input type="checkbox" checked={showCourierNames} onChange={e => setShowCourierNames(e.target.checked)} /> Имена
           </label>
@@ -548,8 +552,8 @@ export function DashboardClient({ user }: { user: User }) {
 
       {isMobile && (
         <div style={sm.mobileSlotsWrap}>
-           <SlotBtn label="Все" active={selectedSlots.length === 0} color="#4a7aff" onClick={() => toggleSlot("all")} />
-            {SLOTS.map(sl => <SlotBtn key={sl.label} label={sl.label} active={selectedSlots.includes(sl.label)} color={sl.color} onClick={() => toggleSlot(sl.label)} />)}
+          <SlotBtn label="Все" active={selectedSlots.length === 0} color="#4a7aff" onClick={() => toggleSlot("all")} />
+          {SLOTS.map(sl => <SlotBtn key={sl.label} label={sl.label} active={selectedSlots.includes(sl.label)} color={sl.color} onClick={() => toggleSlot(sl.label)} />)}
         </div>
       )}
 
@@ -572,18 +576,14 @@ export function DashboardClient({ user }: { user: User }) {
       <div style={isMobile ? sm.body : s.body}>
         {!isMobile && (
           <div style={{ display: 'flex', width: '100%', height: '100%' }}>
-            
-            {/* БОКОВЫЕ ПАНЕЛИ (СПИСОК И КАРТОЧКА) */}
             {showLeftPanel && (
               <div style={s.leftPanel}>
-                
                 {isListVisible && (
                   <div style={{ ...s.cardsSection, flex: isDetailVisible ? "0 0 50%" : 1, borderBottom: isDetailVisible ? "1px solid #e8e6df" : "none" }}>
                     <div style={s.sectionHeader}>
                       <span style={s.sectionTitle}>Заказы</span>
                       <span style={s.countBadge}>{filtered.length}</span>
                       <div style={{ flex: 1 }} />
-                      {/* СТРЕЛОЧКА СКРЫТИЯ СПИСКА */}
                       <button onClick={() => setIsListVisible(false)} style={s.panelToggleArrow} title="Скрыть список">◀</button>
                     </div>
                     <div style={s.cardsList}>
@@ -591,7 +591,6 @@ export function DashboardClient({ user }: { user: User }) {
                     </div>
                   </div>
                 )}
-
                 {isDetailVisible && (
                   <div style={{ ...s.detailSection, flex: isListVisible ? "0 0 50%" : 1 }}>
                     {renderDetailPanel()}
@@ -599,22 +598,15 @@ export function DashboardClient({ user }: { user: User }) {
                 )}
               </div>
             )}
-
-            {/* КОНТЕЙНЕР КАРТЫ */}
             <div style={{ flex: 1, position: 'relative' }}>
               <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
-              
-              {/* СТРЕЛОЧКА ВОЗВРАТА СПИСКА (ПОЯВЛЯЕТСЯ ТОЛЬКО ЕСЛИ СПИСОК СКРЫТ) */}
               {!isListVisible && (
-                <button onClick={() => setIsListVisible(true)} style={s.expandSideBtn} title="Показать список">
-                  ▶
-                </button>
+                <button onClick={() => setIsListVisible(true)} style={s.expandSideBtn} title="Показать список">▶</button>
               )}
             </div>
           </div>
         )}
 
-        {/* --- MOBILE ВЕРСИЯ --- */}
         {isMobile && (
           <>
             <div ref={mapRef} style={{ ...sm.map, display: mobileView === "panels" ? "none" : "block", flex: mobileView === "map" ? 1 : "0 0 45%" }} />
@@ -737,7 +729,6 @@ const s: Record<string, React.CSSProperties> = {
   invalidBanner: { display: "flex", alignItems: "center", gap: 8, padding: "7px 16px", background: "rgba(217,64,64,0.07)", borderBottom: "1px solid rgba(217,64,64,0.15)", color: "#d94040", flexShrink: 0 },
   invalidBannerLink: { fontFamily: "monospace", fontWeight: 600, cursor: "pointer", textDecoration: "underline" },
   invalidBannerClose: { marginLeft: "auto", background: "none", border: "none", color: "#d94040", cursor: "pointer", fontSize: 14, flexShrink: 0, padding: 2 },
-  
   body: { display: "flex", flex: 1, overflow: "hidden", minHeight: 0 },
   leftPanel: { width: 300, minWidth: 260, background: "#fff", borderRight: "1px solid #e8e6df", display: "flex", flexDirection: "column", flexShrink: 0, overflow: "hidden", zIndex: 5 },
   cardsSection: { display: "flex", flexDirection: "column", overflow: "hidden" },
@@ -763,11 +754,8 @@ const s: Record<string, React.CSSProperties> = {
   input: { padding: "7px 9px", borderRadius: 7, border: "1px solid #e8e6df", background: "#fafaf8", color: "#1a1a18", fontSize: 12, outline: "none" },
   textarea: { width: "100%", padding: "7px 9px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 12, resize: "none", outline: "none", color: "#1a1a18", background: "#fafaf8", display: "block" },
   saveBtn: { width: "100%", padding: "8px", borderRadius: 8, border: "none", fontSize: 12, fontWeight: 600, transition: "background .15s, color .15s" },
-  
-  // КНОПКИ ПАНЕЛЕЙ (ТОЛЬКО СТРЕЛОЧКИ)
   panelToggleArrow: { background: "transparent", border: "none", cursor: "pointer", color: "#a8a49c", fontSize: 13, padding: "4px 8px", borderRadius: 4, transition: "color 0.15s" },
   expandSideBtn: { position: "absolute", top: 12, left: 0, zIndex: 100, background: "#fff", border: "1px solid #e8e6df", borderLeft: "none", borderRadius: "0 8px 8px 0", padding: "10px 8px", cursor: "pointer", color: "#6b6860", fontSize: 13, boxShadow: "2px 2px 8px rgba(0,0,0,0.06)" },
-  
   card: { padding: "9px 11px", borderRadius: 8, marginBottom: 4, background: "#fafaf8", border: "1px solid #e8e6df", cursor: "pointer", transition: "all .12s" },
   cardSelected: { background: "#eef3ff", borderColor: "#4a7aff" },
   cardInvalid: { borderColor: "rgba(217,64,64,0.3)", background: "#fff8f8" },
@@ -788,13 +776,12 @@ const s: Record<string, React.CSSProperties> = {
   th: { padding: "7px 12px", textAlign: "left" as const, fontSize: 10, fontWeight: 600, color: "#a8a49c", textTransform: "uppercase", letterSpacing: ".4px", background: "#fafaf8", borderBottom: "1px solid #e8e6df", whiteSpace: "nowrap", position: "sticky", top: 0, zIndex: 1 },
   td: { padding: "7px 12px", borderBottom: "0.5px solid #f0efe9", verticalAlign: "top", fontSize: 12, color: "#1a1a18" },
   statusDot: { width: 6, height: 6, borderRadius: "50%", flexShrink: 0, display: "inline-block", marginRight: 4, verticalAlign: "middle" },
-
   popup: { position: "fixed", top: 52, right: 8, background: "#fff", border: "1px solid #e8e6df", borderRadius: 12, padding: 16, zIndex: 200, width: 280, boxShadow: "0 4px 24px rgba(0,0,0,0.1)" },
   overlay: { position: "fixed", inset: 0, zIndex: 199 },
   alertTitle: { fontSize: 11, fontWeight: 700, color: "#d94040", textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 10 },
   alertItem: { padding: "7px 0", borderBottom: "0.5px solid #f5f4f0", cursor: "pointer" },
   alertAddr: { fontSize: 12, color: "#1a1a18", marginBottom: 2 },
-  alertSub: { fontSize: 11, color: "#d94040", opacity: 0.8 }
+  alertSub: { fontSize: 11, color: "#d94040", opacity: 0.8 },
 };
 
 const sm: Record<string, React.CSSProperties> = {
@@ -805,5 +792,5 @@ const sm: Record<string, React.CSSProperties> = {
   map: { minHeight: 250 },
   panelsWrap: { display: "flex", flexDirection: "column", background: "#fff", overflow: "hidden" },
   cardsSection: { flex: 1, display: "flex", flexDirection: "column", minHeight: 0 },
-  detailSection: { flex: "0 0 55%", display: "flex", flexDirection: "column", borderTop: "2px solid #4a7aff", background: "#fff", overflow: "hidden", boxShadow: "0 -4px 12px rgba(0,0,0,0.05)" }
+  detailSection: { flex: "0 0 55%", display: "flex", flexDirection: "column", borderTop: "2px solid #4a7aff", background: "#fff", overflow: "hidden", boxShadow: "0 -4px 12px rgba(0,0,0,0.05)" },
 };
