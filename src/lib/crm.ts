@@ -8,6 +8,30 @@ const CRM_URL = process.env.RETAILCRM_API_URL;
 const CRM_KEY = process.env.RETAILCRM_API_KEY;
 const GEO_KEY = process.env.YANDEX_GEOCODER_KEY;
 
+// ── Вспомогательная функция: Поиск ID курьера по имени ──
+async function resolveCourierId(name: string): Promise<number | null> {
+  if (!CRM_URL || !CRM_KEY || !name) return null;
+  try {
+    const res = await axios.get(`${CRM_URL}/api/v5/users`, {
+      params: { apiKey: CRM_KEY, limit: 100 },
+      timeout: 5000,
+    });
+    const users = res.data?.users || [];
+    const normalized = name.toLowerCase().trim();
+    
+    // Ищем точное или частичное совпадение по имени/фамилии
+    const match = users.find((u: any) => {
+      const fName = [u.firstName, u.lastName].filter(Boolean).join(" ").toLowerCase();
+      return fName === normalized || u.firstName?.toLowerCase() === normalized || u.lastName?.toLowerCase() === normalized;
+    });
+    
+    return match?.id || null;
+  } catch (e) {
+    console.error("[CRM] Ошибка поиска ID курьера:", String(e));
+    return null;
+  }
+}
+
 // ── Slot parser ───────────────────────────────────────────
 export function parseSlot(raw: unknown) {
   if (!raw) return { from: null, to: null, text: null };
@@ -81,8 +105,9 @@ export function mapCrmOrder(order: CrmOrder) {
     try { dData = JSON.parse(dData); } catch (_) {}
   }
 
-  // 1. Попытка достать из интеграций (Dostavista, Yandex, Logisty)
   let parsedCourier: string | null = null;
+  
+  // 1. Из интеграций
   if (dData) {
     if (dData.firstName || dData.lastName) {
       parsedCourier = [dData.firstName, dData.lastName].filter(Boolean).join(" ");
@@ -97,26 +122,27 @@ export function mapCrmOrder(order: CrmOrder) {
     }
   }
 
-  // 2. Попытка достать штатного курьера самой RetailCRM (ИСПРАВЛЕНИЕ)
+  // 2. ИСПРАВЛЕНИЕ: Вытаскиваем ШТАТНОГО курьера RetailCRM
   if (!parsedCourier && order.delivery && (order.delivery as any).courier) {
     const dc = (order.delivery as any).courier;
-    if (dc.firstName || dc.lastName) {
-      parsedCourier = [dc.firstName, dc.lastName].filter(Boolean).join(" ");
-    } else if (dc.name) {
-      parsedCourier = dc.name;
+    if (typeof dc === "object") {
+      parsedCourier = [dc.firstName, dc.lastName].filter(Boolean).join(" ") || dc.name || null;
+    } else if (typeof dc === "string") {
+      parsedCourier = dc.trim();
     }
   }
 
-  // 3. Попытка достать из кастомных полей
+  // 3. Из кастомных полей
   if (!parsedCourier) {
     const cfCourier = cFields?.courier ?? cFields?.kurier;
     if (typeof cfCourier === "string" && cfCourier.trim()) {
       parsedCourier = cfCourier.trim();
     }
   }
+
   const courier = parsedCourier || null;
 
-  // ИСПРАВЛЕНИЕ ВРЕМЕНИ: Жестко привязываем к Москве (+03:00)
+  // Жесткая привязка к МСК
   let parsedDate = null;
   if (order.createdAt) {
     const isoDate = order.createdAt.replace(" ", "T") + "+03:00";
@@ -316,7 +342,6 @@ export async function pollCrmOrders() {
     return;
   }
 
-  // ИСПРАВЛЕНИЕ: Вернули 7 дней
   const dateFrom = new Date(Date.now() - 7 * 24 * 3_600_000).toISOString().split("T")[0];
   console.log(`[CRM Poll] Синхронизация начиная с ${dateFrom}`);
 
@@ -380,15 +405,28 @@ export async function updateCrmOrder(
     deliveryUpdates.address = { text: data.address };
   }
 
+  // ИСПРАВЛЕНИЕ: Конвертируем имя курьера в штатный ID пользователя RetailCRM
   if (data.courier !== undefined) {
-    orderPayload.customFields = {
-      courier: data.courier || "",
-      kurier:  data.courier || "",
-    };
-    
-    // ФИКС: Обход жесткого правила RetailCRM ("Нельзя выбрать курьера без типа доставки").
+    const courierName = data.courier.trim();
     deliveryUpdates = deliveryUpdates || {};
+    
+    if (courierName) {
+      const courierId = await resolveCourierId(courierName);
+      if (courierId) {
+        deliveryUpdates.courier = { id: courierId };
+      }
+    } else {
+      deliveryUpdates.courier = null; // Попытка очистить курьера
+    }
+    
+    // Обязательное поле типа доставки для выбора курьера
     deliveryUpdates.code = data.deliveryType || "logisty"; 
+
+    // На всякий случай дублируем в кастомные поля (для совместимости)
+    orderPayload.customFields = {
+      courier: courierName,
+      kurier:  courierName,
+    };
   }
 
   if (deliveryUpdates) {
