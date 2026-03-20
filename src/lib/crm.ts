@@ -405,8 +405,6 @@ export async function updateCrmOrder(
     deliveryUpdates.address = { text: data.address };
   }
 
-  // ИСПРАВЛЕНИЕ: Конвертируем имя курьера в штатный ID пользователя RetailCRM
-  // src/lib/crm.ts -> внутри функции updateCrmOrder
   if (data.courier !== undefined) {
     const courierName = data.courier.trim();
     deliveryUpdates = deliveryUpdates || {};
@@ -415,12 +413,14 @@ export async function updateCrmOrder(
       const courierId = await resolveCourierId(courierName);
       if (courierId) {
         deliveryUpdates.courier = { id: courierId };
-        // 🔥 ИСПРАВЛЕНИЕ: Записываем курьера в данные интеграции (Logisty) 🔥
-        deliveryUpdates.data = { courier: courierId };
+        
+        // 🔥 ГЛАВНЫЙ ФИКС ДЛЯ ИНТЕГРАЦИЙ (LOGISTY) 🔥
+        // Отправляем ID курьера прямо в data интеграции
+        deliveryUpdates.data = { courier: courierId }; 
       }
     } else {
       deliveryUpdates.courier = null;
-      deliveryUpdates.data = null;
+      deliveryUpdates.data = null; // Очищаем и там
     }
     
     deliveryUpdates.code = data.deliveryType || "logisty"; 
@@ -431,10 +431,7 @@ export async function updateCrmOrder(
     orderPayload.delivery = deliveryUpdates;
   }
 
-  if (Object.keys(orderPayload).length === 0) {
-    console.log(`[CRM] Нет данных для отправки заказа ${crmId}`);
-    return;
-  }
+  if (Object.keys(orderPayload).length === 0) return;
 
   const params = new URLSearchParams();
   params.append("apiKey", CRM_KEY);
@@ -452,7 +449,6 @@ export async function updateCrmOrder(
     console.error(`[CRM] Ошибка обновления заказа ${crmId} в RetailCRM:`, err?.response?.data || err.message);
   }
 }
-
 // ── Types ─────────────────────────────────────────────────
 export interface CrmOrder {
   id: number;
