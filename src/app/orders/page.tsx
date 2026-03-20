@@ -117,7 +117,7 @@ export default function OrdersPage() {
 
       <div style={{ background: "#fff", borderRadius: 8, border: "1px solid #e8e6df", overflow: "hidden" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, textAlign: "left" }}>
-        <thead>
+          <thead>
             <tr style={{ background: "#fafaf8", color: "#6b6860", textTransform: "uppercase", fontSize: 11 }}>
               <th style={{ padding: 12, borderBottom: "1px solid #e8e6df" }}>ID</th>
               <th style={{ padding: 12, borderBottom: "1px solid #e8e6df" }}>Статус</th>
@@ -125,7 +125,7 @@ export default function OrdersPage() {
               <th style={{ padding: 12, borderBottom: "1px solid #e8e6df" }}>Адрес</th>
               <th style={{ padding: 12, borderBottom: "1px solid #e8e6df" }}>Слот</th>
               <th style={{ padding: 12, borderBottom: "1px solid #e8e6df" }}>Сумма</th>
-              <th style={{ padding: 12, borderBottom: "1px solid #e8e6df" }}>На карте</th> {/* НОВАЯ КОЛОНКА */}
+              <th style={{ padding: 12, borderBottom: "1px solid #e8e6df" }}>На карте</th>
             </tr>
           </thead>
           <tbody>
@@ -145,7 +145,6 @@ export default function OrdersPage() {
                 </td>
                 <td style={{ padding: 12 }}>{o.slotRaw || "—"}</td>
                 <td style={{ padding: 12 }}>{o.price ? `${o.price} ₽` : "—"}</td>
-                {/* ССЫЛКА НА ДАШБОРД */}
                 <td style={{ padding: 12 }}>
                   <Link href={`/dashboard?orderId=${o.id}`} style={{ color: "#4a7aff", textDecoration: "none", fontSize: 12, fontWeight: 600, background: "#eef3ff", padding: "4px 8px", borderRadius: 6 }}>
                     📍 Открыть

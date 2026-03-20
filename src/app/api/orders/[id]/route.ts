@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { updateCrmOrderStatus } from "@/lib/crm";
+import { updateCrmOrder } from "@/lib/crm";
 import { notify } from "@/lib/notifications";
 import { OrderStatus } from "@prisma/client";
 import { z } from "zod";
@@ -43,11 +43,31 @@ export async function PATCH(
   const prev = await prisma.order.findUnique({ where: { id } });
   if (!prev) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const order = await prisma.order.update({ where: { id }, data });
+  // Если оператор явно задаёт курьера — фиксируем флаг courierManual=true
+  // Если курьера сбрасывают (пустая строка) — снимаем флаг
+  const courierUpdate: { courierManual?: boolean } = {};
+  if (data.courier !== undefined) {
+    courierUpdate.courierManual = data.courier.trim().length > 0;
+  }
 
-  // Синхронизируем статус обратно в CRM
-  if (data.status && order.crmId) {
-    updateCrmOrderStatus(order.crmId, data.status).catch(console.error);
+  const order = await prisma.order.update({
+    where: { id },
+    data: {
+      ...data,
+      // Нормализуем пустую строку в null
+      courier: data.courier !== undefined
+        ? (data.courier.trim() || null)
+        : undefined,
+      ...courierUpdate,
+    },
+  });
+
+  // Синхронизируем статус И курьера обратно в CRM
+  if (order.crmId && (data.status !== undefined || data.courier !== undefined)) {
+    updateCrmOrder(order.crmId, {
+      ...(data.status !== undefined && { status: data.status }),
+      ...(data.courier !== undefined && { courier: data.courier }),
+    }).catch(console.error);
   }
 
   // Уведомление при смене статуса

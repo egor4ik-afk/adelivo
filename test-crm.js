@@ -1,4 +1,3 @@
-// test-crm.js
 require('dotenv').config({ path: '.env.local' });
 const axios = require('axios');
 
@@ -7,7 +6,7 @@ const axios = require('axios');
     const res = await axios.get("https://kaktusfiori.retailcrm.ru/api/v5/orders", {
       params: { 
         apiKey: process.env.RETAILCRM_API_KEY || 'JQLXCkIYDfGlU1ZeOTJArjo5HnbkoeP7', 
-        limit: 5 
+        limit: 20 
       }
     });
 
@@ -21,7 +20,6 @@ const axios = require('axios');
     });
 
   } catch (err) {
-    // ВЫВОДИМ ТОЧНУЮ ОШИБКУ ОТ RETAILCRM
     console.error("❌ Ошибка от CRM:");
     console.error(err.response?.data || err.message);
   }

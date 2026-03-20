@@ -53,6 +53,107 @@ function loadYMaps(): Promise<void> {
   return ymapsReady;
 }
 
+// ── Кастомный дропдаун со стилизованными опциями ──
+interface SelectOption { value: string; label: string; }
+
+function CustomSelect({
+  value,
+  onChange,
+  options,
+  style,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: SelectOption[];
+  style?: React.CSSProperties;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+
+  const current = options.find(o => o.value === value);
+
+  return (
+    <div ref={ref} style={{ position: "relative", ...style }}>
+      <button
+        type="button"
+        onClick={() => setOpen(p => !p)}
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          width: "100%", height: 28, padding: "0 8px",
+          borderRadius: 7, border: "1px solid #e0dfd7",
+          background: "#fff", fontSize: 11, fontWeight: 500, color: "#1a1a18",
+          cursor: "pointer", outline: "none",
+          boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+          whiteSpace: "nowrap", gap: 6,
+        }}
+      >
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1, textAlign: "left" }}>
+          {current?.label ?? placeholder ?? "—"}
+        </span>
+        <span style={{ fontSize: 8, color: "#a8a49c", flexShrink: 0, transition: "transform 0.12s", transform: open ? "rotate(180deg)" : "none" }}>▼</span>
+      </button>
+
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", left: 0, minWidth: "100%",
+          background: "#fff", borderRadius: 8, border: "1px solid #e0dfd7",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.1)", zIndex: 300,
+          overflow: "hidden", maxHeight: 220, overflowY: "auto",
+        }}>
+          {options.map(opt => (
+            <div
+              key={opt.value}
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+              style={{
+                padding: "7px 12px", fontSize: 11, fontWeight: 500,
+                color: opt.value === value ? "#4a7aff" : "#1a1a18",
+                background: opt.value === value ? "#f0f4ff" : "transparent",
+                cursor: "pointer", whiteSpace: "nowrap",
+                borderBottom: "1px solid #f5f4f0",
+                transition: "background 0.08s",
+              }}
+              onMouseEnter={e => { if (opt.value !== value) (e.currentTarget as HTMLDivElement).style.background = "#fafaf8"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = opt.value === value ? "#f0f4ff" : "transparent"; }}
+            >
+              {opt.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Старый StyledSelect оставляем для внутренних панелей (detail, table)
+function StyledSelect({
+  value, onChange, style, children,
+}: {
+  value: string; onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  style?: React.CSSProperties; children: React.ReactNode;
+}) {
+  return (
+    <div style={{ position: "relative", display: "inline-flex", alignItems: "center", ...style }}>
+      <select
+        value={value} onChange={onChange}
+        style={{ ...ss.select, appearance: "none" as const, WebkitAppearance: "none" as const, paddingRight: 22, width: "100%" }}
+      >
+        {children}
+      </select>
+      <span style={ss.arrow}>▾</span>
+    </div>
+  );
+}
+
 export function DashboardClient({ user }: { user: User }) {
   const router = useRouter();
   const mapRef = useRef<HTMLDivElement>(null);
@@ -76,7 +177,9 @@ export function DashboardClient({ user }: { user: User }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [slot, setSlot] = useState("all");
   const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
-  const [filterStatus, setFilterStatus] = useState("ALL"); // НОВЫЙ ФИЛЬТР ПО СТАТУСУ
+  const [filterStatus, setFilterStatus] = useState("ALL");
+  const [filterCourier, setFilterCourier] = useState("ALL");
+  const [showCourierNames, setShowCourierNames] = useState(true); // НОВЫЙ СТЕЙТ
   const [selectedId, setSelectedId] = useState<string | null>(null);
   
   const [profileOpen, setProfileOpen] = useState(false);
@@ -118,16 +221,14 @@ export function DashboardClient({ user }: { user: User }) {
   }, [isDraggingTable]);
 
   useEffect(() => {
-    if (ymapRef.current) {
-      setTimeout(() => ymapRef.current.container.fitToViewport(), 50);
-    }
+    if (ymapRef.current) setTimeout(() => ymapRef.current.container.fitToViewport(), 50);
   }, [mobileView, isListVisible, isDetailVisible, tableOpen, tableHeight]);
 
-  // ── ЛОГИКА ФИЛЬТРАЦИИ ──
   const dateAndStatusOrders = orders.filter(o => {
     const oDate = o.deliveryDate || (o.crmCreatedAt ? o.crmCreatedAt.split('T')[0] : null);
     if (oDate !== filterDate) return false;
     if (filterStatus !== "ALL" && o.status !== filterStatus) return false;
+    if (filterCourier !== "ALL" && (o.courier || "UNASSIGNED") !== filterCourier) return false;
     return true;
   });
 
@@ -211,47 +312,76 @@ export function DashboardClient({ user }: { user: User }) {
     return () => { mounted = false; };
   }, []);
 
+  // ── ПИНЫ НА КАРТЕ: stretchy-плашка (с курьером) или dot (без), имя курьера ПОД пином ──
   useEffect(() => {
     const clusterer = clustererRef.current;
     if (!clusterer || typeof window === "undefined" || !window.ymaps) return;
     clusterer.removeAll();
-    
-    const placemarks = filtered.filter(o => (o.lat && o.lng) || (o.id === selectedId && previewGeo)).map(order => {
-      const isSelected = selectedId === order.id;
-      const lat = isSelected && previewGeo ? previewGeo.lat : order.lat!;
-      const lng = isSelected && previewGeo ? previewGeo.lng : order.lng!;
-      const color = slotColor(order);
-      
-      // СЕРАЯ ТОЧКА при предпросмотре, ЖЕЛТАЯ при обычном выделении
-      let preset = order.courier ? "islands#blueStretchyIcon" : "islands#dotIcon";
-      if (isSelected) {
-        preset = order.courier 
-          ? (previewGeo ? "islands#grayStretchyIcon" : "islands#yellowStretchyIcon") 
-          : (previewGeo ? "islands#grayDotIcon" : "islands#yellowDotIcon");
-      }
-      const iconColor = isSelected ? (previewGeo ? '#9ca3af' : '#facc15') : color;
 
-      const pm = new window.ymaps.Placemark(
-        [lat, lng],
-        {
-          balloonContentHeader: order.externalId ?? order.crmId,
-          iconContent: order.courier ? `<span style="font-size:10px; font-weight:bold; color:#000">${order.courier}</span>` : undefined,
-          balloonContentBody: `<div style="font-size:13px;line-height:1.6"><b>${order.address ?? "—"}</b><br><span style="color:#888">${order.slotRaw ?? "—"}</span></div>`,
-          hintContent: order.address ?? "—",
-        },
-        { preset, iconColor }
-      );
-      
-      pm.events.add("click", () => {
-        setSelectedId(p => p === order.id ? null : order.id);
-        if (!isMobile) setIsDetailVisible(true); 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ymaps = (window as any).ymaps;
+
+    // Лейаут для заказов С курьером — крупная цветная плашка со слотом + имя снизу
+    const StretchyLayout = ymaps.templateLayoutFactory.createClass(
+      '<div style="display:inline-flex;flex-direction:column;align-items:center;cursor:pointer;">' +
+        '<div style="background:{{ properties.pinColor }};color:#fff;padding:4px 10px;border-radius:12px;font-size:10px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.28);border:1.5px solid rgba(255,255,255,0.35);min-width:28px;text-align:center;line-height:1.4;">{{ properties.slotLabel }}</div>' +
+        '<div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid {{ properties.pinColor }};margin-top:-1px;"></div>' +
+        '{% if properties.showLabel %}' +
+          '<div style="margin-top:3px;font-size:9px;font-weight:700;color:#1a1a18;white-space:nowrap;background:rgba(255,255,255,0.96);padding:2px 6px;border-radius:4px;box-shadow:0 1px 5px rgba(0,0,0,0.15);line-height:1.4;letter-spacing:0.1px;">{{ properties.labelText }}</div>' +
+        '{% endif %}' +
+      '</div>'
+    );
+
+    // Лейаут для заказов БЕЗ курьера — круглая точка (как islands#dotIcon)
+    const DotLayout = ymaps.templateLayoutFactory.createClass(
+      '<div style="display:inline-flex;flex-direction:column;align-items:center;cursor:pointer;">' +
+        '<div style="width:16px;height:16px;border-radius:50%;background:{{ properties.pinColor }};border:2.5px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);"></div>' +
+      '</div>'
+    );
+
+    const placemarks = filtered
+      .filter(o => (o.lat && o.lng) || (o.id === selectedId && previewGeo))
+      .map(order => {
+        const isSelected = selectedId === order.id;
+        const lat = isSelected && previewGeo ? previewGeo.lat : order.lat!;
+        const lng = isSelected && previewGeo ? previewGeo.lng : order.lng!;
+        const color = slotColor(order);
+        const pinColor = isSelected ? (previewGeo ? '#9ca3af' : '#facc15') : color;
+        const hasCourier = !!order.courier;
+        const slotLabel = order.slotFrom
+          ? `${order.slotFrom.slice(0, 2)}–${(order.slotTo ?? "").slice(0, 2)}`
+          : (order.externalId ?? "");
+
+        const pm = new window.ymaps.Placemark(
+          [lat, lng],
+          {
+            balloonContentHeader: order.externalId ?? order.crmId,
+            balloonContentBody: `<div style="font-size:13px;line-height:1.6"><b>${order.address ?? "—"}</b><br><span style="color:#888">${order.slotRaw ?? "—"}</span></div>`,
+            hintContent: order.address ?? "—",
+            pinColor,
+            slotLabel,
+            showLabel: showCourierNames && hasCourier,
+            labelText: order.courier ?? "",
+          },
+          {
+            iconLayout: hasCourier ? StretchyLayout : DotLayout,
+            iconOffset: hasCourier ? [-30, -26] : [-8, -8],
+            iconShape: hasCourier
+              ? { type: "Rectangle", coordinates: [[-30, -26], [30, 6]] }
+              : { type: "Circle", coordinates: [8, 8], radius: 10 },
+          }
+        );
+
+        pm.events.add("click", () => {
+          setSelectedId(p => p === order.id ? null : order.id);
+          if (!isMobile) setIsDetailVisible(true);
+        });
+        return pm;
       });
-      return pm;
-    });
-    if (placemarks.length > 0) clusterer.add(placemarks);
-  }, [filtered, selectedId, previewGeo, isMobile]);
 
-  // ПЛАВНЫЙ ЗУМ ПРИ КЛИКЕ НА КАРТОЧКУ (zoom: 14)
+    if (placemarks.length > 0) clusterer.add(placemarks);
+  }, [filtered, selectedId, previewGeo, isMobile, showCourierNames]);
+
   useEffect(() => {
     if (selected?.lat && selected?.lng && isMobile && mobileView !== "panels") window.scrollTo({ top: 0, behavior: 'smooth' });
     if (selected?.lat && selected?.lng && !previewGeo && ymapRef.current) {
@@ -282,7 +412,6 @@ export function DashboardClient({ user }: { user: User }) {
 
         if (data.geo && data.geo.lat) {
           setPreviewGeo({ lat: data.geo.lat, lng: data.geo.lng });
-          // ПЛАВНЫЙ ЗУМ ПРИ ПРЕДПРОСМОТРЕ (zoom: 15 для точности)
           if (ymapRef.current) ymapRef.current.setCenter([data.geo.lat, data.geo.lng], 15, { duration: 400 });
         } else {
           alert("Яндекс.Карты не смогли найти координаты по этому адресу.");
@@ -391,13 +520,49 @@ export function DashboardClient({ user }: { user: User }) {
       <div style={isMobile ? sm.topbar : s.topbar}>
         <div style={s.logo}><span style={s.logoDot} />FlowerOps</div>
         <button onClick={() => router.push('/orders')} style={s.navBtn}>≡ Заказы</button>
-        <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={s.datePicker} />
-        
-        {/* НОВЫЙ ВЫПАДАЮЩИЙ СПИСОК СТАТУСОВ */}
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...s.datePicker, marginLeft: 4 }}>
-          <option value="ALL">Все статусы</option>
-          {STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-        </select>
+
+        {/* Дата */}
+        <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={ss.datePicker} />
+
+        {/* Статус */}
+        <CustomSelect
+          value={filterStatus}
+          onChange={setFilterStatus}
+          style={{ minWidth: 100 }}
+          options={[
+            { value: "ALL", label: "Все статусы" },
+            ...STATUS_OPTIONS.map(o => ({ value: o.value, label: o.label })),
+          ]}
+        />
+
+        {/* Курьер (компактный) + чекбокс имён */}
+        <div style={ss.courierGroup}>
+          <CustomSelect
+            value={filterCourier}
+            onChange={setFilterCourier}
+            style={{ minWidth: 86, maxWidth: 120 }}
+            options={[
+              { value: "ALL", label: "Курьеры" },
+              { value: "UNASSIGNED", label: "Не назначен" },
+              ...couriers.map(c => ({ value: c, label: c })),
+            ]}
+          />
+
+          {/* Чекбокс — кликабельный div, без связки с input */}
+          <div
+            style={ss.checkboxLabel}
+            onClick={() => setShowCourierNames(v => !v)}
+            role="checkbox"
+            aria-checked={showCourierNames}
+            tabIndex={0}
+            onKeyDown={e => e.key === " " && setShowCourierNames(v => !v)}
+          >
+            <span style={{ ...ss.checkboxBox, background: showCourierNames ? "#4a7aff" : "#f0efe9", borderColor: showCourierNames ? "#4a7aff" : "#d6d4cc" }}>
+              {showCourierNames && <span style={ss.checkboxTick}>✓</span>}
+            </span>
+            <span style={ss.checkboxText}>Имена</span>
+          </div>
+        </div>
 
         {!isMobile && (
           <div style={s.slotBar}>
@@ -611,6 +776,84 @@ function OrderCard({ order, selected, onSelect }: { order: Order; selected: bool
     </div>
   );
 }
+
+// ── Стили для StyledSelect и нового чекбокса ──
+const ss: Record<string, React.CSSProperties> = {
+  select: {
+    padding: "4px 8px",
+    borderRadius: 7,
+    border: "1px solid #e0dfd7",
+    background: "#fff",
+    fontSize: 11,
+    fontWeight: 500,
+    color: "#1a1a18",
+    outline: "none",
+    cursor: "pointer",
+    height: 28,
+    boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+    transition: "border-color 0.12s",
+  },
+  arrow: {
+    position: "absolute",
+    right: 6,
+    top: "50%",
+    transform: "translateY(-50%)",
+    pointerEvents: "none",
+    fontSize: 9,
+    color: "#a8a49c",
+    lineHeight: 1,
+  },
+  datePicker: {
+    padding: "4px 8px",
+    borderRadius: 7,
+    border: "1px solid #e0dfd7",
+    fontSize: 11,
+    fontWeight: 500,
+    outline: "none",
+    color: "#1a1a18",
+    background: "#fff",
+    height: 28,
+    boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+    marginLeft: 4,
+  },
+  courierGroup: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    marginLeft: 4,
+  },
+  checkboxLabel: {
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+    cursor: "pointer",
+    userSelect: "none" as const,
+    flexShrink: 0,
+  },
+  checkboxBox: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+    border: "1px solid #d6d4cc",
+    transition: "background 0.12s, border-color 0.12s",
+    flexShrink: 0,
+  },
+  checkboxTick: {
+    fontSize: 9,
+    color: "#fff",
+    fontWeight: 700,
+    lineHeight: 1,
+  },
+  checkboxText: {
+    fontSize: 11,
+    fontWeight: 500,
+    color: "#6b6860",
+    whiteSpace: "nowrap" as const,
+  },
+};
 
 const s: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", overflow: "hidden" },

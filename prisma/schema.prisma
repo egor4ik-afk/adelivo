@@ -107,6 +107,8 @@ model Order {
   crmCreatedAt  DateTime?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+  courierManual Boolean     @default(false)
+
 
   @@index([createdAt])
   @@index([slotFrom, slotTo])

@@ -10,26 +10,39 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url);
-  const slot = searchParams.get("slot");       // "20:00-22:00"
-  const date = searchParams.get("date");       // "2026-03-17"
+  const slot    = searchParams.get("slot");    // "20:00-22:00"
+  const date    = searchParams.get("date");    // "2026-03-17"
   const invalid = searchParams.get("invalid"); // "true"
 
-  const where: Record<string, unknown> = {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const where: Record<string, any> = {};
 
   // Фильтр по слоту
   if (slot && slot !== "all") {
     const [from, to] = slot.split("-");
     if (from) where.slotFrom = from;
-    if (to) where.slotTo = to;
+    if (to)   where.slotTo   = to;
   }
 
-  // Фильтр по дате создания в CRM
+  // Фильтр по дате: смотрим deliveryDate первым (дата доставки),
+  // если не задана — fallback на дату создания в CRM.
+  // OR-условие через Prisma: заказы у которых deliveryDate=date ИЛИ
+  // (deliveryDate IS NULL AND crmCreatedAt в диапазоне дня)
   if (date) {
     const start = new Date(date);
     start.setHours(0, 0, 0, 0);
     const end = new Date(date);
     end.setHours(23, 59, 59, 999);
-    where.crmCreatedAt = { gte: start, lte: end };
+
+    where.OR = [
+      // Есть явная дата доставки — приоритет
+      { deliveryDate: date },
+      // Нет даты доставки — смотрим на дату создания
+      {
+        deliveryDate: null,
+        crmCreatedAt: { gte: start, lte: end },
+      },
+    ];
   }
 
   // Только проблемные адреса
