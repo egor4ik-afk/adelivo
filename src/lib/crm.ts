@@ -106,9 +106,15 @@ export function mapCrmOrder(order: CrmOrder) {
     }
   }
 
-  // delivery.service.name — НАМЕРЕННО НЕ используем: это не имя курьера
-
   const courier = parsedCourier || null;
+
+  // ИСПРАВЛЕНИЕ ВРЕМЕНИ: RetailCRM отдает время без пояса ("2026-03-20 16:32:47"). 
+  // Жестко привязываем его к Москве (+03:00), чтобы браузер правильно конвертировал его.
+  let parsedDate = null;
+  if (order.createdAt) {
+    const isoDate = order.createdAt.replace(" ", "T") + "+03:00";
+    parsedDate = new Date(isoDate);
+  }
 
   return {
     crmId: String(order.id),
@@ -126,23 +132,11 @@ export function mapCrmOrder(order: CrmOrder) {
     slotTo: slot.to,
     slotRaw: slot.text,
     deliveryType: order.delivery?.code ?? null,
-    crmCreatedAt: order.createdAt ? new Date(order.createdAt) : null,
+    crmCreatedAt: parsedDate,
   };
 }
 
 // ── Upsert order + notify ─────────────────────────────────
-//
-// Правила слияния (CRM — авторитет для "своих" полей, оператор — для "своих"):
-//
-//  CRM-поля (всегда перезаписываем из CRM):
-//    crmStatus, status, items, comment, price, slot*, deliveryType, deliveryDate, crmCreatedAt, externalId
-//
-//  Оператор-поля (НИКОГДА не затираем, если уже заполнены):
-//    courier   — оператор назначил вручную; в CRM может не быть
-//    opComment — комментарий оператора, CRM не знает
-//    address   — если geocoded=true, значит мы его уже исправили
-//    lat/lng/geocoded/isInvalid/invalidReason — геокод наш, CRM не трогает
-
 export async function upsertOrder(crmOrder: CrmOrder) {
   const data = mapCrmOrder(crmOrder);
 
@@ -187,9 +181,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       updateFields.invalidReason = existing.invalidReason;
     }
 
-    // 4. changedAt — только реальные изменения из CRM (не геокодирование, не наши правки)
-    //    Слушаем crmStatus (реальный CRM-статус), а не наш внутренний status,
-    //    чтобы геокодирование NEW→GEOCODED не считалось изменением.
+    // 4. changedAt
     const meaningfullyChanged =
       (existing.crmStatus ?? "") !== (updateFields.crmStatus ?? "") ||
       (existing.courier   ?? "") !== (updateFields.courier   ?? "") ||
@@ -225,7 +217,6 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     // Если есть важные изменения, отправляем уведомление
     if (changes.length > 0) {
       console.log(`[Push] Заказ ${order.crmId} обновлен. Изменения:`, changes.join(', '));
-      // Передаем previousStatus, чтобы push-уведомление показало текст изменения
       notify({ 
         type: "order.updated", 
         order, 
@@ -347,8 +338,7 @@ export async function pollCrmOrders() {
     const { orders = [], pagination } = res.data;
     total += orders.length;
 
-    // Neon HTTP: нет пула коннектов, но идём последовательно
-    // чтобы не перегрузить serverless-инстанс при большом количестве заказов
+    // Последовательная обработка: защищает пул соединений БД от перегрузки
     for (const order of orders) {
       await upsertOrder(order);
     }
@@ -368,15 +358,6 @@ export async function pollCrmOrders() {
 }
 
 // ── Update order in CRM ────────────────────────────────────
-//
-// Вызывается из PATCH /api/orders/[id] когда оператор меняет статус/курьера.
-// Убедитесь что роут вызывает эту функцию:
-//
-//   import { updateCrmOrder } from "@/lib/crm";
-//   ...
-//   // после prisma.order.update(...)
-//   await updateCrmOrder(order.crmId, { status: body.status, courier: body.courier });
-//
 export async function updateCrmOrder(
   crmId: string,
   data: { status?: OrderStatus; courier?: string }
@@ -404,7 +385,7 @@ export async function updateCrmOrder(
   const params = new URLSearchParams();
   params.append("apiKey", CRM_KEY);
   params.append("order", JSON.stringify(orderPayload));
-  params.append("by", "id"); // ← явно указываем что ищем по внутреннему id
+  params.append("by", "id"); 
 
   try {
     const resp = await axios.post(

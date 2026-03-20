@@ -55,8 +55,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, reason: "missing orderId" });
     }
 
-    // 2. Всегда запрашиваем свежий заказ из CRM по ID (самый надежный способ)
+    // 2. Всегда запрашиваем свежий заказ из CRM по ID
     console.log(`[Webhook] Запрашиваем актуальные данные заказа #${orderId} из CRM...`);
+    
+    // ПАУЗА 2 СЕКУНДЫ: Ждем, пока база RetailCRM обновит свои реплики, чтобы избежать ошибки 404 (race condition)
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    
     orderPayload = await fetchOrderFromCrm(orderId);
 
     if (!orderPayload?.id) {
