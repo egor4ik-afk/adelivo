@@ -12,6 +12,111 @@ interface Props {
   setFixingAI: (v: boolean) => void;
 }
 
+// Дропдаун с поиском для курьеров
+function CourierSelect({ value, onChange, couriers }: {
+  value: string;
+  onChange: (v: string) => void;
+  couriers: { value: string; label: string }[];
+}) {
+  const [search, setSearch] = useState("");
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Ищем по имени курьера (value = fullName)
+  const filtered = couriers.filter(c =>
+    c.value.toLowerCase().includes(search.toLowerCase()) ||
+    c.label.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const current = couriers.find(c => c.value === value);
+  const displayLabel = current?.label ?? (value || "— Не назначен —");
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        type="button"
+        onClick={() => { setOpen(v => !v); setSearch(""); }}
+        style={{
+          width: "100%", padding: "7px 9px", borderRadius: 7,
+          border: "1px solid #e8e6df", fontSize: 12, background: "#fafaf8",
+          cursor: "pointer", textAlign: "left", display: "flex",
+          justifyContent: "space-between", alignItems: "center",
+        }}
+      >
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+          {displayLabel}
+        </span>
+        <span style={{ fontSize: 9, color: "#a8a49c", marginLeft: 6, flexShrink: 0 }}>▼</span>
+      </button>
+
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 2px)", left: 0, right: 0,
+          background: "#fff", border: "1px solid #e8e6df", borderRadius: 8,
+          boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 500,
+          maxHeight: 220, display: "flex", flexDirection: "column",
+        }}>
+          {/* Поиск */}
+          <div style={{ padding: "6px 8px", borderBottom: "1px solid #f0efe9", flexShrink: 0 }}>
+            <input
+              autoFocus
+              placeholder="Поиск курьера..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{
+                width: "100%", padding: "5px 8px", borderRadius: 6,
+                border: "1px solid #e8e6df", fontSize: 11, outline: "none",
+              }}
+            />
+          </div>
+          {/* Список */}
+          <div style={{ overflowY: "auto", flex: 1 }}>
+            <div
+              onMouseDown={() => { onChange(""); setOpen(false); }}
+              style={{
+                padding: "7px 10px", fontSize: 12, cursor: "pointer",
+                color: !value ? "#4a7aff" : "#a8a49c",
+                background: !value ? "#f4f7ff" : "transparent",
+                borderBottom: "1px solid #f5f4f0",
+              }}
+            >
+              — Не назначен —
+            </div>
+            {filtered.map(c => (
+              <div
+                key={c.value}
+                onMouseDown={() => { onChange(c.value); setOpen(false); }}
+                style={{
+                  padding: "7px 10px", fontSize: 12, cursor: "pointer",
+                  color: c.value === value ? "#4a7aff" : "#1a1a18",
+                  background: c.value === value ? "#f4f7ff" : "transparent",
+                  borderBottom: "1px solid #f5f4f0",
+                  fontWeight: c.value === value ? 600 : 400,
+                }}
+              >
+                {c.label}
+              </div>
+            ))}
+            {filtered.length === 0 && (
+              <div style={{ padding: "10px", fontSize: 12, color: "#a8a49c", textAlign: "center" }}>
+                Не найдено
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPreviewGeo, fixingAI, setFixingAI }: Props) {
   const [opComment,   setOpComment]   = useState("");
   const [editStatus,  setEditStatus]  = useState("");
@@ -20,9 +125,7 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
   const [saving,      setSaving]      = useState(false);
   const [saved,       setSaved]       = useState(false);
 
-  // Снимок значений на момент открытия карточки.
-  // Сравниваем с ним — чтобы авто-обновление из CRM каждые 30 сек
-  // не сбрасывало hasChanges пока пользователь редактирует.
+  // Снимок при открытии — защита от сброса hasChanges при авто-обновлении
   const snapshot = useRef<{ status: string; courier: string; opComment: string; address: string } | null>(null);
 
   useEffect(() => {
@@ -72,15 +175,10 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
             : `[Старый адрес: ${selected!.address}]`
           );
         }
-        if (data.geo?.lat) {
-          onPreviewGeo({ lat: data.geo.lat, lng: data.geo.lng });
-        } else {
-          alert("Координаты не найдены.");
-        }
+        if (data.geo?.lat) onPreviewGeo({ lat: data.geo.lat, lng: data.geo.lng });
+        else alert("Координаты не найдены.");
       }
-    } finally {
-      setFixingAI(false);
-    }
+    } finally { setFixingAI(false); }
   }
 
   async function saveChanges() {
@@ -109,9 +207,7 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
       });
     }
 
-    // Обновляем снимок после сохранения
     snapshot.current = { status: editStatus, courier: editCourier, opComment, address: editAddress };
-
     onPreviewGeo(null);
     onUpdateSuccess();
     setSaving(false);
@@ -167,10 +263,7 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
 
       <div style={{ marginBottom: 10 }}>
         <div style={lbl}>Курьер</div>
-        <select style={sel} value={editCourier} onChange={e => setEditCourier(e.target.value)}>
-          <option value="">— Не назначен —</option>
-          {couriers.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-        </select>
+        <CourierSelect value={editCourier} onChange={setEditCourier} couriers={couriers} />
       </div>
 
       {selected.items && (

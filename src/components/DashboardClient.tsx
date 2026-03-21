@@ -549,7 +549,7 @@ export function DashboardClient({ user }: { user: User }) {
             <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
               <table style={s.table}>
                 <thead>
-                  <tr>{["Внешний ID", "Время", "Адрес", "Курьер", "Сумма", "Статус", "Комментарий", "Оператор", "Состав", "Изменён ↓"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
+                  <tr>{["Внешний ID", "Время", "Адрес", "Курьер", "Сумма", "Статус", "Комментарий", "Оператор", "Состав", "Создан", "Изменён ↓"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
                 </thead>
                 <tbody>
                   {tableOrders.map((o, i) => {
@@ -567,6 +567,9 @@ export function DashboardClient({ user }: { user: User }) {
                         <td style={{ ...s.td, minWidth: 120, maxWidth: 180, color: "#4a7aff" }}>{o.opComment ?? "—"}</td>
                         <td style={{ ...s.td, minWidth: 140, maxWidth: 220, color: "#6b6860" }}>{o.items ?? "—"}</td>
                         <td style={{ ...s.td, whiteSpace: "nowrap", color: "#a8a49c", fontSize: 10 }}>
+                          {o.crmCreatedAt ? new Date(o.crmCreatedAt).toLocaleString("ru", { timeZone: "Europe/Moscow", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}
+                        </td>
+                        <td style={{ ...s.td, whiteSpace: "nowrap", color: (o as any).changedAt ? "#1a1a18" : "#a8a49c", fontSize: 10 }}>
                           {((o as any).changedAt || o.updatedAt) ? new Date((o as any).changedAt || o.updatedAt!).toLocaleString("ru", { timeZone: "Europe/Moscow", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}
                         </td>
                       </tr>

@@ -127,12 +127,9 @@ export async function mapCrmOrder(order: CrmOrder) {
 
   if (courierFromDelivery.id) {
     finalCourierId = courierFromDelivery.id;
-    parsedCourier = courierFromDelivery.name;
-    // Если имя не пришло — ищем в нашей БД по id
-    if (!parsedCourier) {
-      const dbCourier = await prisma.courier.findUnique({ where: { id: finalCourierId } });
-      if (dbCourier) parsedCourier = dbCourier.fullName;
-    }
+    // ВСЕГДА берём fullName из нашей БД — CRM может прислать только имя без фамилии
+    const dbCourier = await prisma.courier.findUnique({ where: { id: finalCourierId } });
+    parsedCourier = dbCourier?.fullName ?? courierFromDelivery.name;
   } else if (courierFromDelivery.name) {
     parsedCourier = courierFromDelivery.name;
     // Пытаемся найти id в нашей БД по имени
