@@ -45,7 +45,6 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       courier:   body.courier,
       opComment: body.opComment,
       address:   body.address,
-      deliveryType: order.deliveryType, // передаем тип доставки
     });
 
     return NextResponse.json({ ok: true });
