@@ -46,6 +46,7 @@ export function DashboardClient({ user }: { user: User }) {
   const [tableOpen, setTableOpen] = useState(true);
   const [tableHeight, setTableHeight] = useState(250);
   const [isDraggingTable, setIsDraggingTable] = useState(false);
+  const [sortConfig, setSortConfig] = useState<{ key: string, dir: 'asc' | 'desc' }>({ key: 'changedAt', dir: 'desc' });
 
   const [showCourierNames, setShowCourierNames] = useState(true);
   const [showTime, setShowTime] = useState(true);
@@ -162,9 +163,31 @@ export function DashboardClient({ user }: { user: User }) {
     return s && selectedSlots.includes(s.label);
   });
 
-  const tableOrders = [...filtered].sort((a, b) =>
-    new Date((b as any).changedAt || b.updatedAt || "").getTime() - new Date((a as any).changedAt || a.updatedAt || "").getTime()
-  );
+ // Применяем сортировку к таблице
+  const tableOrders = [...filtered].sort((a, b) => {
+    let valA: any = a[sortConfig.key as keyof Order] ?? "";
+    let valB: any = b[sortConfig.key as keyof Order] ?? "";
+
+    // Специальная обработка для дат
+    if (sortConfig.key === "changedAt") {
+      valA = new Date((a as any).changedAt || a.updatedAt || 0).getTime();
+      valB = new Date((b as any).changedAt || b.updatedAt || 0).getTime();
+    } else if (sortConfig.key === "crmCreatedAt") {
+      valA = new Date(a.crmCreatedAt || 0).getTime();
+      valB = new Date(b.crmCreatedAt || 0).getTime();
+    }
+
+    if (valA < valB) return sortConfig.dir === 'asc' ? -1 : 1;
+    if (valA > valB) return sortConfig.dir === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const handleSort = (key: string) => {
+    setSortConfig(prev => ({
+      key,
+      dir: prev.key === key && prev.dir === 'asc' ? 'desc' : 'asc'
+    }));
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -577,8 +600,31 @@ export function DashboardClient({ user }: { user: User }) {
           {tableOpen && (
             <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
               <table style={s.table}>
-                <thead>
-                  <tr>{["Внешний ID", "Время", "Адрес", "Курьер", "Сумма", "Статус", "Комментарий", "Оператор", "Состав", "Создан", "Изменён ↓"].map(h => <th key={h} style={s.th}>{h}</th>)}</tr>
+              <thead>
+                  <tr>
+                    {[
+                      { label: "Внешний ID", key: "externalId" },
+                      { label: "Время", key: "slotFrom" },
+                      { label: "Адрес", key: "address" },
+                      { label: "Курьер", key: "courier" },
+                      { label: "Сумма", key: "price" },
+                      { label: "Статус", key: "status" },
+                      { label: "Комментарий", key: "comment" },
+                      { label: "Оператор", key: "opComment" },
+                      { label: "Состав", key: "items" },
+                      { label: "Создан", key: "crmCreatedAt" },
+                      { label: "Изменён", key: "changedAt" }
+                    ].map(col => (
+                      <th 
+                        key={col.key} 
+                        style={{ ...s.th, cursor: "pointer", userSelect: "none" }} 
+                        onClick={() => handleSort(col.key)}
+                        title={`Сортировать по: ${col.label}`}
+                      >
+                        {col.label} {sortConfig.key === col.key ? (sortConfig.dir === 'asc' ? '↑' : '↓') : ''}
+                      </th>
+                    ))}
+                  </tr>
                 </thead>
                 <tbody>
                   {tableOrders.map((o, i) => {

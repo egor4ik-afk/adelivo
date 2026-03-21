@@ -6,19 +6,40 @@ import axios from "axios";
 const CRM_URL = process.env.RETAILCRM_API_URL;
 const CRM_KEY = process.env.RETAILCRM_API_KEY;
 
-// Получаем полный заказ из CRM по его внутреннему ID
-async function fetchOrderFromCrm(orderId: string): Promise<CrmOrder | null> {
+// Умный поиск заказа с ретраями (защита от гонки и разных типов ID)
+async function fetchOrderFromCrm(orderId: string, retryCount = 0): Promise<CrmOrder | null> {
   if (!CRM_URL || !CRM_KEY) return null;
-  try {
-    const res = await axios.get(`${CRM_URL}/api/v5/orders/${orderId}`, {
-      params: { apiKey: CRM_KEY, by: "id" },
-      timeout: 10000,
-    });
-    return res.data?.order ?? null;
-  } catch (e) {
-    console.error(`[Webhook] Не удалось получить заказ ${orderId} из CRM:`, e);
-    return null;
+
+  // Пробуем искать по всем возможным типам идентификаторов
+  const searchTypes = ["id", "externalId", "number"];
+
+  for (const byType of searchTypes) {
+    try {
+      const res = await axios.get(`${CRM_URL}/api/v5/orders/${orderId}`, {
+        params: { apiKey: CRM_KEY, by: byType },
+        timeout: 8000,
+      });
+      if (res.data?.success && res.data?.order) {
+        return res.data.order;
+      }
+    } catch (e: unknown) {
+      // Игнорируем 404, чтобы цикл перешел к следующему типу поиска
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ((e as any).response?.status !== 404) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        console.error(`[Webhook] Ошибка CRM API (${byType}):`, (e as any).message);
+      }
+    }
   }
+
+  // Если ни по одному ключу не найдено, возможно это задержка базы данных самой CRM
+  if (retryCount < 2) {
+    console.log(`[Webhook] Заказ ${orderId} пока не доступен в API. Ждем 3 сек (попытка ${retryCount + 1})...`);
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    return fetchOrderFromCrm(orderId, retryCount + 1);
+  }
+
+  return null;
 }
 
 export async function GET() {
@@ -48,14 +69,14 @@ export async function POST(req: Request) {
       // form-urlencoded fallback
       const params = new URLSearchParams(rawText);
       
-      // 🔥 ФИКС: Учитываем все возможные форматы, которые шлет RetailCRM
+      // Учитываем все возможные форматы, которые шлет RetailCRM
       orderId = 
         params.get("order[id]") ?? 
-        params.get("events[0][order][id]") ?? // <-- Формат для точечного изменения 1 поля
+        params.get("events[0][order][id]") ?? 
         params.get("orderId") ?? 
         null;
 
-      // Резервный поиск через регулярку (если CRM прислала сложный многомерный массив истории)
+      // Резервный поиск через регулярку (для сложных массивов)
       if (!orderId) {
         const match = rawText.match(/events%5B\d+%5D%5Border%5D%5Bid%5D=(\d+)/);
         if (match) orderId = match[1];
@@ -63,11 +84,10 @@ export async function POST(req: Request) {
     }
 
     if (!orderId) {
-      console.warn("[Webhook] Не найден ID заказа в запросе. Тело:", rawText.substring(0, 200));
+      console.warn("[Webhook] Не найден ID заказа в запросе.");
       return NextResponse.json({ ok: false, reason: "missing orderId" });
     }
 
-    // 2. Всегда запрашиваем свежий заказ из CRM по ID
     console.log(`[Webhook] Запрашиваем актуальные данные заказа #${orderId} из CRM...`);
     
     // 🔥 ПАУЗА 3 СЕКУНДЫ: Ждем, пока RetailCRM обновит кэш поиска по API
@@ -76,16 +96,16 @@ export async function POST(req: Request) {
     orderPayload = await fetchOrderFromCrm(orderId);
 
     if (!orderPayload?.id) {
-      console.warn(`[Webhook] Данные для заказа #${orderId} не получены из CRM.`);
+      console.warn(`[Webhook] Данные для заказа #${orderId} окончательно не получены (404).`);
       return NextResponse.json({ ok: false, reason: "order fetch failed" });
     }
 
     console.log(`[Webhook] Начинаем обновление заказа #${orderPayload.id} (Внешний ID: ${orderPayload.externalId || 'Нет'})`);
     
-    // 3. Сохраняем в БД (upsertOrder обновит адрес и скинет гео-координаты)
+    // 3. Сохраняем в БД
     await upsertOrder(orderPayload);
     
-    // 4. Запускаем фоновое геокодирование, если это новый адрес
+    // 4. Запускаем фоновое геокодирование
     geocodeNewOrders().catch(console.error);
 
     return NextResponse.json({ ok: true });

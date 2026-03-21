@@ -154,7 +154,9 @@ export async function mapCrmOrder(order: CrmOrder) {
   let parsedDate = null;
   if (order.createdAt) {
     const isoDate = order.createdAt.replace(" ", "T") + (order.createdAt.includes("+") ? "" : "+03:00");
-    parsedDate = new Date(isoDate);
+    const rawDate = new Date(isoDate);
+    // Отнимаем 5 часов (5 * 60 минут * 60 секунд * 1000 миллисекунд)
+    parsedDate = new Date(rawDate.getTime() - 5 * 60 * 60 * 1000);
   }
 
   return {
