@@ -141,9 +141,14 @@ export async function mapCrmOrder(order: CrmOrder) {
     }
   }
 
-  // Логируем первые несколько заказов с курьером для диагностики
-  if (order.delivery?.code === "logisty" || (order.delivery as any)?.courier) {
+  // DEBUG: полный дамп delivery для заказов с logisty
+  if (order.delivery?.code === "logisty" || (order.delivery as any)?.courier || finalCourierId) {
     console.log(`[CRM] Заказ ${order.id} (${order.externalId}) courier parsed:`, { finalCourierId, parsedCourier, deliveryCode: order.delivery?.code });
+    // Полный дамп delivery.data чтобы понять структуру
+    console.log(`[CRM Debug] Заказ ${order.id} FULL delivery.data:`, JSON.stringify(order.delivery?.data ?? null));
+    if ((order.delivery as any)?.courier) {
+      console.log(`[CRM Debug] Заказ ${order.id} delivery.courier:`, JSON.stringify((order.delivery as any).courier));
+    }
   }
 
   let parsedDate = null;
