@@ -191,9 +191,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
   } = { ...data };
 
   if (existing) {
-    // 🔥 ФИКС АДРЕСА: Если адрес из CRM отличается от нашего локального
-    // (например, Самовывоз изменили на реальный адрес доставки),
-    // мы ВСЕГДА берем новый адрес и сбрасываем гео-данные.
+    // 🔥 ФИКС АДРЕСА: Если адрес в CRM отличается, забираем новый и сбрасываем гео-статус
     if (existing.address !== data.address) {
       updateFields.geocoded      = false;
       updateFields.lat           = null;
@@ -201,7 +199,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       updateFields.isInvalid     = false;
       updateFields.invalidReason = null;
     } else if (existing.geocoded) {
-      // Если адрес НЕ менялся, только тогда восстанавливаем наши гео-координаты
+      // Если адрес НЕ менялся, восстанавливаем наши старые координаты
       updateFields.address       = existing.address;
       updateFields.lat           = existing.lat;
       updateFields.lng           = existing.lng;
@@ -222,7 +220,6 @@ export async function upsertOrder(crmOrder: CrmOrder) {
 
     if (changed) updateFields.changedAt = new Date();
   }
-
   const order = await prisma.order.upsert({
     where: { crmId: data.crmId },
     update: updateFields,

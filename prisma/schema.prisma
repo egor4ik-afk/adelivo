@@ -98,6 +98,7 @@ model Courier {
 
                                                                                                                                                                                       // Связь с графиком работы (смены)
                                                                                                                                                                                                                   shifts      CourierShift[]
+                                                                                                                                                                                                                  payments    CourierPayment[]
 }
 
 // Таблица смен (график работы курьеров)
@@ -111,7 +112,14 @@ model CourierShift {
                                                         // Один курьер не может иметь две разные смены в один и тот же день
                                                                         @@unique([courierId, date])
 }
-
+model CourierPayment {
+  id        String   @id @default(cuid())
+  courierId Int
+  date      String
+  
+  courier   Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  @@unique([courierId, date])
+}
 model Order {
       id            String      @id @default(cuid())
             crmId         String      @unique

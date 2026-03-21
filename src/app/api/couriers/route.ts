@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 export async function GET() {
   try {
     const couriers = await prisma.courier.findMany({
-      include: { shifts: true },
+      include: { shifts: true, payments: true }, // <--- ВОТ ЗДЕСЬ ПРОПУЩЕНА ЗАПЯТАЯ
       orderBy: { fullName: "asc" },
     });
     return NextResponse.json(couriers);
