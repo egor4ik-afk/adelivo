@@ -63,14 +63,16 @@ export function DashboardClient({ user }: { user: User }) {
   const [loading, setLoading] = useState(true);
   const [lastSync, setLastSync] = useState("");
   const [dismissedInvalid, setDismissedInvalid] = useState(false);
-  const [previewGeo, setPreviewGeo] = useState<{lat: number, lng: number} | null>(null);
+  const [previewGeo, setPreviewGeo] = useState<{ lat: number, lng: number } | null>(null);
   const [fixingAI, setFixingAI] = useState(false);
 
+  // Маршруты
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [routeTab, setRouteTab] = useState<"map" | "list">("map");
   const [bulkSelectedIds, setBulkSelectedIds] = useState<string[]>([]);
   const [bulkCourier, setBulkCourier] = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [routeType, setRouteType] = useState<"auto" | "mt">("auto"); // авто или пешком
 
   useEffect(() => {
     if (!isDraggingTable) { document.body.style.userSelect = ""; return; }
@@ -81,7 +83,6 @@ export function DashboardClient({ user }: { user: User }) {
     return () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp); };
   }, [isDraggingTable]);
 
-  // Пересчитываем размер карты при изменении панелей
   useEffect(() => {
     if (ymapRef.current) setTimeout(() => ymapRef.current!.container.fitToViewport(), 50);
   }, [isListVisible, isDetailVisible, tableOpen, tableHeight, mobileView]);
@@ -97,7 +98,6 @@ export function DashboardClient({ user }: { user: User }) {
 
   useEffect(() => { fetchData(); const t = setInterval(fetchData, 30_000); return () => clearInterval(t); }, [fetchData]);
 
-  // SW сообщения — обновление при пуше и клике на уведомление
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (e.data?.type === "NOTIFICATION_CLICK" && e.data.orderId) {
@@ -193,6 +193,18 @@ export function DashboardClient({ user }: { user: User }) {
     });
   };
 
+  const moveBulkItem = (index: number, dir: 'up' | 'down') => {
+    setBulkSelectedIds(prev => {
+      const arr = [...prev];
+      if (dir === 'up' && index > 0) {
+        [arr[index - 1], arr[index]] = [arr[index], arr[index - 1]];
+      } else if (dir === 'down' && index < arr.length - 1) {
+        [arr[index + 1], arr[index]] = [arr[index], arr[index + 1]];
+      }
+      return arr;
+    });
+  };
+
   useEffect(() => {
     const clusterer = clustererRef.current;
     if (!clusterer || typeof window === "undefined" || !window.ymaps) return;
@@ -201,9 +213,9 @@ export function DashboardClient({ user }: { user: User }) {
 
     const StretchyLayout = ymaps.templateLayoutFactory.createClass(
       '<div style="display:inline-flex;flex-direction:column;align-items:center;cursor:pointer;">' +
-        '<div style="background:{{ properties.pinColor }};color:#fff;padding:4px 10px;border-radius:12px;font-size:10px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.28);border:1.5px solid rgba(255,255,255,0.35);min-width:28px;text-align:center;line-height:1.4;">{{ properties.slotLabel }}</div>' +
-        '<div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid {{ properties.pinColor }};margin-top:-1px;"></div>' +
-        '{% if properties.showLabel %}<div style="margin-top:3px;font-size:9px;font-weight:700;color:#1a1a18;white-space:nowrap;background:rgba(255,255,255,0.96);padding:2px 6px;border-radius:4px;box-shadow:0 1px 5px rgba(0,0,0,0.15);line-height:1.4;">{{ properties.labelText }}</div>{% endif %}' +
+      '<div style="background:{{ properties.pinColor }};color:#fff;padding:4px 10px;border-radius:12px;font-size:10px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.28);border:1.5px solid rgba(255,255,255,0.35);min-width:28px;text-align:center;line-height:1.4;">{{ properties.slotLabel }}</div>' +
+      '<div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid {{ properties.pinColor }};margin-top:-1px;"></div>' +
+      '{% if properties.showLabel %}<div style="margin-top:3px;font-size:9px;font-weight:700;color:#1a1a18;white-space:nowrap;background:rgba(255,255,255,0.96);padding:2px 6px;border-radius:4px;box-shadow:0 1px 5px rgba(0,0,0,0.15);line-height:1.4;">{{ properties.labelText }}</div>{% endif %}' +
       '</div>'
     );
 
@@ -264,26 +276,26 @@ export function DashboardClient({ user }: { user: User }) {
         clickedFromMapRef.current = false;
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, isBulkMode]);
 
-  const generateYandexUrl = (ordersToRoute: Order[]) => {
+  // ГЕНЕРАТОР ССЫЛКИ ДЛЯ ЯНДЕКСА (без принудительной сортировки)
+  const generateYandexUrl = (ordersToRoute: Order[], type: "auto" | "mt") => {
     const validOrders = ordersToRoute.filter(o => o.lat && o.lng && !o.isInvalid);
     if (validOrders.length === 0) return null;
-    validOrders.sort((a, b) => (a.slotFrom || "23:59").localeCompare(b.slotFrom || "23:59"));
     if (validOrders.length > 50) validOrders.length = 50;
     const rtext = [STORE_COORDS, ...validOrders.map(o => `${o.lat},${o.lng}`)].join("~");
-    return `https://yandex.ru/maps/?rtext=${rtext}&rtt=auto`;
+    return `https://yandex.ru/maps/?rtext=${rtext}&rtt=${type}`;
   };
 
   const handleOpenRoute = (ordersToRoute: Order[]) => {
-    const url = generateYandexUrl(ordersToRoute);
+    const url = generateYandexUrl(ordersToRoute, routeType);
     if (url) window.open(url, "_blank");
     else alert("Нет корректных координат для построения маршрута.");
   };
 
   const handleShareRoute = async (ordersToRoute: Order[]) => {
-    const url = generateYandexUrl(ordersToRoute);
+    const url = generateYandexUrl(ordersToRoute, routeType);
     if (!url) { alert("Нет корректных координат"); return; }
     try {
       await navigator.clipboard.writeText(url);
@@ -306,7 +318,9 @@ export function DashboardClient({ user }: { user: User }) {
       for (const id of bulkSelectedIds) {
         await fetch(`/api/orders/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ courier: bulkCourier }) });
       }
-      setBulkSelectedIds([]); setIsBulkMode(false); setBulkCourier(""); await fetchData();
+      setBulkCourier(""); // Очищаем селект курьера, но ОСТАВЛЯЕМ окно открытым
+      await fetchData();
+      alert("✅ Курьер успешно назначен на выбранные заказы!");
     } catch { alert("Произошла ошибка при массовом назначении"); }
     finally { setBulkSaving(false); }
   }
@@ -316,7 +330,8 @@ export function DashboardClient({ user }: { user: User }) {
     else setSelectedSlots(prev => prev.includes(label) ? prev.filter(x => x !== label) : [...prev, label]);
   };
 
-  const selectedRouteOrders = orders.filter(o => bulkSelectedIds.includes(o.id)).sort((a, b) => (a.slotFrom || "23:59").localeCompare(b.slotFrom || "23:59"));
+  // СПИСОК МАРШРУТОВ БЕРЕТСЯ В ТОЧНОМ ПОРЯДКЕ КЛИКОВ / СТРЕЛОЧЕК
+  const selectedRouteOrders = bulkSelectedIds.map(id => orders.find(o => o.id === id)).filter(Boolean) as Order[];
   const showLeftPanel = (isListVisible || isDetailVisible) && !isBulkMode;
 
   return (
@@ -329,17 +344,12 @@ export function DashboardClient({ user }: { user: User }) {
         <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={s.datePicker} />
 
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...s.nativeSelect, marginLeft: 8 }}>
-  {/* 🔥 ДОБАВЛЕН ФИЛЬТР .filter(...) */}
-  {STATUS_OPTIONS.filter(opt => !["GEOCODED", "INVALID_ADDRESS"].includes(opt.value)).map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-</select>
+          {STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+        </select>
 
         <select value={filterCourier} onChange={e => setFilterCourier(e.target.value)} style={{ ...s.nativeSelect, marginLeft: 4 }}>
           {courierOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
         </select>
-
-        {filterCourier !== "ALL" && filterCourier !== "UNASSIGNED" && (
-          <button onClick={() => handleOpenRoute(filtered)} style={{ ...s.navBtn, background: "#facc15", color: "#1a1a18", border: "1px solid #eab308", marginLeft: 4 }}>🗺️ Маршрут</button>
-        )}
 
         <button
           onClick={() => { setIsBulkMode(!isBulkMode); setRouteTab("map"); setBulkSelectedIds([]); setSelectedId(null); setIsDetailVisible(false); }}
@@ -454,11 +464,22 @@ export function DashboardClient({ user }: { user: User }) {
               {isBulkMode && routeTab === "list" && (
                 <div style={{ flex: 1, background: "#f5f4f0", padding: 24, overflowY: "auto" }}>
                   <div style={{ maxWidth: 600, margin: "0 auto", background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 20 }}>
-                    <h2 style={{ margin: "0 0 16px 0", fontSize: 18, color: "#1a1a18" }}>Маршрут · {bulkSelectedIds.length} точек</h2>
+
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                      <h2 style={{ margin: 0, fontSize: 18, color: "#1a1a18" }}>Маршрут · {bulkSelectedIds.length} точек</h2>
+                      <button onClick={() => setIsBulkMode(false)} style={{ background: "none", border: "none", fontSize: 24, cursor: "pointer", color: "#a8a49c", padding: "0 8px" }}>×</button>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 8, marginBottom: 16, background: "#f5f4f0", padding: 4, borderRadius: 8, width: "fit-content" }}>
+                      <button onClick={() => setRouteType("auto")} style={{ ...s.actionBtn, background: routeType === "auto" ? "#fff" : "transparent", color: routeType === "auto" ? "#1a1a18" : "#a8a49c", boxShadow: routeType === "auto" ? "0 1px 3px rgba(0,0,0,0.1)" : "none", padding: "6px 14px", borderRadius: 6 }}>🚗 На авто</button>
+                      <button onClick={() => setRouteType("mt")} style={{ ...s.actionBtn, background: routeType === "mt" ? "#fff" : "transparent", color: routeType === "mt" ? "#1a1a18" : "#a8a49c", boxShadow: routeType === "mt" ? "0 1px 3px rgba(0,0,0,0.1)" : "none", padding: "6px 14px", borderRadius: 6 }}>🚌 Транспорт</button>
+                    </div>
+
                     <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
                       <button onClick={() => handleOpenRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "#facc15", color: "#1a1a18" }}>🗺️ Открыть в Яндексе</button>
                       <button onClick={() => handleShareRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "#fafaf8", border: "1px solid #e8e6df", color: "#1a1a18" }}>🔗 Копировать ссылку</button>
                     </div>
+
                     <div style={{ background: "#fafaf8", padding: 16, borderRadius: 8, marginBottom: 20 }}>
                       <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Назначить курьера</div>
                       <div style={{ display: "flex", gap: 10 }}>
@@ -471,10 +492,17 @@ export function DashboardClient({ user }: { user: User }) {
                         </button>
                       </div>
                     </div>
+
                     <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Очередь доставки</div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       {selectedRouteOrders.map((o, index) => (
                         <div key={o.id} style={{ padding: "10px 12px", background: "#fff", border: "1px solid #e8e6df", borderRadius: 8, display: "flex", gap: 12, alignItems: "center" }}>
+
+                          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                            <button disabled={index === 0} onClick={() => moveBulkItem(index, 'up')} style={{ background: "none", border: "none", cursor: index === 0 ? "default" : "pointer", opacity: index === 0 ? 0.3 : 1, fontSize: 11, padding: 2, color: "#6b6860" }}>▲</button>
+                            <button disabled={index === selectedRouteOrders.length - 1} onClick={() => moveBulkItem(index, 'down')} style={{ background: "none", border: "none", cursor: index === selectedRouteOrders.length - 1 ? "default" : "pointer", opacity: index === selectedRouteOrders.length - 1 ? 0.3 : 1, fontSize: 11, padding: 2, color: "#6b6860" }}>▼</button>
+                          </div>
+
                           <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#4a7aff", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{index + 1}</div>
                           <div style={{ flex: 1, overflow: "hidden" }}>
                             <div style={{ fontSize: 13, fontWeight: 600, color: "#1a1a18", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.address}</div>
@@ -639,12 +667,12 @@ function OrderCard({ order, selected, isBulkMode, isBulkSelected, onSelect }: an
 
 const s: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", overflow: "hidden" },
-  topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 16px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 10, position: "relative" },
+  topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 16px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 10, position: "relative", overflowX: "auto" },
   logo: { fontSize: 15, fontWeight: 600, color: "#1a1a18", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap" },
   logoDot: { display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "#4a7aff" },
   navBtn: { padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#1a1a18", whiteSpace: "nowrap" },
   datePicker: { padding: "4px 8px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 11, outline: "none", color: "#1a1a18", background: "#fff", marginLeft: 8 },
-  nativeSelect: { height: 28, padding: "0 8px", borderRadius: 7, border: "1px solid #e0dfd7", fontSize: 11, fontWeight: 500, outline: "none", cursor: "pointer", background: "#fff", color: "#1a1a18", maxWidth: 140 /* 🔥 ДОБАВЛЕНО */ },
+  nativeSelect: { height: 28, padding: "0 8px", borderRadius: 7, border: "1px solid #e0dfd7", fontSize: 11, fontWeight: 500, outline: "none", cursor: "pointer", background: "#fff", color: "#1a1a18", maxWidth: 120 /* 🔥 ДОБАВЛЕНО */ },
   slotBar: { display: "flex", gap: 4, marginLeft: 8 },
   slotBtn: { padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 500, border: "1px solid #e8e6df", background: "transparent", color: "#6b6860", cursor: "pointer", whiteSpace: "nowrap" },
   syncLabel: { fontSize: 11, color: "#a8a49c", whiteSpace: "nowrap", marginRight: 4 },
