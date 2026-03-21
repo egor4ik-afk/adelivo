@@ -81,16 +81,23 @@ function parseCourierFromDelivery(delivery: CrmOrder["delivery"]): { id: number 
     try { dData = JSON.parse(dData); } catch (_) { dData = null; }
   }
 
+  // Logisty кладёт курьера прямо в delivery.data:
+  // { "id": 204, "firstName": "Согомонян Давид", "courierId": 204, "active": true, ... }
+  if (dData?.id && typeof dData.id === "number" && dData.id > 0) {
+    const name = dData.firstName ? String(dData.firstName) : null;
+    return { id: dData.id, name };
+  }
+  if (dData?.courierId && typeof dData.courierId === "number" && dData.courierId > 0) {
+    const name = dData.firstName ? String(dData.firstName) : null;
+    return { id: dData.courierId, name };
+  }
+
+  // Fallback: старый формат где курьер в поле courier
   if (dData?.courier !== undefined && dData.courier !== null && dData.courier !== "") {
-    // Числовой ID — основной формат (integrationDeliveryData[courier] = 59)
-    if (typeof dData.courier === "number" && dData.courier > 0) {
-      return { id: dData.courier, name: null };
-    }
-    if (typeof dData.courier === "string" && !isNaN(Number(dData.courier)) && Number(dData.courier) > 0) {
-      return { id: Number(dData.courier), name: null };
-    }
+    if (typeof dData.courier === "number" && dData.courier > 0) return { id: dData.courier, name: null };
+    if (typeof dData.courier === "string" && !isNaN(Number(dData.courier)) && Number(dData.courier) > 0) return { id: Number(dData.courier), name: null };
     if (typeof dData.courier === "object" && dData.courier?.id) {
-      const name = [dData.courier.firstName, dData.courier.lastName].filter(Boolean).join(" ") || dData.courier.name || null;
+      const name = [dData.courier.firstName, dData.courier.lastName].filter(Boolean).join(" ") || null;
       return { id: Number(dData.courier.id), name };
     }
   }
@@ -141,14 +148,9 @@ export async function mapCrmOrder(order: CrmOrder) {
     }
   }
 
-  // DEBUG: полный дамп delivery для заказов с logisty
-  if (order.delivery?.code === "logisty" || (order.delivery as any)?.courier || finalCourierId) {
+  // Логируем первые несколько заказов с курьером для диагностики
+  if (order.delivery?.code === "logisty" || (order.delivery as any)?.courier) {
     console.log(`[CRM] Заказ ${order.id} (${order.externalId}) courier parsed:`, { finalCourierId, parsedCourier, deliveryCode: order.delivery?.code });
-    // Полный дамп delivery.data чтобы понять структуру
-    console.log(`[CRM Debug] Заказ ${order.id} FULL delivery.data:`, JSON.stringify(order.delivery?.data ?? null));
-    if ((order.delivery as any)?.courier) {
-      console.log(`[CRM Debug] Заказ ${order.id} delivery.courier:`, JSON.stringify((order.delivery as any).courier));
-    }
   }
 
   let parsedDate = null;
@@ -182,58 +184,50 @@ export async function upsertOrder(crmOrder: CrmOrder) {
   const data = await mapCrmOrder(crmOrder);
   const existing = await prisma.order.findUnique({ where: { crmId: data.crmId } });
 
+  // Без ограничений — CRM авторитет для всех полей.
+  // Единственное исключение: геокоординаты и адрес не затираем если уже геокодировали
+  // (geocoded=true означает что мы вручную исправили адрес через AI или карту).
   const updateFields: typeof data & {
-    lat?: number | null; lng?: number | null; geocoded?: boolean;
-    isInvalid?: boolean; invalidReason?: string | null;
-    courierManual?: boolean; changedAt?: Date;
+    lat?: number | null; lng?: number | null;
+    geocoded?: boolean; isInvalid?: boolean; invalidReason?: string | null;
+    changedAt?: Date;
   } = { ...data };
 
+  if (existing?.geocoded) {
+    updateFields.address       = existing.address;
+    updateFields.lat           = existing.lat;
+    updateFields.lng           = existing.lng;
+    updateFields.geocoded      = true;
+    updateFields.isInvalid     = existing.isInvalid;
+    updateFields.invalidReason = existing.invalidReason;
+  }
+
+  // changedAt — только при реальных изменениях значимых полей
   if (existing) {
-    if (existing.courierManual) {
-      updateFields.courier = existing.courier;
-      updateFields.courierId = existing.courierId;
-      updateFields.courierManual = true;
-    } else {
-      if (!data.courier && existing.courier) {
-        updateFields.courier = existing.courier;
-        updateFields.courierId = existing.courierId;
-      }
-    }
-    if (existing.opComment) updateFields.opComment = existing.opComment;
-    if (existing.geocoded) {
-      updateFields.address = existing.address;
-      updateFields.lat = existing.lat;
-      updateFields.lng = existing.lng;
-      updateFields.geocoded = true;
-      updateFields.isInvalid = existing.isInvalid;
-      updateFields.invalidReason = existing.invalidReason;
-    }
+    const changed =
+      (existing.crmStatus  ?? "") !== (updateFields.crmStatus  ?? "") ||
+      (existing.courierId  ?? 0)  !== (updateFields.courierId  ?? 0)  ||
+      (existing.courier    ?? "") !== (updateFields.courier    ?? "") ||
+      (existing.items      ?? "") !== (updateFields.items      ?? "") ||
+      (existing.slotFrom   ?? "") !== (updateFields.slotFrom   ?? "") ||
+      (existing.slotTo     ?? "") !== (updateFields.slotTo     ?? "") ||
+      (existing.price      ?? 0)  !== (updateFields.price      ?? 0);
 
-    const meaningfullyChanged =
-      (existing.crmStatus ?? "") !== (updateFields.crmStatus ?? "") ||
-      (existing.courierId ?? 0) !== (updateFields.courierId ?? 0) ||
-      (existing.courier ?? "") !== (updateFields.courier ?? "") ||
-      (existing.address ?? "") !== (updateFields.address ?? "") ||
-      (existing.items ?? "") !== (updateFields.items ?? "") ||
-      (existing.slotFrom ?? "") !== (updateFields.slotFrom ?? "") ||
-      (existing.slotTo ?? "") !== (updateFields.slotTo ?? "") ||
-      (existing.price ?? 0) !== (updateFields.price ?? 0);
-
-    if (meaningfullyChanged) updateFields.changedAt = new Date();
+    if (changed) updateFields.changedAt = new Date();
   }
 
   const order = await prisma.order.upsert({
     where: { crmId: data.crmId },
     update: updateFields,
-    create: { ...data, isInvalid: false, geocoded: false, courierManual: false },
+    create: { ...data, isInvalid: false, geocoded: false },
   });
 
   if (!existing) {
     notify({ type: "order.new", order }).catch(console.error);
   } else {
-    const statusChanged = (existing.crmStatus ?? "") !== (order.crmStatus ?? "");
-    const courierChanged = (existing.courierId ?? 0) !== (order.courierId ?? 0) || (existing.courier ?? "") !== (order.courier ?? "");
-    const slotChanged = (existing.slotRaw ?? "") !== (order.slotRaw ?? "");
+    const statusChanged  = (existing.crmStatus ?? "") !== (order.crmStatus ?? "");
+    const courierChanged = (existing.courierId ?? 0)  !== (order.courierId ?? 0);
+    const slotChanged    = (existing.slotRaw   ?? "") !== (order.slotRaw   ?? "");
 
     if (statusChanged || courierChanged || slotChanged) {
       notify({
@@ -352,9 +346,9 @@ export async function updateCrmOrder(
       const courierId = await resolveCourierId(courierName);
 
       if (courierId) {
-        // integrationDeliveryData[courier] = ID (целое число) — это то что видно в форме CRM
-        // В API это поле называется delivery[data][courier]
-        orderPayload.delivery.data = { courier: courierId };
+        // Logisty хранит курьера в delivery.data.id (не courier!)
+        // Структура: {"id": 204, "firstName": "...", "courierId": 204}
+        orderPayload.delivery.data = { id: courierId };
       }
 
       // Fallback через customFields
@@ -363,7 +357,7 @@ export async function updateCrmOrder(
       console.log(`[CRM] Назначаем курьера ${courierName} (id=${courierId}) delivery=logisty для заказа ${crmId}`);
     } else {
       // Сброс курьера
-      orderPayload.delivery.data = { courier: null };
+      orderPayload.delivery.data = { id: null };
       orderPayload.customFields = { courier: "", kurier: "" };
     }
   }
