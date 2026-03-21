@@ -40,10 +40,11 @@ export function DashboardClient({ user }: { user: User }) {
     return () => window.removeEventListener("resize", checkMob);
   }, []);
 
+  // ── Состояния интерфейса (по умолчанию свернуты) ──
   const [mobileView, setMobileView] = useState<"split" | "map" | "panels">("split");
   const [isListVisible, setIsListVisible] = useState(true);
-  const [isDetailVisible, setIsDetailVisible] = useState(true);
-  const [tableOpen, setTableOpen] = useState(true);
+  const [isDetailVisible, setIsDetailVisible] = useState(false); // По умолчанию свернута
+  const [tableOpen, setTableOpen] = useState(false); // По умолчанию свернута
   const [tableHeight, setTableHeight] = useState(250);
   const [isDraggingTable, setIsDraggingTable] = useState(false);
 
@@ -63,7 +64,7 @@ export function DashboardClient({ user }: { user: User }) {
   const [loading, setLoading] = useState(true);
   const [lastSync, setLastSync] = useState("");
   const [dismissedInvalid, setDismissedInvalid] = useState(false);
-  const [previewGeo, setPreviewGeo] = useState<{lat: number, lng: number} | null>(null);
+  const [previewGeo, setPreviewGeo] = useState<{ lat: number, lng: number } | null>(null);
   const [fixingAI, setFixingAI] = useState(false);
 
   const [sortConfig, setSortConfig] = useState<{ key: string, dir: 'asc' | 'desc' }>({ key: 'changedAt', dir: 'desc' });
@@ -75,6 +76,37 @@ export function DashboardClient({ user }: { user: User }) {
   const [bulkCourier, setBulkCourier] = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
   const [routeType, setRouteType] = useState<"auto" | "mt">("auto");
+
+  // ── Восстановление состояния (localStorage) ──
+  useEffect(() => {
+    const fd = localStorage.getItem("fo_filterDate");
+    if (fd) setFilterDate(fd);
+    const to = localStorage.getItem("fo_tableOpen");
+    if (to !== null) setTableOpen(to === "true");
+    const lv = localStorage.getItem("fo_listVisible");
+    if (lv !== null) setIsListVisible(lv === "true");
+    const dv = localStorage.getItem("fo_detailVisible");
+    if (dv !== null) setIsDetailVisible(dv === "true");
+  }, []);
+
+  // ── Сохранение состояния ──
+  useEffect(() => { localStorage.setItem("fo_filterDate", filterDate); }, [filterDate]);
+  useEffect(() => { localStorage.setItem("fo_tableOpen", String(tableOpen)); }, [tableOpen]);
+  useEffect(() => { localStorage.setItem("fo_listVisible", String(isListVisible)); }, [isListVisible]);
+  useEffect(() => { localStorage.setItem("fo_detailVisible", String(isDetailVisible)); }, [isDetailVisible]);
+
+  // ── Автоскролл к выбранному заказу ──
+  useEffect(() => {
+    if (selectedId) {
+      setTimeout(() => {
+        const card = document.getElementById(`card-${selectedId}`);
+        if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+
+        const row = document.getElementById(`row-${selectedId}`);
+        if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 150);
+    }
+  }, [selectedId, isListVisible, isDetailVisible, tableOpen]);
 
   useEffect(() => {
     if (!isDraggingTable) { document.body.style.userSelect = ""; return; }
@@ -171,9 +203,7 @@ export function DashboardClient({ user }: { user: User }) {
     let valB: any = (b as any)[sortConfig.key] ?? "";
 
     if (sortConfig.key === "changedAt") {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       valA = new Date((a as any).changedAt || a.updatedAt || 0).getTime();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       valB = new Date((b as any).changedAt || b.updatedAt || 0).getTime();
     } else if (sortConfig.key === "crmCreatedAt") {
       valA = new Date(a.crmCreatedAt || 0).getTime();
@@ -242,9 +272,9 @@ export function DashboardClient({ user }: { user: User }) {
 
     const StretchyLayout = ymaps.templateLayoutFactory.createClass(
       '<div style="display:inline-flex;flex-direction:column;align-items:center;cursor:pointer;">' +
-        '<div style="background:{{ properties.pinColor }};color:#fff;padding:4px 10px;border-radius:12px;font-size:10px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.28);border:1.5px solid rgba(255,255,255,0.35);min-width:28px;text-align:center;line-height:1.4;">{{ properties.slotLabel }}</div>' +
-        '<div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid {{ properties.pinColor }};margin-top:-1px;"></div>' +
-        '{% if properties.showLabel %}<div style="margin-top:3px;font-size:9px;font-weight:700;color:#1a1a18;white-space:nowrap;background:rgba(255,255,255,0.96);padding:2px 6px;border-radius:4px;box-shadow:0 1px 5px rgba(0,0,0,0.15);line-height:1.4;">{{ properties.labelText }}</div>{% endif %}' +
+      '<div style="background:{{ properties.pinColor }};color:#fff;padding:4px 10px;border-radius:12px;font-size:10px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.28);border:1.5px solid rgba(255,255,255,0.35);min-width:28px;text-align:center;line-height:1.4;">{{ properties.slotLabel }}</div>' +
+      '<div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid {{ properties.pinColor }};margin-top:-1px;"></div>' +
+      '{% if properties.showLabel %}<div style="margin-top:3px;font-size:9px;font-weight:700;color:#1a1a18;white-space:nowrap;background:rgba(255,255,255,0.96);padding:2px 6px;border-radius:4px;box-shadow:0 1px 5px rgba(0,0,0,0.15);line-height:1.4;">{{ properties.labelText }}</div>{% endif %}' +
       '</div>'
     );
 
@@ -277,20 +307,23 @@ export function DashboardClient({ user }: { user: User }) {
         }, { preset, iconColor: (isBulkMode || isSelected) ? undefined : color });
       }
 
+      // 🔥 КЛИК ПО КАРТЕ
       pm.events.add("click", () => {
         if (isBulkMode) {
           toggleBulkSelect(order.id);
         } else {
           clickedFromMapRef.current = true;
-          setSelectedId(p => p === order.id ? null : order.id);
-          if (!isMobile) { setIsListVisible(true); setIsDetailVisible(true); }
+          setSelectedId(order.id); // Всегда выбираем заказ при клике на пин
+          if (!isMobile) {
+            setIsListVisible(true);
+            setIsDetailVisible(true);
+          }
           else setMobileView("split");
         }
       });
       return pm;
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (placemarks.length > 0) clusterer.add(placemarks as any);
   }, [filtered, selectedId, previewGeo, currentZoom, selectedSlots, isBulkMode, bulkSelectedIds, showTime, showCourierNames, isMobile]);
 
@@ -306,7 +339,7 @@ export function DashboardClient({ user }: { user: User }) {
         clickedFromMapRef.current = false;
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, isBulkMode]);
 
   const generateYandexUrl = (ordersToRoute: Order[], type: "auto" | "mt") => {
@@ -366,12 +399,16 @@ export function DashboardClient({ user }: { user: User }) {
     <div style={isMobile ? sm.app : s.app}>
       {/* ── Topbar ── */}
       <div style={isMobile ? sm.topbar : s.topbar}>
-        <div style={s.logo}>
-          <img src="/favicon.svg" alt="Logo" style={{ width: 22, height: 22 }} />
-          EwentWave
-        </div>
-        <button onClick={() => router.push('/orders')} style={s.navBtn}>≡ Заказы</button>
-        <button onClick={() => router.push('/couriers')} style={s.navBtn}>🚚 Курьеры</button>
+        <div style={s.logo}><span style={s.logoDot} />EwentWave</div>
+        <button onClick={() => router.push('/orders')} style={s.navBtn}>
+          ≡ Заказы
+          <span style={{ background: '#eef3ff', color: '#4a7aff', padding: '1px 6px', borderRadius: 10, marginLeft: 6, fontSize: 10, fontWeight: 700 }}>
+            {filtered.length}
+          </span>
+        </button>
+        <button onClick={() => router.push('/couriers')} style={s.navBtn}>
+          🚚 Курьеры
+        </button>
         <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={s.datePicker} />
 
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...s.nativeSelect, marginLeft: 8 }}>
@@ -501,7 +538,7 @@ export function DashboardClient({ user }: { user: User }) {
               {isBulkMode && routeTab === "list" && (
                 <div style={{ flex: 1, background: "#f5f4f0", padding: 24, overflowY: "auto" }}>
                   <div style={{ maxWidth: 600, margin: "0 auto", background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 20 }}>
-                    
+
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                       <h2 style={{ margin: 0, fontSize: 18, color: "#1a1a18" }}>Маршрут · {bulkSelectedIds.length} точек</h2>
                       <button onClick={() => setIsBulkMode(false)} style={{ background: "none", border: "none", fontSize: 24, cursor: "pointer", color: "#a8a49c", padding: "0 8px" }}>×</button>
@@ -529,12 +566,12 @@ export function DashboardClient({ user }: { user: User }) {
                         </button>
                       </div>
                     </div>
-                    
+
                     <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Очередь доставки</div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       {selectedRouteOrders.map((o, index) => (
                         <div key={o.id} style={{ padding: "10px 12px", background: "#fff", border: "1px solid #e8e6df", borderRadius: 8, display: "flex", gap: 12, alignItems: "center" }}>
-                          
+
                           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                             <button disabled={index === 0} onClick={() => moveBulkItem(index, 'up')} style={{ background: "none", border: "none", cursor: index === 0 ? "default" : "pointer", opacity: index === 0 ? 0.3 : 1, fontSize: 11, padding: 2, color: "#6b6860" }}>▲</button>
                             <button disabled={index === selectedRouteOrders.length - 1} onClick={() => moveBulkItem(index, 'down')} style={{ background: "none", border: "none", cursor: index === selectedRouteOrders.length - 1 ? "default" : "pointer", opacity: index === selectedRouteOrders.length - 1 ? 0.3 : 1, fontSize: 11, padding: 2, color: "#6b6860" }}>▼</button>
@@ -580,7 +617,7 @@ export function DashboardClient({ user }: { user: User }) {
                 flex: (mobileView === "map" || (isBulkMode && routeTab === "map")) ? 1 : "0 0 45%",
               }}
             />
-            
+
             {!isBulkMode && (
               <div style={{ ...sm.panelsWrap, display: mobileView === "map" ? "none" : "flex", flex: mobileView === "panels" ? 1 : undefined }}>
                 <div style={sm.cardsSection}>
@@ -602,7 +639,7 @@ export function DashboardClient({ user }: { user: User }) {
             {isBulkMode && routeTab === "list" && (
               <div style={{ flex: 1, background: "#f5f4f0", padding: 16, overflowY: "auto" }}>
                 <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 16 }}>
-                  
+
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                     <h2 style={{ margin: 0, fontSize: 16, color: "#1a1a18" }}>Маршрут · {bulkSelectedIds.length} точек</h2>
                   </div>
@@ -629,7 +666,7 @@ export function DashboardClient({ user }: { user: User }) {
                       </button>
                     </div>
                   </div>
-                  
+
                   <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Очередь доставки</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {selectedRouteOrders.map((o, index) => (
@@ -686,9 +723,9 @@ export function DashboardClient({ user }: { user: User }) {
                       { label: "Создан", key: "crmCreatedAt" },
                       { label: "Изменён", key: "changedAt" }
                     ].map(col => (
-                      <th 
-                        key={col.key} 
-                        style={{ ...s.th, cursor: "pointer", userSelect: "none" }} 
+                      <th
+                        key={col.key}
+                        style={{ ...s.th, cursor: "pointer", userSelect: "none" }}
                         onClick={() => handleSort(col.key)}
                         title={`Сортировать по: ${col.label}`}
                       >
@@ -701,8 +738,12 @@ export function DashboardClient({ user }: { user: User }) {
                   {tableOrders.map((o, i) => {
                     const color = slotColor(o);
                     return (
-                      <tr key={o.id} style={{ background: selectedId === o.id ? "#eef3ff" : i % 2 === 0 ? "#fff" : "#fafaf8", cursor: "pointer" }}
-                        onClick={() => { setSelectedId(p => p === o.id ? null : o.id); setIsListVisible(true); setIsDetailVisible(true); }}>
+                      <tr
+                        id={`row-${o.id}`} // 🔥 ID для автоскролла 
+                        key={o.id}
+                        style={{ background: selectedId === o.id ? "#eef3ff" : i % 2 === 0 ? "#fff" : "#fafaf8", cursor: "pointer" }}
+                        onClick={() => { setSelectedId(o.id); setIsListVisible(true); setIsDetailVisible(true); }}
+                      >
                         <td style={{ ...s.td, whiteSpace: "nowrap" }}><span style={{ ...s.statusDot, background: color }} /><span style={{ fontFamily: "monospace", fontSize: 10, color: "#a8a49c" }}>{o.externalId ?? o.crmId}</span></td>
                         <td style={{ ...s.td, whiteSpace: "nowrap", color }}>{o.slotRaw ?? "—"}</td>
                         <td style={{ ...s.td, minWidth: 160, maxWidth: 220 }}>{o.address ?? "—"}</td>
@@ -766,7 +807,7 @@ function SlotBtn({ label, active, color, onClick }: any) {
 function OrderCard({ order, selected, isBulkMode, isBulkSelected, onSelect }: any) {
   const color = slotColor(order);
   return (
-    <div style={{ ...s.card, ...(selected || isBulkSelected ? s.cardSelected : {}), ...(order.isInvalid ? s.cardInvalid : {}) }} onClick={onSelect}>
+    <div id={`card-${order.id}`} style={{ ...s.card, ...(selected || isBulkSelected ? s.cardSelected : {}), ...(order.isInvalid ? s.cardInvalid : {}) }} onClick={onSelect}>
       <div style={s.cardRow1}>
         {isBulkMode && <input type="checkbox" checked={isBulkSelected} readOnly style={{ marginRight: 6, pointerEvents: "none", accentColor: "#4a7aff" }} />}
         <span style={{ ...s.statusDot, background: color }} />
@@ -785,10 +826,11 @@ function OrderCard({ order, selected, isBulkMode, isBulkSelected, onSelect }: an
 const s: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", overflow: "hidden" },
   topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 16px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 10, position: "relative", overflowX: "auto" },
-  logo: { fontSize: 15, fontWeight: 600, color: "#1a1a18", display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap", marginRight: 17 },
+  logo: { fontSize: 15, fontWeight: 600, color: "#1a1a18", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap" },
+  logoDot: { display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "#4a7aff" },
   navBtn: { padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#1a1a18", whiteSpace: "nowrap" },
   datePicker: { padding: "4px 8px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 11, outline: "none", color: "#1a1a18", background: "#fff", marginLeft: 8 },
-  nativeSelect: { height: 28, padding: "0 8px", borderRadius: 7, border: "1px solid #e0dfd7", fontSize: 11, fontWeight: 500, outline: "none", cursor: "pointer", background: "#fff", color: "#1a1a18", maxWidth: 120 /* 🔥 ДОБАВЛЕНО */ },
+  nativeSelect: { height: 28, padding: "0 8px", borderRadius: 7, border: "1px solid #e0dfd7", fontSize: 11, fontWeight: 500, outline: "none", cursor: "pointer", background: "#fff", color: "#1a1a18", maxWidth: 120 },
   slotBar: { display: "flex", gap: 4, marginLeft: 8 },
   slotBtn: { padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 500, border: "1px solid #e8e6df", background: "transparent", color: "#6b6860", cursor: "pointer", whiteSpace: "nowrap" },
   syncLabel: { fontSize: 11, color: "#a8a49c", whiteSpace: "nowrap", marginRight: 4 },
