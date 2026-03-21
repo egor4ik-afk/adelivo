@@ -12,7 +12,7 @@ async function fetchOrderFromCrm(orderId: string): Promise<CrmOrder | null> {
   try {
     const res = await axios.get(`${CRM_URL}/api/v5/orders/${orderId}`, {
       params: { apiKey: CRM_KEY, by: "id" },
-      timeout: 8000,
+      timeout: 10000,
     });
     return res.data?.order ?? null;
   } catch (e) {
@@ -47,19 +47,31 @@ export async function POST(req: Request) {
     } else {
       // form-urlencoded fallback
       const params = new URLSearchParams(rawText);
-      orderId = params.get("order[id]") ?? params.get("orderId") ?? null;
+      
+      // 🔥 ФИКС: Учитываем все возможные форматы, которые шлет RetailCRM
+      orderId = 
+        params.get("order[id]") ?? 
+        params.get("events[0][order][id]") ?? // <-- Формат для точечного изменения 1 поля
+        params.get("orderId") ?? 
+        null;
+
+      // Резервный поиск через регулярку (если CRM прислала сложный многомерный массив истории)
+      if (!orderId) {
+        const match = rawText.match(/events%5B\d+%5D%5Border%5D%5Bid%5D=(\d+)/);
+        if (match) orderId = match[1];
+      }
     }
 
     if (!orderId) {
-      console.warn("[Webhook] Не найден ID заказа в запросе.");
+      console.warn("[Webhook] Не найден ID заказа в запросе. Тело:", rawText.substring(0, 200));
       return NextResponse.json({ ok: false, reason: "missing orderId" });
     }
 
     // 2. Всегда запрашиваем свежий заказ из CRM по ID
     console.log(`[Webhook] Запрашиваем актуальные данные заказа #${orderId} из CRM...`);
     
-    // ПАУЗА 2 СЕКУНДЫ: Ждем, пока база RetailCRM обновит свои реплики, чтобы избежать ошибки 404 (race condition)
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    // 🔥 ПАУЗА 3 СЕКУНДЫ: Ждем, пока RetailCRM обновит кэш поиска по API
+    await new Promise((resolve) => setTimeout(resolve, 3000));
     
     orderPayload = await fetchOrderFromCrm(orderId);
 
@@ -70,7 +82,7 @@ export async function POST(req: Request) {
 
     console.log(`[Webhook] Начинаем обновление заказа #${orderPayload.id} (Внешний ID: ${orderPayload.externalId || 'Нет'})`);
     
-    // 3. Сохраняем в БД (upsertOrder внутри себя уже сравнивает diff и рассылает Push-уведомления)
+    // 3. Сохраняем в БД (upsertOrder обновит адрес и скинет гео-координаты)
     await upsertOrder(orderPayload);
     
     // 4. Запускаем фоновое геокодирование, если это новый адрес
