@@ -180,70 +180,6 @@ export async function mapCrmOrder(order: CrmOrder) {
   };
 }
 
-export async function upsertOrder(crmOrder: CrmOrder) {
-  const data = await mapCrmOrder(crmOrder);
-  const existing = await prisma.order.findUnique({ where: { crmId: data.crmId } });
-
-  const updateFields: typeof data & {
-    lat?: number | null; lng?: number | null;
-    geocoded?: boolean; isInvalid?: boolean; invalidReason?: string | null;
-    changedAt?: Date;
-  } = { ...data };
-
-  if (existing) {
-    // 🔥 ФИКС АДРЕСА: Если адрес в CRM отличается, забираем новый и сбрасываем гео-статус
-    if (existing.address !== data.address) {
-      updateFields.geocoded      = false;
-      updateFields.lat           = null;
-      updateFields.lng           = null;
-      updateFields.isInvalid     = false;
-      updateFields.invalidReason = null;
-    } else if (existing.geocoded) {
-      // Если адрес НЕ менялся, восстанавливаем наши старые координаты
-      updateFields.address       = existing.address;
-      updateFields.lat           = existing.lat;
-      updateFields.lng           = existing.lng;
-      updateFields.geocoded      = true;
-      updateFields.isInvalid     = existing.isInvalid;
-      updateFields.invalidReason = existing.invalidReason;
-    }
-
-    const changed =
-      (existing.crmStatus  ?? "") !== (updateFields.crmStatus  ?? "") ||
-      (existing.courierId  ?? 0)  !== (updateFields.courierId  ?? 0)  ||
-      (existing.courier    ?? "") !== (updateFields.courier    ?? "") ||
-      (existing.items      ?? "") !== (updateFields.items      ?? "") ||
-      (existing.slotFrom   ?? "") !== (updateFields.slotFrom   ?? "") ||
-      (existing.slotTo     ?? "") !== (updateFields.slotTo     ?? "") ||
-      (existing.price      ?? 0)  !== (updateFields.price      ?? 0)  ||
-      (existing.address    ?? "") !== (updateFields.address    ?? "");
-
-    if (changed) updateFields.changedAt = new Date();
-  }
-  const order = await prisma.order.upsert({
-    where: { crmId: data.crmId },
-    update: updateFields,
-    create: { ...data, isInvalid: false, geocoded: false },
-  });
-
-  if (!existing) {
-    notify({ type: "order.new", order }).catch(console.error);
-  } else {
-    const statusChanged  = (existing.crmStatus ?? "") !== (order.crmStatus ?? "");
-    const courierChanged = (existing.courierId ?? 0)  !== (order.courierId ?? 0);
-    const slotChanged    = (existing.slotRaw   ?? "") !== (order.slotRaw   ?? "");
-
-    if (statusChanged || courierChanged || slotChanged) {
-      notify({
-        type: "order.updated",
-        order,
-        previousStatus: statusChanged ? existing.status : undefined,
-      }).catch(console.error);
-    }
-  }
-
-  return order;
-}
 
 export async function geocodeNewOrders() {
   const orders = await prisma.order.findMany({ where: { geocoded: false, address: { not: null } }, take: 20 });
@@ -306,22 +242,116 @@ export async function geocodeAddress(address: string) {
   } catch (_) { return null; }
 }
 
+export async function upsertOrder(crmOrder: CrmOrder) {
+  const data = await mapCrmOrder(crmOrder);
+  const existing = await prisma.order.findUnique({ where: { crmId: data.crmId } });
+
+  const updateFields: typeof data & {
+    lat?: number | null; lng?: number | null;
+    geocoded?: boolean; isInvalid?: boolean; invalidReason?: string | null;
+    changedAt?: Date;
+  } = { ...data };
+
+  if (existing) {
+    const dbAddr = existing.address?.trim() || "";
+    const crmAddr = data.address?.trim() || "";
+
+    // 🔥 ЖЕСТКОЕ СРАВНЕНИЕ АДРЕСОВ (Без поблажек)
+    if (dbAddr !== crmAddr) {
+      console.log(`[CRM -> DB] Заказ ${data.crmId}: АДРЕС ИЗМЕНЕН!\nБыло: "${dbAddr}"\nСтало: "${crmAddr}"`);
+      updateFields.address       = crmAddr || null;
+      updateFields.geocoded      = false;
+      updateFields.lat           = null;
+      updateFields.lng           = null;
+      updateFields.isInvalid     = false;
+      updateFields.invalidReason = null;
+    } else {
+      // Если адрес идентичен, железно сохраняем старые координаты
+      updateFields.address       = existing.address;
+      updateFields.lat           = existing.lat;
+      updateFields.lng           = existing.lng;
+      updateFields.geocoded      = existing.geocoded;
+      updateFields.isInvalid     = existing.isInvalid;
+      updateFields.invalidReason = existing.invalidReason;
+    }
+
+    const changed =
+      (existing.crmStatus  ?? "") !== (updateFields.crmStatus  ?? "") ||
+      (existing.courierId  ?? 0)  !== (updateFields.courierId  ?? 0)  ||
+      (existing.courier    ?? "") !== (updateFields.courier    ?? "") ||
+      (existing.items      ?? "") !== (updateFields.items      ?? "") ||
+      (existing.slotFrom   ?? "") !== (updateFields.slotFrom   ?? "") ||
+      (existing.slotTo     ?? "") !== (updateFields.slotTo     ?? "") ||
+      (existing.price      ?? 0)  !== (updateFields.price      ?? 0)  ||
+      dbAddr !== crmAddr; // Триггер изменения
+
+    if (changed) updateFields.changedAt = new Date();
+  }
+
+  const order = await prisma.order.upsert({
+    where: { crmId: data.crmId },
+    update: updateFields,
+    create: { ...data, isInvalid: false, geocoded: false },
+  });
+
+  if (!existing) {
+    notify({ type: "order.new", order }).catch(console.error);
+  } else {
+    const statusChanged  = (existing.crmStatus ?? "") !== (order.crmStatus ?? "");
+    const courierChanged = (existing.courierId ?? 0)  !== (order.courierId ?? 0);
+    const slotChanged    = (existing.slotRaw   ?? "") !== (order.slotRaw   ?? "");
+
+    if (statusChanged || courierChanged || slotChanged) {
+      notify({
+        type: "order.updated",
+        order,
+        previousStatus: statusChanged ? existing.status : undefined,
+      }).catch(console.error);
+    }
+  }
+
+  return order;
+}
+
 export async function pollCrmOrders() {
   if (!CRM_URL || !CRM_KEY) return;
-  const dateFrom = new Date(Date.now() - 7 * 24 * 3_600_000).toISOString().split("T")[0];
-  let page = 1; let hasMore = true;
-  while (hasMore) {
-    const res = await axios.get<CrmOrdersResponse>(`${CRM_URL}/api/v5/orders`, {
-      params: { apiKey: CRM_KEY, "filter[createdAtFrom]": dateFrom, limit: 100, page },
+  
+  try {
+    // 1. Быстрая синхронизация: забираем новые заказы, созданные за последние 2 дня
+    const dateFrom = new Date(Date.now() - 2 * 24 * 3_600_000).toISOString().split("T")[0];
+    const resNew = await axios.get<CrmOrdersResponse>(`${CRM_URL}/api/v5/orders`, {
+      params: { apiKey: CRM_KEY, "filter[createdAtFrom]": dateFrom, limit: 100 },
       timeout: 15_000,
     });
-    const { orders = [], pagination } = res.data;
-    for (const order of orders) await upsertOrder(order);
-    hasMore = pagination?.currentPage < pagination?.totalPageCount;
-    page++;
+    for (const order of resNew.data?.orders || []) await upsertOrder(order);
+
+    // 2. 🔥 УМНЫЙ ОБХОД ДЛЯ ОБНОВЛЕНИЙ: Достаем ВСЕ АКТИВНЫЕ заказы из базы (не доставленные/не отмененные)
+    const activeOrders = await prisma.order.findMany({
+      where: { status: { notIn: ["DELIVERED", "CANCELLED", "RETURNED"] } },
+      select: { crmId: true }
+    });
+
+    const activeIds = activeOrders.map(o => o.crmId);
+    
+    // Запрашиваем их актуальное состояние напрямую по ID пачками по 50 штук
+    for (let i = 0; i < activeIds.length; i += 50) {
+      const chunk = activeIds.slice(i, i + 50);
+      const params = new URLSearchParams();
+      params.append("apiKey", CRM_KEY);
+      params.append("limit", "100");
+      chunk.forEach(id => params.append("filter[ids][]", id));
+      
+      const resUpdate = await axios.get<CrmOrdersResponse>(`${CRM_URL}/api/v5/orders?${params.toString()}`, { timeout: 15_000 });
+      for (const order of resUpdate.data?.orders || []) await upsertOrder(order);
+    }
+
+    await prisma.syncState.upsert({ where: { id: 1 }, update: { lastSyncAt: new Date() }, create: { id: 1, lastSyncAt: new Date() } });
+    
+    // Запускаем перекодирование сброшенных адресов
+    geocodeNewOrders().catch(console.error);
+  } catch (err) {
+    console.error("[Cron] Error polling CRM:", err);
   }
-  await prisma.syncState.upsert({ where: { id: 1 }, update: { lastSyncAt: new Date() }, create: { id: 1, lastSyncAt: new Date() } });
-  geocodeNewOrders().catch(console.error);
 }
 
 // src/lib/crm.ts
