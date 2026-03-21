@@ -18,34 +18,33 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updateData: any = {};
-    if (body.status !== undefined) updateData.status = body.status;
+
+    if (body.status    !== undefined) updateData.status    = body.status;
+    if (body.opComment !== undefined) updateData.opComment = body.opComment;
+    if (body.address   !== undefined) updateData.address   = body.address;
+
     if (body.courier !== undefined) {
-      updateData.courier = body.courier;
-      updateData.courierManual = true;
-      
-      // Находим ID этого курьера в нашей базе
+      updateData.courier = body.courier || null;
       if (body.courier) {
         const dbCourier = await prisma.courier.findFirst({
-          where: { fullName: body.courier }
+          where: { fullName: body.courier },
         });
-        if (dbCourier) updateData.courierId = dbCourier.id;
+        updateData.courierId = dbCourier?.id ?? null;
       } else {
         updateData.courierId = null;
       }
     }
-    if (body.opComment !== undefined) updateData.opComment = body.opComment;
 
-    await prisma.order.update({
-      where: { id },
-      data: updateData,
-    });
+    if (Object.keys(updateData).length > 0) {
+      await prisma.order.update({ where: { id }, data: updateData });
+    }
 
-    // 🔥 Убрали параметр deliveryType, так как мы больше не шлем его в CRM
+    // Синхронизируем в CRM
     await updateCrmOrder(order.crmId, {
-      status: body.status as OrderStatus,
-      courier: body.courier,
+      status:    body.status    as OrderStatus,
+      courier:   body.courier,
       opComment: body.opComment,
-      address: body.address, 
+      address:   body.address,
     });
 
     return NextResponse.json({ ok: true });
