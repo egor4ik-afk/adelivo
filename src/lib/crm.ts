@@ -355,7 +355,7 @@ export async function updateCrmOrder(
       // Fallback через customFields
       orderPayload.customFields = { courier: courierName, kurier: courierName };
 
-      console.log(`[CRM] Назначаем курьера ${courierName} (id=${courierId}) с типом доставки ${dbOrder?.deliveryType} для заказа ${crmId}`);
+      console.log(`[CRM] Назначаем курьера ${courierName} (id=${courierId}) delivery=logisty для заказа ${crmId}`);
     } else {
       // Сброс курьера
       orderPayload.delivery.data = { courier: null };
