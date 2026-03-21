@@ -257,7 +257,8 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
       <div style={{ marginBottom: 10 }}>
         <div style={lbl}>Статус</div>
         <select style={sel} value={editStatus} onChange={e => setEditStatus(e.target.value)}>
-          {STATUS_OPTIONS.slice(1).map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+          {/* 🔥 ИЗМЕНЕНИЕ: фильтрация вместо slice(1) */}
+          {STATUS_OPTIONS.filter(opt => !["GEOCODED", "INVALID_ADDRESS", "ALL"].includes(opt.value)).map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
         </select>
       </div>
 

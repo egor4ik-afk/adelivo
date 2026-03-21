@@ -39,12 +39,13 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       await prisma.order.update({ where: { id }, data: updateData });
     }
 
-    // Синхронизируем в CRM
+    // 🔥 ИЗМЕНЕНИЕ: Синхронизируем в CRM, передаем deliveryType
     await updateCrmOrder(order.crmId, {
       status:    body.status    as OrderStatus,
       courier:   body.courier,
       opComment: body.opComment,
       address:   body.address,
+      deliveryType: order.deliveryType, // передаем тип доставки
     });
 
     return NextResponse.json({ ok: true });

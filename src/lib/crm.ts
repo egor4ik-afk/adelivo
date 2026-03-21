@@ -263,6 +263,16 @@ export async function geocodeNewOrders() {
 
   for (const order of orders) {
     if (!order.address) continue;
+
+    // --- ДОБАВЛЕНО: Пропускаем геокодирование, если это самовывоз ---
+    if (order.address.toLowerCase().includes("самовывоз")) {
+      await prisma.order.update({ 
+        where: { id: order.id }, 
+        data: { geocoded: true, isInvalid: false, status: order.status === OrderStatus.NEW ? OrderStatus.GEOCODED : order.status } 
+      });
+      continue;
+    }
+
     try {
       const geo = await geocodeAddress(order.address);
       if (!geo) {
@@ -304,13 +314,11 @@ export async function pollCrmOrders() {
   geocodeNewOrders().catch(console.error);
 }
 
-// ── Обновление заказа в CRM ───────────────────────────────────────
-// ВАЖНО: для назначения курьера в RetailCRM нужно передавать delivery[code]
-// (символьный код типа доставки), иначе CRM не знает куда привязать курьера.
-// Берём deliveryType из нашей БД — он был сохранён при синхронизации.
+// src/lib/crm.ts
+
 export async function updateCrmOrder(
   crmId: string,
-  data: { status?: OrderStatus; courier?: string; opComment?: string; address?: string }
+  data: { status?: OrderStatus; courier?: string; opComment?: string; address?: string; deliveryType?: string | null }
 ) {
   if (!CRM_URL || !CRM_KEY) return;
 
@@ -334,27 +342,26 @@ export async function updateCrmOrder(
     const courierName = data.courier.trim();
     orderPayload.delivery = orderPayload.delivery ?? {};
 
-    // Тип доставки обязателен для назначения курьера в RetailCRM.
-    // У нас один тип доставки с курьерами — "logisty" (ID=5 в UI CRM).
+    // 🔥 ВСЕГДА ЖЕСТКО ОТПРАВЛЯЕМ "logisty", неважно что было в БД
     orderPayload.delivery.code = "logisty";
 
     if (courierName) {
-      // Ищем числовой ID курьера в нашей БД (он совпадает с ID в CRM/Logisty)
+      // Ищем ID курьера в нашей базе
       const courierId = await resolveCourierId(courierName);
 
       if (courierId) {
-        // Logisty хранит курьера в delivery.data.id (не courier!)
-        // Структура: {"id": 204, "firstName": "...", "courierId": 204}
-        orderPayload.delivery.data = { id: courierId };
+        // Записываем курьера
+        orderPayload.delivery.data = { 
+          id: courierId, 
+          courierId: courierId 
+        };
       }
 
-      // Fallback через customFields
       orderPayload.customFields = { courier: courierName, kurier: courierName };
-
       console.log(`[CRM] Назначаем курьера ${courierName} (id=${courierId}) delivery=logisty для заказа ${crmId}`);
     } else {
       // Сброс курьера
-      orderPayload.delivery.data = { id: null };
+      orderPayload.delivery.data = { id: null, courierId: null };
       orderPayload.customFields = { courier: "", kurier: "" };
     }
   }
@@ -380,7 +387,6 @@ export async function updateCrmOrder(
   } catch (err: unknown) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const errData = (err as any)?.response?.data;
-    // 404 — заказ удалён из CRM
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if ((err as any)?.response?.status === 404 || errData?.errorMsg === "Not found") {
       console.log(`[CRM] Заказ ${crmId} не найден в CRM (удалён?)`);

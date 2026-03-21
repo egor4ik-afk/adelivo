@@ -218,4 +218,5 @@ const inputStyle: React.CSSProperties = {
   color: "#1a1a18",
   background: "#fff",
   fontFamily: "inherit",
+  maxWidth: 160, // 🔥 ДОБАВЛЕНО
 };

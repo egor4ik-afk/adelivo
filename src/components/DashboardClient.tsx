@@ -329,8 +329,9 @@ export function DashboardClient({ user }: { user: User }) {
         <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={s.datePicker} />
 
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...s.nativeSelect, marginLeft: 8 }}>
-          {STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-        </select>
+  {/* 🔥 ДОБАВЛЕН ФИЛЬТР .filter(...) */}
+  {STATUS_OPTIONS.filter(opt => !["GEOCODED", "INVALID_ADDRESS"].includes(opt.value)).map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+</select>
 
         <select value={filterCourier} onChange={e => setFilterCourier(e.target.value)} style={{ ...s.nativeSelect, marginLeft: 4 }}>
           {courierOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
@@ -643,7 +644,7 @@ const s: Record<string, React.CSSProperties> = {
   logoDot: { display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "#4a7aff" },
   navBtn: { padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#1a1a18", whiteSpace: "nowrap" },
   datePicker: { padding: "4px 8px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 11, outline: "none", color: "#1a1a18", background: "#fff", marginLeft: 8 },
-  nativeSelect: { height: 28, padding: "0 8px", borderRadius: 7, border: "1px solid #e0dfd7", fontSize: 11, fontWeight: 500, outline: "none", cursor: "pointer", background: "#fff", color: "#1a1a18" },
+  nativeSelect: { height: 28, padding: "0 8px", borderRadius: 7, border: "1px solid #e0dfd7", fontSize: 11, fontWeight: 500, outline: "none", cursor: "pointer", background: "#fff", color: "#1a1a18", maxWidth: 140 /* 🔥 ДОБАВЛЕНО */ },
   slotBar: { display: "flex", gap: 4, marginLeft: 8 },
   slotBtn: { padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 500, border: "1px solid #e8e6df", background: "transparent", color: "#6b6860", cursor: "pointer", whiteSpace: "nowrap" },
   syncLabel: { fontSize: 11, color: "#a8a49c", whiteSpace: "nowrap", marginRight: 4 },
