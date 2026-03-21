@@ -49,8 +49,9 @@ export function mapCrmStatus(crmStatus?: string): OrderStatus {
 }
 
 const STATUS_TO_CRM: Partial<Record<OrderStatus, string>> = {
-  [OrderStatus.ASSIGNED]: "kurer-naznachen",
-  [OrderStatus.IN_DELIVERY]: "delivering",
+  [OrderStatus.NEW]: "new",                     // Добавлено: теперь можно возвращать в "Новый"
+  [OrderStatus.ASSIGNED]: "kurer-naznachen",    // Оставляем как есть (в твоих логах он ранее мелькал)
+  [OrderStatus.IN_DELIVERY]: "send-to-delivery", // Исправлено: было "delivering"
   [OrderStatus.DELIVERED]: "complete",
   [OrderStatus.RETURNED]: "return",
   [OrderStatus.CANCELLED]: "cancel-other",
@@ -181,26 +182,32 @@ export async function upsertOrder(crmOrder: CrmOrder) {
   const data = await mapCrmOrder(crmOrder);
   const existing = await prisma.order.findUnique({ where: { crmId: data.crmId } });
 
-  // Без ограничений — CRM авторитет для всех полей.
-  // Единственное исключение: геокоординаты и адрес не затираем если уже геокодировали
-  // (geocoded=true означает что мы вручную исправили адрес через AI или карту).
   const updateFields: typeof data & {
     lat?: number | null; lng?: number | null;
     geocoded?: boolean; isInvalid?: boolean; invalidReason?: string | null;
     changedAt?: Date;
   } = { ...data };
 
-  if (existing?.geocoded) {
-    updateFields.address       = existing.address;
-    updateFields.lat           = existing.lat;
-    updateFields.lng           = existing.lng;
-    updateFields.geocoded      = true;
-    updateFields.isInvalid     = existing.isInvalid;
-    updateFields.invalidReason = existing.invalidReason;
-  }
-
-  // changedAt — только при реальных изменениях значимых полей
   if (existing) {
+    // 🔥 ФИКС АДРЕСА: Если адрес из CRM отличается от нашего локального
+    // (например, Самовывоз изменили на реальный адрес доставки),
+    // мы ВСЕГДА берем новый адрес и сбрасываем гео-данные.
+    if (existing.address !== data.address) {
+      updateFields.geocoded      = false;
+      updateFields.lat           = null;
+      updateFields.lng           = null;
+      updateFields.isInvalid     = false;
+      updateFields.invalidReason = null;
+    } else if (existing.geocoded) {
+      // Если адрес НЕ менялся, только тогда восстанавливаем наши гео-координаты
+      updateFields.address       = existing.address;
+      updateFields.lat           = existing.lat;
+      updateFields.lng           = existing.lng;
+      updateFields.geocoded      = true;
+      updateFields.isInvalid     = existing.isInvalid;
+      updateFields.invalidReason = existing.invalidReason;
+    }
+
     const changed =
       (existing.crmStatus  ?? "") !== (updateFields.crmStatus  ?? "") ||
       (existing.courierId  ?? 0)  !== (updateFields.courierId  ?? 0)  ||
@@ -208,7 +215,8 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       (existing.items      ?? "") !== (updateFields.items      ?? "") ||
       (existing.slotFrom   ?? "") !== (updateFields.slotFrom   ?? "") ||
       (existing.slotTo     ?? "") !== (updateFields.slotTo     ?? "") ||
-      (existing.price      ?? 0)  !== (updateFields.price      ?? 0);
+      (existing.price      ?? 0)  !== (updateFields.price      ?? 0)  ||
+      (existing.address    ?? "") !== (updateFields.address    ?? "");
 
     if (changed) updateFields.changedAt = new Date();
   }
@@ -238,6 +246,50 @@ export async function upsertOrder(crmOrder: CrmOrder) {
   return order;
 }
 
+export async function geocodeNewOrders() {
+  const orders = await prisma.order.findMany({ where: { geocoded: false, address: { not: null } }, take: 20 });
+  if (orders.length === 0) return;
+
+  const invalidOrders: Array<{ externalId: string | null; address: string | null; reason: string }> = [];
+
+  for (const order of orders) {
+    if (!order.address) continue;
+    
+    // Пропускаем самовывоз, просто ставим галочку geocoded (без смены статуса!)
+    if (order.address.toLowerCase().includes("самовывоз")) {
+      await prisma.order.update({ 
+        where: { id: order.id }, 
+        data: { geocoded: true, isInvalid: false } 
+      });
+      continue;
+    }
+
+    try {
+      const geo = await geocodeAddress(order.address);
+      if (!geo) {
+        // 🔥 Статус больше не трогаем, только булевы флаги
+        await prisma.order.update({ where: { id: order.id }, data: { geocoded: true, isInvalid: true, invalidReason: "Адрес не найден" } });
+        invalidOrders.push({ externalId: order.externalId, address: order.address, reason: "Адрес не найден" });
+        continue;
+      }
+      if (!geo.isExact) {
+        // 🔥 Статус больше не трогаем, только булевы флаги
+        await prisma.order.update({ where: { id: order.id }, data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: true, invalidReason: `Неточный геокод: ${geo.precision}` } });
+        invalidOrders.push({ externalId: order.externalId, address: order.address, reason: `Неточный геокод: ${geo.precision}` });
+        continue;
+      }
+      // Успешный геокод - просто пишем координаты
+      await prisma.order.update({ where: { id: order.id }, data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: false } });
+    } catch (_) {
+      await prisma.order.update({ where: { id: order.id }, data: { geocoded: true, isInvalid: true, invalidReason: "Ошибка геокодирования" } }).catch(() => {});
+    }
+  }
+
+  if (invalidOrders.length > 0) {
+    notify({ type: "address.invalid", orders: invalidOrders }).catch(console.error);
+  }
+}
+
 export async function geocodeAddress(address: string) {
   if (!GEO_KEY || !address) return null;
   try {
@@ -253,47 +305,6 @@ export async function geocodeAddress(address: string) {
     const precision = members[0]?.GeoObject?.metaDataProperty?.GeocoderMetaData?.precision;
     return { lat, lng, precision, isExact: ["exact", "number", "near", "range"].includes(precision) };
   } catch (_) { return null; }
-}
-
-export async function geocodeNewOrders() {
-  const orders = await prisma.order.findMany({ where: { geocoded: false, address: { not: null } }, take: 20 });
-  if (orders.length === 0) return;
-
-  const invalidOrders: Array<{ externalId: string | null; address: string | null; reason: string }> = [];
-
-  for (const order of orders) {
-    if (!order.address) continue;
-
-    // --- ДОБАВЛЕНО: Пропускаем геокодирование, если это самовывоз ---
-    if (order.address.toLowerCase().includes("самовывоз")) {
-      await prisma.order.update({ 
-        where: { id: order.id }, 
-        data: { geocoded: true, isInvalid: false, status: order.status === OrderStatus.NEW ? OrderStatus.GEOCODED : order.status } 
-      });
-      continue;
-    }
-
-    try {
-      const geo = await geocodeAddress(order.address);
-      if (!geo) {
-        await prisma.order.update({ where: { id: order.id }, data: { geocoded: true, isInvalid: true, invalidReason: "Адрес не найден", status: OrderStatus.INVALID_ADDRESS } });
-        invalidOrders.push({ externalId: order.externalId, address: order.address, reason: "Адрес не найден" });
-        continue;
-      }
-      if (!geo.isExact) {
-        await prisma.order.update({ where: { id: order.id }, data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: true, invalidReason: `Неточный геокод: ${geo.precision}`, status: OrderStatus.INVALID_ADDRESS } });
-        invalidOrders.push({ externalId: order.externalId, address: order.address, reason: `Неточный геокод: ${geo.precision}` });
-        continue;
-      }
-      await prisma.order.update({ where: { id: order.id }, data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: false, status: order.status === OrderStatus.NEW ? OrderStatus.GEOCODED : order.status } });
-    } catch (_) {
-      await prisma.order.update({ where: { id: order.id }, data: { geocoded: true, isInvalid: true, invalidReason: "Ошибка геокодирования", status: OrderStatus.INVALID_ADDRESS } }).catch(() => {});
-    }
-  }
-
-  if (invalidOrders.length > 0) {
-    notify({ type: "address.invalid", orders: invalidOrders }).catch(console.error);
-  }
 }
 
 export async function pollCrmOrders() {
@@ -342,7 +353,7 @@ export async function updateCrmOrder(
     const courierName = data.courier.trim();
     orderPayload.delivery = orderPayload.delivery ?? {};
 
-    // 🔥 ВСЕГДА ЖЕСТКО ОТПРАВЛЯЕМ "logisty", неважно что было в БД
+    // 🔥 ВСЕГДА ЖЕСТКО ОТПРАВЛЯЕМ "logisty"
     orderPayload.delivery.code = "logisty";
 
     if (courierName) {
@@ -350,19 +361,27 @@ export async function updateCrmOrder(
       const courierId = await resolveCourierId(courierName);
 
       if (courierId) {
-        // Записываем курьера
+        // Записываем курьера во все возможные поля (id, courierId и courier)
         orderPayload.delivery.data = { 
           id: courierId, 
-          courierId: courierId 
+          courierId: courierId,
+          courier: courierId // CRM смотрит именно сюда
         };
       }
 
       orderPayload.customFields = { courier: courierName, kurier: courierName };
       console.log(`[CRM] Назначаем курьера ${courierName} (id=${courierId}) delivery=logisty для заказа ${crmId}`);
     } else {
-      // Сброс курьера
-      orderPayload.delivery.data = { id: null, courierId: null };
+      // 🔥 ФИКС: Сброс курьера ("Не назначен")
+      // Передаем пустую строку в data.courier, как это делает сама CRM
+      orderPayload.delivery.data = { 
+        id: "", 
+        courierId: "", 
+        courier: "" 
+      };
+      
       orderPayload.customFields = { courier: "", kurier: "" };
+      console.log(`[CRM] Снимаем курьера (Не назначен) для заказа ${crmId}`);
     }
   }
 
