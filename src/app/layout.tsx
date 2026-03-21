@@ -1,8 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google"; // или твой шрифт
+import { Inter } from "next/font/google";
 import "./globals.css";
+import "@/lib/cron"
+// 🔥 Правильно инициализируем шрифт (добавил кириллицу для русского языка)
+const inter = Inter({ subsets: ["latin", "cyrillic"] });
 
-// Добавляем Viewport для правильного масштабирования и цвета статус-бара на телефонах
 export const viewport: Viewport = {
   themeColor: "#4a7aff",
   width: "device-width",
@@ -11,15 +13,14 @@ export const viewport: Viewport = {
   userScalable: false,
 };
 
-// Добавляем ссылку на manifest и поддержку Apple (iOS)
 export const metadata: Metadata = {
-  title: "FlowerOps",
-  description: "FlowerOps Dashboard",
+  title: "EwentWave", // Поменял на EwentWave (или верни EwentWave, если нужно)
+  description: "Dashboard",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "FlowerOps",
+    title: "EwentWave",
   },
   formatDetection: {
     telephone: false,
@@ -33,7 +34,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ru">
-      <body>{children}</body>
+      {/* 🔥 Применяем класс шрифта к body */}
+      <body className={inter.className}>{children}</body>
     </html>
   );
 }

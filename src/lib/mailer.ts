@@ -10,7 +10,7 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-const FROM = `"FlowerOps" <${process.env.EMAIL_USER}>`;
+const FROM = `"EwentWave" <${process.env.EMAIL_USER}>`;
 const TO   = process.env.RECIPIENT_EMAIL!;
 
 export async function sendAuthCode(email: string, code: string) {
@@ -21,7 +21,7 @@ export async function sendAuthCode(email: string, code: string) {
     text: `Ваш код: ${code}\n\nДействителен 10 минут.`,
     html: `
       <div style="font-family:sans-serif;max-width:400px;margin:0 auto;padding:32px;background:#f9f9f9;border-radius:12px">
-        <h2 style="margin:0 0 8px;color:#111">FlowerOps</h2>
+        <h2 style="margin:0 0 8px;color:#111">EwentWave</h2>
         <p style="color:#666;margin:0 0 24px;font-size:14px">Код для входа в систему</p>
         <div style="background:#fff;border:1px solid #e5e5e5;border-radius:8px;padding:24px;text-align:center">
           <p style="margin:0 0 8px;font-size:13px;color:#999">Ваш одноразовый код</p>

@@ -5,10 +5,10 @@ self.addEventListener("push", (event) => {
   try {
     data = event.data?.json() ?? {};
   } catch {
-    data = { title: "FlowerOps", body: event.data?.text() ?? "" };
+    data = { title: "EwentWave", body: event.data?.text() ?? "" };
   }
 
-  const title = data.title ?? "FlowerOps";
+  const title = data.title ?? "EwentWave";
   const options = {
     body: data.body ?? "",
     icon: "/icon-192.png",

@@ -1,4 +1,4 @@
-// Placeholder for ProfilePanel.tsx"use client";
+"use client";
 import { useState, useEffect } from "react";
 import { usePushNotifications } from "./usePushNotifications";
 
@@ -6,6 +6,15 @@ interface Profile {
   id: string; email: string; role: string;
   firstName?: string | null; lastName?: string | null;
   phone?: string | null; lastLoginAt?: string | null;
+  // Настройки уведомлений
+  notifyNewOrder?: boolean;
+  notifyStatus?: boolean;
+  notifyCourier?: boolean;
+  notifyAddress?: boolean;
+  notifyTime?: boolean;
+  notifyComment?: boolean;
+  notifyOpComment?: boolean;
+  notifyItems?: boolean;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -14,20 +23,26 @@ const ROLE_LABELS: Record<string, string> = {
   ADMIN: "Администратор",
 };
 
-const PUSH_LABELS: Record<string, string> = {
-  loading: "...",
-  unsupported: "Не поддерживается",
-  denied: "Заблокированы браузером",
-  default: "Включить уведомления",
-  granted: "Уведомления включены",
-};
+const SETTINGS = [
+  { key: "notifyNewOrder", label: "Новые заказы" },
+  { key: "notifyStatus", label: "Изменение статуса" },
+  { key: "notifyCourier", label: "Назначение/снятие курьера" },
+  { key: "notifyAddress", label: "Изменение адреса доставки" },
+  { key: "notifyTime", label: "Изменение времени (слота)" },
+  { key: "notifyComment", label: "Комментарий клиента" },
+  { key: "notifyOpComment", label: "Комментарий оператора" },
+  { key: "notifyItems", label: "Изменение состава" },
+];
 
 export function ProfilePanel({ onClose, onLogout }: { onClose: () => void; onLogout: () => void }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ firstName: "", lastName: "", phone: "" });
   const [saving, setSaving] = useState(false);
+  
+  // 🔥 Берем правильные методы из твоего хука
   const { state: pushState, subscribe, unsubscribe } = usePushNotifications();
+  const isSubscribed = pushState === "granted";
 
   useEffect(() => {
     fetch("/api/profile").then(r => r.json()).then(data => {
@@ -49,13 +64,26 @@ export function ProfilePanel({ onClose, onLogout }: { onClose: () => void; onLog
     setSaving(false);
   }
 
+  const togglePref = async (key: keyof Profile) => {
+    if (!profile) return;
+    const newVal = !(profile[key] ?? true);
+    // Обновляем локально для скорости интерфейса
+    setProfile({ ...profile, [key]: newVal });
+    // Отправляем на сервер
+    await fetch("/api/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [key]: newVal })
+    });
+  };
+
   const initials = profile
     ? ((profile.firstName?.[0] ?? "") + (profile.lastName?.[0] ?? "")).toUpperCase() || profile.email.slice(0, 2).toUpperCase()
     : "??";
 
   const fullName = profile ? [profile.firstName, profile.lastName].filter(Boolean).join(" ") || "—" : "—";
 
-  if (!profile) return <div style={s.panel}><div style={{ color: "var(--text3)", padding: 16, fontSize: 12 }}>Загрузка...</div></div>;
+  if (!profile) return <div style={s.panel}><div style={{ color: "#a8a49c", padding: 16, fontSize: 12 }}>Загрузка...</div></div>;
 
   return (
     <div style={s.panel} onClick={e => e.stopPropagation()}>
@@ -88,17 +116,34 @@ export function ProfilePanel({ onClose, onLogout }: { onClose: () => void; onLog
           {/* Push уведомления */}
           <div style={s.pushRow}>
             <div>
-              <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text)" }}>Push-уведомления</div>
-              <div style={{ fontSize: 11, color: pushState === "granted" ? "var(--green)" : "var(--text3)", marginTop: 2 }}>
-                {PUSH_LABELS[pushState]}
+              <div style={{ fontSize: 12, fontWeight: 500, color: "#1a1a18" }}>Push-уведомления</div>
+              <div style={{ fontSize: 11, color: isSubscribed ? "#10b981" : "#a8a49c", marginTop: 2 }}>
+                {isSubscribed ? "Уведомления включены" : "Выключены"}
               </div>
             </div>
-            {pushState === "granted" ? (
+            {isSubscribed ? (
               <button style={s.pushBtnOff} onClick={unsubscribe}>Выкл.</button>
-            ) : pushState === "default" ? (
+            ) : (
               <button style={s.pushBtnOn} onClick={subscribe}>Включить</button>
-            ) : null}
+            )}
           </div>
+
+          {/* Тонкие настройки пушей (показываем только если пуши включены) */}
+          {isSubscribed && (
+            <div style={{ background: "#fafaf8", padding: 12, borderRadius: 8, display: "flex", flexDirection: "column", gap: 10, marginTop: 8, marginBottom: 8 }}>
+              {SETTINGS.map(set => (
+                <label key={set.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
+                  <span style={{ fontSize: 12, color: "#6b6860" }}>{set.label}</span>
+                  <input 
+                    type="checkbox" 
+                    checked={(profile[set.key as keyof Profile] as boolean) ?? true} 
+                    onChange={() => togglePref(set.key as keyof Profile)} 
+                    style={{ accentColor: "#4a7aff", width: 16, height: 16, cursor: "pointer", margin: 0 }}
+                  />
+                </label>
+              ))}
+            </div>
+          )}
 
           <button style={s.editBtn} onClick={() => setEditing(true)}>Редактировать профиль</button>
           <button style={s.logoutBtn} onClick={onLogout}>Выйти из аккаунта</button>
@@ -130,9 +175,9 @@ export function ProfilePanel({ onClose, onLogout }: { onClose: () => void; onLog
 
 function InfoRow({ label, value, accent, muted }: { label: string; value: string; accent?: boolean; muted?: boolean }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "0.5px solid var(--border)" }}>
-      <span style={{ fontSize: 12, color: "var(--text2)" }}>{label}</span>
-      <span style={{ fontSize: 12, fontWeight: 500, color: muted ? "var(--text3)" : accent ? "#4a7aff" : "var(--text)" }}>{value}</span>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "0.5px solid #e8e6df" }}>
+      <span style={{ fontSize: 12, color: "#a8a49c" }}>{label}</span>
+      <span style={{ fontSize: 12, fontWeight: 500, color: muted ? "#a8a49c" : accent ? "#4a7aff" : "#1a1a18" }}>{value}</span>
     </div>
   );
 }
@@ -140,14 +185,24 @@ function InfoRow({ label, value, accent, muted }: { label: string; value: string
 function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
     <div>
-      <div style={{ fontSize: 10, fontWeight: 500, color: "var(--text3)", textTransform: "uppercase" as const, letterSpacing: ".4px", marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 10, fontWeight: 500, color: "#a8a49c", textTransform: "uppercase" as const, letterSpacing: ".4px", marginBottom: 4 }}>{label}</div>
       <input style={s.fieldInput} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder ?? ""} />
     </div>
   );
 }
 
 const s: Record<string, React.CSSProperties> = {
-  panel: { background: "#fff", border: "1px solid #e8e6df", borderRadius: 12, padding: 16, width: 268, boxShadow: "0 4px 24px rgba(0,0,0,0.09)", fontFamily: "Manrope, system-ui, sans-serif" },
+  panel: { 
+    background: "#fff", 
+    border: "1px solid #e8e6df", 
+    borderRadius: 12, 
+    padding: 16, 
+    width: 300, 
+    boxShadow: "0 4px 24px rgba(0,0,0,0.09)", 
+    fontFamily: "Manrope, system-ui, sans-serif",
+    maxHeight: "85vh",   // 🔥 Ограничиваем высоту панели (85% от экрана)
+    overflowY: "auto",   // 🔥 Включаем вертикальный скролл, если контент не влезает
+  },
   header: { display: "flex", alignItems: "center", gap: 12, marginBottom: 12, position: "relative" },
   avatarLg: { width: 44, height: 44, borderRadius: "50%", background: "#4a7aff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 600, color: "#fff", flexShrink: 0 },
   name: { fontSize: 14, fontWeight: 500, color: "#1a1a18" },

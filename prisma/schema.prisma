@@ -1,176 +1,188 @@
 generator client {
-      provider = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-      provider  = "postgresql"
-            url       = env("DATABASE_URL")
-                    directUrl = env("DIRECT_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum Role {
-      OPERATOR
-            COURIER
-                    ADMIN
+  OPERATOR
+  COURIER
+  ADMIN
 }
 
 enum OrderStatus {
-      NEW
-            GEOCODED
-                    INVALID_ADDRESS
-                              ASSIGNED
-                                          IN_DELIVERY
-                                                        DELIVERED
-                                                                        RETURNED
-                                                                                          CANCELLED
+  NEW
+  GEOCODED
+  INVALID_ADDRESS
+  ASSIGNED
+  IN_DELIVERY
+  DELIVERED
+  RETURNED
+  CANCELLED
 }
 
 model User {
-      id          String    @id @default(cuid())
-            email       String    @unique
-                    role        Role      @default(OPERATOR)
-                              firstName   String?
-                                          lastName    String?
-                                                        phone       String?
-                                                                        lastLoginAt DateTime?
-                                                                                          createdAt   DateTime  @default(now())
-                                                                                                              updatedAt   DateTime  @updatedAt
+  id                String             @id @default(cuid())
+  email             String             @unique
+  role              Role               @default(OPERATOR)
+  firstName         String?
+  lastName          String?
+  phone             String?
+  lastLoginAt       DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
-                                                                                                                                    sessions          Session[]
-                                                                                                                                                            authCodes         AuthCode[]
-                                                                                                                                                                                      pushSubscriptions PushSubscription[]
+  // Настройки уведомлений
+  notifyNewOrder    Boolean            @default(true)
+  notifyStatus      Boolean            @default(true)
+  notifyCourier     Boolean            @default(true)
+  notifyAddress     Boolean            @default(true)
+  notifyTime        Boolean            @default(true)
+  notifyComment     Boolean            @default(true)
+  notifyOpComment   Boolean            @default(true)
+  notifyItems       Boolean            @default(true)
+
+  sessions          Session[]
+  authCodes         AuthCode[]
+  pushSubscriptions PushSubscription[]
 }
 
 model Session {
-      id        String   @id @default(cuid())
-            userId    String
-                    token     String   @unique
-                              expiresAt DateTime
-                                          createdAt DateTime @default(now())
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 
-                                                        user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-                                                                        @@index([token])
+  @@index([token])
 }
 
 model AuthCode {
-      id        String   @id @default(cuid())
-            userId    String
-                    code      String
-                              used      Boolean  @default(false)
-                                          expiresAt DateTime
-                                                        createdAt DateTime @default(now())
+  id        String   @id @default(cuid())
+  userId    String
+  code      String
+  used      Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 
-                                                                        user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-                                                                                          @@index([userId])
-                                                                                                              @@index([code])
+  @@index([userId])
+  @@index([code])
 }
 
 // Web Push подписки браузера
 model PushSubscription {
-      id        String   @id @default(cuid())
-            userId    String
-                    endpoint  String   @unique
-                              p256dh    String
-                                          auth      String
-                                                        userAgent String?
-                                                                        createdAt DateTime @default(now())
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
 
-                                                                                          user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-                                                                                                              @@index([userId])
+  @@index([userId])
 }
 
 model Courier {
-      id          Int      @id // Внутренний ID курьера из CRM
-            firstName   String?
-                    lastName    String?
-                              patronymic  String?
-                                          fullName    String   // Склеенное ФИО для удобного поиска
-                                                        phone       String?
-                                                                        email       String?
-                                                                                          description String?  // Примечание из CRM
-                                                                                                              isActive    Boolean  @default(true) // Работает ли он вообще в компании
+  id          Int      @id // Внутренний ID курьера из CRM
+  firstName   String?
+  lastName    String?
+  patronymic  String?
+  fullName    String   // Склеенное ФИО для удобного поиска
+  phone       String?
+  email       String?
+  description String?  // Примечание из CRM
+  isActive    Boolean  @default(true) // Работает ли он вообще в компании
 
-                                                                                                                                    createdAt   DateTime @default(now())
-                                                                                                                                                            updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-                                                                                                                                                                                      // Связь с графиком работы (смены)
-                                                                                                                                                                                                                  shifts      CourierShift[]
-                                                                                                                                                                                                                  payments    CourierPayment[]
+  // Связи
+  shifts      CourierShift[]
+  payments    CourierPayment[]
 }
 
 // Таблица смен (график работы курьеров)
 model CourierShift {
-      id        String   @id @default(cuid())
-            courierId Int
-                    date      String   // Строка в формате "YYYY-MM-DD"
-                              
-                                          courier   Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  courierId Int
+  date      String   // Строка в формате "YYYY-MM-DD"
+  
+  courier   Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
 
-                                                        // Один курьер не может иметь две разные смены в один и тот же день
-                                                                        @@unique([courierId, date])
+  // Один курьер не может иметь две разные смены в один и тот же день
+  @@unique([courierId, date])
 }
+
 model CourierPayment {
   id        String   @id @default(cuid())
   courierId Int
   date      String
   
   courier   Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  
   @@unique([courierId, date])
 }
+
 model Order {
-      id            String      @id @default(cuid())
-            crmId         String      @unique
-                    externalId    String?
-                              status        OrderStatus @default(NEW)
-                                          address       String?
-                                                        lat           Float?
-                                                                        lng           Float?
-                                                                                          price         Float?
-                                                                                                              courierId     Int?     // 🔥 ВОТ ОНО: Связь с курьером по ID
-                                                                                                                                    courier       String?
-                                                                                                                                                            comment       String?
-                                                                                                                                                                                      opComment     String?
-                                                                                                                                                                                                                  items         String?
-                                                                                                                                                                                                                                                slotFrom      String?
-                                                                                                                                                                                                                                                                                slotTo        String?
-                                                                                                                                                                                                                                                                                                                  slotRaw       String?
-                                                                                                                                                                                                                                                                                                                                                      deliveryType  String?
-                                                                                                                                                                                                                                                                                                                                                                                            deliveryDate  String?     // <--- ДОБАВИТЬ ЭТУ СТРОКУ
-                                                                                                                                                                                                                                                                                                                                                                                                                                    crmStatus     String?
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                              isInvalid     Boolean     @default(false)
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          invalidReason String?
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        geocoded      Boolean     @default(false)
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        crmCreatedAt  DateTime?
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          createdAt     DateTime    @default(now())
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              updatedAt     DateTime    @updatedAt
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    changedAt     DateTime?
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            courierManual Boolean     @default(false)
+  id            String      @id @default(cuid())
+  crmId         String      @unique
+  externalId    String?
+  status        OrderStatus @default(NEW)
+  address       String?
+  lat           Float?
+  lng           Float?
+  price         Float?
+  courierId     Int?        
+  courier       String?
+  comment       String?
+  opComment     String?
+  items         String?
+  slotFrom      String?
+  slotTo        String?
+  slotRaw       String?
+  deliveryType  String?
+  deliveryDate  String?     
+  crmStatus     String?
+  isInvalid     Boolean     @default(false)
+  invalidReason String?
+  geocoded      Boolean     @default(false)
+  crmCreatedAt  DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  changedAt     DateTime?
+  courierManual Boolean     @default(false)
 
-
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      @@index([createdAt])
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  @@index([slotFrom, slotTo])
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                @@index([status])
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                @@index([isInvalid])
+  @@index([createdAt])
+  @@index([slotFrom, slotTo])
+  @@index([status])
+  @@index([isInvalid])
 }
 
 model SyncState {
-      id         Int      @id @default(1)
-            lastSyncAt DateTime @default(now())
+  id         Int      @id @default(1)
+  lastSyncAt DateTime @default(now())
 }
 
 // Лог уведомлений
 model NotificationLog {
-      id        String   @id @default(cuid())
-            type      String   // "order.new" | "order.updated" | "address.invalid"
-                    channel   String   // "push" | "email"
-                              payload   String   // JSON строка
-                                          success   Boolean
-                                                        error     String?
-                                                                        createdAt DateTime @default(now())
+  id        String   @id @default(cuid())
+  type      String   // "order.new" | "order.updated" | "address.invalid"
+  channel   String   // "push" | "email"
+  payload   String   // JSON строка
+  success   Boolean
+  error     String?
+  createdAt DateTime @default(now())
 
-                                                                                          @@index([createdAt])
-                                                                                                              @@index([type])
+  @@index([createdAt])
+  @@index([type])
 }

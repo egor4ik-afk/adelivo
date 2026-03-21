@@ -111,7 +111,10 @@ export function CouriersClient({ user }: { user: any }) {
   return (
     <div style={s.app}>
       <div style={s.topbar}>
-        <div style={s.logo}><span style={s.logoDot} />FlowerOps</div>
+        <div style={s.logo}>
+          <img src="/favicon.svg" alt="Logo" style={{ width: 22, height: 22 }} />
+          EwentWave
+        </div>
         <button onClick={() => router.push('/dashboard')} style={s.navBtn}>🗺️ Дашборд</button>
         <button onClick={() => router.push('/orders')} style={s.navBtn}>≡ Заказы</button>
         <div style={{ flex: 1 }} />
@@ -244,7 +247,6 @@ const s: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", overflow: "auto" },
   topbar: { display: "flex", alignItems: "center", gap: 8, padding: "0 16px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0 },
   logo: { fontSize: 15, fontWeight: 600, color: "#1a1a18", display: "flex", alignItems: "center", gap: 7, marginRight: 16 },
-  logoDot: { display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "#4a7aff" },
   navBtn: { padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#1a1a18" },
   userBtn: { width: 32, height: 32, borderRadius: "50%", background: "#4a7aff", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, color: "#fff" },
   content: { padding: "24px", maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", flexDirection: "column", gap: 20 },

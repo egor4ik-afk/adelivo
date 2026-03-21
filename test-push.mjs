@@ -25,7 +25,7 @@ for (const sub of subs) {
     await webpush.sendNotification(
       { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
       JSON.stringify({
-        title: 'FlowerOps — тест',
+        title: 'EwentWave — тест',
         body: 'Новый заказ #test-001 · с 20:00 до 22:00 · Тверская 7',
         data: { type: 'order.new', orderId: 'test-1' }
       })

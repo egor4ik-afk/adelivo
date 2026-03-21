@@ -45,8 +45,11 @@ export default function LoginPage() {
   return (
     <div style={s.page}>
       <div style={s.card}>
-        <div style={s.logo}><span style={s.dot} />FlowerOps</div>
-        <p style={s.sub}>Платформа управления доставкой</p>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 4 }}>
+          <img src="/favicon.svg" alt="Logo" style={{ width: 32, height: 32 }} />
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: "#1a1a18", margin: 0 }}>EwentWave</h1>
+        </div>
+        <p style={{ fontSize: 12, color: "#a8a49c", marginBottom: 24, textAlign: 'center' }}>Платформа управления доставкой</p>
         <div style={s.dots}>
           <span style={{ ...s.stepDot, background: "#4a7aff" }} />
           <span style={{ ...s.stepDot, background: step === "code" ? "#4a7aff" : "#e8e6df" }} />
@@ -89,8 +92,6 @@ export default function LoginPage() {
 const s: Record<string, React.CSSProperties> = {
   page: { minHeight: "100vh", background: "#f5f4f0", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Manrope, system-ui, sans-serif" },
   card: { background: "#fff", border: "1px solid #e8e6df", borderRadius: 16, padding: "40px 36px", width: 360, boxShadow: "0 2px 20px rgba(0,0,0,0.06)" },
-  logo: { fontSize: 20, fontWeight: 600, color: "#1a1a18", marginBottom: 4, display: "flex", alignItems: "center", gap: 8 },
-  dot: { display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "#4a7aff" },
   sub: { fontSize: 12, color: "#a8a49c", marginBottom: 24 },
   dots: { display: "flex", gap: 5, marginBottom: 24 },
   stepDot: { display: "block", width: 6, height: 6, borderRadius: "50%", transition: "background .2s" },

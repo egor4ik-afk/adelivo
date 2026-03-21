@@ -366,7 +366,10 @@ export function DashboardClient({ user }: { user: User }) {
     <div style={isMobile ? sm.app : s.app}>
       {/* ── Topbar ── */}
       <div style={isMobile ? sm.topbar : s.topbar}>
-        <div style={s.logo}><span style={s.logoDot} />FlowerOps</div>
+        <div style={s.logo}>
+          <img src="/favicon.svg" alt="Logo" style={{ width: 22, height: 22 }} />
+          EwentWave
+        </div>
         <button onClick={() => router.push('/orders')} style={s.navBtn}>≡ Заказы</button>
         <button onClick={() => router.push('/couriers')} style={s.navBtn}>🚚 Курьеры</button>
         <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={s.datePicker} />
@@ -782,8 +785,7 @@ function OrderCard({ order, selected, isBulkMode, isBulkSelected, onSelect }: an
 const s: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", overflow: "hidden" },
   topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 16px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 10, position: "relative", overflowX: "auto" },
-  logo: { fontSize: 15, fontWeight: 600, color: "#1a1a18", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap" },
-  logoDot: { display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "#4a7aff" },
+  logo: { fontSize: 15, fontWeight: 600, color: "#1a1a18", display: "flex", alignItems: "center", gap: 4, whiteSpace: "nowrap", marginRight: 17 },
   navBtn: { padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#1a1a18", whiteSpace: "nowrap" },
   datePicker: { padding: "4px 8px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 11, outline: "none", color: "#1a1a18", background: "#fff", marginLeft: 8 },
   nativeSelect: { height: 28, padding: "0 8px", borderRadius: 7, border: "1px solid #e0dfd7", fontSize: 11, fontWeight: 500, outline: "none", cursor: "pointer", background: "#fff", color: "#1a1a18", maxWidth: 120 /* 🔥 ДОБАВЛЕНО */ },
