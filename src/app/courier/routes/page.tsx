@@ -198,7 +198,7 @@ export default function CourierRoutesPage() {
                   <div key={date}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: "#a8a49c", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.5px" }}>
                       {/* Красиво форматируем дату: Ср, 15 марта */}
-                      {date === "Ранее" ? "Неизвестная дата" : new Date(date).toLocaleDateString("ru-RU", { weekday: 'short', day: 'numeric', month: 'long' })}
+                      {date === "Ранее" ? "Неизвестная дата" : new Date(date).toLocaleDateString("ru-RU", { weekday: 'short', day: 'numeric', month: 'long', timeZone: 'Europe/Moscow' })}
                     </div>
                     
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

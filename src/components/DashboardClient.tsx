@@ -76,11 +76,11 @@ export function DashboardClient({ user }: { user: User }) {
   const [bulkCourier, setBulkCourier] = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
   const [routeType, setRouteType] = useState<"auto" | "mt">("auto");
-  const [returnToBase, setReturnToBase] = useState(false); // 🔥 Вернуться на базу
+  const [returnToBase, setReturnToBase] = useState(true);
 
-  // Состояние для ETA (Расчет времени маршрута)
+  // ETA
   const [routeLegs, setRouteLegs] = useState<string[]>([]);
-  const [routeTotals, setRouteTotals] = useState<{ time: string, dist: string } | null>(null);
+  const [routeTotals, setRouteTotals] = useState<{time: string, dist: string} | null>(null);
   const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
 
   useEffect(() => {
@@ -104,7 +104,6 @@ export function DashboardClient({ user }: { user: User }) {
       setTimeout(() => {
         const card = document.getElementById(`card-${selectedId}`);
         if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
-
         const row = document.getElementById(`row-${selectedId}`);
         if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
       }, 150);
@@ -135,6 +134,7 @@ export function DashboardClient({ user }: { user: User }) {
 
   useEffect(() => { fetchData(); const t = setInterval(fetchData, 30_000); return () => clearInterval(t); }, [fetchData]);
 
+  // 🔥 ВЕРНУЛИ УДАЛЕННЫЙ БЛОК ДЛЯ ПУШ-УВЕДОМЛЕНИЙ И БАННЕРА
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (e.data?.type === "NOTIFICATION_CLICK" && e.data.orderId) {
@@ -151,6 +151,7 @@ export function DashboardClient({ user }: { user: User }) {
   }, [fetchData, isMobile]);
 
   useEffect(() => { setDismissedInvalid(false); }, [orders]);
+  // 🔥 КОНЕЦ БЛОКА
 
   const sortedCouriers = (() => {
     const base = [...dbCouriers].filter(c => c.isActive);
@@ -217,10 +218,7 @@ export function DashboardClient({ user }: { user: User }) {
   });
 
   const handleSort = (key: string) => {
-    setSortConfig(prev => ({
-      key,
-      dir: prev.key === key && prev.dir === 'asc' ? 'desc' : 'asc'
-    }));
+    setSortConfig(prev => ({ key, dir: prev.key === key && prev.dir === 'asc' ? 'desc' : 'asc' }));
   };
 
   useEffect(() => {
@@ -231,13 +229,12 @@ export function DashboardClient({ user }: { user: User }) {
       map.events.add('boundschange', (e: any) => { if (e.get('newZoom') !== e.get('oldZoom')) setCurrentZoom(e.get('newZoom')); });
       const clusterer = new window.ymaps.Clusterer({ clusterIconLayout: "default#pieChart", clusterIconPieChartRadius: 20 });
       map.geoObjects.add(clusterer);
-
-      // 🔥 БАЗА: Заменили иконку на аккуратную синюю точку
+      
       const storePm = new window.ymaps.Placemark([STORE_LAT, STORE_LNG], {
         hintContent: "БАЗА: Большой Афанасьевский переулок, 39",
         iconCaption: "База"
-      }, { preset: 'islands#blackCircleDotIcon' });
-
+      }, { preset: 'islands#blackDotIcon' });
+      
       map.geoObjects.add(storePm as any);
       ymapRef.current = map;
       clustererRef.current = clusterer;
@@ -256,11 +253,8 @@ export function DashboardClient({ user }: { user: User }) {
   const moveBulkItem = (index: number, dir: 'up' | 'down') => {
     setBulkSelectedIds(prev => {
       const arr = [...prev];
-      if (dir === 'up' && index > 0) {
-        [arr[index - 1], arr[index]] = [arr[index], arr[index - 1]];
-      } else if (dir === 'down' && index < arr.length - 1) {
-        [arr[index + 1], arr[index]] = [arr[index], arr[index + 1]];
-      }
+      if (dir === 'up' && index > 0) [arr[index - 1], arr[index]] = [arr[index], arr[index - 1]];
+      else if (dir === 'down' && index < arr.length - 1) [arr[index + 1], arr[index]] = [arr[index], arr[index + 1]];
       return arr;
     });
   };
@@ -281,30 +275,49 @@ export function DashboardClient({ user }: { user: User }) {
 
     const placemarks = filtered.filter(o => (o.lat && o.lng) || (o.id === selectedId && previewGeo)).map(order => {
       const isSelected = selectedId === order.id;
-      const isBulkSelected = bulkSelectedIds.includes(order.id);
+      const bulkIndex = bulkSelectedIds.indexOf(order.id);
+      const isBulkSelected = bulkIndex !== -1;
       const lat = isSelected && previewGeo ? previewGeo.lat : order.lat!;
       const lng = isSelected && previewGeo ? previewGeo.lng : order.lng!;
       const color = slotColor(order);
-      let pinColor = isSelected ? (previewGeo ? '#9ca3af' : '#facc15') : color;
-      if (isBulkMode) pinColor = isBulkSelected ? '#1a9e5c' : '#d1d5db';
 
       const displayTime = showTime && currentZoom >= 13 && !!order.slotRaw && selectedSlots.length === 0;
       const displayName = showCourierNames && !!order.courier;
-      const slotLabel = order.slotRaw ? order.slotRaw.replace("с ", "").replace(" до ", "-") : "";
+      const slotLabelText = order.slotRaw ? order.slotRaw.replace("с ", "").replace(" до ", "-") : "";
 
       let pm;
+
+      // 🔥 ВЕРНУЛИ ВРЕМЯ В МАССОВОМ РЕЖИМЕ (С НОМЕРОМ!)
       if (displayTime) {
+        let pinColor = isSelected ? (previewGeo ? '#9ca3af' : '#facc15') : color;
+        if (isBulkMode) pinColor = isBulkSelected ? '#1a9e5c' : '#d1d5db';
+
+        // Формируем красивую надпись: "1. 14:00-16:00" или просто "14:00-16:00"
+        const finalSlotLabel = (isBulkMode && isBulkSelected) ? `${bulkIndex + 1}. ${slotLabelText}` : slotLabelText;
+
         pm = new ymaps.Placemark([lat, lng], {
           balloonContentHeader: order.externalId ?? order.crmId, hintContent: order.address ?? "—",
-          pinColor, slotLabel, showLabel: displayName, labelText: order.courier ?? "",
+          pinColor, slotLabel: finalSlotLabel, showLabel: displayName, labelText: order.courier ?? "",
         }, { iconLayout: StretchyLayout, iconShape: { type: "Rectangle", coordinates: [[-40, -40], [40, 20]] }, iconOffset: [-15, -26] });
       } else {
         let preset = 'islands#dotIcon';
-        if (isBulkMode) preset = isBulkSelected ? 'islands#greenDotIcon' : 'islands#grayDotIcon';
-        else if (isSelected) preset = previewGeo ? "islands#grayDotIcon" : "islands#redDotIcon";
+        let iconContent = undefined;
+
+        if (isBulkMode) {
+          if (isBulkSelected) {
+             preset = 'islands#greenIcon'; 
+             iconContent = `${bulkIndex + 1}`;
+          } else {
+             preset = 'islands#grayCircleDotIcon';
+          }
+        } else {
+          if (isSelected) preset = previewGeo ? "islands#grayDotIcon" : "islands#redDotIcon";
+        }
+
         pm = new ymaps.Placemark([lat, lng], {
           balloonContentHeader: order.externalId ?? order.crmId, hintContent: order.address ?? "—",
-          iconCaption: displayName ? order.courier : undefined
+          iconCaption: (displayName && !isBulkMode) ? order.courier : undefined,
+          iconContent: iconContent
         }, { preset, iconColor: (isBulkMode || isSelected) ? undefined : color });
       }
 
@@ -313,11 +326,8 @@ export function DashboardClient({ user }: { user: User }) {
           toggleBulkSelect(order.id);
         } else {
           clickedFromMapRef.current = true;
-          setSelectedId(order.id);
-          if (!isMobile) {
-            setIsListVisible(true);
-            setIsDetailVisible(true);
-          }
+          setSelectedId(order.id); 
+          if (!isMobile) { setIsListVisible(true); setIsDetailVisible(true); }
           else setMobileView("split");
         }
       });
@@ -331,25 +341,20 @@ export function DashboardClient({ user }: { user: User }) {
     if (selectedId && ymapRef.current && !previewGeo && !isBulkMode) {
       const order = orders.find(o => o.id === selectedId);
       if (order?.lat && order?.lng) {
-        if (clickedFromMapRef.current) {
-          ymapRef.current.setCenter([order.lat, order.lng], undefined, { duration: 300 });
-        } else {
-          ymapRef.current.setCenter([order.lat, order.lng], 16, { duration: 500 });
-        }
+        if (clickedFromMapRef.current) ymapRef.current.setCenter([order.lat, order.lng], undefined, { duration: 300 });
+        else ymapRef.current.setCenter([order.lat, order.lng], 16, { duration: 500 });
         clickedFromMapRef.current = false;
       }
     }
   }, [selectedId, isBulkMode, orders]);
 
-  // 🔥 ФОНОВЫЙ РАСЧЕТ ETA МАРШРУТА
   const selectedRouteOrders = bulkSelectedIds.map(id => orders.find(o => o.id === id)).filter(Boolean) as Order[];
 
   useEffect(() => {
-    if (!isBulkMode || routeTab !== "list" || bulkSelectedIds.length === 0) {
+    if (!isBulkMode || (isMobile && routeTab !== "list") || bulkSelectedIds.length === 0) {
       setRouteLegs([]); setRouteTotals(null); return;
     }
     
-    // Используем any, чтобы TypeScript не ругался на новые методы Яндекса
     const ymapsAny = window.ymaps as any;
     if (!ymapsAny || !ymapsAny.multiRouter) return;
 
@@ -363,31 +368,22 @@ export function DashboardClient({ user }: { user: User }) {
     let multiRoute: any = null;
 
     const timer = setTimeout(() => {
-      // Используем новый современный движок Яндекса (MultiRouter)
       multiRoute = new ymapsAny.multiRouter.MultiRoute({
         referencePoints: points,
         params: { routingMode: routeType === 'mt' ? 'masstransit' : 'auto' }
-      }, {
-        boundsAutoApply: false // Карту не двигаем, нам нужны только сухие цифры
-      });
+      }, { boundsAutoApply: false });
 
-      // Слушаем успешный ответ от Яндекса
       multiRoute.model.events.add('requestsuccess', () => {
         const activeRoute = multiRoute.getActiveRoute();
-        if (!activeRoute) {
-          setIsCalculatingRoute(false);
-          return;
-        }
+        if (!activeRoute) { setIsCalculatingRoute(false); return; }
 
         const cleanHtml = (str: string) => str ? str.replace(/&#160;/g, " ") : "";
 
-        // Общее время и расстояние
         setRouteTotals({
           time: cleanHtml(activeRoute.properties.get("duration")?.text || "—"),
           dist: cleanHtml(activeRoute.properties.get("distance")?.text || "—")
         });
 
-        // Время между конкретными точками (ногами/legs)
         const legsArr: string[] = [];
         activeRoute.getPaths().each((path: any) => {
           legsArr.push(cleanHtml(path.properties.get("duration")?.text || "—"));
@@ -397,47 +393,37 @@ export function DashboardClient({ user }: { user: User }) {
         setIsCalculatingRoute(false);
       });
 
-      // Если Яндекс не смог построить маршрут
       multiRoute.model.events.add('requestfail', (e: any) => {
         console.error("Route calc error:", e.get("error"));
         setIsCalculatingRoute(false);
       });
     }, 800);
 
-    return () => {
-      clearTimeout(timer);
-      if (multiRoute) multiRoute.destroy(); // Убиваем процесс, если логист быстро щелкает кнопки
-    };
-  }, [bulkSelectedIds, routeType, returnToBase, routeTab]);
+    return () => { clearTimeout(timer); if (multiRoute) multiRoute.destroy(); };
+  }, [bulkSelectedIds, routeType, returnToBase, routeTab, isBulkMode, isMobile]);
 
-  // 🔥 Обновленный генератор ссылок
   const generateYandexUrl = (ordersToRoute: Order[], type: "auto" | "mt", rtb: boolean) => {
     const validOrders = ordersToRoute.filter(o => o.lat && o.lng && !o.isInvalid);
     if (validOrders.length === 0) return null;
     if (validOrders.length > 50) validOrders.length = 50;
-
     const rtextArr = [STORE_COORDS, ...validOrders.map(o => `${o.lat},${o.lng}`)];
     if (rtb) rtextArr.push(STORE_COORDS);
-
     return `https://yandex.ru/maps/?rtext=${rtextArr.join("~")}&rtt=${type}`;
   };
 
   const handleOpenRoute = (ordersToRoute: Order[]) => {
     const url = generateYandexUrl(ordersToRoute, routeType, returnToBase);
-    if (url) window.open(url, "_blank");
-    else alert("Нет корректных координат для построения маршрута.");
+    if (url) window.open(url, "_blank"); else alert("Нет координат для построения");
   };
 
   const handleShareRoute = async (ordersToRoute: Order[]) => {
     const url = generateYandexUrl(ordersToRoute, routeType, returnToBase);
-    if (!url) { alert("Нет корректных координат"); return; }
+    if (!url) { alert("Нет координат"); return; }
     try {
-      await navigator.clipboard.writeText(url);
-      alert("✅ Ссылка скопирована!");
+      await navigator.clipboard.writeText(url); alert("✅ Ссылка скопирована!");
     } catch {
       const input = document.createElement("input");
-      input.value = url; document.body.appendChild(input);
-      input.select(); document.execCommand("copy"); document.body.removeChild(input);
+      input.value = url; document.body.appendChild(input); input.select(); document.execCommand("copy"); document.body.removeChild(input);
       alert("✅ Ссылка скопирована!");
     }
   };
@@ -447,18 +433,14 @@ export function DashboardClient({ user }: { user: User }) {
     setBulkSaving(true);
     try {
       const res = await fetch(`/api/routes/assign`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderIds: bulkSelectedIds, courierId: bulkCourier, routeType, returnToBase }) // 🔥 Передаем флаг на сервер
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderIds: bulkSelectedIds, courierId: bulkCourier, routeType, returnToBase })
       });
-
       if (!res.ok) throw new Error("Ошибка сервера");
       setBulkCourier("");
-      await fetchData();
-      alert("✅ Маршрут успешно создан, курьер уведомлен!");
-    } catch {
-      alert("Произошла ошибка при массовом назначении");
-    }
+      await fetchData(); 
+      alert("✅ Маршрут создан, курьер уведомлен!");
+    } catch { alert("Произошла ошибка"); }
     finally { setBulkSaving(false); }
   }
 
@@ -469,7 +451,6 @@ export function DashboardClient({ user }: { user: User }) {
 
   const showLeftPanel = (isListVisible || isDetailVisible) && !isBulkMode;
 
-  // 🔥 Вынесли рендер блока маршрутов, чтобы не дублировать код для Mobile и Desktop
   const renderRouteListPanel = () => (
     <div style={{ maxWidth: 600, margin: isMobile ? 0 : "0 auto", background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: isMobile ? 16 : 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -489,7 +470,7 @@ export function DashboardClient({ user }: { user: User }) {
       </div>
 
       {routeTotals && (
-        <div style={{ fontSize: 13, color: "#1a1a18", background: "#eef3ff", padding: "10px 14px", borderRadius: 8, marginBottom: 16, fontWeight: 600 }}>
+        <div style={{fontSize: 13, color: "#1a1a18", background: "#eef3ff", padding: "10px 14px", borderRadius: 8, marginBottom: 16, fontWeight: 600}}>
           {isCalculatingRoute ? "⏳ Считаем время в пути..." : `🏁 Итого: ~${routeTotals.time} (${routeTotals.dist})`}
         </div>
       )}
@@ -502,10 +483,11 @@ export function DashboardClient({ user }: { user: User }) {
       <div style={{ background: "#fafaf8", padding: 16, borderRadius: 8, marginBottom: 20 }}>
         <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Назначить курьера</div>
         <div style={{ display: "flex", gap: 10, flexDirection: isMobile ? "column" : "row" }}>
-          <select style={{ ...s.nativeSelect, flex: 1 }} value={bulkCourier} onChange={e => setBulkCourier(e.target.value)}>
-            <option value="">— Выберите курьера —</option>
-            {sortedCouriers.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-          </select>
+        <CourierSearchSelect 
+            value={bulkCourier} 
+            onChange={setBulkCourier} 
+            options={sortedCouriers.map(c => ({ value: String(c.id), label: c.label }))} 
+          />
           <button style={{ ...s.actionBtn, width: isMobile ? "100%" : 120, background: bulkCourier && bulkSelectedIds.length > 0 ? '#4a7aff' : '#e8e6df', color: bulkCourier && bulkSelectedIds.length > 0 ? '#fff' : '#a8a49c' }} disabled={!bulkCourier || bulkSelectedIds.length === 0 || bulkSaving} onClick={handleBulkAssign}>
             {bulkSaving ? "..." : "Назначить"}
           </button>
@@ -514,7 +496,7 @@ export function DashboardClient({ user }: { user: User }) {
 
       <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Очередь доставки</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-
+        
         {routeLegs[0] && (
           <div style={{ fontSize: 11, color: "#a8a49c", paddingLeft: 46, paddingBottom: 6 }}>
             ↓ {routeLegs[0]} от базы
@@ -536,7 +518,7 @@ export function DashboardClient({ user }: { user: User }) {
               </div>
               <button onClick={() => toggleBulkSelect(o.id)} style={{ background: "none", border: "none", color: "#d94040", cursor: "pointer", fontSize: 18, padding: 4 }}>×</button>
             </div>
-
+            
             {routeLegs[index + 1] && (
               <div style={{ fontSize: 11, color: "#a8a49c", paddingLeft: 46, paddingBottom: 6, paddingTop: 4 }}>
                 ↓ {routeLegs[index + 1]} {index === selectedRouteOrders.length - 1 && returnToBase ? "возврат на базу" : ""}
@@ -666,40 +648,33 @@ export function DashboardClient({ user }: { user: User }) {
               </div>
             )}
 
-            <div style={{ flex: 1, position: 'relative', display: "flex", flexDirection: "column", minWidth: 0 }}>
+<div style={{ flex: 1, position: 'relative', display: "flex", flexDirection: "row", minWidth: 0 }}>
+              
+              {/* 🔥 Панель маршрута теперь СЛЕВА, строго 600px */}
               {isBulkMode && (
-                <div style={{ display: "flex", background: "#fff", borderBottom: "1px solid #e8e6df", padding: "8px 16px", gap: 8, flexShrink: 0, zIndex: 10 }}>
-                  <button onClick={() => setRouteTab("map")} style={{ ...s.routeTabBtn, background: routeTab === "map" ? "#eef3ff" : "#fff", color: routeTab === "map" ? "#4a7aff" : "#6b6860" }}>📍 Точки на карте</button>
-                  <button onClick={() => setRouteTab("list")} style={{ ...s.routeTabBtn, background: routeTab === "list" ? "#eef3ff" : "#fff", color: routeTab === "list" ? "#4a7aff" : "#6b6860" }}>📋 Маршрут ({bulkSelectedIds.length})</button>
+                <div style={{ width: 600, flexShrink: 0, background: "#f5f4f0", borderRight: "1px solid #e8e6df", zIndex: 10, display: "flex", flexDirection: "column" }}>
+                  <div style={{ flex: 1, overflowY: "auto", overflowX: "auto", padding: 16 }}>
+                    {renderRouteListPanel()}
+                  </div>
                 </div>
               )}
 
-              <div
-                ref={mapRef}
-                style={{
-                  width: '100%', flex: 1,
-                  visibility: routeTab === "list" ? "hidden" : "visible",
-                  position: routeTab === "list" ? "absolute" : "relative",
-                  pointerEvents: routeTab === "list" ? "none" : "auto",
-                  top: 0, left: 0, right: 0, bottom: 0,
-                }}
-              />
-              {isBulkMode && routeTab === "list" && (
-                <div style={{ flex: 1, background: "#f5f4f0", padding: 24, overflowY: "auto" }}>
-                  {renderRouteListPanel()}
-                </div>
-              )}
-
-              {!isBulkMode && (
-                <div style={{ position: 'absolute', top: 12, left: 0, zIndex: 100, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {!isListVisible && (
-                    <button onClick={() => setIsListVisible(true)} style={s.expandSideBtn} title="Показать список">≡</button>
-                  )}
-                  {!isDetailVisible && selectedId && (
-                    <button onClick={() => setIsDetailVisible(true)} style={{ ...s.expandSideBtn, marginTop: isListVisible ? 0 : 4 }} title="Показать карточку">☰</button>
-                  )}
-                </div>
-              )}
+              {/* 🔥 Карта занимает всё оставшееся место СПРАВА */}
+              <div style={{ flex: 1, position: "relative", display: "flex", flexDirection: "column", minWidth: 0 }}>
+                <div ref={mapRef} style={{ flex: 1, width: '100%' }} />
+                
+                {!isBulkMode && (
+                  <div style={{ position: 'absolute', top: 12, left: 0, zIndex: 100, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {!isListVisible && (
+                      <button onClick={() => setIsListVisible(true)} style={s.expandSideBtn} title="Показать список">≡</button>
+                    )}
+                    {!isDetailVisible && selectedId && (
+                      <button onClick={() => setIsDetailVisible(true)} style={{ ...s.expandSideBtn, marginTop: isListVisible ? 0 : 4 }} title="Показать карточку">☰</button>
+                    )}
+                  </div>
+                )}
+              </div>
+              
             </div>
           </div>
         )}
@@ -790,7 +765,7 @@ export function DashboardClient({ user }: { user: User }) {
                     const color = slotColor(o);
                     return (
                       <tr
-                        id={`row-${o.id}`}
+                        id={`row-${o.id}`} 
                         key={o.id}
                         style={{ background: selectedId === o.id ? "#eef3ff" : i % 2 === 0 ? "#fff" : "#fafaf8", cursor: "pointer" }}
                         onClick={() => { setSelectedId(o.id); setIsListVisible(true); setIsDetailVisible(true); }}
@@ -873,7 +848,78 @@ function OrderCard({ order, selected, isBulkMode, isBulkSelected, onSelect }: an
     </div>
   );
 }
+// Компонент выпадающего списка с поиском
+function CourierSearchSelect({ value, onChange, options }: { value: string, onChange: (v: string) => void, options: {value: string | number, label: string}[] }) {
+  const [search, setSearch] = useState("");
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const filtered = options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()));
+  const selectedLabel = options.find(o => String(o.value) === String(value))?.label || "— Выберите курьера —";
+
+  return (
+    <div ref={ref} style={{ position: "relative", flex: 1 }}>
+      <div
+        onClick={() => setOpen(!open)}
+        style={{
+          padding: "8px 12px", borderRadius: 8, border: "1px solid #e8e6df", background: "#fff",
+          fontSize: 13, color: value ? "#1a1a18" : "#a8a49c", cursor: "pointer", display: "flex", 
+          justifyContent: "space-between", alignItems: "center", height: "100%", fontWeight: 600
+        }}
+      >
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedLabel}</span>
+        <span style={{ fontSize: 10, color: "#a8a49c", transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "rotate(0deg)" }}>▼</span>
+      </div>
+
+      {open && (
+        <div style={{
+          position: "absolute", bottom: "calc(100% + 6px)", left: 0, right: 0, // Открываем вверх, чтобы не обрезалось прокруткой
+          background: "#fff", border: "1px solid #e8e6df", borderRadius: 10, boxShadow: "0 -4px 24px rgba(0,0,0,0.12)",
+          zIndex: 500, maxHeight: 280, display: "flex", flexDirection: "column", overflow: "hidden"
+        }}>
+          <div style={{ padding: "8px", borderBottom: "1px solid #f0efe9", background: "#fafaf8" }}>
+            <input
+              autoFocus
+              placeholder="Поиск курьера..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 13, outline: "none" }}
+            />
+          </div>
+          <div style={{ overflowY: "auto", padding: "4px 0", flex: 1 }}>
+            <div
+              onClick={() => { onChange(""); setOpen(false); setSearch(""); }}
+              style={{ padding: "10px 14px", fontSize: 13, cursor: "pointer", color: !value ? "#4a7aff" : "#a8a49c", background: !value ? "#f4f7ff" : "transparent" }}
+            >
+              — Выберите курьера —
+            </div>
+            {filtered.map(o => (
+              <div
+                key={o.value}
+                onClick={() => { onChange(String(o.value)); setOpen(false); setSearch(""); }}
+                style={{ 
+                  padding: "10px 14px", fontSize: 13, cursor: "pointer", borderBottom: "1px solid #f5f4f0",
+                  color: String(o.value) === String(value) ? "#4a7aff" : "#1a1a18", 
+                  background: String(o.value) === String(value) ? "#f4f7ff" : "transparent",
+                  fontWeight: String(o.value) === String(value) ? 700 : 500
+                }}
+              >
+                {o.label}
+              </div>
+            ))}
+            {filtered.length === 0 && <div style={{ padding: "16px", textAlign: "center", fontSize: 13, color: "#a8a49c" }}>Не найдено</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 const s: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", overflow: "hidden" },
   topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 16px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 10, position: "relative", overflowX: "auto" },
