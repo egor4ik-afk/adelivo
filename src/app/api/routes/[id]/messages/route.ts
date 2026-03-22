@@ -3,12 +3,12 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 
-export async function GET(req: Request, context: { params: { id: string } }) {
+export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const user = await getSession();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const routeId = context.params.id;
+    const { id: routeId } = await context.params; // 🔥 Ждем params через await
 
     const messages = await prisma.routeMessage.findMany({
       where: { routeId },
@@ -22,12 +22,12 @@ export async function GET(req: Request, context: { params: { id: string } }) {
   }
 }
 
-export async function POST(req: Request, context: { params: { id: string } }) {
+export async function POST(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const user = await getSession();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const routeId = context.params.id;
+    const { id: routeId } = await context.params; // 🔥 Ждем params через await
     const { text } = await req.json();
     
     if (!text) return NextResponse.json({ error: "Empty text" }, { status: 400 });

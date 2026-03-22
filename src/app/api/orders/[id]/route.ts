@@ -39,9 +39,16 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       await prisma.order.update({ where: { id }, data: updateData });
     }
 
-    // 🔥 ИЗМЕНЕНИЕ: Синхронизируем в CRM, передаем deliveryType
+    // 🔥 ИЗМЕНЕНИЕ: Фильтруем статусы перед отправкой в CRM
+    let crmStatus = body.status;
+    // Если статус "Назначен" или "В пути", мы его в CRM НЕ отправляем
+    if (crmStatus === "ASSIGNED" || crmStatus === "IN_DELIVERY") {
+      crmStatus = undefined;
+    }
+
+    // Вызываем обновление CRM (undefined поля проигнорируются)
     await updateCrmOrder(order.crmId, {
-      status:    body.status    as OrderStatus,
+      status:    crmStatus as OrderStatus | undefined,
       courier:   body.courier,
       opComment: body.opComment,
       address:   body.address,

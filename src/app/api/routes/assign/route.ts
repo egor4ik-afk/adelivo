@@ -2,9 +2,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { notify } from "@/lib/notifications";
-import { updateCrmOrder } from "@/lib/crm"; // 🔥 ДОБАВИЛИ ИМПОРТ
+import { updateCrmOrder } from "@/lib/crm";
 
-const STORE_COORDS = "55.749511,37.596205"; 
+const STORE_COORDS = "55.749511,37.596205"; // База (магазин)
 
 export async function POST(req: Request) {
   try {
@@ -13,7 +13,7 @@ export async function POST(req: Request) {
 
     const orders = await prisma.order.findMany({
       where: { id: { in: orderIds } },
-      select: { id: true, lat: true, lng: true, crmId: true } // 🔥 Добавили crmId для выгрузки в CRM
+      select: { id: true, lat: true, lng: true, crmId: true }
     });
 
     const sortedOrders = orderIds.map((id: string) => orders.find((o) => o.id === id)).filter(Boolean);
@@ -28,11 +28,9 @@ export async function POST(req: Request) {
       data: { name: routeName, link, date: today, courierId: Number(courierId) }
     });
 
-    // 🔥 Ищем имя курьера, чтобы передать его в CRM
     const courierDb = await prisma.courier.findUnique({ where: { id: Number(courierId) } });
     const courierFullName = courierDb?.fullName || "";
 
-    // Обновляем заказы локально И выгружаем в CRM
     for (let i = 0; i < orderIds.length; i++) {
       const orderToUpdate = sortedOrders.find((o: any) => o.id === orderIds[i]);
       
@@ -40,17 +38,16 @@ export async function POST(req: Request) {
         where: { id: orderIds[i] },
         data: { 
           courierId: Number(courierId), 
-          courier: courierFullName, // 🔥 Локально тоже записываем имя, чтобы дашборд сразу обновился
+          courier: courierFullName,
           routeId: newRoute.id, 
           routeOrder: i + 1,
-          status: "ASSIGNED"
+          status: "ASSIGNED" // Локально статус меняем!
         }
       });
 
-      // 🔥 ОТПРАВЛЯЕМ КУРЬЕРА И СТАТУС В RETAILCRM
       if (courierFullName && orderToUpdate?.crmId) {
+        // 🔥 В CRM отправляем ТОЛЬКО курьера, без статуса
         await updateCrmOrder(orderToUpdate.crmId, { 
-          status: "ASSIGNED", 
           courier: courierFullName 
         }).catch(err => console.error(`[CRM Sync] Ошибка для ${orderToUpdate.crmId}:`, err));
       }
@@ -67,6 +64,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, routeId: newRoute.id });
   } catch (e: any) {
+    console.error("Assign route error:", e);
     return NextResponse.json({ error: String(e.message || e) }, { status: 500 });
   }
 }
