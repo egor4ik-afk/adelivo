@@ -1,27 +1,43 @@
-import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
-import { verifyAuthCode, createSession, deleteSession } from "@/lib/auth";
+// src/app/api/auth/verify/route.ts
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const { email, code } = z.object({
-      email: z.string().email(),
-      code: z.string().length(6),
-    }).parse(await req.json());
+    const { email, code, secretCode } = await req.json();
+    if (!email || !code) return NextResponse.json({ error: "Email и код обязательны" }, { status: 400 });
 
-    const user = await verifyAuthCode(email, code);
-    if (!user) return NextResponse.json({ error: "Неверный или истёкший код" }, { status: 401 });
+    const authCode = await prisma.authCode.findFirst({
+      where: { user: { email }, code, used: false, expiresAt: { gt: new Date() } },
+      include: { user: true },
+    });
 
-    await createSession(user.id);
-    return NextResponse.json({ ok: true, user: { id: user.id, email: user.email, role: user.role } });
-  } catch (err) {
-    if (err instanceof z.ZodError) return NextResponse.json({ error: "Неверные данные" }, { status: 400 });
-    console.error("[verify]", err);
-    return NextResponse.json({ error: "Ошибка входа" }, { status: 500 });
+    if (!authCode) return NextResponse.json({ error: "Неверный или просроченный код" }, { status: 400 });
+
+    await prisma.authCode.update({ where: { id: authCode.id }, data: { used: true } });
+
+    let user = authCode.user;
+
+    // 🔥 Если это новая регистрация или апгрейд прав
+    if (secretCode === "0007" && user.role === "COURIER") {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { role: "OPERATOR" }
+      });
+    }
+
+    await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+
+    const sessionToken = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    await prisma.session.create({ data: { token: sessionToken, userId: user.id, expiresAt } });
+
+    const res = NextResponse.json({ ok: true, role: user.role });
+    res.cookies.set("session_token", sessionToken, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", expires: expiresAt });
+
+    return res;
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 500 });
   }
-}
-
-export async function DELETE() {
-  await deleteSession();
-  return NextResponse.json({ ok: true });
 }

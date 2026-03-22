@@ -138,6 +138,12 @@ export async function mapCrmOrder(order: CrmOrder) {
     parsedDate = new Date(rawDate.getTime() - 5 * 60 * 60 * 1000);
   }
 
+  // 🔥 НОВОЕ: Достаем контакты
+  const customerName = [order.firstName, order.lastName].filter(Boolean).join(" ") 
+    || [order.customer?.firstName, order.customer?.lastName].filter(Boolean).join(" ") || null;
+  const customerPhone = order.phone || order.customer?.phones?.[0]?.number || null;
+  const customerEmail = order.email || order.customer?.email || null;
+
   return {
     crmId: String(order.id),
     externalId: order.externalId ?? order.number ?? null,
@@ -156,6 +162,10 @@ export async function mapCrmOrder(order: CrmOrder) {
     slotRaw: slot.text,
     deliveryType: order.delivery?.code ?? null,
     crmCreatedAt: parsedDate,
+    // 🔥 НОВОЕ: Сохраняем в БД
+    customerName,
+    customerPhone,
+    customerEmail,
   };
 }
 
@@ -385,12 +395,17 @@ export interface CrmOrder {
   id: number; number?: string; externalId?: string; status?: string;
   createdAt?: string; customerComment?: string; managerComment?: string;
   firstName?: string; lastName?: string;
+  phone?: string; email?: string;
+  customer?: {
+    firstName?: string; lastName?: string;
+    phones?: Array<{number?: string}>;
+    email?: string;
+  };
   delivery?: {
     time?: unknown; date?: string; cost?: number; code?: string;
     address?: { text?: string };
     service?: { name?: string; code?: string };
     data?: unknown;
-    // RetailCRM стандартный курьер
     courier?: unknown;
   };
   items?: Array<{

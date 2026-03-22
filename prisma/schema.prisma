@@ -28,7 +28,7 @@ enum OrderStatus {
 model User {
   id                String             @id @default(cuid())
   email             String             @unique
-  role              Role               @default(OPERATOR)
+  role              Role               @default(COURIER) // Было OPERATOR  
   firstName         String?
   lastName          String?
   phone             String?
@@ -139,6 +139,9 @@ model Order {
   externalId    String?
   status        OrderStatus @default(NEW)
   address       String?
+  customerName  String?
+  customerPhone String?
+  customerEmail String?
   lat           Float?
   lng           Float?
   price         Float?
