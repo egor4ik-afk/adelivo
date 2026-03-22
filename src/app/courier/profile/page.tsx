@@ -21,10 +21,10 @@ export default function CourierProfilePage() {
   // Генерация ближайших 7 дней для графика
   const days = Array.from({ length: 7 }).map((_, i) => {
     const d = new Date(); d.setDate(d.getDate() + i);
-    return { 
-      date: d.toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }), 
-      dayName: d.toLocaleDateString("ru-RU", { weekday: "short" }), 
-      dayNum: d.getDate() 
+    return {
+      date: d.toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }),
+      dayName: d.toLocaleDateString("ru-RU", { weekday: "short" }),
+      dayNum: d.getDate()
     };
   });
 
@@ -43,13 +43,13 @@ export default function CourierProfilePage() {
 
   const toggleShift = async (date: string) => {
     const isWorking = !myShifts.includes(date);
-    
+
     // Оптимистичное обновление UI (сразу красим кнопку)
     setMyShifts(prev => isWorking ? [...prev, date] : prev.filter(d => d !== date));
-    
+
     try {
       await fetch("/api/courier/my-shifts", {
-        method: "POST", 
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date, isWorking })
       });
@@ -95,7 +95,7 @@ export default function CourierProfilePage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#f5f4f0", overflowY: "auto", paddingBottom: 80 }}>
-      
+
       <div style={{ padding: "24px 16px", background: "#fff", display: "flex", alignItems: "center", gap: 16, borderBottom: "1px solid #e8e6df" }}>
         <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#4a7aff", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 700 }}>
           {(profile.firstName?.[0] || "") + (profile.lastName?.[0] || "")}
@@ -111,7 +111,7 @@ export default function CourierProfilePage() {
       </div>
 
       <div style={{ padding: 16 }}>
-        
+
         {/* Блок Графика работы (теперь 7 дней) */}
         <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
           <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", margin: "0 0 12px 0", textTransform: "uppercase" }}>График (Ближайшие 7 дней)</h2>
@@ -119,15 +119,15 @@ export default function CourierProfilePage() {
             {days.map((d, i) => {
               const isWorking = myShifts.includes(d.date);
               return (
-                <div 
-                  key={d.date} 
-                  onClick={() => toggleShift(d.date)} 
-                  style={{ 
-                    display: "flex", flexDirection: "column", alignItems: "center", padding: "10px 0", 
+                <div
+                  key={d.date}
+                  onClick={() => toggleShift(d.date)}
+                  style={{
+                    display: "flex", flexDirection: "column", alignItems: "center", padding: "10px 0",
                     borderRadius: 8, cursor: "pointer", transition: "all 0.2s",
-                    background: isWorking ? "#10b981" : "#f5f4f0", 
-                    color: isWorking ? "#fff" : "#1a1a18", 
-                    border: i === 0 && !isWorking ? "1px solid #1a1a18" : "1px solid transparent" 
+                    background: isWorking ? "#10b981" : "#f5f4f0",
+                    color: isWorking ? "#fff" : "#1a1a18",
+                    border: i === 0 && !isWorking ? "1px solid #1a1a18" : "1px solid transparent"
                   }}
                 >
                   <span style={{ fontSize: 11, textTransform: "uppercase", opacity: isWorking ? 0.9 : 0.5, fontWeight: 600 }}>{d.dayName}</span>
@@ -141,7 +141,7 @@ export default function CourierProfilePage() {
         {/* Настройки и контакты */}
         <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
           <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", margin: "0 0 12px 0", textTransform: "uppercase" }}>Настройки</h2>
-          
+
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: "1px solid #f0efe9" }}>
             <div style={{ flex: 1, paddingRight: 16 }}>
               <div style={{ fontSize: 13, color: "#a8a49c" }}>Номер телефона</div>
@@ -159,13 +159,28 @@ export default function CourierProfilePage() {
             <div>
               <div style={{ fontSize: 13, color: "#a8a49c" }}>Push-уведомления</div>
               <div style={{ fontSize: 13, color: isSubscribed ? "#10b981" : "#d94040", marginTop: 4, fontWeight: 600 }}>
-                {isSubscribed ? "Включены" : "Выключены"}
+                {pushState === "loading" ? "..." : pushState === "unsupported" ? "Не поддерживается" : isSubscribed ? "Включены" : "Выключены"}
               </div>
             </div>
-            {isSubscribed ? (
-              <button onClick={unsubscribe} style={{ background: "none", border: "1px solid #e8e6df", padding: "10px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, color: "#6b6860", cursor: "pointer", touchAction: "manipulation" }}>Отключить</button>
-            ) : (
-              <button onClick={handleSubscribe} style={{ background: "#1a1a18", border: "none", color: "#fff", padding: "10px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", touchAction: "manipulation" }}>Включить</button>
+            {pushState !== "unsupported" && pushState !== "loading" && (
+              <label style={{ position: "relative", display: "inline-block", width: 44, height: 24, cursor: "pointer", touchAction: "manipulation" }}>
+                <input
+                  type="checkbox"
+                  checked={isSubscribed}
+                  onChange={isSubscribed ? unsubscribe : subscribe}
+                  style={{ opacity: 0, width: 0, height: 0, position: "absolute" }}
+                />
+                <span style={{
+                  position: "absolute", inset: 0, borderRadius: 24,
+                  background: isSubscribed ? "#10b981" : "#d1d5db",
+                  transition: "background 0.2s"
+                }} />
+                <span style={{
+                  position: "absolute", top: 3, left: isSubscribed ? 23 : 3,
+                  width: 18, height: 18, borderRadius: "50%", background: "#fff",
+                  boxShadow: "0 1px 4px rgba(0,0,0,0.2)", transition: "left 0.2s"
+                }} />
+              </label>
             )}
           </div>
         </div>

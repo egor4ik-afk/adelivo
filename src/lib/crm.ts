@@ -239,7 +239,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
   if (existing) {
     const dbAddr = existing.address?.trim() || "";
     const crmAddr = data.address?.trim() || "";
-
+  
     if (dbAddr !== crmAddr) {
       updateFields.address       = crmAddr || null;
       updateFields.geocoded      = false;
@@ -255,6 +255,16 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       updateFields.isInvalid     = existing.isInvalid;
       updateFields.invalidReason = existing.invalidReason;
     }
+  
+    // 🔥 Защита: NEW из CRM не перезаписывает ASSIGNED / IN_DELIVERY
+    const protectedStatuses: OrderStatus[] = [OrderStatus.ASSIGNED, OrderStatus.IN_DELIVERY];
+    if (
+      protectedStatuses.includes(existing.status) &&
+      updateFields.status === OrderStatus.NEW
+    ) {
+      updateFields.status = existing.status;
+    }
+  
 
     const hasCoreChanges =
       (existing.crmStatus  ?? "") !== (updateFields.crmStatus  ?? "") ||

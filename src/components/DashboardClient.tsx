@@ -378,22 +378,22 @@ export function DashboardClient({ user }: { user: User }) {
     if (!bulkCourier || bulkSelectedIds.length === 0) return;
     setBulkSaving(true);
     try {
-      const res = await fetch(`/api/routes/assign`, { 
-        method: "POST", 
-        headers: { "Content-Type": "application/json" }, 
+      const res = await fetch(`/api/routes/assign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         // 🔥 Добавили routeType, чтобы навигатор строился для авто или транспорта!
-        body: JSON.stringify({ orderIds: bulkSelectedIds, courierId: bulkCourier, routeType }) 
+        body: JSON.stringify({ orderIds: bulkSelectedIds, courierId: bulkCourier, routeType })
       });
-      
+
       if (!res.ok) throw new Error("Ошибка сервера");
 
       setBulkCourier(""); // Сбрасываем только выбор курьера
       // 🔥 УБРАЛИ очистку списка и закрытие окна (setIsBulkMode и setBulkSelectedIds)
-      
+
       await fetchData(); // Данные обновятся, заказы поменяют статус на "Назначен"
       alert("✅ Маршрут успешно создан, курьер уведомлен!");
-    } catch { 
-      alert("Произошла ошибка при массовом назначении"); 
+    } catch {
+      alert("Произошла ошибка при массовом назначении");
     }
     finally { setBulkSaving(false); }
   }
@@ -546,8 +546,16 @@ export function DashboardClient({ user }: { user: User }) {
               )}
 
               {/* Карта — всегда в DOM, скрывается через display */}
-              <div ref={mapRef} style={{ width: '100%', flex: 1, display: routeTab === "list" ? "none" : "block" }} />
-
+              <div
+                ref={mapRef}
+                style={{
+                  width: '100%', flex: 1,
+                  visibility: routeTab === "list" ? "hidden" : "visible",
+                  position: routeTab === "list" ? "absolute" : "relative",
+                  pointerEvents: routeTab === "list" ? "none" : "auto",
+                  top: 0, left: 0, right: 0, bottom: 0,
+                }}
+              />
               {isBulkMode && routeTab === "list" && (
                 <div style={{ flex: 1, background: "#f5f4f0", padding: 24, overflowY: "auto" }}>
                   <div style={{ maxWidth: 600, margin: "0 auto", background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 20 }}>
@@ -626,8 +634,11 @@ export function DashboardClient({ user }: { user: User }) {
               ref={mapRef}
               style={{
                 ...sm.map,
-                display: (mobileView === "panels" && !isBulkMode) || (isBulkMode && routeTab === "list") ? "none" : "block",
+                visibility: ((mobileView === "panels" && !isBulkMode) || (isBulkMode && routeTab === "list")) ? "hidden" : "visible",
+                position: ((mobileView === "panels" && !isBulkMode) || (isBulkMode && routeTab === "list")) ? "absolute" : "relative",
+                pointerEvents: ((mobileView === "panels" && !isBulkMode) || (isBulkMode && routeTab === "list")) ? "none" : "auto",
                 flex: (mobileView === "map" || (isBulkMode && routeTab === "map")) ? 1 : "0 0 45%",
+                top: 0, left: 0,
               }}
             />
 
