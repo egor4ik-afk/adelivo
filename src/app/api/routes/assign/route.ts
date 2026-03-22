@@ -2,18 +2,18 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { notify } from "@/lib/notifications";
+import { updateCrmOrder } from "@/lib/crm"; // 🔥 ДОБАВИЛИ ИМПОРТ
 
-const STORE_COORDS = "55.749511,37.596205"; // База (магазин)
+const STORE_COORDS = "55.749511,37.596205"; 
 
 export async function POST(req: Request) {
   try {
     const { orderIds, courierId, routeType = "auto" } = await req.json();
     if (!orderIds?.length || !courierId) return NextResponse.json({ error: "Неверные данные" }, { status: 400 });
 
-    // 1. Получаем заказы
     const orders = await prisma.order.findMany({
       where: { id: { in: orderIds } },
-      select: { id: true, lat: true, lng: true }
+      select: { id: true, lat: true, lng: true, crmId: true } // 🔥 Добавили crmId для выгрузки в CRM
     });
 
     const sortedOrders = orderIds.map((id: string) => orders.find((o) => o.id === id)).filter(Boolean);
@@ -22,50 +22,51 @@ export async function POST(req: Request) {
     const link = `https://yandex.ru/maps/?rtext=${rtext}&rtt=${routeType}`;
 
     const routeName = `M-${Math.floor(1000 + Math.random() * 9000)}`;
-    
-    // Получаем текущую дату в формате YYYY-MM-DD
     const today = new Date().toISOString().split('T')[0];
 
-    // 2. Создаем маршрут (БЕЗ использования транзакции для надежности)
     const newRoute = await prisma.route.create({
-      data: {
-        name: routeName,
-        link,
-        date: today, // 🔥 Обязательное поле добавлено
-        courierId: Number(courierId),
-      }
+      data: { name: routeName, link, date: today, courierId: Number(courierId) }
     });
 
-    // 3. Обновляем заказы
+    // 🔥 Ищем имя курьера, чтобы передать его в CRM
+    const courierDb = await prisma.courier.findUnique({ where: { id: Number(courierId) } });
+    const courierFullName = courierDb?.fullName || "";
+
+    // Обновляем заказы локально И выгружаем в CRM
     for (let i = 0; i < orderIds.length; i++) {
+      const orderToUpdate = sortedOrders.find((o: any) => o.id === orderIds[i]);
+      
       await prisma.order.update({
         where: { id: orderIds[i] },
         data: { 
           courierId: Number(courierId), 
+          courier: courierFullName, // 🔥 Локально тоже записываем имя, чтобы дашборд сразу обновился
           routeId: newRoute.id, 
           routeOrder: i + 1,
           status: "ASSIGNED"
         }
       });
+
+      // 🔥 ОТПРАВЛЯЕМ КУРЬЕРА И СТАТУС В RETAILCRM
+      if (courierFullName && orderToUpdate?.crmId) {
+        await updateCrmOrder(orderToUpdate.crmId, { 
+          status: "ASSIGNED", 
+          courier: courierFullName 
+        }).catch(err => console.error(`[CRM Sync] Ошибка для ${orderToUpdate.crmId}:`, err));
+      }
     }
 
-    // 4. Отправляем уведомление
-    const courierDb = await prisma.courier.findUnique({ where: { id: Number(courierId) } });
     if (courierDb?.email) {
       const courierUser = await prisma.user.findUnique({ where: { email: courierDb.email } });
       if (courierUser) {
         await notify({ 
-          type: "route.assigned", 
-          userId: courierUser.id, 
-          routeId: newRoute.name, 
-          pointsCount: orderIds.length 
-        }).catch(console.error); // Игнорируем ошибки пушей, чтобы не ломать логику
+          type: "route.assigned", userId: courierUser.id, routeId: newRoute.name, pointsCount: orderIds.length 
+        }).catch(console.error); 
       }
     }
 
     return NextResponse.json({ success: true, routeId: newRoute.id });
   } catch (e: any) {
-    console.error("Assign route error:", e);
     return NextResponse.json({ error: String(e.message || e) }, { status: 500 });
   }
 }
