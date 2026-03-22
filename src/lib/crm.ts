@@ -254,14 +254,14 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       updateFields.invalidReason = existing.invalidReason;
     }
   
-    // 🔥 АБСОЛЮТНАЯ ЗАЩИТА: Полностью игнорируем статус NEW из CRM для существующих заказов
-    if (updateFields.status === OrderStatus.NEW) {
-      updateFields.status = existing.status;
-      updateFields.courierId = existing.courierId;
-      updateFields.courier = existing.courier;
-    } 
-    // Защита от случайного отката из "В пути" в "Назначен" (если CRM вдруг пришлет такое)
-    else if (existing.status === OrderStatus.IN_DELIVERY && updateFields.status === OrderStatus.ASSIGNED) {
+    // 🔥 ЖЕЛЕЗОБЕТОННАЯ ЗАЩИТА:
+    // Если заказ в нашей БД "Назначен" или "В пути" - жестко блокируем изменения
+    // этих полей из CRM, чтобы ни один статус (включая NEW) или пустой курьер 
+    // не затер нашу локальную логистику.
+    if (
+      existing.status === OrderStatus.ASSIGNED || 
+      existing.status === OrderStatus.IN_DELIVERY
+    ) {
       updateFields.status = existing.status;
       updateFields.courierId = existing.courierId;
       updateFields.courier = existing.courier;
