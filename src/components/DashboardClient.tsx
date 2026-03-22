@@ -342,14 +342,16 @@ export function DashboardClient({ user }: { user: User }) {
   }, [selectedId, isBulkMode, orders]);
 
   // 🔥 ФОНОВЫЙ РАСЧЕТ ETA МАРШРУТА
-  // 🔥 ФОНОВЫЙ РАСЧЕТ ETA МАРШРУТА
   const selectedRouteOrders = bulkSelectedIds.map(id => orders.find(o => o.id === id)).filter(Boolean) as Order[];
 
   useEffect(() => {
     if (!isBulkMode || routeTab !== "list" || bulkSelectedIds.length === 0) {
       setRouteLegs([]); setRouteTotals(null); return;
     }
-    if (!window.ymaps || !window.ymaps.route) return;
+    
+    // Используем any, чтобы TypeScript не ругался на новые методы Яндекса
+    const ymapsAny = window.ymaps as any;
+    if (!ymapsAny || !ymapsAny.multiRouter) return;
 
     const validOrders = selectedRouteOrders.filter(o => o.lat && o.lng);
     if (validOrders.length === 0) return;
@@ -358,23 +360,54 @@ export function DashboardClient({ user }: { user: User }) {
     if (returnToBase) points.push([STORE_LAT, STORE_LNG]);
 
     setIsCalculatingRoute(true);
+    let multiRoute: any = null;
+
     const timer = setTimeout(() => {
-      window.ymaps.route(points, { routingMode: routeType === 'mt' ? 'masstransit' : 'auto' })
-        .then((route: any) => {
-          setRouteTotals({ time: route.getHumanTime(), dist: route.getHumanLength() });
-          const paths = route.getPaths();
-          const legsArr: string[] = [];
-          for(let i = 0; i < paths.getLength(); i++) legsArr.push(paths.get(i).getHumanTime());
-          setRouteLegs(legsArr);
-          setIsCalculatingRoute(false); // 🔥 Перенесли сюда из finally
-        })
-        .catch((e: any) => {
-          console.error("Route calc error", e);
-          setIsCalculatingRoute(false); // 🔥 И сюда
+      // Используем новый современный движок Яндекса (MultiRouter)
+      multiRoute = new ymapsAny.multiRouter.MultiRoute({
+        referencePoints: points,
+        params: { routingMode: routeType === 'mt' ? 'masstransit' : 'auto' }
+      }, {
+        boundsAutoApply: false // Карту не двигаем, нам нужны только сухие цифры
+      });
+
+      // Слушаем успешный ответ от Яндекса
+      multiRoute.model.events.add('requestsuccess', () => {
+        const activeRoute = multiRoute.getActiveRoute();
+        if (!activeRoute) {
+          setIsCalculatingRoute(false);
+          return;
+        }
+
+        const cleanHtml = (str: string) => str ? str.replace(/&#160;/g, " ") : "";
+
+        // Общее время и расстояние
+        setRouteTotals({
+          time: cleanHtml(activeRoute.properties.get("duration")?.text || "—"),
+          dist: cleanHtml(activeRoute.properties.get("distance")?.text || "—")
         });
+
+        // Время между конкретными точками (ногами/legs)
+        const legsArr: string[] = [];
+        activeRoute.getPaths().each((path: any) => {
+          legsArr.push(cleanHtml(path.properties.get("duration")?.text || "—"));
+        });
+        
+        setRouteLegs(legsArr);
+        setIsCalculatingRoute(false);
+      });
+
+      // Если Яндекс не смог построить маршрут
+      multiRoute.model.events.add('requestfail', (e: any) => {
+        console.error("Route calc error:", e.get("error"));
+        setIsCalculatingRoute(false);
+      });
     }, 800);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      if (multiRoute) multiRoute.destroy(); // Убиваем процесс, если логист быстро щелкает кнопки
+    };
   }, [bulkSelectedIds, routeType, returnToBase, routeTab]);
 
   // 🔥 Обновленный генератор ссылок
