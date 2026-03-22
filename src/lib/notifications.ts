@@ -5,7 +5,6 @@ import { sendNewOrderAlert, sendOrderUpdateAlert, sendInvalidAddressAlert } from
 
 export type NotificationEvent =
   | { type: "order.new"; order: OrderPayload }
-  // Добавили поле changes
   | { type: "order.updated"; order: OrderPayload; previousStatus?: string; changes?: any }
   | { type: "address.invalid"; orders: InvalidOrderPayload[] }
   | { type: "route.assigned"; userId: string; routeId: string; pointsCount: number };
@@ -31,8 +30,6 @@ interface InvalidOrderPayload {
 
 const STATUS_LABELS: Record<string, string> = {
   NEW: "Новый", 
-  GEOCODED: "Новый", 
-  INVALID_ADDRESS: "Новый",
   ASSIGNED: "Назначен",
   IN_DELIVERY: "В пути", 
   DELIVERED: "Доставлен",
@@ -91,20 +88,57 @@ async function sendIndividualPushes(event: NotificationEvent) {
     // ── ЛОГИКА ДЛЯ ОПЕРАТОРОВ / АДМИНОВ ──
     if (user.role === "OPERATOR" || user.role === "ADMIN") {
       if (event.type === "order.new" && user.notifyNewOrder) {
-        shouldSend = true; title = `🌸 Новый заказ: ${event.order.externalId ?? "—"}`;
+        shouldSend = true; 
+        title = `🌸 Новый заказ: ${event.order.externalId ?? "—"}`;
         bodyTexts.push(event.order.address ?? "Без адреса");
       } 
       else if (event.type === "order.updated" && event.changes) {
-        shouldSend = true; title = `📦 Заказ ${event.order.externalId ?? "—"} обновлён`;
-        if (event.changes.statusChanged && user.notifyStatus) bodyTexts.push(`Статус изменен`);
-        // ... (остальные проверки оператора)
+        // Проверяем каждую настройку оператора и формируем детальный текст
+        if (event.changes.statusChanged && user.notifyStatus) {
+          shouldSend = true;
+          const oldLabel = event.previousStatus ? statusLabel(event.previousStatus) : "—";
+          const newLabel = statusLabel(event.order.status);
+          if (oldLabel !== newLabel) {
+            bodyTexts.push(`Статус: ${oldLabel} ➔ ${newLabel}`);
+          }
+        }
+        if (event.changes.courierChanged && user.notifyCourier) {
+          shouldSend = true;
+          bodyTexts.push(`Курьер: ${event.order.courier || "Снят"}`);
+        }
+        if (event.changes.addressChanged && user.notifyAddress) {
+          shouldSend = true;
+          bodyTexts.push(`Адрес: ${event.order.address || "Удален"}`);
+        }
+        if (event.changes.slotChanged && user.notifyTime) {
+          shouldSend = true;
+          bodyTexts.push(`Время: ${event.order.slotRaw || "—"}`);
+        }
+        if (event.changes.commentChanged && user.notifyComment) {
+          shouldSend = true;
+          bodyTexts.push(`Коммент: ${event.order.comment || "—"}`);
+        }
+        if (event.changes.opCommentChanged && user.notifyOpComment) {
+          shouldSend = true;
+          bodyTexts.push(`Заметка: ${event.order.opComment || "—"}`);
+        }
+        if (event.changes.itemsChanged && user.notifyItems) {
+          shouldSend = true;
+          bodyTexts.push(`Состав изменен`);
+        }
+
+        if (shouldSend) {
+          title = `📦 Заказ ${event.order.externalId ?? "—"} обновлён`;
+        }
       } 
       else if (event.type === "address.invalid") {
-        shouldSend = true; title = `⚠️ Ошибка геокодинга`; bodyTexts.push(`Не найдено адресов: ${event.orders.length}`);
+        shouldSend = true; 
+        title = `⚠️ Ошибка геокодинга`; 
+        bodyTexts.push(`Не найдено адресов: ${event.orders.length}`);
       }
     }
 
-    // ── ЛОГИКА ДЛЯ КУРЬЕРОВ (Изолированная) ──
+    // ── ЛОГИКА ДЛЯ КУРЬЕРОВ (Изолированная, без изменений) ──
     if (user.role === "COURIER") {
       // 1. Пуш о новом маршруте (строго ему)
       if (event.type === "route.assigned" && event.userId === user.id) {
@@ -116,9 +150,7 @@ async function sendIndividualPushes(event: NotificationEvent) {
       
       // 2. Пуш об обновлении заказа (только если заказ висит на нем)
       if (event.type === "order.updated" && event.changes) {
-        // Проверяем, привязан ли этот заказ к курьеру через email пользователя
         const courierDb = await prisma.courier.findFirst({ where: { email: user.email } });
-        
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const eventOrderCourierId = (event.order as any).courierId; 
 

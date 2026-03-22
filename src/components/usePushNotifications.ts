@@ -1,230 +1,126 @@
-// src/lib/notifications.ts
-import webpush from "web-push";
-import { prisma } from "@/lib/prisma";
-import { sendNewOrderAlert, sendOrderUpdateAlert, sendInvalidAddressAlert } from "@/lib/mailer";
+// src/components/usePushNotifications.ts
+"use client";
 
-export type NotificationEvent =
-  | { type: "order.new"; order: OrderPayload }
-  | { type: "order.updated"; order: OrderPayload; previousStatus?: string; changes?: any }
-  | { type: "address.invalid"; orders: InvalidOrderPayload[] }
-  | { type: "route.assigned"; userId: string; routeId: string; pointsCount: number };
+import { useState, useEffect } from "react";
 
-interface OrderPayload {
-  id: string;
-  crmId: string;
-  externalId: string | null;
-  address: string | null;
-  slotRaw: string | null;
-  courier: string | null;
-  items: string | null;
-  status: string;
-  comment?: string | null;
-  opComment?: string | null;
+export type PushState = "loading" | "unsupported" | "denied" | "default" | "granted";
+
+function urlBase64ToUint8Array(base64: string): ArrayBuffer {
+  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
+  const b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = window.atob(b64);
+  const arr = new Uint8Array([...raw].map((c) => c.charCodeAt(0)));
+  return arr.buffer.slice(0) as ArrayBuffer;
 }
 
-interface InvalidOrderPayload {
-  externalId: string | null;
-  address: string | null;
-  reason: string;
-}
+export async function doSubscribe(): Promise<boolean> {
+  if (!("Notification" in window) || !("serviceWorker" in navigator)) return false;
 
-const STATUS_LABELS: Record<string, string> = {
-  NEW: "Новый", 
-  ASSIGNED: "Назначен",
-  IN_DELIVERY: "В пути", 
-  DELIVERED: "Доставлен",
-  RETURNED: "Возврат", 
-  CANCELLED: "Отменён",
-};
+  const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+  await navigator.serviceWorker.ready;
 
-function statusLabel(s: string) {
-  return STATUS_LABELS[s] ?? s;
-}
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") return false;
 
-function initWebPush(): boolean {
-  const mailto = process.env.VAPID_MAILTO;
-  const pubKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-  const privKey = process.env.VAPID_PRIVATE_KEY;
+  const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  if (!vapidKey) { console.error("[Push] VAPID key не задан"); return false; }
 
-  if (!mailto || !pubKey || !privKey) {
-    console.warn("[Push] VAPID keys not set");
-    return false;
-  }
-
-  const subject = mailto.startsWith("mailto:") ? mailto : `mailto:${mailto}`;
-
-  try {
-    webpush.setVapidDetails(subject, pubKey, privKey);
+  // Проверяем — может подписка уже есть
+  const existing = await reg.pushManager.getSubscription();
+  if (existing) {
+    // Переотправляем на сервер на случай если протухла
+    await fetch("/api/push/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(existing.toJSON()),
+    });
     return true;
-  } catch (e) {
-    console.error("[Push] setVapidDetails error:", e);
-    return false;
   }
-}
 
-async function log(type: string, channel: string, payload: object, success: boolean, error?: string) {
-  await prisma.notificationLog
-    .create({ data: { type, channel, payload: JSON.stringify(payload), success, error } })
-    .catch(() => {});
-}
-
-// ── ИНДИВИДУАЛЬНАЯ РАССЫЛКА PUSH ──
-async function sendIndividualPushes(event: NotificationEvent) {
-  if (!initWebPush()) return;
-
-  const users = await prisma.user.findMany({
-    include: { pushSubscriptions: true },
+  const sub = await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(vapidKey),
   });
 
-  const expiredEndpoints: string[] = [];
+  const res = await fetch("/api/push/subscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(sub.toJSON()),
+  });
 
-  for (const user of users) {
-    if (!user.pushSubscriptions.length) continue;
-
-    let shouldSend = false;
-    let title = "";
-    const bodyTexts: string[] = [];
-
-    // ── ЛОГИКА ДЛЯ ОПЕРАТОРОВ / АДМИНОВ ──
-    if (user.role === "OPERATOR" || user.role === "ADMIN") {
-      if (event.type === "order.new" && user.notifyNewOrder) {
-        shouldSend = true; 
-        title = `🌸 Новый заказ: ${event.order.externalId ?? "—"}`;
-        bodyTexts.push(event.order.address ?? "Без адреса");
-      } 
-      else if (event.type === "order.updated" && event.changes) {
-        // Проверяем каждую настройку оператора и формируем детальный текст
-        if (event.changes.statusChanged && user.notifyStatus) {
-          shouldSend = true;
-          const oldLabel = event.previousStatus ? statusLabel(event.previousStatus) : "—";
-          const newLabel = statusLabel(event.order.status);
-          if (oldLabel !== newLabel) {
-            bodyTexts.push(`Статус: ${oldLabel} ➔ ${newLabel}`);
-          }
-        }
-        if (event.changes.courierChanged && user.notifyCourier) {
-          shouldSend = true;
-          bodyTexts.push(`Курьер: ${event.order.courier || "Снят"}`);
-        }
-        if (event.changes.addressChanged && user.notifyAddress) {
-          shouldSend = true;
-          bodyTexts.push(`Адрес: ${event.order.address || "Удален"}`);
-        }
-        if (event.changes.slotChanged && user.notifyTime) {
-          shouldSend = true;
-          bodyTexts.push(`Время: ${event.order.slotRaw || "—"}`);
-        }
-        if (event.changes.commentChanged && user.notifyComment) {
-          shouldSend = true;
-          bodyTexts.push(`Коммент: ${event.order.comment || "—"}`);
-        }
-        if (event.changes.opCommentChanged && user.notifyOpComment) {
-          shouldSend = true;
-          bodyTexts.push(`Заметка: ${event.order.opComment || "—"}`);
-        }
-        if (event.changes.itemsChanged && user.notifyItems) {
-          shouldSend = true;
-          bodyTexts.push(`Состав изменен`);
-        }
-
-        if (shouldSend) {
-          title = `📦 Заказ ${event.order.externalId ?? "—"} обновлён`;
-        }
-      } 
-      else if (event.type === "address.invalid") {
-        shouldSend = true; 
-        title = `⚠️ Ошибка геокодинга`; 
-        bodyTexts.push(`Не найдено адресов: ${event.orders.length}`);
-      }
-    }
-
-    // ── ЛОГИКА ДЛЯ КУРЬЕРОВ (Изолированная, без изменений) ──
-    if (user.role === "COURIER") {
-      // 1. Пуш о новом маршруте (строго ему)
-      if (event.type === "route.assigned" && event.userId === user.id) {
-        shouldSend = true;
-        title = `🗺 Новый маршрут ${event.routeId}`;
-        bodyTexts.push(`Вам назначено точек: ${event.pointsCount}`);
-        bodyTexts.push(`Зайдите в раздел "Маршруты"`);
-      }
-      
-      // 2. Пуш об обновлении заказа (только если заказ висит на нем)
-      if (event.type === "order.updated" && event.changes) {
-        const courierDb = await prisma.courier.findFirst({ where: { email: user.email } });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const eventOrderCourierId = (event.order as any).courierId; 
-
-        if (courierDb && eventOrderCourierId === courierDb.id) {
-          if (event.changes.addressChanged || event.changes.slotChanged || event.changes.commentChanged) {
-            shouldSend = true;
-            title = `⚠ Изменения в заказе ${event.order.externalId ?? "—"}`;
-            if (event.changes.addressChanged) bodyTexts.push(`Новый адрес: ${event.order.address}`);
-            if (event.changes.slotChanged) bodyTexts.push(`Новое время: ${event.order.slotRaw}`);
-            if (event.changes.commentChanged) bodyTexts.push(`Новый коммент: ${event.order.comment}`);
-          }
-        }
-      }
-    }
-
-    if (shouldSend && title) {
-      const payload = JSON.stringify({
-        title, body: bodyTexts.join("\n"), notifyTabs: true, timestamp: Date.now(),
-      });
-
-      for (const sub of user.pushSubscriptions) {
-        try {
-          await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload);
-        } catch (e: any) {
-          if (e.statusCode === 410 || e.statusCode === 404) expiredEndpoints.push(sub.endpoint);
-        }
-      }
-    }
-  }
-
-  if (expiredEndpoints.length > 0) {
-    await prisma.pushSubscription.deleteMany({ where: { endpoint: { in: expiredEndpoints } } });
-  }
+  return res.ok;
 }
 
-export async function notify(event: NotificationEvent) {
-  // Отправляем PUSH (индивидуально)
-  await sendIndividualPushes(event).catch(console.error);
+export function usePushNotifications() {
+  const [state, setState] = useState<PushState>("loading");
+  const [needsBanner, setNeedsBanner] = useState(false);
 
-  // Отправляем Emails и пишем логи (ОДИН раз на событие, как и было)
-  switch (event.type) {
-    case "order.new": {
-      const { order } = event;
-      try {
-        await sendNewOrderAlert(order);
-        await log("order.new", "email", order, true);
-      } catch (e) {
-        await log("order.new", "email", order, false, String(e));
-      }
-      break;
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!("Notification" in window) || !("serviceWorker" in navigator)) {
+      setState("unsupported");
+      return;
     }
-    case "order.updated": {
-      const { order, previousStatus, changes } = event;
-      // Если поменялся публичный статус, шлем письмо
-      if (changes?.statusChanged && previousStatus && statusLabel(previousStatus) !== statusLabel(order.status)) {
-        try {
-          await sendOrderUpdateAlert({ ...order, previousStatus });
-          await log("order.updated", "email", { order, previousStatus }, true);
-        } catch (e) {
-          await log("order.updated", "email", { order, previousStatus }, false, String(e));
+
+    const perm = Notification.permission as PushState;
+    setState(perm);
+
+    if (perm === "granted") {
+      // Подписка уже есть — проверяем что жива
+      doSubscribe().catch(console.error);
+      return;
+    }
+
+    if (perm === "denied") return;
+
+    // perm === "default" — пробуем автоподписку
+    doSubscribe()
+      .then(ok => {
+        if (ok) {
+          setState("granted");
+          setNeedsBanner(false);
+        } else {
+          setNeedsBanner(true);
         }
+      })
+      .catch(() => {
+        setNeedsBanner(true);
+      });
+  }, []);
+
+  const subscribe = async () => {
+    try {
+      const ok = await doSubscribe();
+      if (ok) {
+        setState("granted");
+        setNeedsBanner(false);
+      } else {
+        setState(Notification.permission as PushState);
       }
-      break;
+    } catch (error) {
+      console.error("[Push] Ошибка подписки:", error);
+      setState(Notification.permission as PushState);
     }
-    case "address.invalid": {
-      const { orders } = event;
-      if (orders.length === 0) break;
-      try {
-        await sendInvalidAddressAlert(orders);
-        await log("address.invalid", "email", { count: orders.length }, true);
-      } catch (e) {
-        await log("address.invalid", "email", { count: orders.length }, false, String(e));
+  };
+
+  const unsubscribe = async () => {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration("/sw.js");
+      const sub = await reg?.pushManager.getSubscription();
+      if (sub) {
+        await fetch("/api/push/subscribe", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint: sub.endpoint }),
+        });
+        await sub.unsubscribe();
       }
-      break;
+      setState("default");
+      setNeedsBanner(true);
+    } catch (error) {
+      console.error("[Push] Ошибка отписки:", error);
     }
-  }
+  };
+
+  return { state, subscribe, unsubscribe, needsBanner };
 }
