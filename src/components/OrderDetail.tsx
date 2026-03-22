@@ -1,6 +1,8 @@
+// src/components/OrderDetail.tsx
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { Order, STATUS_OPTIONS, slotColor } from "@/lib/constants";
+import { RouteChat } from "./RouteChat"; // 🔥 ДОБАВИЛИ ИМПОРТ ЧАТА
 
 interface Props {
   selected: Order | null;
@@ -30,7 +32,6 @@ function CourierSelect({ value, onChange, couriers }: {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Ищем по имени курьера (value = fullName)
   const filtered = couriers.filter(c =>
     c.value.toLowerCase().includes(search.toLowerCase()) ||
     c.label.toLowerCase().includes(search.toLowerCase())
@@ -64,7 +65,6 @@ function CourierSelect({ value, onChange, couriers }: {
           boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 500,
           maxHeight: 220, display: "flex", flexDirection: "column",
         }}>
-          {/* Поиск */}
           <div style={{ padding: "6px 8px", borderBottom: "1px solid #f0efe9", flexShrink: 0 }}>
             <input
               autoFocus
@@ -77,7 +77,6 @@ function CourierSelect({ value, onChange, couriers }: {
               }}
             />
           </div>
-          {/* Список */}
           <div style={{ overflowY: "auto", flex: 1 }}>
             <div
               onMouseDown={() => { onChange(""); setOpen(false); }}
@@ -125,7 +124,6 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
   const [saving,      setSaving]      = useState(false);
   const [saved,       setSaved]       = useState(false);
 
-  // Снимок при открытии — защита от сброса hasChanges при авто-обновлении
   const snapshot = useRef<{ status: string; courier: string; opComment: string; address: string } | null>(null);
 
   useEffect(() => {
@@ -141,7 +139,7 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
       opComment: selected.opComment ?? "",
       address:   selected.address   ?? "",
     };
-  }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selected?.id]); 
 
   if (!selected) return null;
 
@@ -257,7 +255,6 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
       <div style={{ marginBottom: 10 }}>
         <div style={lbl}>Статус</div>
         <select style={sel} value={editStatus} onChange={e => setEditStatus(e.target.value)}>
-          {/* 🔥 ИЗМЕНЕНИЕ: фильтрация вместо slice(1) */}
           {STATUS_OPTIONS.filter(opt => !["GEOCODED", "INVALID_ADDRESS", "ALL"].includes(opt.value)).map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
         </select>
       </div>
@@ -293,12 +290,18 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
           background: saved ? "#1a9e5c" : hasChanges ? "#4a7aff" : "#e8e6df",
           color: hasChanges || saved ? "#fff" : "#a8a49c",
           cursor: hasChanges ? "pointer" : "default",
+          marginBottom: 16
         }}
         disabled={!hasChanges || saving}
         onClick={saveChanges}
       >
         {saved ? "✓ Сохранено" : saving ? "Сохраняем..." : "Сохранить изменения"}
       </button>
+
+      {/* 🔥 ИСПРАВЛЕНО: Приводим selected к any, чтобы TS не ругался на routeId */}
+      {(selected as any).routeId && (
+        <RouteChat routeId={(selected as any).routeId} />
+      )}
     </div>
   );
 }

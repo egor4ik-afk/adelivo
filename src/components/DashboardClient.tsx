@@ -378,19 +378,19 @@ export function DashboardClient({ user }: { user: User }) {
     if (!bulkCourier || bulkSelectedIds.length === 0) return;
     setBulkSaving(true);
     try {
-      // 🔥 Вызываем наш новый API для маршрутов
       const res = await fetch(`/api/routes/assign`, { 
         method: "POST", 
         headers: { "Content-Type": "application/json" }, 
-        body: JSON.stringify({ orderIds: bulkSelectedIds, courierId: bulkCourier }) 
+        // 🔥 Добавили routeType, чтобы навигатор строился для авто или транспорта!
+        body: JSON.stringify({ orderIds: bulkSelectedIds, courierId: bulkCourier, routeType }) 
       });
       
       if (!res.ok) throw new Error("Ошибка сервера");
 
-      setBulkCourier("");
-      setBulkSelectedIds([]); // Очищаем выбранные точки
-      setIsBulkMode(false);   // Выходим из режима маршрута
-      await fetchData();      // Обновляем данные на экране
+      setBulkCourier(""); // Сбрасываем только выбор курьера
+      // 🔥 УБРАЛИ очистку списка и закрытие окна (setIsBulkMode и setBulkSelectedIds)
+      
+      await fetchData(); // Данные обновятся, заказы поменяют статус на "Назначен"
       alert("✅ Маршрут успешно создан, курьер уведомлен!");
     } catch { 
       alert("Произошла ошибка при массовом назначении"); 
@@ -554,7 +554,7 @@ export function DashboardClient({ user }: { user: User }) {
 
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                       <h2 style={{ margin: 0, fontSize: 18, color: "#1a1a18" }}>Маршрут · {bulkSelectedIds.length} точек</h2>
-                      <button onClick={() => setIsBulkMode(false)} style={{ background: "none", border: "none", fontSize: 24, cursor: "pointer", color: "#a8a49c", padding: "0 8px" }}>×</button>
+                      <button onClick={() => { setIsBulkMode(false); setBulkSelectedIds([]); }} style={{ background: "none", border: "none", fontSize: 24, cursor: "pointer", color: "#a8a49c", padding: "0 8px" }}>×</button>
                     </div>
 
                     <div style={{ display: "flex", gap: 8, marginBottom: 16, background: "#f5f4f0", padding: 4, borderRadius: 8, width: "fit-content" }}>

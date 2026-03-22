@@ -13,12 +13,25 @@ export function CourierNav() {
   ];
 
   return (
-    <nav style={{ display: "flex", background: "#fff", borderTop: "1px solid #e8e6df", paddingBottom: "env(safe-area-inset-bottom)", flexShrink: 0, zIndex: 100 }}>
+    <nav style={{ 
+      position: "fixed", 
+      bottom: 0, 
+      left: 0, 
+      right: 0, 
+      display: "flex", 
+      background: "rgba(255, 255, 255, 0.95)", // Полупрозрачный фон
+      backdropFilter: "blur(10px)", // Красивое размытие, как в iOS
+      borderTop: "1px solid #e8e6df", 
+      paddingBottom: "env(safe-area-inset-bottom)", // Учет "челки" на iPhone
+      height: 56, // 🔥 Сделали компактнее
+      zIndex: 1000,
+      boxShadow: "0 -2px 10px rgba(0,0,0,0.03)"
+    }}>
       {navItems.map(item => {
         const isActive = pathname === item.href;
         return (
-          <Link key={item.href} href={item.href} style={{ flex: 1, padding: "10px 0", textAlign: "center", textDecoration: "none", color: isActive ? "#4a7aff" : "#a8a49c", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-            <div style={{ fontSize: 22, filter: isActive ? "none" : "grayscale(100%) opacity(0.5)", transition: "all 0.2s" }}>
+          <Link key={item.href} href={item.href} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textDecoration: "none", color: isActive ? "#4a7aff" : "#a8a49c", gap: 2 }}>
+            <div style={{ fontSize: 20, filter: isActive ? "none" : "grayscale(100%) opacity(0.5)", transition: "all 0.2s" }}>
               {item.icon}
             </div>
             <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 500, transition: "all 0.2s" }}>
