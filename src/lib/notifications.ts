@@ -85,16 +85,16 @@ async function sendIndividualPushes(event: NotificationEvent) {
     let title = "";
     const bodyTexts: string[] = [];
 
-    // ── ЛОГИКА ДЛЯ ОПЕРАТОРОВ / АДМИНОВ ──
+    // ── ЛОГИКА ДЛЯ ОПЕРАТОРОВ / АДМИНОВ (Исправлено: убраны несуществующие настройки) ──
     if (user.role === "OPERATOR" || user.role === "ADMIN") {
-      if (event.type === "order.new" && user.notifyNewOrder) {
+      if (event.type === "order.new") {
         shouldSend = true; 
-        title = `🌸 Новый заказ: ${event.order.externalId ?? "—"}`;
+        title = `🌸 Новый заказ: ${event.order.externalId ?? event.order.crmId}`;
         bodyTexts.push(event.order.address ?? "Без адреса");
       } 
       else if (event.type === "order.updated" && event.changes) {
-        // Проверяем каждую настройку оператора и формируем детальный текст
-        if (event.changes.statusChanged && user.notifyStatus) {
+        
+        if (event.changes.statusChanged) {
           shouldSend = true;
           const oldLabel = event.previousStatus ? statusLabel(event.previousStatus) : "—";
           const newLabel = statusLabel(event.order.status);
@@ -102,33 +102,33 @@ async function sendIndividualPushes(event: NotificationEvent) {
             bodyTexts.push(`Статус: ${oldLabel} ➔ ${newLabel}`);
           }
         }
-        if (event.changes.courierChanged && user.notifyCourier) {
+        if (event.changes.courierChanged) {
           shouldSend = true;
           bodyTexts.push(`Курьер: ${event.order.courier || "Снят"}`);
         }
-        if (event.changes.addressChanged && user.notifyAddress) {
+        if (event.changes.addressChanged) {
           shouldSend = true;
           bodyTexts.push(`Адрес: ${event.order.address || "Удален"}`);
         }
-        if (event.changes.slotChanged && user.notifyTime) {
+        if (event.changes.slotChanged) {
           shouldSend = true;
           bodyTexts.push(`Время: ${event.order.slotRaw || "—"}`);
         }
-        if (event.changes.commentChanged && user.notifyComment) {
+        if (event.changes.commentChanged) {
           shouldSend = true;
           bodyTexts.push(`Коммент: ${event.order.comment || "—"}`);
         }
-        if (event.changes.opCommentChanged && user.notifyOpComment) {
+        if (event.changes.opCommentChanged) {
           shouldSend = true;
           bodyTexts.push(`Заметка: ${event.order.opComment || "—"}`);
         }
-        if (event.changes.itemsChanged && user.notifyItems) {
+        if (event.changes.itemsChanged) {
           shouldSend = true;
           bodyTexts.push(`Состав изменен`);
         }
 
         if (shouldSend) {
-          title = `📦 Заказ ${event.order.externalId ?? "—"} обновлён`;
+          title = `📦 Заказ ${event.order.externalId ?? event.order.crmId} обновлён`;
         }
       } 
       else if (event.type === "address.invalid") {
@@ -138,9 +138,8 @@ async function sendIndividualPushes(event: NotificationEvent) {
       }
     }
 
-    // ── ЛОГИКА ДЛЯ КУРЬЕРОВ (Изолированная, без изменений) ──
+    // ── ЛОГИКА ДЛЯ КУРЬЕРОВ ──
     if (user.role === "COURIER") {
-      // 1. Пуш о новом маршруте (строго ему)
       if (event.type === "route.assigned" && event.userId === user.id) {
         shouldSend = true;
         title = `🗺 Новый маршрут ${event.routeId}`;
@@ -148,7 +147,6 @@ async function sendIndividualPushes(event: NotificationEvent) {
         bodyTexts.push(`Зайдите в раздел "Маршруты"`);
       }
       
-      // 2. Пуш об обновлении заказа (только если заказ висит на нем)
       if (event.type === "order.updated" && event.changes) {
         const courierDb = await prisma.courier.findFirst({ where: { email: user.email } });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -187,10 +185,8 @@ async function sendIndividualPushes(event: NotificationEvent) {
 }
 
 export async function notify(event: NotificationEvent) {
-  // Отправляем PUSH (индивидуально)
   await sendIndividualPushes(event).catch(console.error);
 
-  // Отправляем Emails и пишем логи (ОДИН раз на событие, как и было)
   switch (event.type) {
     case "order.new": {
       const { order } = event;
@@ -204,7 +200,6 @@ export async function notify(event: NotificationEvent) {
     }
     case "order.updated": {
       const { order, previousStatus, changes } = event;
-      // Если поменялся публичный статус, шлем письмо
       if (changes?.statusChanged && previousStatus && statusLabel(previousStatus) !== statusLabel(order.status)) {
         try {
           await sendOrderUpdateAlert({ ...order, previousStatus });
