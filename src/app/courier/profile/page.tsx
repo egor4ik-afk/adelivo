@@ -15,8 +15,9 @@ export default function CourierProfilePage() {
   const [myShifts, setMyShifts] = useState<string[]>([]);
 
   // Хук для Push-уведомлений
-  const { state: pushState, subscribe, unsubscribe } = usePushNotifications();
+  const { state: pushState, subscribe, unsubscribe, needsBanner } = usePushNotifications();
   const isSubscribed = pushState === "granted";
+  const showPushBanner = pushState === "default" || pushState === "loading";
 
   // Генерация ближайших 7 дней для графика
   const days = Array.from({ length: 7 }).map((_, i) => {
@@ -94,6 +95,7 @@ export default function CourierProfilePage() {
   if (!profile) return <div style={{ padding: 20, textAlign: "center", color: "#a8a49c" }}>Загрузка профиля...</div>;
 
   return (
+
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#f5f4f0", overflowY: "auto", paddingBottom: 80 }}>
 
       <div style={{ padding: "24px 16px", background: "#fff", display: "flex", alignItems: "center", gap: 16, borderBottom: "1px solid #e8e6df" }}>
@@ -137,7 +139,26 @@ export default function CourierProfilePage() {
             })}
           </div>
         </div>
-
+        {needsBanner && pushState !== "denied" && pushState !== "unsupported" && (
+          <div
+            onClick={subscribe}
+            style={{
+              margin: "0 0 12px 0", padding: "14px 16px",
+              background: "linear-gradient(135deg, #1a1a18 0%, #2d2d2a 100%)",
+              borderRadius: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 12,
+              WebkitTapHighlightColor: "transparent"
+            }}
+          >
+            <span style={{ fontSize: 24 }}>🔔</span>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>Включить уведомления</div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", marginTop: 2 }}>
+                Нажмите чтобы получать уведомления о маршрутах
+              </div>
+            </div>
+            <span style={{ marginLeft: "auto", color: "rgba(255,255,255,0.4)", fontSize: 20 }}>›</span>
+          </div>
+        )}
         {/* Настройки и контакты */}
         <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
           <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", margin: "0 0 12px 0", textTransform: "uppercase" }}>Настройки</h2>

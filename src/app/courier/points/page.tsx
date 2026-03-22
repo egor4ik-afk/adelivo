@@ -9,12 +9,18 @@ interface CourierOrder {
   route?: { id: string; name: string } | null;
 }
 
+// 🔥 Хелпер для проверки координат
+function hasCoords(o: CourierOrder): o is CourierOrder & { lat: number; lng: number } {
+  return o.lat !== null && o.lng !== null;
+}
+
 export default function CourierPointsPage() {
   const mapRef = useRef<HTMLDivElement>(null);
   const ymapRef = useRef<any>(null);
+  const mapInitialized = useRef(false); // 🔥 Флаг чтобы не инициализировать дважды
   const [orders, setOrders] = useState<CourierOrder[]>([]);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
-  const [showList, setShowList] = useState(false); // Состояние для открытия списка снизу
+  const [showList, setShowList] = useState(false);
   const [expandedRoutes, setExpandedRoutes] = useState<Record<string, boolean>>({});
 
   const fetchOrders = async () => {
@@ -30,49 +36,89 @@ export default function CourierPointsPage() {
     return () => clearInterval(interval);
   }, []);
 
+  // 🔥 Инициализация карты — ждём и DOM и данные
   useEffect(() => {
-    if (typeof window !== "undefined" && !window.ymaps) {
-      const s = document.createElement("script");
-      s.src = `https://api-maps.yandex.ru/2.1/?apikey=${process.env.NEXT_PUBLIC_YANDEX_MAPS_KEY}&lang=ru_RU`;
-      s.onload = () => window.ymaps.ready(initMap);
-      document.head.appendChild(s);
-    } else if (window.ymaps) {
-      window.ymaps.ready(initMap);
-    }
+    if (mapInitialized.current) return;
 
     function initMap() {
-      if (mapRef.current && !ymapRef.current) {
-        ymapRef.current = new window.ymaps.Map(mapRef.current, {
-          center: [55.75, 37.61], zoom: 12, controls: ["zoomControl"]
-        }, {}); 
+      if (!mapRef.current || mapInitialized.current) return;
+      mapInitialized.current = true;
+      ymapRef.current = new window.ymaps.Map(mapRef.current, {
+        center: [55.75, 37.61], zoom: 12, controls: ["zoomControl"]
+      }, {});
+    }
+
+    if (typeof window === "undefined") return;
+
+    if (window.ymaps) {
+      window.ymaps.ready(initMap);
+    } else {
+      const existing = document.querySelector(`script[src*="api-maps.yandex.ru"]`);
+      if (!existing) {
+        const s = document.createElement("script");
+        s.src = `https://api-maps.yandex.ru/2.1/?apikey=${process.env.NEXT_PUBLIC_YANDEX_MAPS_KEY}&lang=ru_RU`;
+        s.onload = () => window.ymaps.ready(initMap);
+        document.head.appendChild(s);
+      } else {
+        // Скрипт уже грузится — ждём
+        existing.addEventListener("load", () => window.ymaps.ready(initMap));
       }
     }
   }, []);
 
+  // 🔥 Маркеры — перерисовываем при изменении заказов или активного
   useEffect(() => {
-    if (!ymapRef.current || !window.ymaps || orders.length === 0) return;
-    ymapRef.current.geoObjects.removeAll();
+    if (!window?.ymaps) return;
 
-    orders.forEach(o => {
-      if (!o.lat || !o.lng || o.status === "DELIVERED") return;
-      const isDelivery = o.status === "IN_DELIVERY";
-      const isSelected = o.id === activeOrderId;
-      
-      const pm = new window.ymaps.Placemark([o.lat, o.lng], {
-        balloonContent: o.address
-      }, { 
-        preset: isSelected ? 'islands#redDotIcon' : (isDelivery ? 'islands#greenDotIcon' : 'islands#blueDotIcon') 
+    // Если карта ещё не готова — ждём её инициализации
+    if (!ymapRef.current) {
+      const wait = setInterval(() => {
+        if (ymapRef.current) { clearInterval(wait); renderMarkers(); }
+      }, 100);
+      return () => clearInterval(wait);
+    }
+
+    renderMarkers();
+
+    function renderMarkers() {
+      if (!ymapRef.current) return;
+      ymapRef.current.geoObjects.removeAll();
+
+      const validOrders = orders.filter(o => hasCoords(o) && o.status !== "DELIVERED");
+
+      validOrders.forEach(o => {
+        if (!hasCoords(o)) return;
+        const coords: [number, number] = [o.lat, o.lng]; // Теперь TypeScript доволен
+        const isDelivery = o.status === "IN_DELIVERY";
+        const isSelected = o.id === activeOrderId;
+
+        const pm = new window.ymaps.Placemark(coords, {
+          balloonContent: o.address
+        }, {
+          preset: isSelected
+            ? "islands#redDotIcon"
+            : isDelivery
+              ? "islands#greenDotIcon"
+              : "islands#blueDotIcon"
+        });
+
+        pm.events.add("click", () => {
+          setActiveOrderId(o.id);
+          setShowList(false);
+        });
+
+        ymapRef.current.geoObjects.add(pm);
       });
 
-      pm.events.add("click", () => {
-        setActiveOrderId(o.id);
-        setShowList(false); // Закрываем список при клике на точку карты
-      });
-      ymapRef.current.geoObjects.add(pm);
-    });
-
-    if (!activeOrderId && ymapRef.current.geoObjects.getBounds()) {
-      ymapRef.current.setBounds(ymapRef.current.geoObjects.getBounds(), { checkZoomRange: true, zoomMargin: 20 });
+      // Автоцентрирование только если нет активного заказа
+      if (!activeOrderId && validOrders.length > 0) {
+        setTimeout(() => {
+          const bounds = ymapRef.current?.geoObjects.getBounds();
+          if (bounds) {
+            ymapRef.current.setBounds(bounds, { checkZoomRange: true, zoomMargin: 50, maxZoom: 14 });
+          }
+        }, 150);
+      }
     }
   }, [orders, activeOrderId]);
 
@@ -88,7 +134,7 @@ export default function CourierPointsPage() {
   const handleListPointClick = (order: CourierOrder) => {
     setActiveOrderId(order.id);
     setShowList(false);
-    if (order.lat && order.lng && ymapRef.current) {
+    if (hasCoords(order) && ymapRef.current) {
       ymapRef.current.setCenter([order.lat, order.lng], 16, { duration: 300 });
     }
   };
@@ -100,10 +146,9 @@ export default function CourierPointsPage() {
   const activeOrder = orders.find(o => o.id === activeOrderId);
   const activeOrdersCount = orders.filter(o => o.status !== "DELIVERED").length;
 
-  // Группируем заказы для нижнего списка
   const groupedOrders: Record<string, CourierOrder[]> = {};
   orders.filter(o => o.status !== "DELIVERED").forEach(o => {
-    const key = o.route?.id || "Без маршрута";
+    const key = o.route?.id || "no-route";
     if (!groupedOrders[key]) groupedOrders[key] = [];
     groupedOrders[key].push(o);
   });
@@ -111,29 +156,28 @@ export default function CourierPointsPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", position: "relative" }}>
-      
+
       <div style={{ padding: "16px", background: "#fff", borderBottom: "1px solid #e8e6df", zIndex: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 18, color: "#1a1a18" }}>Карта доставок</h1>
           <p style={{ margin: 0, fontSize: 12, color: "#a8a49c", marginTop: 2 }}>{activeOrdersCount} точек на карте</p>
         </div>
-        <button 
-          onClick={() => setShowList(!showList)} 
+        <button
+          onClick={() => setShowList(!showList)}
           style={{ background: showList ? "#1a1a18" : "#f5f4f0", color: showList ? "#fff" : "#1a1a18", border: "1px solid #e8e6df", padding: "8px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600 }}
         >
           {showList ? "Скрыть список" : "☰ Список точек"}
         </button>
       </div>
 
-      {/* Карта */}
+      {/* Карта — всегда в DOM, никогда не скрываем через display:none */}
       <div ref={mapRef} style={{ flex: 1, width: "100%", background: "#e8e6df" }} />
 
-      {/* Всплывающий список точек поверх карты */}
       {showList && (
         <div style={{ position: "absolute", top: 70, left: 0, right: 0, bottom: activeOrder ? 180 : 0, background: "#f5f4f0", zIndex: 20, overflowY: "auto", padding: 12 }}>
           {routeKeys.map((rId) => {
             const routePoints = groupedOrders[rId].sort((a, b) => (a.routeOrder || 0) - (b.routeOrder || 0));
-            const isExpanded = expandedRoutes[rId] ?? true; 
+            const isExpanded = expandedRoutes[rId] ?? true;
             const routeName = routePoints[0]?.route?.name || "Без маршрута";
 
             return (
@@ -146,8 +190,8 @@ export default function CourierPointsPage() {
                 {isExpanded && (
                   <div style={{ display: "flex", flexDirection: "column" }}>
                     {routePoints.map((o, idx) => (
-                      <div 
-                        key={o.id} 
+                      <div
+                        key={o.id}
                         onClick={() => handleListPointClick(o)}
                         style={{ padding: "12px 16px", borderBottom: idx < routePoints.length - 1 ? "1px solid #f0efe9" : "none", display: "flex", gap: 12, cursor: "pointer" }}
                       >
@@ -169,7 +213,6 @@ export default function CourierPointsPage() {
         </div>
       )}
 
-      {/* Плашка активного заказа снизу */}
       {activeOrder && (
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "16px", background: "#fff", borderTop: "1px solid #e8e6df", boxShadow: "0 -4px 20px rgba(0,0,0,0.1)", zIndex: 30 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>

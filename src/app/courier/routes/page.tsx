@@ -69,33 +69,35 @@ export default function CourierRoutesPage() {
       <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 16 }}>
         {routeKeys.map((rId) => {
           const routePoints = groupedOrders[rId].sort((a, b) => (a.routeOrder || 0) - (b.routeOrder || 0));
-          const isExpanded = expandedRoutes[rId] ?? true; 
+          const isExpanded = expandedRoutes[rId] ?? true;
           const routeSum = routePoints.reduce((sum, o) => sum + (o.price || 0), 0);
-          
+
           const routeObj = routePoints[0]?.route;
           const routeName = routeObj ? routeObj.name : "Без маршрута";
           const routeLink = routeObj ? routeObj.link : null;
 
           return (
             <div key={rId} style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
-              <div 
+              <div
                 onClick={() => toggleRoute(rId)}
                 style={{ padding: "14px 16px", background: "#fafaf8", borderBottom: isExpanded ? "1px solid #e8e6df" : "none", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
               >
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18" }}>Маршрут {routeName}</div>
-                  <div style={{ fontSize: 12, color: "#6b6860", marginTop: 2 }}>{routePoints.length} точек · {routeSum} ₽</div>
+                  <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 4 }}>
+                    Активных: {orders.filter(o => o.status !== "DELIVERED").length} · Всего: {orders.length}
+                  </div>
                 </div>
                 <div style={{ fontSize: 18, color: "#a8a49c", transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>▼</div>
               </div>
 
               {isExpanded && (
                 <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 12 }}>
-                  
+
                   {routeLink && (
-                    <a 
-                      href={routeLink} 
-                      target="_blank" 
+                    <a
+                      href={routeLink}
+                      target="_blank"
                       style={{ display: "block", background: "#facc15", color: "#1a1a18", textAlign: "center", padding: "10px", borderRadius: 8, textDecoration: "none", fontWeight: 700, fontSize: 13, marginBottom: 4 }}
                     >
                       📍 Открыть в Навигаторе
@@ -118,9 +120,9 @@ export default function CourierRoutesPage() {
                               <div style={{ fontSize: 12, fontWeight: 700, color: "#1a1a18" }}>{o.slotRaw}</div>
                             </div>
                           </div>
-                          
-                          <select 
-                            value={o.status} 
+
+                          <select
+                            value={o.status}
                             onChange={(e) => handleStatusChange(o.id, e.target.value)}
                             style={{ background: st.bg, color: st.color, border: "none", padding: "6px 10px", borderRadius: 8, fontSize: 11, fontWeight: 700, outline: "none", cursor: "pointer", WebkitAppearance: "none" }}
                           >
