@@ -10,34 +10,33 @@ export async function POST(req: Request) {
     const { orderIds, courierId, routeType = "auto" } = await req.json();
     if (!orderIds?.length || !courierId) return NextResponse.json({ error: "Неверные данные" }, { status: 400 });
 
-    // 1. Получаем заказы для координат
+    // 1. Получаем заказы
     const orders = await prisma.order.findMany({
       where: { id: { in: orderIds } },
       select: { id: true, lat: true, lng: true }
     });
 
-    // 2. Сортируем координаты в том порядке, в котором передал логист (по orderIds)
     const sortedOrders = orderIds.map((id: string) => orders.find((o) => o.id === id)).filter(Boolean);
-    
-    // 3. Генерируем ссылку на Яндекс.Навигатор/Карты
     const coordsList = sortedOrders.map((o: any) => o.lat && o.lng ? `${o.lat},${o.lng}` : null).filter(Boolean);
     const rtext = [STORE_COORDS, ...coordsList].join("~");
     const link = `https://yandex.ru/maps/?rtext=${rtext}&rtt=${routeType}`;
 
     const routeName = `M-${Math.floor(1000 + Math.random() * 9000)}`;
-    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" });
+    
+    // Получаем текущую дату в формате YYYY-MM-DD
+    const today = new Date().toISOString().split('T')[0];
 
-    // 4. Создаем маршрут в БД
+    // 2. Создаем маршрут (БЕЗ использования транзакции для надежности)
     const newRoute = await prisma.route.create({
       data: {
         name: routeName,
         link,
-        date: today,
+        date: today, // 🔥 Обязательное поле добавлено
         courierId: Number(courierId),
       }
     });
 
-    // 5. Привязываем заказы к маршруту
+    // 3. Обновляем заказы
     for (let i = 0; i < orderIds.length; i++) {
       await prisma.order.update({
         where: { id: orderIds[i] },
@@ -50,9 +49,9 @@ export async function POST(req: Request) {
       });
     }
 
-    // 6. Ищем курьера для отправки Пуш-уведомления
+    // 4. Отправляем уведомление
     const courierDb = await prisma.courier.findUnique({ where: { id: Number(courierId) } });
-    if (courierDb && courierDb.email) {
+    if (courierDb?.email) {
       const courierUser = await prisma.user.findUnique({ where: { email: courierDb.email } });
       if (courierUser) {
         await notify({ 
@@ -60,12 +59,13 @@ export async function POST(req: Request) {
           userId: courierUser.id, 
           routeId: newRoute.name, 
           pointsCount: orderIds.length 
-        });
+        }).catch(console.error); // Игнорируем ошибки пушей, чтобы не ломать логику
       }
     }
 
     return NextResponse.json({ success: true, routeId: newRoute.id });
-  } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+  } catch (e: any) {
+    console.error("Assign route error:", e);
+    return NextResponse.json({ error: String(e.message || e) }, { status: 500 });
   }
 }

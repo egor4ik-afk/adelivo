@@ -3,8 +3,10 @@
 import { useState, useEffect, useRef } from "react";
 
 interface CourierOrder {
-  id: string; externalId: string; address: string; status: string; crmId: string;
+  id: string; externalId: string; crmId: string; address: string; status: string;
   lat: number | null; lng: number | null; slotRaw: string | null;
+  routeId: string | null; routeOrder: number | null;
+  route?: { id: string; name: string } | null;
 }
 
 export default function CourierPointsPage() {
@@ -12,8 +14,9 @@ export default function CourierPointsPage() {
   const ymapRef = useRef<any>(null);
   const [orders, setOrders] = useState<CourierOrder[]>([]);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
+  const [showList, setShowList] = useState(false); // Состояние для открытия списка снизу
+  const [expandedRoutes, setExpandedRoutes] = useState<Record<string, boolean>>({});
 
-  // 🔥 Получаем реальные данные
   const fetchOrders = async () => {
     try {
       const res = await fetch("/api/courier/my-orders");
@@ -51,23 +54,28 @@ export default function CourierPointsPage() {
     ymapRef.current.geoObjects.removeAll();
 
     orders.forEach(o => {
-      if (!o.lat || !o.lng || o.status === "DELIVERED") return; // Доставленные на карте не нужны
+      if (!o.lat || !o.lng || o.status === "DELIVERED") return;
       const isDelivery = o.status === "IN_DELIVERY";
+      const isSelected = o.id === activeOrderId;
       
       const pm = new window.ymaps.Placemark([o.lat, o.lng], {
         balloonContent: o.address
-      }, { preset: isDelivery ? 'islands#greenDotIcon' : 'islands#blueDotIcon' });
+      }, { 
+        preset: isSelected ? 'islands#redDotIcon' : (isDelivery ? 'islands#greenDotIcon' : 'islands#blueDotIcon') 
+      });
 
-      pm.events.add("click", () => setActiveOrderId(o.id));
+      pm.events.add("click", () => {
+        setActiveOrderId(o.id);
+        setShowList(false); // Закрываем список при клике на точку карты
+      });
       ymapRef.current.geoObjects.add(pm);
     });
 
-    if (ymapRef.current.geoObjects.getBounds()) {
+    if (!activeOrderId && ymapRef.current.geoObjects.getBounds()) {
       ymapRef.current.setBounds(ymapRef.current.geoObjects.getBounds(), { checkZoomRange: true, zoomMargin: 20 });
     }
-  }, [orders]);
+  }, [orders, activeOrderId]);
 
-  // 🔥 Функция смены статуса (сохраняется в БД)
   const handleStatusChange = async (id: string, newStatus: string) => {
     setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o));
     setActiveOrderId(null);
@@ -77,20 +85,93 @@ export default function CourierPointsPage() {
     });
   };
 
+  const handleListPointClick = (order: CourierOrder) => {
+    setActiveOrderId(order.id);
+    setShowList(false);
+    if (order.lat && order.lng && ymapRef.current) {
+      ymapRef.current.setCenter([order.lat, order.lng], 16, { duration: 300 });
+    }
+  };
+
+  const toggleRoute = (rId: string) => {
+    setExpandedRoutes(prev => ({ ...prev, [rId]: !(prev[rId] ?? true) }));
+  };
+
   const activeOrder = orders.find(o => o.id === activeOrderId);
   const activeOrdersCount = orders.filter(o => o.status !== "DELIVERED").length;
 
+  // Группируем заказы для нижнего списка
+  const groupedOrders: Record<string, CourierOrder[]> = {};
+  orders.filter(o => o.status !== "DELIVERED").forEach(o => {
+    const key = o.route?.id || "Без маршрута";
+    if (!groupedOrders[key]) groupedOrders[key] = [];
+    groupedOrders[key].push(o);
+  });
+  const routeKeys = Object.keys(groupedOrders).sort();
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <div style={{ padding: "16px", background: "#fff", borderBottom: "1px solid #e8e6df", zIndex: 10 }}>
-        <h1 style={{ margin: 0, fontSize: 18, color: "#1a1a18" }}>Мои точки на сегодня</h1>
-        <p style={{ margin: 0, fontSize: 12, color: "#a8a49c", marginTop: 2 }}>{activeOrdersCount} заказов ожидают доставки</p>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", position: "relative" }}>
+      
+      <div style={{ padding: "16px", background: "#fff", borderBottom: "1px solid #e8e6df", zIndex: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 18, color: "#1a1a18" }}>Карта доставок</h1>
+          <p style={{ margin: 0, fontSize: 12, color: "#a8a49c", marginTop: 2 }}>{activeOrdersCount} точек на карте</p>
+        </div>
+        <button 
+          onClick={() => setShowList(!showList)} 
+          style={{ background: showList ? "#1a1a18" : "#f5f4f0", color: showList ? "#fff" : "#1a1a18", border: "1px solid #e8e6df", padding: "8px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600 }}
+        >
+          {showList ? "Скрыть список" : "☰ Список точек"}
+        </button>
       </div>
 
+      {/* Карта */}
       <div ref={mapRef} style={{ flex: 1, width: "100%", background: "#e8e6df" }} />
 
+      {/* Всплывающий список точек поверх карты */}
+      {showList && (
+        <div style={{ position: "absolute", top: 70, left: 0, right: 0, bottom: activeOrder ? 180 : 0, background: "#f5f4f0", zIndex: 20, overflowY: "auto", padding: 12 }}>
+          {routeKeys.map((rId) => {
+            const routePoints = groupedOrders[rId].sort((a, b) => (a.routeOrder || 0) - (b.routeOrder || 0));
+            const isExpanded = expandedRoutes[rId] ?? true; 
+            const routeName = routePoints[0]?.route?.name || "Без маршрута";
+
+            return (
+              <div key={rId} style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "hidden", marginBottom: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
+                <div onClick={() => toggleRoute(rId)} style={{ padding: "12px 16px", background: "#fafaf8", borderBottom: isExpanded ? "1px solid #e8e6df" : "none", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18" }}>Маршрут {routeName}</div>
+                  <div style={{ fontSize: 16, color: "#a8a49c", transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)" }}>▼</div>
+                </div>
+
+                {isExpanded && (
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    {routePoints.map((o, idx) => (
+                      <div 
+                        key={o.id} 
+                        onClick={() => handleListPointClick(o)}
+                        style={{ padding: "12px 16px", borderBottom: idx < routePoints.length - 1 ? "1px solid #f0efe9" : "none", display: "flex", gap: 12, cursor: "pointer" }}
+                      >
+                        <div style={{ width: 24, height: 24, borderRadius: "50%", background: o.status === "IN_DELIVERY" ? "#10b981" : "#1a1a18", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+                          {o.routeOrder || "•"}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: "#1a1a18", marginBottom: 4 }}>{o.address}</div>
+                          <div style={{ fontSize: 12, color: "#a8a49c" }}>{o.slotRaw} · {o.externalId ?? o.crmId}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {routeKeys.length === 0 && <div style={{ textAlign: "center", padding: 40, color: "#a8a49c" }}>Нет активных точек</div>}
+        </div>
+      )}
+
+      {/* Плашка активного заказа снизу */}
       {activeOrder && (
-        <div style={{ padding: "16px", background: "#fff", borderTop: "1px solid #e8e6df", boxShadow: "0 -4px 16px rgba(0,0,0,0.05)", zIndex: 10 }}>
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "16px", background: "#fff", borderTop: "1px solid #e8e6df", boxShadow: "0 -4px 20px rgba(0,0,0,0.1)", zIndex: 30 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
             <div>
               <div style={{ fontSize: 11, fontWeight: 700, color: "#4a7aff", textTransform: "uppercase", marginBottom: 4 }}>
@@ -99,17 +180,17 @@ export default function CourierPointsPage() {
               <div style={{ fontSize: 16, fontWeight: 700, color: "#1a1a18" }}>{activeOrder.address}</div>
               <div style={{ fontSize: 12, color: "#6b6860", marginTop: 4 }}>Заказ {activeOrder.externalId ?? activeOrder.crmId} · Слот: {activeOrder.slotRaw}</div>
             </div>
-            <button onClick={() => setActiveOrderId(null)} style={{ background: "none", border: "none", fontSize: 20, color: "#a8a49c" }}>✕</button>
+            <button onClick={() => setActiveOrderId(null)} style={{ background: "none", border: "none", fontSize: 24, color: "#a8a49c", padding: 0 }}>✕</button>
           </div>
 
           <div style={{ display: "flex", gap: 8 }}>
             {activeOrder.status === "ASSIGNED" && (
-              <button onClick={() => handleStatusChange(activeOrder.id, "IN_DELIVERY")} style={{ flex: 1, padding: "12px", borderRadius: 8, background: "#4a7aff", color: "#fff", border: "none", fontWeight: 600, fontSize: 14 }}>
+              <button onClick={() => handleStatusChange(activeOrder.id, "IN_DELIVERY")} style={{ flex: 1, padding: "14px", borderRadius: 10, background: "#4a7aff", color: "#fff", border: "none", fontWeight: 600, fontSize: 15 }}>
                 Поехал сюда
               </button>
             )}
             {activeOrder.status === "IN_DELIVERY" && (
-              <button onClick={() => handleStatusChange(activeOrder.id, "DELIVERED")} style={{ flex: 1, padding: "12px", borderRadius: 8, background: "#10b981", color: "#fff", border: "none", fontWeight: 600, fontSize: 14 }}>
+              <button onClick={() => handleStatusChange(activeOrder.id, "DELIVERED")} style={{ flex: 1, padding: "14px", borderRadius: 10, background: "#10b981", color: "#fff", border: "none", fontWeight: 600, fontSize: 15 }}>
                 Отметить доставленным
               </button>
             )}
