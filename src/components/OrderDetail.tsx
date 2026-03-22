@@ -2,7 +2,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { Order, STATUS_OPTIONS, slotColor } from "@/lib/constants";
-import { RouteChat } from "./RouteChat"; // 🔥 ДОБАВИЛИ ИМПОРТ ЧАТА
 
 interface Props {
   selected: Order | null;
@@ -298,10 +297,6 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
         {saved ? "✓ Сохранено" : saving ? "Сохраняем..." : "Сохранить изменения"}
       </button>
 
-      {/* 🔥 ИСПРАВЛЕНО: Приводим selected к any, чтобы TS не ругался на routeId */}
-      {(selected as any).routeId && (
-        <RouteChat routeId={(selected as any).routeId} />
-      )}
     </div>
   );
 }
