@@ -1,8 +1,32 @@
+// src/types/yandex-maps.d.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 declare namespace ymaps {
   type Ready = (callback: () => void) => void;
   export const ready: Ready;
+
+  // 🔥 Добавляем функцию route
+  export function route(
+    points: (number[] | string)[],
+    options?: { routingMode?: 'auto' | 'masstransit' | 'pedestrian' | 'bicycle'; [key: string]: any }
+  ): Promise<Route>;
+
+  // Описываем возвращаемый объект маршрута
+  interface Route {
+    getHumanTime(): string;
+    getHumanLength(): string;
+    getPaths(): RoutePaths;
+  }
+
+  interface RoutePaths {
+    getLength(): number;
+    get(index: number): RoutePath;
+  }
+
+  interface RoutePath {
+    getHumanTime(): string;
+    getHumanLength(): string;
+  }
 
   class Map {
     constructor(
@@ -16,15 +40,15 @@ declare namespace ymaps {
     );
 
     geoObjects: {
-      add(clusterer: Clusterer): void;
+      add(clusterer: Clusterer | Placemark | any): void;
     };
     container: {
       fitToViewport(): void;
     };
     setCenter(
       center: number[],
-      zoom: number,
-      options: { duration: number }
+      zoom?: number,
+      options?: { duration: number }
     ): void;
     events: {
       add(event: string, handler: (e: any) => void): void;

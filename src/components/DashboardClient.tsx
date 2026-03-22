@@ -1,5 +1,6 @@
+// src/components/DashboardClient.tsx
 "use client";
-import { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { useRouter } from "next/navigation";
 import { ProfilePanel } from "./ProfilePanel";
 import { OrderDetail } from "./OrderDetail";
@@ -40,11 +41,10 @@ export function DashboardClient({ user }: { user: User }) {
     return () => window.removeEventListener("resize", checkMob);
   }, []);
 
-  // ── Состояния интерфейса (по умолчанию свернуты) ──
   const [mobileView, setMobileView] = useState<"split" | "map" | "panels">("split");
   const [isListVisible, setIsListVisible] = useState(true);
-  const [isDetailVisible, setIsDetailVisible] = useState(false); // По умолчанию свернута
-  const [tableOpen, setTableOpen] = useState(false); // По умолчанию свернута
+  const [isDetailVisible, setIsDetailVisible] = useState(false);
+  const [tableOpen, setTableOpen] = useState(false);
   const [tableHeight, setTableHeight] = useState(250);
   const [isDraggingTable, setIsDraggingTable] = useState(false);
 
@@ -76,8 +76,13 @@ export function DashboardClient({ user }: { user: User }) {
   const [bulkCourier, setBulkCourier] = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
   const [routeType, setRouteType] = useState<"auto" | "mt">("auto");
+  const [returnToBase, setReturnToBase] = useState(false); // 🔥 Вернуться на базу
 
-  // ── Восстановление состояния (localStorage) ──
+  // Состояние для ETA (Расчет времени маршрута)
+  const [routeLegs, setRouteLegs] = useState<string[]>([]);
+  const [routeTotals, setRouteTotals] = useState<{ time: string, dist: string } | null>(null);
+  const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
+
   useEffect(() => {
     const fd = localStorage.getItem("fo_filterDate");
     if (fd) setFilterDate(fd);
@@ -89,13 +94,11 @@ export function DashboardClient({ user }: { user: User }) {
     if (dv !== null) setIsDetailVisible(dv === "true");
   }, []);
 
-  // ── Сохранение состояния ──
   useEffect(() => { localStorage.setItem("fo_filterDate", filterDate); }, [filterDate]);
   useEffect(() => { localStorage.setItem("fo_tableOpen", String(tableOpen)); }, [tableOpen]);
   useEffect(() => { localStorage.setItem("fo_listVisible", String(isListVisible)); }, [isListVisible]);
   useEffect(() => { localStorage.setItem("fo_detailVisible", String(isDetailVisible)); }, [isDetailVisible]);
 
-  // ── Автоскролл к выбранному заказу ──
   useEffect(() => {
     if (selectedId) {
       setTimeout(() => {
@@ -174,7 +177,6 @@ export function DashboardClient({ user }: { user: User }) {
         if (cnt > 0) flags.push(`${cnt} зак.`);
         label += ` (${flags.join(", ")})`;
       }
-      // 🔥 Добавили id: c.id
       return { id: c.id, value: c.fullName, label };
     });
   })();
@@ -198,9 +200,7 @@ export function DashboardClient({ user }: { user: User }) {
   });
 
   const tableOrders = [...filtered].sort((a, b) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let valA: any = (a as any)[sortConfig.key] ?? "";
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let valB: any = (b as any)[sortConfig.key] ?? "";
 
     if (sortConfig.key === "changedAt") {
@@ -228,15 +228,16 @@ export function DashboardClient({ user }: { user: User }) {
     loadYMaps().then(() => {
       if (!mounted || !mapRef.current || ymapRef.current) return;
       const map = new window.ymaps.Map(mapRef.current, { center: [STORE_LAT, STORE_LNG], zoom: 11, controls: ["zoomControl"] }, {});
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       map.events.add('boundschange', (e: any) => { if (e.get('newZoom') !== e.get('oldZoom')) setCurrentZoom(e.get('newZoom')); });
       const clusterer = new window.ymaps.Clusterer({ clusterIconLayout: "default#pieChart", clusterIconPieChartRadius: 20 });
       map.geoObjects.add(clusterer);
+
+      // 🔥 БАЗА: Заменили иконку на аккуратную синюю точку
       const storePm = new window.ymaps.Placemark([STORE_LAT, STORE_LNG], {
         hintContent: "БАЗА: Большой Афанасьевский переулок, 39",
-        balloonContent: "<b>Магазин / База</b><br/>Большой Афанасьевский пер., 39"
-      }, { preset: 'islands#blackHomeIcon' });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        iconCaption: "База"
+      }, { preset: 'islands#blackCircleDotIcon' });
+
       map.geoObjects.add(storePm as any);
       ymapRef.current = map;
       clustererRef.current = clusterer;
@@ -268,7 +269,6 @@ export function DashboardClient({ user }: { user: User }) {
     const clusterer = clustererRef.current;
     if (!clusterer || typeof window === "undefined" || !window.ymaps) return;
     clusterer.removeAll();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ymaps = (window as any).ymaps;
 
     const StretchyLayout = ymaps.templateLayoutFactory.createClass(
@@ -308,13 +308,12 @@ export function DashboardClient({ user }: { user: User }) {
         }, { preset, iconColor: (isBulkMode || isSelected) ? undefined : color });
       }
 
-      // 🔥 КЛИК ПО КАРТЕ
       pm.events.add("click", () => {
         if (isBulkMode) {
           toggleBulkSelect(order.id);
         } else {
           clickedFromMapRef.current = true;
-          setSelectedId(order.id); // Всегда выбираем заказ при клике на пин
+          setSelectedId(order.id);
           if (!isMobile) {
             setIsListVisible(true);
             setIsDetailVisible(true);
@@ -340,36 +339,68 @@ export function DashboardClient({ user }: { user: User }) {
         clickedFromMapRef.current = false;
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId, isBulkMode]);
+  }, [selectedId, isBulkMode, orders]);
 
-  const generateYandexUrl = (ordersToRoute: Order[], type: "auto" | "mt") => {
+  // 🔥 ФОНОВЫЙ РАСЧЕТ ETA МАРШРУТА
+  const selectedRouteOrders = bulkSelectedIds.map(id => orders.find(o => o.id === id)).filter(Boolean) as Order[];
+
+  useEffect(() => {
+    if (!isBulkMode || routeTab !== "list" || bulkSelectedIds.length === 0) {
+      setRouteLegs([]); setRouteTotals(null); return;
+    }
+    if (!window.ymaps || !window.ymaps.route) return;
+
+    const validOrders = selectedRouteOrders.filter(o => o.lat && o.lng);
+    if (validOrders.length === 0) return;
+
+    const points = [[STORE_LAT, STORE_LNG], ...validOrders.map(o => [o.lat!, o.lng!])];
+    if (returnToBase) points.push([STORE_LAT, STORE_LNG]);
+
+    setIsCalculatingRoute(true);
+    const timer = setTimeout(() => {
+      window.ymaps.route(points, { routingMode: routeType === 'mt' ? 'masstransit' : 'auto' })
+        .then((route: any) => {
+          setRouteTotals({ time: route.getHumanTime(), dist: route.getHumanLength() });
+          const paths = route.getPaths();
+          const legsArr: string[] = [];
+          for (let i = 0; i < paths.getLength(); i++) legsArr.push(paths.get(i).getHumanTime());
+          setRouteLegs(legsArr);
+        })
+        .catch((e: any) => console.error("Route calc error", e))
+        .finally(() => setIsCalculatingRoute(false));
+    }, 800); // Задержка, чтобы не спамить API при перетаскивании
+
+    return () => clearTimeout(timer);
+  }, [bulkSelectedIds, routeType, returnToBase, routeTab]);
+
+  // 🔥 Обновленный генератор ссылок
+  const generateYandexUrl = (ordersToRoute: Order[], type: "auto" | "mt", rtb: boolean) => {
     const validOrders = ordersToRoute.filter(o => o.lat && o.lng && !o.isInvalid);
     if (validOrders.length === 0) return null;
     if (validOrders.length > 50) validOrders.length = 50;
-    const rtext = [STORE_COORDS, ...validOrders.map(o => `${o.lat},${o.lng}`)].join("~");
-    return `https://yandex.ru/maps/?rtext=${rtext}&rtt=${type}`;
+
+    const rtextArr = [STORE_COORDS, ...validOrders.map(o => `${o.lat},${o.lng}`)];
+    if (rtb) rtextArr.push(STORE_COORDS);
+
+    return `https://yandex.ru/maps/?rtext=${rtextArr.join("~")}&rtt=${type}`;
   };
 
   const handleOpenRoute = (ordersToRoute: Order[]) => {
-    const url = generateYandexUrl(ordersToRoute, routeType);
+    const url = generateYandexUrl(ordersToRoute, routeType, returnToBase);
     if (url) window.open(url, "_blank");
     else alert("Нет корректных координат для построения маршрута.");
   };
 
   const handleShareRoute = async (ordersToRoute: Order[]) => {
-    const url = generateYandexUrl(ordersToRoute, routeType);
+    const url = generateYandexUrl(ordersToRoute, routeType, returnToBase);
     if (!url) { alert("Нет корректных координат"); return; }
     try {
       await navigator.clipboard.writeText(url);
       alert("✅ Ссылка скопирована!");
     } catch {
       const input = document.createElement("input");
-      input.value = url;
-      document.body.appendChild(input);
-      input.select();
-      document.execCommand("copy");
-      document.body.removeChild(input);
+      input.value = url; document.body.appendChild(input);
+      input.select(); document.execCommand("copy"); document.body.removeChild(input);
       alert("✅ Ссылка скопирована!");
     }
   };
@@ -381,33 +412,108 @@ export function DashboardClient({ user }: { user: User }) {
       const res = await fetch(`/api/routes/assign`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // 🔥 Добавили routeType, чтобы навигатор строился для авто или транспорта!
-        body: JSON.stringify({ orderIds: bulkSelectedIds, courierId: bulkCourier, routeType })
+        body: JSON.stringify({ orderIds: bulkSelectedIds, courierId: bulkCourier, routeType, returnToBase }) // 🔥 Передаем флаг на сервер
       });
 
       if (!res.ok) throw new Error("Ошибка сервера");
-
-      setBulkCourier(""); // Сбрасываем только выбор курьера
-      // 🔥 УБРАЛИ очистку списка и закрытие окна (setIsBulkMode и setBulkSelectedIds)
-
-      await fetchData(); // Данные обновятся, заказы поменяют статус на "Назначен"
+      setBulkCourier("");
+      await fetchData();
       alert("✅ Маршрут успешно создан, курьер уведомлен!");
     } catch {
       alert("Произошла ошибка при массовом назначении");
     }
     finally { setBulkSaving(false); }
   }
+
   const toggleSlot = (label: string) => {
     if (label === "all") setSelectedSlots([]);
     else setSelectedSlots(prev => prev.includes(label) ? prev.filter(x => x !== label) : [...prev, label]);
   };
 
-  const selectedRouteOrders = bulkSelectedIds.map(id => orders.find(o => o.id === id)).filter(Boolean) as Order[];
   const showLeftPanel = (isListVisible || isDetailVisible) && !isBulkMode;
+
+  // 🔥 Вынесли рендер блока маршрутов, чтобы не дублировать код для Mobile и Desktop
+  const renderRouteListPanel = () => (
+    <div style={{ maxWidth: 600, margin: isMobile ? 0 : "0 auto", background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: isMobile ? 16 : 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 18, color: "#1a1a18" }}>Маршрут · {bulkSelectedIds.length} точек</h2>
+        {!isMobile && <button onClick={() => { setIsBulkMode(false); setRouteTab("map"); }} style={{ background: "none", border: "none", fontSize: 24, cursor: "pointer", color: "#a8a49c", padding: "0 8px" }}>×</button>}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 12, marginBottom: 16, background: "#f5f4f0", padding: "6px 8px", borderRadius: 8, alignItems: isMobile ? "stretch" : "center" }}>
+        <div style={{ display: "flex", gap: 4, flex: 1 }}>
+          <button onClick={() => setRouteType("auto")} style={{ ...s.actionBtn, flex: 1, background: routeType === "auto" ? "#fff" : "transparent", color: routeType === "auto" ? "#1a1a18" : "#a8a49c", boxShadow: routeType === "auto" ? "0 1px 3px rgba(0,0,0,0.1)" : "none", padding: "6px 14px", borderRadius: 6 }}>🚗 На авто</button>
+          <button onClick={() => setRouteType("mt")} style={{ ...s.actionBtn, flex: 1, background: routeType === "mt" ? "#fff" : "transparent", color: routeType === "mt" ? "#1a1a18" : "#a8a49c", boxShadow: routeType === "mt" ? "0 1px 3px rgba(0,0,0,0.1)" : "none", padding: "6px 14px", borderRadius: 6 }}>🚌 Транспорт</button>
+        </div>
+        <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", color: "#1a1a18", fontWeight: 600, padding: isMobile ? "4px 6px" : 0 }}>
+          <input type="checkbox" checked={returnToBase} onChange={e => setReturnToBase(e.target.checked)} style={{ accentColor: "#4a7aff", width: 16, height: 16 }} />
+          Вернуться на базу
+        </label>
+      </div>
+
+      {routeTotals && (
+        <div style={{ fontSize: 13, color: "#1a1a18", background: "#eef3ff", padding: "10px 14px", borderRadius: 8, marginBottom: 16, fontWeight: 600 }}>
+          {isCalculatingRoute ? "⏳ Считаем время в пути..." : `🏁 Итого: ~${routeTotals.time} (${routeTotals.dist})`}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 10, marginBottom: 20, flexDirection: isMobile ? "column" : "row" }}>
+        <button onClick={() => handleOpenRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "#facc15", color: "#1a1a18" }}>🗺️ Открыть в Яндексе</button>
+        <button onClick={() => handleShareRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "#fafaf8", border: "1px solid #e8e6df", color: "#1a1a18" }}>🔗 Скопировать ссылку</button>
+      </div>
+
+      <div style={{ background: "#fafaf8", padding: 16, borderRadius: 8, marginBottom: 20 }}>
+        <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Назначить курьера</div>
+        <div style={{ display: "flex", gap: 10, flexDirection: isMobile ? "column" : "row" }}>
+          <select style={{ ...s.nativeSelect, flex: 1 }} value={bulkCourier} onChange={e => setBulkCourier(e.target.value)}>
+            <option value="">— Выберите курьера —</option>
+            {sortedCouriers.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select>
+          <button style={{ ...s.actionBtn, width: isMobile ? "100%" : 120, background: bulkCourier && bulkSelectedIds.length > 0 ? '#4a7aff' : '#e8e6df', color: bulkCourier && bulkSelectedIds.length > 0 ? '#fff' : '#a8a49c' }} disabled={!bulkCourier || bulkSelectedIds.length === 0 || bulkSaving} onClick={handleBulkAssign}>
+            {bulkSaving ? "..." : "Назначить"}
+          </button>
+        </div>
+      </div>
+
+      <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Очередь доставки</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+
+        {routeLegs[0] && (
+          <div style={{ fontSize: 11, color: "#a8a49c", paddingLeft: 46, paddingBottom: 6 }}>
+            ↓ {routeLegs[0]} от базы
+          </div>
+        )}
+
+        {selectedRouteOrders.map((o, index) => (
+          <Fragment key={o.id}>
+            <div style={{ padding: "10px 12px", background: "#fff", border: "1px solid #e8e6df", borderRadius: 8, display: "flex", gap: 12, alignItems: "center" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <button disabled={index === 0} onClick={() => moveBulkItem(index, 'up')} style={{ background: "none", border: "none", cursor: index === 0 ? "default" : "pointer", opacity: index === 0 ? 0.3 : 1, fontSize: 11, padding: 2, color: "#6b6860" }}>▲</button>
+                <button disabled={index === selectedRouteOrders.length - 1} onClick={() => moveBulkItem(index, 'down')} style={{ background: "none", border: "none", cursor: index === selectedRouteOrders.length - 1 ? "default" : "pointer", opacity: index === selectedRouteOrders.length - 1 ? 0.3 : 1, fontSize: 11, padding: 2, color: "#6b6860" }}>▼</button>
+              </div>
+
+              <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#4a7aff", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{index + 1}</div>
+              <div style={{ flex: 1, overflow: "hidden" }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#1a1a18", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.address}</div>
+                <div style={{ fontSize: 11, color: "#a8a49c", marginTop: 2 }}>Слот: {o.slotRaw} · {o.externalId ?? o.crmId}</div>
+              </div>
+              <button onClick={() => toggleBulkSelect(o.id)} style={{ background: "none", border: "none", color: "#d94040", cursor: "pointer", fontSize: 18, padding: 4 }}>×</button>
+            </div>
+
+            {routeLegs[index + 1] && (
+              <div style={{ fontSize: 11, color: "#a8a49c", paddingLeft: 46, paddingBottom: 6, paddingTop: 4 }}>
+                ↓ {routeLegs[index + 1]} {index === selectedRouteOrders.length - 1 && returnToBase ? "возврат на базу" : ""}
+              </div>
+            )}
+          </Fragment>
+        ))}
+        {selectedRouteOrders.length === 0 && <div style={{ fontSize: 13, color: "#a8a49c", textAlign: "center", padding: 20 }}>Точки не выбраны</div>}
+      </div>
+    </div>
+  );
 
   return (
     <div style={isMobile ? sm.app : s.app}>
-      {/* ── Topbar ── */}
       <div style={isMobile ? sm.topbar : s.topbar}>
         <div style={s.logo}>
           <img src="/favicon.svg" alt="Logo" style={{ width: 22, height: 22 }} />
@@ -419,26 +525,20 @@ export function DashboardClient({ user }: { user: User }) {
             {filtered.length}
           </span>
         </button>
-        <button onClick={() => router.push('/couriers')} style={s.navBtn}>
-          🚚 Курьеры
-        </button>
+        <button onClick={() => router.push('/couriers')} style={s.navBtn}>🚚 Курьеры</button>
         <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={s.datePicker} />
-
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...s.nativeSelect, marginLeft: 8 }}>
           {STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
         </select>
-
         <select value={filterCourier} onChange={e => setFilterCourier(e.target.value)} style={{ ...s.nativeSelect, marginLeft: 4 }}>
           {courierOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
         </select>
-
         <button
           onClick={() => { setIsBulkMode(!isBulkMode); setRouteTab("map"); setBulkSelectedIds([]); setSelectedId(null); setIsDetailVisible(false); }}
           style={{ ...s.navBtn, background: isBulkMode ? "#1a1a18" : "#fff", color: isBulkMode ? "#fff" : "#1a1a18", border: isBulkMode ? "1px solid #1a1a18" : "1px solid #e8e6df", marginLeft: 8 }}
         >
           {isBulkMode ? "✕ Маршрут" : "📍 Маршрут"}
         </button>
-
         {!isMobile && (
           <div style={s.slotBar}>
             <SlotBtn label="Все" active={selectedSlots.length === 0} color="#4a7aff" onClick={() => toggleSlot("all")} />
@@ -446,14 +546,12 @@ export function DashboardClient({ user }: { user: User }) {
           </div>
         )}
         <div style={{ flex: 1 }} />
-
         {!isMobile && (
           <div style={{ display: 'flex', gap: 10, marginRight: 8, alignItems: 'center' }}>
             <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 4, cursor: 'pointer' }}><input type="checkbox" checked={showCourierNames} onChange={e => setShowCourierNames(e.target.checked)} /> Имена</label>
             <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 4, cursor: 'pointer' }}><input type="checkbox" checked={showTime} onChange={e => setShowTime(e.target.checked)} /> Время</label>
           </div>
         )}
-
         {invalid.length > 0 && (
           <button style={s.alertBadge} onClick={() => { setAlertsOpen(!alertsOpen); setProfileOpen(false); }}>
             ⚠ {!isMobile && `${invalid.length}`}
@@ -463,7 +561,6 @@ export function DashboardClient({ user }: { user: User }) {
         <button style={s.userBtn} onClick={() => { setProfileOpen(!profileOpen); setAlertsOpen(false); }}>{user.email.slice(0, 2).toUpperCase()}</button>
       </div>
 
-      {/* ── Слоты мобайл ── */}
       {isMobile && (
         <div style={sm.mobileSlotsWrap}>
           <SlotBtn label="Все" active={selectedSlots.length === 0} color="#4a7aff" onClick={() => toggleSlot("all")} />
@@ -471,7 +568,6 @@ export function DashboardClient({ user }: { user: User }) {
         </div>
       )}
 
-      {/* ── Баннер невалидных адресов ── */}
       {!isMobile && invalid.length > 0 && !dismissedInvalid && (
         <div style={s.invalidBanner}>
           <span style={{ fontSize: 14, flexShrink: 0 }}>⚠</span>
@@ -488,7 +584,6 @@ export function DashboardClient({ user }: { user: User }) {
         </div>
       )}
 
-      {/* ── Переключатель вид мобайл ── */}
       {isMobile && !isBulkMode && (
         <div style={{ display: "flex", padding: "6px 10px", background: "#f5f4f0", gap: 6, flexShrink: 0, borderBottom: "1px solid #e8e6df" }}>
           <ViewToggleBtn active={mobileView === "map"} onClick={() => setMobileView("map")}>🗺️ Карта</ViewToggleBtn>
@@ -503,10 +598,7 @@ export function DashboardClient({ user }: { user: User }) {
         </div>
       )}
 
-      {/* ── Body ── */}
       <div style={isMobile ? sm.body : s.body}>
-
-        {/* DESKTOP */}
         {!isMobile && (
           <div style={{ display: 'flex', width: '100%', height: '100%' }}>
             {showLeftPanel && (
@@ -545,7 +637,6 @@ export function DashboardClient({ user }: { user: User }) {
                 </div>
               )}
 
-              {/* Карта — всегда в DOM, скрывается через display */}
               <div
                 ref={mapRef}
                 style={{
@@ -558,61 +649,10 @@ export function DashboardClient({ user }: { user: User }) {
               />
               {isBulkMode && routeTab === "list" && (
                 <div style={{ flex: 1, background: "#f5f4f0", padding: 24, overflowY: "auto" }}>
-                  <div style={{ maxWidth: 600, margin: "0 auto", background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 20 }}>
-
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                      <h2 style={{ margin: 0, fontSize: 18, color: "#1a1a18" }}>Маршрут · {bulkSelectedIds.length} точек</h2>
-                      <button onClick={() => { setIsBulkMode(false); setRouteTab("map"); }} style={{ background: "none", border: "none", fontSize: 24, cursor: "pointer", color: "#a8a49c", padding: "0 8px" }}>×</button>
-                    </div>
-
-                    <div style={{ display: "flex", gap: 8, marginBottom: 16, background: "#f5f4f0", padding: 4, borderRadius: 8, width: "fit-content" }}>
-                      <button onClick={() => setRouteType("auto")} style={{ ...s.actionBtn, background: routeType === "auto" ? "#fff" : "transparent", color: routeType === "auto" ? "#1a1a18" : "#a8a49c", boxShadow: routeType === "auto" ? "0 1px 3px rgba(0,0,0,0.1)" : "none", padding: "6px 14px", borderRadius: 6 }}>🚗 На авто</button>
-                      <button onClick={() => setRouteType("mt")} style={{ ...s.actionBtn, background: routeType === "mt" ? "#fff" : "transparent", color: routeType === "mt" ? "#1a1a18" : "#a8a49c", boxShadow: routeType === "mt" ? "0 1px 3px rgba(0,0,0,0.1)" : "none", padding: "6px 14px", borderRadius: 6 }}>🚌 Транспорт</button>
-                    </div>
-
-                    <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
-                      <button onClick={() => handleOpenRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "#facc15", color: "#1a1a18" }}>🗺️ Открыть в Яндексе</button>
-                      <button onClick={() => handleShareRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "#fafaf8", border: "1px solid #e8e6df", color: "#1a1a18" }}>🔗 Копировать ссылку</button>
-                    </div>
-
-                    <div style={{ background: "#fafaf8", padding: 16, borderRadius: 8, marginBottom: 20 }}>
-                      <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Назначить курьера</div>
-                      <div style={{ display: "flex", gap: 10 }}>
-                        <select style={{ ...s.nativeSelect, flex: 1 }} value={bulkCourier} onChange={e => setBulkCourier(e.target.value)}>
-                          <option value="">— Выберите курьера —</option>
-                          {sortedCouriers.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                        </select>
-                        <button style={{ ...s.actionBtn, width: 120, background: bulkCourier && bulkSelectedIds.length > 0 ? '#4a7aff' : '#e8e6df', color: bulkCourier && bulkSelectedIds.length > 0 ? '#fff' : '#a8a49c' }} disabled={!bulkCourier || bulkSelectedIds.length === 0 || bulkSaving} onClick={handleBulkAssign}>
-                          {bulkSaving ? "..." : "Назначить"}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Очередь доставки</div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {selectedRouteOrders.map((o, index) => (
-                        <div key={o.id} style={{ padding: "10px 12px", background: "#fff", border: "1px solid #e8e6df", borderRadius: 8, display: "flex", gap: 12, alignItems: "center" }}>
-
-                          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                            <button disabled={index === 0} onClick={() => moveBulkItem(index, 'up')} style={{ background: "none", border: "none", cursor: index === 0 ? "default" : "pointer", opacity: index === 0 ? 0.3 : 1, fontSize: 11, padding: 2, color: "#6b6860" }}>▲</button>
-                            <button disabled={index === selectedRouteOrders.length - 1} onClick={() => moveBulkItem(index, 'down')} style={{ background: "none", border: "none", cursor: index === selectedRouteOrders.length - 1 ? "default" : "pointer", opacity: index === selectedRouteOrders.length - 1 ? 0.3 : 1, fontSize: 11, padding: 2, color: "#6b6860" }}>▼</button>
-                          </div>
-
-                          <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#4a7aff", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{index + 1}</div>
-                          <div style={{ flex: 1, overflow: "hidden" }}>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: "#1a1a18", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.address}</div>
-                            <div style={{ fontSize: 11, color: "#a8a49c", marginTop: 2 }}>Слот: {o.slotRaw} · {o.externalId ?? o.crmId}</div>
-                          </div>
-                          <button onClick={() => toggleBulkSelect(o.id)} style={{ background: "none", border: "none", color: "#d94040", cursor: "pointer", fontSize: 18, padding: 4 }}>×</button>
-                        </div>
-                      ))}
-                      {selectedRouteOrders.length === 0 && <div style={{ fontSize: 13, color: "#a8a49c", textAlign: "center", padding: 20 }}>Точки не выбраны</div>}
-                    </div>
-                  </div>
+                  {renderRouteListPanel()}
                 </div>
               )}
 
-              {/* Кнопки разворачивания скрытых панелей */}
               {!isBulkMode && (
                 <div style={{ position: 'absolute', top: 12, left: 0, zIndex: 100, display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {!isListVisible && (
@@ -627,7 +667,6 @@ export function DashboardClient({ user }: { user: User }) {
           </div>
         )}
 
-        {/* MOBILE */}
         {isMobile && (
           <>
             <div
@@ -662,62 +701,13 @@ export function DashboardClient({ user }: { user: User }) {
 
             {isBulkMode && routeTab === "list" && (
               <div style={{ flex: 1, background: "#f5f4f0", padding: 16, overflowY: "auto" }}>
-                <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 16 }}>
-
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                    <h2 style={{ margin: 0, fontSize: 16, color: "#1a1a18" }}>Маршрут · {bulkSelectedIds.length} точек</h2>
-                  </div>
-
-                  <div style={{ display: "flex", gap: 8, marginBottom: 16, background: "#f5f4f0", padding: 4, borderRadius: 8, width: "fit-content" }}>
-                    <button onClick={() => setRouteType("auto")} style={{ ...s.actionBtn, background: routeType === "auto" ? "#fff" : "transparent", color: routeType === "auto" ? "#1a1a18" : "#a8a49c", boxShadow: routeType === "auto" ? "0 1px 3px rgba(0,0,0,0.1)" : "none", padding: "6px 14px", borderRadius: 6 }}>🚗 На авто</button>
-                    <button onClick={() => setRouteType("mt")} style={{ ...s.actionBtn, background: routeType === "mt" ? "#fff" : "transparent", color: routeType === "mt" ? "#1a1a18" : "#a8a49c", boxShadow: routeType === "mt" ? "0 1px 3px rgba(0,0,0,0.1)" : "none", padding: "6px 14px", borderRadius: 6 }}>🚌 Транспорт</button>
-                  </div>
-
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
-                    <button onClick={() => handleOpenRoute(selectedRouteOrders)} style={{ ...s.actionBtn, background: "#facc15", color: "#1a1a18", width: "100%" }}>🗺️ Открыть в Яндексе</button>
-                    <button onClick={() => handleShareRoute(selectedRouteOrders)} style={{ ...s.actionBtn, background: "#fafaf8", border: "1px solid #e8e6df", color: "#1a1a18", width: "100%" }}>🔗 Копировать ссылку</button>
-                  </div>
-
-                  <div style={{ background: "#fafaf8", padding: 12, borderRadius: 8, marginBottom: 20 }}>
-                    <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Назначить курьера</div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                      <select style={{ ...s.nativeSelect, width: "100%" }} value={bulkCourier} onChange={e => setBulkCourier(e.target.value)}>
-                        <option value="">— Выберите курьера —</option>
-                        {sortedCouriers.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                      </select>
-                      <button style={{ ...s.actionBtn, width: "100%", background: bulkCourier && bulkSelectedIds.length > 0 ? '#4a7aff' : '#e8e6df', color: bulkCourier && bulkSelectedIds.length > 0 ? '#fff' : '#a8a49c' }} disabled={!bulkCourier || bulkSelectedIds.length === 0 || bulkSaving} onClick={handleBulkAssign}>
-                        {bulkSaving ? "..." : "Назначить"}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Очередь доставки</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {selectedRouteOrders.map((o, index) => (
-                      <div key={o.id} style={{ padding: "10px", background: "#fff", border: "1px solid #e8e6df", borderRadius: 8, display: "flex", gap: 10, alignItems: "center" }}>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                          <button disabled={index === 0} onClick={() => moveBulkItem(index, 'up')} style={{ background: "none", border: "none", cursor: index === 0 ? "default" : "pointer", opacity: index === 0 ? 0.3 : 1, fontSize: 14, padding: 2, color: "#6b6860" }}>▲</button>
-                          <button disabled={index === selectedRouteOrders.length - 1} onClick={() => moveBulkItem(index, 'down')} style={{ background: "none", border: "none", cursor: index === selectedRouteOrders.length - 1 ? "default" : "pointer", opacity: index === selectedRouteOrders.length - 1 ? 0.3 : 1, fontSize: 14, padding: 2, color: "#6b6860" }}>▼</button>
-                        </div>
-
-                        <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#4a7aff", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{index + 1}</div>
-                        <div style={{ flex: 1, overflow: "hidden" }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: "#1a1a18", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.address}</div>
-                          <div style={{ fontSize: 11, color: "#a8a49c", marginTop: 2 }}>{o.slotRaw} · {o.externalId ?? o.crmId}</div>
-                        </div>
-                        <button onClick={() => toggleBulkSelect(o.id)} style={{ background: "none", border: "none", color: "#d94040", cursor: "pointer", fontSize: 20, padding: 4 }}>×</button>
-                      </div>
-                    ))}
-                    {selectedRouteOrders.length === 0 && <div style={{ fontSize: 13, color: "#a8a49c", textAlign: "center", padding: 20 }}>Точки не выбраны</div>}
-                  </div>
-                </div>
+                {renderRouteListPanel()}
               </div>
             )}
           </>
         )}
       </div>
 
-      {/* ── Нижняя таблица (только десктоп) ── */}
       {!isMobile && (
         <div style={{ ...s.tableSection, height: tableOpen ? tableHeight : 44, position: 'relative' }}>
           {tableOpen && <div onMouseDown={(e) => { e.preventDefault(); setIsDraggingTable(true); }} style={{ position: 'absolute', top: -4, left: 0, right: 0, height: 8, cursor: 'row-resize', zIndex: 200 }} />}
@@ -763,7 +753,7 @@ export function DashboardClient({ user }: { user: User }) {
                     const color = slotColor(o);
                     return (
                       <tr
-                        id={`row-${o.id}`} // 🔥 ID для автоскролла 
+                        id={`row-${o.id}`}
                         key={o.id}
                         style={{ background: selectedId === o.id ? "#eef3ff" : i % 2 === 0 ? "#fff" : "#fafaf8", cursor: "pointer" }}
                         onClick={() => { setSelectedId(o.id); setIsListVisible(true); setIsDetailVisible(true); }}
@@ -851,7 +841,6 @@ const s: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", overflow: "hidden" },
   topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 16px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 10, position: "relative", overflowX: "auto" },
   logo: { fontSize: 15, fontWeight: 600, color: "#1a1a18", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap" },
-  logoDot: { display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "#4a7aff" },
   navBtn: { padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#1a1a18", whiteSpace: "nowrap" },
   datePicker: { padding: "4px 8px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 11, outline: "none", color: "#1a1a18", background: "#fff", marginLeft: 8 },
   nativeSelect: { height: 28, padding: "0 8px", borderRadius: 7, border: "1px solid #e0dfd7", fontSize: 11, fontWeight: 500, outline: "none", cursor: "pointer", background: "#fff", color: "#1a1a18", maxWidth: 120 },

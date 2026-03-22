@@ -8,7 +8,8 @@ const STORE_COORDS = "55.749511,37.596205"; // База (магазин)
 
 export async function POST(req: Request) {
   try {
-    const { orderIds, courierId, routeType = "auto" } = await req.json();
+    // 🔥 ДОБАВИЛИ returnToBase
+    const { orderIds, courierId, routeType = "auto", returnToBase = false } = await req.json();
     if (!orderIds?.length || !courierId) return NextResponse.json({ error: "Неверные данные" }, { status: 400 });
 
     const orders = await prisma.order.findMany({
@@ -18,7 +19,12 @@ export async function POST(req: Request) {
 
     const sortedOrders = orderIds.map((id: string) => orders.find((o) => o.id === id)).filter(Boolean);
     const coordsList = sortedOrders.map((o: any) => o.lat && o.lng ? `${o.lat},${o.lng}` : null).filter(Boolean);
-    const rtext = [STORE_COORDS, ...coordsList].join("~");
+    
+    // 🔥 Формируем строку маршрута с учетом возврата на базу
+    const rtextArr = [STORE_COORDS, ...coordsList];
+    if (returnToBase) rtextArr.push(STORE_COORDS);
+    
+    const rtext = rtextArr.join("~");
     const link = `https://yandex.ru/maps/?rtext=${rtext}&rtt=${routeType}`;
 
     const routeName = `M-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -41,12 +47,11 @@ export async function POST(req: Request) {
           courier: courierFullName,
           routeId: newRoute.id, 
           routeOrder: i + 1,
-          status: "ASSIGNED" // Локально статус меняем!
+          status: "ASSIGNED" 
         }
       });
 
       if (courierFullName && orderToUpdate?.crmId) {
-        // 🔥 В CRM отправляем ТОЛЬКО курьера, без статуса
         await updateCrmOrder(orderToUpdate.crmId, { 
           courier: courierFullName 
         }).catch(err => console.error(`[CRM Sync] Ошибка для ${orderToUpdate.crmId}:`, err));
