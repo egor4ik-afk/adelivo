@@ -174,7 +174,8 @@ export function DashboardClient({ user }: { user: User }) {
         if (cnt > 0) flags.push(`${cnt} зак.`);
         label += ` (${flags.join(", ")})`;
       }
-      return { value: c.fullName, label };
+      // 🔥 Добавили id: c.id
+      return { id: c.id, value: c.fullName, label };
     });
   })();
 
@@ -571,7 +572,7 @@ export function DashboardClient({ user }: { user: User }) {
                       <div style={{ display: "flex", gap: 10 }}>
                         <select style={{ ...s.nativeSelect, flex: 1 }} value={bulkCourier} onChange={e => setBulkCourier(e.target.value)}>
                           <option value="">— Выберите курьера —</option>
-                          {sortedCouriers.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                          {sortedCouriers.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                         </select>
                         <button style={{ ...s.actionBtn, width: 120, background: bulkCourier && bulkSelectedIds.length > 0 ? '#4a7aff' : '#e8e6df', color: bulkCourier && bulkSelectedIds.length > 0 ? '#fff' : '#a8a49c' }} disabled={!bulkCourier || bulkSelectedIds.length === 0 || bulkSaving} onClick={handleBulkAssign}>
                           {bulkSaving ? "..." : "Назначить"}
@@ -671,7 +672,7 @@ export function DashboardClient({ user }: { user: User }) {
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <select style={{ ...s.nativeSelect, width: "100%" }} value={bulkCourier} onChange={e => setBulkCourier(e.target.value)}>
                         <option value="">— Выберите курьера —</option>
-                        {sortedCouriers.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                        {sortedCouriers.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                       </select>
                       <button style={{ ...s.actionBtn, width: "100%", background: bulkCourier && bulkSelectedIds.length > 0 ? '#4a7aff' : '#e8e6df', color: bulkCourier && bulkSelectedIds.length > 0 ? '#fff' : '#a8a49c' }} disabled={!bulkCourier || bulkSelectedIds.length === 0 || bulkSaving} onClick={handleBulkAssign}>
                         {bulkSaving ? "..." : "Назначить"}
