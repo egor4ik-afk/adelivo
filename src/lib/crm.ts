@@ -138,7 +138,6 @@ export async function mapCrmOrder(order: CrmOrder) {
     parsedDate = new Date(rawDate.getTime() - 5 * 60 * 60 * 1000);
   }
 
-  // 🔥 НОВОЕ: Достаем контакты
   const customerName = [order.firstName, order.lastName].filter(Boolean).join(" ") 
     || [order.customer?.firstName, order.customer?.lastName].filter(Boolean).join(" ") || null;
   const customerPhone = order.phone || order.customer?.phones?.[0]?.number || null;
@@ -162,7 +161,6 @@ export async function mapCrmOrder(order: CrmOrder) {
     slotRaw: slot.text,
     deliveryType: order.delivery?.code ?? null,
     crmCreatedAt: parsedDate,
-    // 🔥 НОВОЕ: Сохраняем в БД
     customerName,
     customerPhone,
     customerEmail,
@@ -256,15 +254,24 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       updateFields.invalidReason = existing.invalidReason;
     }
   
-    // 🔥 Защита: NEW из CRM не перезаписывает ASSIGNED / IN_DELIVERY
-    const protectedStatuses: OrderStatus[] = [OrderStatus.ASSIGNED, OrderStatus.IN_DELIVERY];
+    // 🔥 ГЛАВНАЯ ЗАЩИТА: Запрещаем CRM (cron/webhook) откатывать наши активные статусы.
+    // Внутри системы операторы могут менять что угодно (это идет через PATCH напрямую в БД), 
+    // но при синхронизации сверху мы игнорируем "NEW", если уже поехали.
     if (
-      protectedStatuses.includes(existing.status) &&
+      existing.status === OrderStatus.IN_DELIVERY && 
+      (updateFields.status === OrderStatus.NEW || updateFields.status === OrderStatus.ASSIGNED)
+    ) {
+      updateFields.status = existing.status;
+      updateFields.courierId = existing.courierId;
+      updateFields.courier = existing.courier;
+    } else if (
+      existing.status === OrderStatus.ASSIGNED && 
       updateFields.status === OrderStatus.NEW
     ) {
       updateFields.status = existing.status;
+      updateFields.courierId = existing.courierId;
+      updateFields.courier = existing.courier;
     }
-  
 
     const hasCoreChanges =
       (existing.crmStatus  ?? "") !== (updateFields.crmStatus  ?? "") ||
@@ -288,7 +295,6 @@ export async function upsertOrder(crmOrder: CrmOrder) {
   if (!existing) {
     notify({ type: "order.new", order }).catch(console.error);
   } else {
-    // 🔥 СОБИРАЕМ ОБЪЕКТ ИЗМЕНЕНИЙ ДЛЯ ПУШЕЙ
     const changes = {
       statusChanged:    (existing.crmStatus ?? "") !== (order.crmStatus ?? ""),
       courierChanged:   (existing.courierId ?? 0)  !== (order.courierId ?? 0),
