@@ -254,20 +254,14 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       updateFields.invalidReason = existing.invalidReason;
     }
   
-    // 🔥 ГЛАВНАЯ ЗАЩИТА: Запрещаем CRM (cron/webhook) откатывать наши активные статусы.
-    // Внутри системы операторы могут менять что угодно (это идет через PATCH напрямую в БД), 
-    // но при синхронизации сверху мы игнорируем "NEW", если уже поехали.
-    if (
-      existing.status === OrderStatus.IN_DELIVERY && 
-      (updateFields.status === OrderStatus.NEW || updateFields.status === OrderStatus.ASSIGNED)
-    ) {
+    // 🔥 АБСОЛЮТНАЯ ЗАЩИТА: Полностью игнорируем статус NEW из CRM для существующих заказов
+    if (updateFields.status === OrderStatus.NEW) {
       updateFields.status = existing.status;
       updateFields.courierId = existing.courierId;
       updateFields.courier = existing.courier;
-    } else if (
-      existing.status === OrderStatus.ASSIGNED && 
-      updateFields.status === OrderStatus.NEW
-    ) {
+    } 
+    // Защита от случайного отката из "В пути" в "Назначен" (если CRM вдруг пришлет такое)
+    else if (existing.status === OrderStatus.IN_DELIVERY && updateFields.status === OrderStatus.ASSIGNED) {
       updateFields.status = existing.status;
       updateFields.courierId = existing.courierId;
       updateFields.courier = existing.courier;
