@@ -342,6 +342,7 @@ export function DashboardClient({ user }: { user: User }) {
   }, [selectedId, isBulkMode, orders]);
 
   // 🔥 ФОНОВЫЙ РАСЧЕТ ETA МАРШРУТА
+  // 🔥 ФОНОВЫЙ РАСЧЕТ ETA МАРШРУТА
   const selectedRouteOrders = bulkSelectedIds.map(id => orders.find(o => o.id === id)).filter(Boolean) as Order[];
 
   useEffect(() => {
@@ -353,7 +354,7 @@ export function DashboardClient({ user }: { user: User }) {
     const validOrders = selectedRouteOrders.filter(o => o.lat && o.lng);
     if (validOrders.length === 0) return;
 
-    const points = [[STORE_LAT, STORE_LNG], ...validOrders.map(o => [o.lat!, o.lng!])];
+    const points = [ [STORE_LAT, STORE_LNG], ...validOrders.map(o => [o.lat!, o.lng!]) ];
     if (returnToBase) points.push([STORE_LAT, STORE_LNG]);
 
     setIsCalculatingRoute(true);
@@ -363,12 +364,15 @@ export function DashboardClient({ user }: { user: User }) {
           setRouteTotals({ time: route.getHumanTime(), dist: route.getHumanLength() });
           const paths = route.getPaths();
           const legsArr: string[] = [];
-          for (let i = 0; i < paths.getLength(); i++) legsArr.push(paths.get(i).getHumanTime());
+          for(let i = 0; i < paths.getLength(); i++) legsArr.push(paths.get(i).getHumanTime());
           setRouteLegs(legsArr);
+          setIsCalculatingRoute(false); // 🔥 Перенесли сюда из finally
         })
-        .catch((e: any) => console.error("Route calc error", e))
-        .finally(() => setIsCalculatingRoute(false));
-    }, 800); // Задержка, чтобы не спамить API при перетаскивании
+        .catch((e: any) => {
+          console.error("Route calc error", e);
+          setIsCalculatingRoute(false); // 🔥 И сюда
+        });
+    }, 800);
 
     return () => clearTimeout(timer);
   }, [bulkSelectedIds, routeType, returnToBase, routeTab]);
