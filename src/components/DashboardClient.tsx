@@ -377,16 +377,25 @@ export function DashboardClient({ user }: { user: User }) {
     if (!bulkCourier || bulkSelectedIds.length === 0) return;
     setBulkSaving(true);
     try {
-      for (const id of bulkSelectedIds) {
-        await fetch(`/api/orders/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ courier: bulkCourier }) });
-      }
+      // 🔥 Вызываем наш новый API для маршрутов
+      const res = await fetch(`/api/routes/assign`, { 
+        method: "POST", 
+        headers: { "Content-Type": "application/json" }, 
+        body: JSON.stringify({ orderIds: bulkSelectedIds, courierId: bulkCourier }) 
+      });
+      
+      if (!res.ok) throw new Error("Ошибка сервера");
+
       setBulkCourier("");
-      await fetchData();
-      alert("✅ Курьер успешно назначен на выбранные заказы!");
-    } catch { alert("Произошла ошибка при массовом назначении"); }
+      setBulkSelectedIds([]); // Очищаем выбранные точки
+      setIsBulkMode(false);   // Выходим из режима маршрута
+      await fetchData();      // Обновляем данные на экране
+      alert("✅ Маршрут успешно создан, курьер уведомлен!");
+    } catch { 
+      alert("Произошла ошибка при массовом назначении"); 
+    }
     finally { setBulkSaving(false); }
   }
-
   const toggleSlot = (label: string) => {
     if (label === "all") setSelectedSlots([]);
     else setSelectedSlots(prev => prev.includes(label) ? prev.filter(x => x !== label) : [...prev, label]);
@@ -399,7 +408,10 @@ export function DashboardClient({ user }: { user: User }) {
     <div style={isMobile ? sm.app : s.app}>
       {/* ── Topbar ── */}
       <div style={isMobile ? sm.topbar : s.topbar}>
-        <div style={s.logo}><span style={s.logoDot} />EwentWave</div>
+        <div style={s.logo}>
+          <img src="/favicon.svg" alt="Logo" style={{ width: 22, height: 22 }} />
+          EventWave
+        </div>
         <button onClick={() => router.push('/orders')} style={s.navBtn}>
           ≡ Заказы
           <span style={{ background: '#eef3ff', color: '#4a7aff', padding: '1px 6px', borderRadius: 10, marginLeft: 6, fontSize: 10, fontWeight: 700 }}>

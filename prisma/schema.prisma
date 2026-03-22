@@ -1,3 +1,4 @@
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -31,7 +32,7 @@ model User {
   role              Role               @default(COURIER) // Было OPERATOR  
   firstName         String?
   lastName          String?
-  phone             String?
+  phone             String?            // Сюда будем обязательно сохранять телефон при входе
   lastLoginAt       DateTime?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
@@ -49,6 +50,7 @@ model User {
   sessions          Session[]
   authCodes         AuthCode[]
   pushSubscriptions PushSubscription[]
+  routeMessages     RouteMessage[]     // 🔥 НОВОЕ: Сообщения юзера в чатах
 }
 
 model Session {
@@ -109,6 +111,7 @@ model Courier {
   // Связи
   shifts      CourierShift[]
   payments    CourierPayment[]
+  routes      Route[] // 🔥 НОВОЕ: Маршруты курьера
 }
 
 // Таблица смен (график работы курьеров)
@@ -139,9 +142,6 @@ model Order {
   externalId    String?
   status        OrderStatus @default(NEW)
   address       String?
-  customerName  String?
-  customerPhone String?
-  customerEmail String?
   lat           Float?
   lng           Float?
   price         Float?
@@ -164,6 +164,15 @@ model Order {
   updatedAt     DateTime    @updatedAt
   changedAt     DateTime?
   courierManual Boolean     @default(false)
+  customerName  String?
+  customerPhone String?
+  customerEmail String?
+  
+  // 🔥 НОВЫЕ ПОЛЯ:
+  recipientPhone String? // Телефон получателя
+  routeId        String? // Привязка к маршруту
+  route          Route?  @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  routeOrder     Int?    // Порядок в маршруте
 
   @@index([createdAt])
   @@index([slotFrom, slotTo])
@@ -188,4 +197,38 @@ model NotificationLog {
 
   @@index([createdAt])
   @@index([type])
+}
+
+// Модель Маршрута
+model Route {
+  id        String   @id @default(uuid())
+  name      String   // Например, "M-1234"
+  link      String?  @db.Text // Ссылка на Яндекс
+  date      String   // Дата "YYYY-MM-DD"
+  
+  courierId Int
+  courier   Courier  @relation(fields: [courierId], references: [id])
+  
+  orders    Order[]
+  messages  RouteMessage[] // Чат маршрута
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Модель сообщения в чате маршрута
+model RouteMessage {
+  id        String   @id @default(cuid())
+  text      String   @db.Text
+  
+  routeId   String
+  route     Route    @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  
+  createdAt DateTime @default(now())
+
+  @@index([routeId])
+  @@index([createdAt])
 }

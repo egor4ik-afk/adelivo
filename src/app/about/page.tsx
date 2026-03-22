@@ -4,22 +4,18 @@ import { useEffect } from "react";
 
 export default function AboutPage() {
   useEffect(() => {
-    // Устанавливаем заголовок страницы
     document.title = "EventWave — Продвинутая система логистики";
 
-    // Интерактивность для бейджиков (фильтров)
     document.querySelectorAll('.filter-chip').forEach(chip => {
       chip.addEventListener('click', () => {
         chip.classList.toggle('active');
       });
     });
 
-    // Интерактивность для переключателей (тумблеров)
     document.querySelectorAll('.toggle').forEach(t => {
       t.addEventListener('click', () => t.classList.toggle('on'));
     });
 
-    // Плавная анимация при прокрутке
     const observer = new IntersectionObserver((entries) => {
       entries.forEach(e => {
         if (e.isIntersecting) {
@@ -37,11 +33,9 @@ export default function AboutPage() {
 
   return (
     <>
-      {/* Подключаем красивые шрифты для лендинга */}
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet" />
       
-      {/* Рендерим HTML */}
       <div dangerouslySetInnerHTML={{ __html: HTML_CONTENT }} />
     </>
   );
@@ -78,7 +72,6 @@ const HTML_CONTENT = `
     position: relative;
   }
 
-  /* ── NOISE OVERLAY ── */
   .landing-body::before {
     content: '';
     position: fixed; inset: 0;
@@ -86,7 +79,6 @@ const HTML_CONTENT = `
     pointer-events: none; z-index: 0;
   }
 
-  /* ── HEADER ── */
   .landing-body header {
     position: fixed; top: 0; left: 0; right: 0;
     z-index: 100;
@@ -104,6 +96,9 @@ const HTML_CONTENT = `
     letter-spacing: 0.12em;
     color: var(--accent);
     text-shadow: 0 0 40px rgba(56,189,248,0.5);
+    display: flex;
+    align-items: center;
+    gap: 12px;
   }
   .landing-body .logo span { color: var(--text); }
 
@@ -119,7 +114,25 @@ const HTML_CONTENT = `
   }
   .landing-body nav a:hover { color: var(--accent); }
 
-  /* ── HERO ── */
+  /* Кнопка Войти в шапке */
+  .landing-body .btn-login {
+    background: rgba(56,189,248,0.1);
+    border: 1px solid rgba(56,189,248,0.3);
+    padding: 0.4rem 1.2rem;
+    border-radius: 6px;
+    color: var(--accent) !important;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .landing-body .btn-login:hover {
+    background: var(--accent);
+    color: #080C14 !important;
+  }
+
   .landing-body .hero {
     position: relative;
     min-height: 100vh;
@@ -198,9 +211,9 @@ const HTML_CONTENT = `
   }
 
   .landing-body .hero-stats {
-    margin-top: 3.5rem;
+    margin-top: 4rem;
     display: flex; gap: 3rem; justify-content: center; flex-wrap: wrap;
-    animation: fadeDown 0.7s 0.35s ease both;
+    animation: fadeDown 0.7s 0.4s ease both;
   }
   .landing-body .stat { text-align: center; }
   .landing-body .stat-val {
@@ -217,7 +230,6 @@ const HTML_CONTENT = `
     to { opacity: 1; transform: translateY(0); }
   }
 
-  /* ── SCROLL INDICATOR ── */
   .landing-body .scroll-hint {
     position: absolute; bottom: 2rem; left: 50%; transform: translateX(-50%);
     display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
@@ -231,7 +243,6 @@ const HTML_CONTENT = `
   }
   @keyframes float { 0%,100%{transform:translateX(-50%) translateY(0)} 50%{transform:translateX(-50%) translateY(6px)} }
 
-  /* ── SECTIONS ── */
   .landing-body section { position: relative; z-index: 1; }
 
   .landing-body .section-inner {
@@ -263,7 +274,6 @@ const HTML_CONTENT = `
     line-height: 1.7;
   }
 
-  /* ── DASHBOARD MODULE ── */
   .landing-body .dash-section { background: var(--surface); }
 
   .landing-body .dash-layout {
@@ -341,7 +351,6 @@ const HTML_CONTENT = `
   .landing-body .fi-text h4 { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.2rem; }
   .landing-body .fi-text p { font-size: 0.8rem; color: var(--muted); line-height: 1.5; }
 
-  /* ── MAP MODULE ── */
   .landing-body .map-section { background: var(--bg); }
 
   .landing-body .map-layout {
@@ -389,7 +398,6 @@ const HTML_CONTENT = `
   .landing-body .filter-chip.day.active { border-color: #10B981; color: #10B981; background: rgba(16,185,129,0.08); }
   .landing-body .filter-chip.evening.active { border-color: var(--accent2); color: #A78BFA; background: rgba(124,58,237,0.08); }
 
-  /* ── ROUTE MODULE ── */
   .landing-body .route-section { background: var(--surface); }
 
   .landing-body .route-grid {
@@ -425,7 +433,6 @@ const HTML_CONTENT = `
   .landing-body .rc-title { font-size: 1rem; font-weight: 700; margin-bottom: 0.5rem; }
   .landing-body .rc-desc { font-size: 0.82rem; color: var(--muted); line-height: 1.6; }
 
-  /* ── ROUTE DEMO ── */
   .landing-body .route-demo {
     margin-top: 4rem;
     background: var(--card);
@@ -460,7 +467,6 @@ const HTML_CONTENT = `
   .landing-body .stop-arrows { color: var(--muted); font-size: 0.9rem; cursor: pointer; }
   .landing-body .stop-arrows:hover { color: var(--accent); }
 
-  /* ── COURIERS MODULE ── */
   .landing-body .couriers-section { background: var(--bg); }
 
   .landing-body .couriers-layout {
@@ -504,7 +510,6 @@ const HTML_CONTENT = `
   .landing-body .cb-paid { background: rgba(100,116,139,0.15); color: var(--muted); }
   .landing-body .cb-owe { background: rgba(245,158,11,0.15); color: var(--warn); }
 
-  /* shift calendar */
   .landing-body .shift-cal {
     background: var(--card);
     border: 1px solid var(--border);
@@ -539,7 +544,6 @@ const HTML_CONTENT = `
   .landing-body .cal-day.shift::after { background: var(--accent3); }
   .landing-body .cal-day.shift2::after { background: var(--accent); }
 
-  /* ── NOTIFICATIONS MODULE ── */
   .landing-body .notif-section { background: var(--surface); }
 
   .landing-body .notif-layout {
@@ -569,7 +573,6 @@ const HTML_CONTENT = `
   .landing-body .notif-body p { font-size: 0.75rem; color: var(--muted); }
   .landing-body .notif-time { margin-left: auto; font-size: 0.7rem; color: var(--muted); white-space: nowrap; }
 
-  /* toggle list */
   .landing-body .toggle-list { display: flex; flex-direction: column; gap: 0.7rem; }
   .landing-body .toggle-row {
     display: flex; justify-content: space-between; align-items: center;
@@ -593,7 +596,6 @@ const HTML_CONTENT = `
   }
   .landing-body .toggle.on::after { transform: translateX(18px); }
 
-  /* ── INTEGRATION BANNER ── */
   .landing-body .int-section { background: var(--bg); }
 
   .landing-body .int-badges {
@@ -612,7 +614,6 @@ const HTML_CONTENT = `
   .landing-body .int-badge:hover { border-color: rgba(56,189,248,0.4); transform: translateY(-2px); }
   .landing-body .int-badge .ib-icon { font-size: 1.3rem; }
 
-  /* ── CTA ── */
   .landing-body .cta-section {
     background: var(--bg);
     text-align: center;
@@ -647,7 +648,7 @@ const HTML_CONTENT = `
     display: inline-flex; align-items: center; gap: 0.6rem;
     padding: 0.9rem 2.2rem;
     background: var(--accent);
-    color: #080C14;
+    color: #080C14 !important;
     font-weight: 700; font-size: 0.9rem;
     border-radius: 8px; text-decoration: none;
     transition: box-shadow 0.2s, transform 0.2s;
@@ -655,7 +656,6 @@ const HTML_CONTENT = `
   }
   .landing-body .btn-primary:hover { box-shadow: 0 0 30px rgba(56,189,248,0.4); transform: translateY(-2px); }
 
-  /* ── FOOTER ── */
   .landing-body footer {
     border-top: 1px solid var(--border);
     padding: 2rem;
@@ -664,14 +664,12 @@ const HTML_CONTENT = `
     color: var(--muted);
   }
 
-  /* ── DIVIDER ── */
   .landing-body .divider {
     height: 1px;
     background: linear-gradient(90deg, transparent, var(--border), transparent);
     margin: 0 2rem;
   }
 
-  /* ── RESPONSIVE ── */
   @media(max-width: 900px) {
     .landing-body .dash-layout, 
     .landing-body .map-layout, 
@@ -689,14 +687,20 @@ const HTML_CONTENT = `
 
 <div class="landing-body">
   <header>
-    <div class="logo">Event<span>Wave</span></div>
-    <nav>
-      <a href="#dashboard">Дашборд</a>
-      <a href="#map">Карта</a>
-      <a href="#routes">Маршруты</a>
-      <a href="#couriers">Курьеры</a>
-      <a href="#notifications">Уведомления</a>
-    </nav>
+    <div class="logo">
+      <img src="/favicon.svg" alt="Logo" style="width: 32px; height: 32px; filter: drop-shadow(0 0 10px rgba(56,189,248,0.5));" />
+      <div>Event<span>Wave</span></div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 2rem;">
+      <nav>
+        <a href="#dashboard">Дашборд</a>
+        <a href="#map">Карта</a>
+        <a href="#routes">Маршруты</a>
+        <a href="#couriers">Курьеры</a>
+        <a href="#notifications">Уведомления</a>
+      </nav>
+      <a href="/login" class="btn-login">Войти</a>
+    </div>
   </header>
 
   <section class="hero">
@@ -709,6 +713,11 @@ const HTML_CONTENT = `
         Единое рабочее пространство для логистов. Реальное время, умная маршрутизация,
         полная интеграция с RetailCRM и Яндекс.Картами.
       </p>
+      
+      <div style="margin-top: 2.5rem; animation: fadeDown 0.7s 0.3s ease both;">
+        <a href="/login" class="btn-primary" style="font-size: 1.1rem; padding: 1rem 3rem;">Войти в систему →</a>
+      </div>
+
       <div class="hero-stats">
         <div class="stat">
           <div class="stat-val">50+</div>
@@ -1295,7 +1304,7 @@ const HTML_CONTENT = `
       <div class="cta-card">
         <h2>Готовы ускорить логистику?</h2>
         <p>EventWave берёт на себя рутину. Логисты работают в 3–4 раза быстрее, а данные всегда остаются в безопасности.</p>
-        <a href="#" class="btn-primary">Запросить демо →</a>
+        <a href="/login" class="btn-primary">Войти в систему →</a>
       </div>
     </div>
   </section>

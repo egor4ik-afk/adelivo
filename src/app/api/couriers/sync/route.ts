@@ -6,6 +6,9 @@ import axios from "axios";
 const CRM_URL = process.env.RETAILCRM_API_URL;
 const CRM_KEY = process.env.RETAILCRM_API_KEY;
 
+// 🔥 Фильтр мусорных имен из CRM
+const BAD_WORDS = ["сдэк", "яндекс", "доставк", "курьер", "тест", "пеший", "авто", "logisty", "dostavista"];
+
 export async function GET() {
   if (!CRM_URL || !CRM_KEY) {
     return NextResponse.json({ error: "No CRM config" }, { status: 500 });
@@ -25,10 +28,20 @@ export async function GET() {
     for (const c of couriers as any[]) {
       // Собираем полное имя
       const fullNameParts = [c.firstName, c.patronymic, c.lastName].filter(Boolean);
-      const fullName = fullNameParts.length > 0 ? fullNameParts.join(" ") : `Курьер ID ${c.id}`;
+      const fullName = fullNameParts.length > 0 ? fullNameParts.join(" ") : "";
       
-      const phone = c.phone?.number || null;
-      
+      // 1. ОТСЕВ: Если имени нет или оно короче 3 символов — пропускаем
+      if (!fullName || fullName.trim().length < 3) continue;
+
+      // 2. ОТСЕВ: Если имя содержит мусорное слово — пропускаем
+      const lowerName = fullName.toLowerCase();
+      if (BAD_WORDS.some(word => lowerName.includes(word))) continue;
+
+      const crmPhone = c.phone?.number || null;
+
+      // Проверяем, есть ли уже этот курьер в нашей базе
+      const existing = await prisma.courier.findUnique({ where: { id: c.id } });
+
       await prisma.courier.upsert({
         where: { id: c.id },
         update: { 
@@ -36,10 +49,12 @@ export async function GET() {
           lastName: c.lastName || null,
           patronymic: c.patronymic || null,
           fullName, 
-          phone,
-          email: c.email || null,
           description: c.description || null,
-          isActive: c.active !== false
+          isActive: c.active !== false,
+          // 🔥 ВАЖНО: Обновляем почту и телефон из CRM ТОЛЬКО если у нас в базе они пустые. 
+          // Если курьер уже ввел свой реальный номер при регистрации - не затираем его!
+          ...(existing?.email ? {} : { email: c.email || null }),
+          ...(existing?.phone ? {} : { phone: crmPhone }),
         },
         create: { 
           id: c.id, 
@@ -47,7 +62,7 @@ export async function GET() {
           lastName: c.lastName || null,
           patronymic: c.patronymic || null,
           fullName, 
-          phone,
+          phone: crmPhone,
           email: c.email || null,
           description: c.description || null,
           isActive: c.active !== false
@@ -57,7 +72,7 @@ export async function GET() {
       synced++;
     }
 
-    return NextResponse.json({ ok: true, synced, message: `Успешно загружено ${synced} курьеров` });
+    return NextResponse.json({ ok: true, synced, message: `Успешно загружено ${synced} реальных курьеров` });
     
   } catch (e) {
     console.error("Courier sync error:", String(e));
