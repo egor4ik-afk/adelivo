@@ -345,7 +345,7 @@ export function DashboardClient({ user }: { user: User }) {
 
         pm = new ymaps.Placemark([lat, lng], {
           balloonContentHeader: order.externalId ?? order.crmId, hintContent: order.address ?? "—",
-          iconCaption: (displayName && !isBulkMode) ? order.courier : undefined,
+          iconCaption: (displayName) ? order.courier : undefined,
           iconContent: iconContent
         }, { preset, iconColor: (isBulkMode || isSelected) ? undefined : color });
       }
