@@ -134,7 +134,6 @@ export function DashboardClient({ user }: { user: User }) {
 
   useEffect(() => { fetchData(); const t = setInterval(fetchData, 30_000); return () => clearInterval(t); }, [fetchData]);
 
-  // 🔥 ВЕРНУЛИ УДАЛЕННЫЙ БЛОК ДЛЯ ПУШ-УВЕДОМЛЕНИЙ И БАННЕРА
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (e.data?.type === "NOTIFICATION_CLICK" && e.data.orderId) {
@@ -151,7 +150,6 @@ export function DashboardClient({ user }: { user: User }) {
   }, [fetchData, isMobile]);
 
   useEffect(() => { setDismissedInvalid(false); }, [orders]);
-  // 🔥 КОНЕЦ БЛОКА
 
   const sortedCouriers = (() => {
     const base = [...dbCouriers].filter(c => c.isActive);
@@ -199,6 +197,12 @@ export function DashboardClient({ user }: { user: User }) {
     const s = SLOTS.find(x => x.from === o.slotFrom && x.to === o.slotTo);
     return s && selectedSlots.includes(s.label);
   });
+
+  // На карте не показываем отменённые, возвраты и самовывоз
+  const MAP_EXCLUDED_STATUSES = ["CANCELLED", "RETURNED"];
+  const filteredForMap = filtered.filter(
+    o => !MAP_EXCLUDED_STATUSES.includes(o.status) && !/Самовывоз/i.test(o.address ?? "")
+  );
 
   const tableOrders = [...filtered].sort((a, b) => {
     let valA: any = (a as any)[sortConfig.key] ?? "";
@@ -259,6 +263,7 @@ export function DashboardClient({ user }: { user: User }) {
     });
   };
 
+  // Плейсмарки — используем filteredForMap (без отменённых, возвратов и самовывоза)
   useEffect(() => {
     const clusterer = clustererRef.current;
     if (!clusterer || typeof window === "undefined" || !window.ymaps) return;
@@ -273,7 +278,7 @@ export function DashboardClient({ user }: { user: User }) {
       '</div>'
     );
 
-    const placemarks = filtered.filter(o => (o.lat && o.lng) || (o.id === selectedId && previewGeo)).map(order => {
+    const placemarks = filteredForMap.filter(o => (o.lat && o.lng) || (o.id === selectedId && previewGeo)).map(order => {
       const isSelected = selectedId === order.id;
       const bulkIndex = bulkSelectedIds.indexOf(order.id);
       const isBulkSelected = bulkIndex !== -1;
@@ -287,12 +292,10 @@ export function DashboardClient({ user }: { user: User }) {
 
       let pm;
 
-      // 🔥 ВЕРНУЛИ ВРЕМЯ В МАССОВОМ РЕЖИМЕ (С НОМЕРОМ!)
       if (displayTime) {
         let pinColor = isSelected ? (previewGeo ? '#9ca3af' : '#facc15') : color;
         if (isBulkMode) pinColor = isBulkSelected ? '#1a9e5c' : '#d1d5db';
 
-        // Формируем красивую надпись: "1. 14:00-16:00" или просто "14:00-16:00"
         const finalSlotLabel = (isBulkMode && isBulkSelected) ? `${bulkIndex + 1}. ${slotLabelText}` : slotLabelText;
 
         pm = new ymaps.Placemark([lat, lng], {
@@ -335,7 +338,7 @@ export function DashboardClient({ user }: { user: User }) {
     });
 
     if (placemarks.length > 0) clusterer.add(placemarks as any);
-  }, [filtered, selectedId, previewGeo, currentZoom, selectedSlots, isBulkMode, bulkSelectedIds, showTime, showCourierNames, isMobile]);
+  }, [filteredForMap, selectedId, previewGeo, currentZoom, selectedSlots, isBulkMode, bulkSelectedIds, showTime, showCourierNames, isMobile]);
 
   useEffect(() => {
     if (selectedId && ymapRef.current && !previewGeo && !isBulkMode) {
@@ -483,7 +486,7 @@ export function DashboardClient({ user }: { user: User }) {
       <div style={{ background: "#fafaf8", padding: 16, borderRadius: 8, marginBottom: 20 }}>
         <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Назначить курьера</div>
         <div style={{ display: "flex", gap: 10, flexDirection: isMobile ? "column" : "row" }}>
-        <CourierSearchSelect 
+          <CourierSearchSelect 
             value={bulkCourier} 
             onChange={setBulkCourier} 
             options={sortedCouriers.map(c => ({ value: String(c.id), label: c.label }))} 
@@ -648,9 +651,8 @@ export function DashboardClient({ user }: { user: User }) {
               </div>
             )}
 
-<div style={{ flex: 1, position: 'relative', display: "flex", flexDirection: "row", minWidth: 0 }}>
+            <div style={{ flex: 1, position: 'relative', display: "flex", flexDirection: "row", minWidth: 0 }}>
               
-              {/* 🔥 Панель маршрута теперь СЛЕВА, строго 600px */}
               {isBulkMode && (
                 <div style={{ width: 600, flexShrink: 0, background: "#f5f4f0", borderRight: "1px solid #e8e6df", zIndex: 10, display: "flex", flexDirection: "column" }}>
                   <div style={{ flex: 1, overflowY: "auto", overflowX: "auto", padding: 16 }}>
@@ -659,7 +661,6 @@ export function DashboardClient({ user }: { user: User }) {
                 </div>
               )}
 
-              {/* 🔥 Карта занимает всё оставшееся место СПРАВА */}
               <div style={{ flex: 1, position: "relative", display: "flex", flexDirection: "column", minWidth: 0 }}>
                 <div ref={mapRef} style={{ flex: 1, width: '100%' }} />
                 
@@ -848,7 +849,7 @@ function OrderCard({ order, selected, isBulkMode, isBulkSelected, onSelect }: an
     </div>
   );
 }
-// Компонент выпадающего списка с поиском
+
 function CourierSearchSelect({ value, onChange, options }: { value: string, onChange: (v: string) => void, options: {value: string | number, label: string}[] }) {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
@@ -879,7 +880,7 @@ function CourierSearchSelect({ value, onChange, options }: { value: string, onCh
 
       {open && (
         <div style={{
-          position: "absolute", bottom: "calc(100% + 6px)", left: 0, right: 0, // Открываем вверх, чтобы не обрезалось прокруткой
+          position: "absolute", bottom: "calc(100% + 6px)", left: 0, right: 0,
           background: "#fff", border: "1px solid #e8e6df", borderRadius: 10, boxShadow: "0 -4px 24px rgba(0,0,0,0.12)",
           zIndex: 500, maxHeight: 280, display: "flex", flexDirection: "column", overflow: "hidden"
         }}>
@@ -920,6 +921,7 @@ function CourierSearchSelect({ value, onChange, options }: { value: string, onCh
     </div>
   );
 }
+
 const s: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", overflow: "hidden" },
   topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 16px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 10, position: "relative", overflowX: "auto" },
