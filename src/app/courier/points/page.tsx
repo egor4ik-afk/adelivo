@@ -17,6 +17,8 @@ export default function CourierPointsPage() {
   const mapRef = useRef<HTMLDivElement>(null);
   const ymapRef = useRef<any>(null);
   const mapInitialized = useRef(false);
+  const initialCenterDone = useRef(false); // 🔥 Флаг первого автоцентрирования
+
   const [orders, setOrders] = useState<CourierOrder[]>([]);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [showList, setShowList] = useState(false);
@@ -31,7 +33,7 @@ export default function CourierPointsPage() {
 
   useEffect(() => {
     fetchOrders();
-    const interval = setInterval(fetchOrders, 15000);
+    const interval = setInterval(fetchOrders, 15000); // Полллинг каждые 15 сек
     return () => clearInterval(interval);
   }, []);
 
@@ -45,11 +47,9 @@ export default function CourierPointsPage() {
       ymapRef.current = new window.ymaps.Map(mapRef.current, {
         center: [55.75, 37.61], 
         zoom: 12, 
-        // 🔥 ДОБАВЛЕНО: geolocationControl (Кнопка "Где я")
         controls: ["zoomControl", "geolocationControl"] 
       }, {});
 
-      // Автоматически пытаемся найти курьера при загрузке карты
       const geoControl = ymapRef.current.controls.get('geolocationControl');
       if (geoControl) geoControl.events.add('locationchange', () => {});
     }
@@ -90,7 +90,6 @@ export default function CourierPointsPage() {
 
       const validOrders = orders.filter(o => hasCoords(o) && o.status !== "DELIVERED");
 
-      // 🔥 1. Рисуем реальные маршруты по дорогам
       const routeGroups: Record<string, CourierOrder[]> = {};
       validOrders.forEach(o => {
         const key = o.route?.id || "no-route";
@@ -100,27 +99,26 @@ export default function CourierPointsPage() {
 
       if (window.ymaps.multiRouter) {
         Object.values(routeGroups).forEach(routeOrders => {
-          if (routeOrders.length < 2) return; // Маршрут строим только если точек 2 и больше
+          if (routeOrders.length < 2) return; 
           
           const sorted = routeOrders.sort((a, b) => (a.routeOrder || 0) - (b.routeOrder || 0));
           const points = sorted.filter(hasCoords).map(o => [o.lat, o.lng]);
 
           const multiRoute = new window.ymaps.multiRouter.MultiRoute({
             referencePoints: points,
-            params: { routingMode: 'auto' } // 'auto' - на автомобиле
+            params: { routingMode: 'auto' } 
           }, {
             boundsAutoApply: false,
-            wayPointVisible: false,   // Скрываем стандартные маркеры (мы нарисуем свои поверх)
+            wayPointVisible: false,   
             viaPointVisible: false,
             routeActiveStrokeWidth: 4,
-            routeActiveStrokeColor: "#4a7aff", // Синяя линия
-            routeStrokeWidth: 0       // Скрываем серые альтернативные маршруты
+            routeActiveStrokeColor: "#4a7aff",
+            routeStrokeWidth: 0       
           });
           ymapRef.current.geoObjects.add(multiRoute);
         });
       }
 
-      // 🔥 2. Рисуем сами точки (маркеры) поверх линии маршрута
       validOrders.forEach(o => {
         if (!hasCoords(o)) return;
         const coords: [number, number] = [o.lat, o.lng]; 
@@ -129,13 +127,13 @@ export default function CourierPointsPage() {
 
         const pm = new window.ymaps.Placemark(coords, {
           balloonContent: o.address,
-          iconContent: o.routeOrder ? String(o.routeOrder) : undefined // Показываем цифру порядка в кружке
+          iconContent: o.routeOrder ? String(o.routeOrder) : undefined
         }, {
           preset: isSelected
-            ? "islands#redCircleIcon" // Выделенная точка
+            ? "islands#redCircleIcon" 
             : isDelivery
-              ? "islands#greenCircleIcon" // Везем сейчас
-              : "islands#blueCircleIcon"  // Ожидает
+              ? "islands#greenCircleIcon" 
+              : "islands#blueCircleIcon"  
         });
 
         pm.events.add("click", () => {
@@ -146,12 +144,13 @@ export default function CourierPointsPage() {
         ymapRef.current.geoObjects.add(pm);
       });
 
-      // Автоцентрирование только если нет активного заказа
-      if (!activeOrderId && validOrders.length > 0) {
+      // 🔥 АВТОЦЕНТРИРОВАНИЕ ТОЛЬКО ОДИН РАЗ
+      if (!activeOrderId && validOrders.length > 0 && !initialCenterDone.current) {
         setTimeout(() => {
           const bounds = ymapRef.current?.geoObjects.getBounds();
           if (bounds) {
             ymapRef.current.setBounds(bounds, { checkZoomRange: true, zoomMargin: 50, maxZoom: 14 });
+            initialCenterDone.current = true; // Запоминаем, что уже центрировали
           }
         }, 150);
       }
@@ -161,6 +160,13 @@ export default function CourierPointsPage() {
   const handleStatusChange = async (id: string, newStatus: string) => {
     setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o));
     setActiveOrderId(null);
+    
+    // 🔥 Если курьер сменил статус (например, доставил), отдаляем карту, чтобы показать следующий заказ
+    setTimeout(() => {
+      const bounds = ymapRef.current?.geoObjects.getBounds();
+      if (bounds) ymapRef.current.setBounds(bounds, { checkZoomRange: true, zoomMargin: 50, maxZoom: 14 });
+    }, 200);
+
     await fetch(`/api/orders/${id}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: newStatus })
@@ -258,7 +264,17 @@ export default function CourierPointsPage() {
               <div style={{ fontSize: 16, fontWeight: 700, color: "#1a1a18" }}>{activeOrder.address}</div>
               <div style={{ fontSize: 12, color: "#6b6860", marginTop: 4 }}>Заказ {activeOrder.externalId ?? activeOrder.crmId} · Слот: {activeOrder.slotRaw}</div>
             </div>
-            <button onClick={() => setActiveOrderId(null)} style={{ background: "none", border: "none", fontSize: 24, color: "#a8a49c", padding: 0 }}>✕</button>
+            <button 
+              onClick={() => {
+                setActiveOrderId(null);
+                // 🔥 Принудительно возвращаем карту к общему виду при закрытии заказа крестиком
+                const bounds = ymapRef.current?.geoObjects.getBounds();
+                if (bounds) ymapRef.current.setBounds(bounds, { checkZoomRange: true, zoomMargin: 50, maxZoom: 14 });
+              }} 
+              style={{ background: "none", border: "none", fontSize: 24, color: "#a8a49c", padding: 0 }}
+            >
+              ✕
+            </button>
           </div>
 
           <div style={{ display: "flex", gap: 8 }}>
