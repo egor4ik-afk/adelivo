@@ -24,6 +24,10 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     if (body.address        !== undefined) updateData.address        = body.address;
     if (body.recipientPhone !== undefined) updateData.recipientPhone = body.recipientPhone; // 🔥 Сохраняем телефон в БД
 
+    // 🔥 Поддержка ручного назначения/удаления маршрута с фронтенда
+    if (body.routeId !== undefined) updateData.routeId = body.routeId;
+    if (body.routeOrder !== undefined) updateData.routeOrder = body.routeOrder;
+
     if (body.courier !== undefined) {
       updateData.courier = body.courier || null;
       if (body.courier) {
@@ -36,8 +40,24 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       }
     }
 
+    // 🔥 АВТОМАТИЧЕСКИЙ ВЫБРОС ИЗ МАРШРУТА
+    const newStatus = body.status || order.status;
+    const newAddress = body.address || order.address;
+    const isCancelledOrReturned = newStatus === "CANCELLED" || newStatus === "RETURNED";
+    const isPickup = newAddress?.toLowerCase().includes("самовывоз");
+
+    if (isCancelledOrReturned || isPickup) {
+      updateData.routeId = null;
+      updateData.routeOrder = null;
+    }
+
+    let updatedOrder = order;
     if (Object.keys(updateData).length > 0) {
-      await prisma.order.update({ where: { id }, data: updateData });
+      updatedOrder = await prisma.order.update({ 
+        where: { id }, 
+        data: updateData,
+        include: { route: true } // Обязательно возвращаем маршрут на фронт
+      });
     }
 
     // 🔥 ИЗМЕНЕНИЕ: Фильтруем статусы перед отправкой в CRM
@@ -56,7 +76,8 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       recipientPhone: body.recipientPhone, // 🔥 Отправляем телефон в CRM
     });
 
-    return NextResponse.json({ ok: true });
+    // Возвращаем обновленный объект заказа для UI
+    return NextResponse.json(updatedOrder);
   } catch (e) {
     console.error("PATCH /api/orders/[id] error:", e);
     return NextResponse.json({ error: String(e) }, { status: 500 });

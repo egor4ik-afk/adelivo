@@ -80,7 +80,7 @@ export function DashboardClient({ user }: { user: User }) {
 
   // ETA
   const [routeLegs, setRouteLegs] = useState<string[]>([]);
-  const [routeTotals, setRouteTotals] = useState<{time: string, dist: string} | null>(null);
+  const [routeTotals, setRouteTotals] = useState<{ time: string, dist: string } | null>(null);
   const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
 
   useEffect(() => {
@@ -233,12 +233,12 @@ export function DashboardClient({ user }: { user: User }) {
       map.events.add('boundschange', (e: any) => { if (e.get('newZoom') !== e.get('oldZoom')) setCurrentZoom(e.get('newZoom')); });
       const clusterer = new window.ymaps.Clusterer({ clusterIconLayout: "default#pieChart", clusterIconPieChartRadius: 20 });
       map.geoObjects.add(clusterer);
-      
+
       const storePm = new window.ymaps.Placemark([STORE_LAT, STORE_LNG], {
         hintContent: "БАЗА: Большой Афанасьевский переулок, 39",
         iconCaption: "База"
       }, { preset: 'islands#blackDotIcon' });
-      
+
       map.geoObjects.add(storePm as any);
       ymapRef.current = map;
       clustererRef.current = clusterer;
@@ -308,10 +308,10 @@ export function DashboardClient({ user }: { user: User }) {
 
         if (isBulkMode) {
           if (isBulkSelected) {
-             preset = 'islands#greenIcon'; 
-             iconContent = `${bulkIndex + 1}`;
+            preset = 'islands#greenIcon';
+            iconContent = `${bulkIndex + 1}`;
           } else {
-             preset = 'islands#grayCircleDotIcon';
+            preset = 'islands#grayCircleDotIcon';
           }
         } else {
           if (isSelected) preset = previewGeo ? "islands#grayDotIcon" : "islands#redDotIcon";
@@ -329,7 +329,7 @@ export function DashboardClient({ user }: { user: User }) {
           toggleBulkSelect(order.id);
         } else {
           clickedFromMapRef.current = true;
-          setSelectedId(order.id); 
+          setSelectedId(order.id);
           if (!isMobile) { setIsListVisible(true); setIsDetailVisible(true); }
           else setMobileView("split");
         }
@@ -357,14 +357,14 @@ export function DashboardClient({ user }: { user: User }) {
     if (!isBulkMode || (isMobile && routeTab !== "list") || bulkSelectedIds.length === 0) {
       setRouteLegs([]); setRouteTotals(null); return;
     }
-    
+
     const ymapsAny = window.ymaps as any;
     if (!ymapsAny || !ymapsAny.multiRouter) return;
 
     const validOrders = selectedRouteOrders.filter(o => o.lat && o.lng);
     if (validOrders.length === 0) return;
 
-    const points = [ [STORE_LAT, STORE_LNG], ...validOrders.map(o => [o.lat!, o.lng!]) ];
+    const points = [[STORE_LAT, STORE_LNG], ...validOrders.map(o => [o.lat!, o.lng!])];
     if (returnToBase) points.push([STORE_LAT, STORE_LNG]);
 
     setIsCalculatingRoute(true);
@@ -391,7 +391,7 @@ export function DashboardClient({ user }: { user: User }) {
         activeRoute.getPaths().each((path: any) => {
           legsArr.push(cleanHtml(path.properties.get("duration")?.text || "—"));
         });
-        
+
         setRouteLegs(legsArr);
         setIsCalculatingRoute(false);
       });
@@ -441,7 +441,7 @@ export function DashboardClient({ user }: { user: User }) {
       });
       if (!res.ok) throw new Error("Ошибка сервера");
       setBulkCourier("");
-      await fetchData(); 
+      await fetchData();
       alert("✅ Маршрут создан, курьер уведомлен!");
     } catch { alert("Произошла ошибка"); }
     finally { setBulkSaving(false); }
@@ -473,7 +473,7 @@ export function DashboardClient({ user }: { user: User }) {
       </div>
 
       {routeTotals && (
-        <div style={{fontSize: 13, color: "#1a1a18", background: "#eef3ff", padding: "10px 14px", borderRadius: 8, marginBottom: 16, fontWeight: 600}}>
+        <div style={{ fontSize: 13, color: "#1a1a18", background: "#eef3ff", padding: "10px 14px", borderRadius: 8, marginBottom: 16, fontWeight: 600 }}>
           {isCalculatingRoute ? "⏳ Считаем время в пути..." : `🏁 Итого: ~${routeTotals.time} (${routeTotals.dist})`}
         </div>
       )}
@@ -486,10 +486,10 @@ export function DashboardClient({ user }: { user: User }) {
       <div style={{ background: "#fafaf8", padding: 16, borderRadius: 8, marginBottom: 20 }}>
         <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Назначить курьера</div>
         <div style={{ display: "flex", gap: 10, flexDirection: isMobile ? "column" : "row" }}>
-          <CourierSearchSelect 
-            value={bulkCourier} 
-            onChange={setBulkCourier} 
-            options={sortedCouriers.map(c => ({ value: String(c.id), label: c.label }))} 
+          <CourierSearchSelect
+            value={bulkCourier}
+            onChange={setBulkCourier}
+            options={sortedCouriers.map(c => ({ value: String(c.id), label: c.label }))}
           />
           <button style={{ ...s.actionBtn, width: isMobile ? "100%" : 120, background: bulkCourier && bulkSelectedIds.length > 0 ? '#4a7aff' : '#e8e6df', color: bulkCourier && bulkSelectedIds.length > 0 ? '#fff' : '#a8a49c' }} disabled={!bulkCourier || bulkSelectedIds.length === 0 || bulkSaving} onClick={handleBulkAssign}>
             {bulkSaving ? "..." : "Назначить"}
@@ -499,7 +499,7 @@ export function DashboardClient({ user }: { user: User }) {
 
       <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Очередь доставки</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        
+
         {routeLegs[0] && (
           <div style={{ fontSize: 11, color: "#a8a49c", paddingLeft: 46, paddingBottom: 6 }}>
             ↓ {routeLegs[0]} от базы
@@ -521,7 +521,7 @@ export function DashboardClient({ user }: { user: User }) {
               </div>
               <button onClick={() => toggleBulkSelect(o.id)} style={{ background: "none", border: "none", color: "#d94040", cursor: "pointer", fontSize: 18, padding: 4 }}>×</button>
             </div>
-            
+
             {routeLegs[index + 1] && (
               <div style={{ fontSize: 11, color: "#a8a49c", paddingLeft: 46, paddingBottom: 6, paddingTop: 4 }}>
                 ↓ {routeLegs[index + 1]} {index === selectedRouteOrders.length - 1 && returnToBase ? "возврат на базу" : ""}
@@ -539,7 +539,7 @@ export function DashboardClient({ user }: { user: User }) {
       <div style={isMobile ? sm.topbar : s.topbar}>
         <div style={s.logo}>
           <img src="/favicon.svg" alt="Logo" style={{ width: 22, height: 22 }} />
-          EventWave
+          {!isMobile && "EventWave"}
         </div>
         <button onClick={() => router.push('/orders')} style={s.navBtn}>
           ≡ Заказы
@@ -652,7 +652,7 @@ export function DashboardClient({ user }: { user: User }) {
             )}
 
             <div style={{ flex: 1, position: 'relative', display: "flex", flexDirection: "row", minWidth: 0 }}>
-              
+
               {isBulkMode && (
                 <div style={{ width: 600, flexShrink: 0, background: "#f5f4f0", borderRight: "1px solid #e8e6df", zIndex: 10, display: "flex", flexDirection: "column" }}>
                   <div style={{ flex: 1, overflowY: "auto", overflowX: "auto", padding: 16 }}>
@@ -663,7 +663,7 @@ export function DashboardClient({ user }: { user: User }) {
 
               <div style={{ flex: 1, position: "relative", display: "flex", flexDirection: "column", minWidth: 0 }}>
                 <div ref={mapRef} style={{ flex: 1, width: '100%' }} />
-                
+
                 {!isBulkMode && (
                   <div style={{ position: 'absolute', top: 12, left: 0, zIndex: 100, display: 'flex', flexDirection: 'column', gap: 4 }}>
                     {!isListVisible && (
@@ -675,7 +675,7 @@ export function DashboardClient({ user }: { user: User }) {
                   </div>
                 )}
               </div>
-              
+
             </div>
           </div>
         )}
@@ -766,7 +766,7 @@ export function DashboardClient({ user }: { user: User }) {
                     const color = slotColor(o);
                     return (
                       <tr
-                        id={`row-${o.id}`} 
+                        id={`row-${o.id}`}
                         key={o.id}
                         style={{ background: selectedId === o.id ? "#eef3ff" : i % 2 === 0 ? "#fff" : "#fafaf8", cursor: "pointer" }}
                         onClick={() => { setSelectedId(o.id); setIsListVisible(true); setIsDetailVisible(true); }}
@@ -850,7 +850,7 @@ function OrderCard({ order, selected, isBulkMode, isBulkSelected, onSelect }: an
   );
 }
 
-function CourierSearchSelect({ value, onChange, options }: { value: string, onChange: (v: string) => void, options: {value: string | number, label: string}[] }) {
+function CourierSearchSelect({ value, onChange, options }: { value: string, onChange: (v: string) => void, options: { value: string | number, label: string }[] }) {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -870,7 +870,7 @@ function CourierSearchSelect({ value, onChange, options }: { value: string, onCh
         onClick={() => setOpen(!open)}
         style={{
           padding: "8px 12px", borderRadius: 8, border: "1px solid #e8e6df", background: "#fff",
-          fontSize: 13, color: value ? "#1a1a18" : "#a8a49c", cursor: "pointer", display: "flex", 
+          fontSize: 13, color: value ? "#1a1a18" : "#a8a49c", cursor: "pointer", display: "flex",
           justifyContent: "space-between", alignItems: "center", height: "100%", fontWeight: 600
         }}
       >
@@ -904,9 +904,9 @@ function CourierSearchSelect({ value, onChange, options }: { value: string, onCh
               <div
                 key={o.value}
                 onClick={() => { onChange(String(o.value)); setOpen(false); setSearch(""); }}
-                style={{ 
+                style={{
                   padding: "10px 14px", fontSize: 13, cursor: "pointer", borderBottom: "1px solid #f5f4f0",
-                  color: String(o.value) === String(value) ? "#4a7aff" : "#1a1a18", 
+                  color: String(o.value) === String(value) ? "#4a7aff" : "#1a1a18",
                   background: String(o.value) === String(value) ? "#f4f7ff" : "transparent",
                   fontWeight: String(o.value) === String(value) ? 700 : 500
                 }}
@@ -925,8 +925,17 @@ function CourierSearchSelect({ value, onChange, options }: { value: string, onCh
 const s: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", overflow: "hidden" },
   topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 16px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 10, position: "relative", overflowX: "auto" },
-  logo: { fontSize: 15, fontWeight: 600, color: "#1a1a18", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap" },
-  navBtn: { padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#1a1a18", whiteSpace: "nowrap" },
+  logo: {
+    fontSize: 15,
+    fontWeight: 600,
+    color: "#1a1a18",
+    display: "flex",
+    alignItems: "center",
+    gap: 7,
+    whiteSpace: "nowrap",
+    flexShrink: 0,               // 🔥 Запрещаем сжимать
+    minWidth: "max-content"      // 🔥 Фиксируем ширину по контенту
+  }, navBtn: { padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#1a1a18", whiteSpace: "nowrap" },
   datePicker: { padding: "4px 8px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 11, outline: "none", color: "#1a1a18", background: "#fff", marginLeft: 8 },
   nativeSelect: { height: 28, padding: "0 8px", borderRadius: 7, border: "1px solid #e0dfd7", fontSize: 11, fontWeight: 500, outline: "none", cursor: "pointer", background: "#fff", color: "#1a1a18", maxWidth: 120 },
   slotBar: { display: "flex", gap: 4, marginLeft: 8 },

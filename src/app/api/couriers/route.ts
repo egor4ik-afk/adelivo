@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 export async function GET() {
   try {
     const couriers = await prisma.courier.findMany({
-      include: { shifts: true, payments: true }, // <--- ВОТ ЗДЕСЬ ПРОПУЩЕНА ЗАПЯТАЯ
+      include: { shifts: true, payments: true, routes: true }, // 🔥 Добавили запятую и routes: true
       orderBy: { fullName: "asc" },
     });
     return NextResponse.json(couriers);

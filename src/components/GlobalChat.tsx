@@ -7,7 +7,7 @@ type LastMessage = { id: string; text?: string | null; mediaType?: string | null
 type Conversation = { id: string; user1: UserInfo; user2: UserInfo; messages: LastMessage[]; unread: number; updatedAt: string };
 type Message = { id: string; text?: string | null; mediaType?: string | null; mediaUrl?: string | null; createdAt: string; sender: UserInfo };
 
-export function GlobalChat({ currentUserId }: { currentUserId: string }) {
+export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId: string, isCourier?: boolean }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"list" | "dialog" | "search">("list");
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -59,8 +59,8 @@ export function GlobalChat({ currentUserId }: { currentUserId: string }) {
       if (unreadCount > prevUnreadRef.current) {
         try {
           const audio = new Audio('/message.mp3');
-          audio.play().catch(() => {}); // Игнорируем ошибку автоплея
-        } catch (e) {}
+          audio.play().catch(() => { }); // Игнорируем ошибку автоплея
+        } catch (e) { }
         if ("Notification" in window && Notification.permission === "granted" && !open) {
           new Notification("Новое сообщение", { icon: "/favicon-96x96.png" });
         }
@@ -163,10 +163,10 @@ export function GlobalChat({ currentUserId }: { currentUserId: string }) {
       if (file.type.startsWith("image/")) type = "image";
       else if (file.type.startsWith("video/")) type = "video";
       else if (file.type.startsWith("audio/")) type = "audio";
-      
+
       const url = await uploadFileToS3(file, file.name, file.type);
       await send({ mediaUrl: url, mediaType: type });
-    } catch (e) { alert("Ошибка загрузки файла"); } 
+    } catch (e) { alert("Ошибка загрузки файла"); }
     finally {
       setLoading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -192,7 +192,7 @@ export function GlobalChat({ currentUserId }: { currentUserId: string }) {
           const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
           const url = await uploadFileToS3(audioBlob, "voice.webm", "audio/webm");
           await send({ mediaUrl: url, mediaType: "audio" });
-        } catch (e) { alert("Ошибка отправки голосового"); } 
+        } catch (e) { alert("Ошибка отправки голосового"); }
         finally {
           setLoading(false);
           stream.getTracks().forEach(track => track.stop());
@@ -221,7 +221,8 @@ export function GlobalChat({ currentUserId }: { currentUserId: string }) {
   return (
     <>
       {/* Стили анимаций и скрытия десктопной кнопки на мобилках */}
-      <style dangerouslySetInnerHTML={{__html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         @keyframes slideUpFade {
           from { opacity: 0; transform: translateY(20px) scale(0.95); }
           to { opacity: 1; transform: translateY(0) scale(1); }
@@ -233,7 +234,7 @@ export function GlobalChat({ currentUserId }: { currentUserId: string }) {
         }
         .chat-window { animation: slideUpFade 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         .record-dot { animation: pulseDot 1.5s infinite; }
-        @media (max-width: 768px) { .desktop-chat-btn { display: none !important; } }
+        ${isCourier ? '@media (max-width: 768px) { .desktop-chat-btn { display: none !important; } }' : ''}
       `}} />
 
       {open && (
@@ -334,7 +335,7 @@ export function GlobalChat({ currentUserId }: { currentUserId: string }) {
               <div style={{ padding: 10, borderTop: "1px solid #e8e6df", display: "flex", gap: 8, background: "#fff", flexShrink: 0, alignItems: "center" }}>
                 <input type="file" accept="image/*,audio/*,video/*" ref={fileInputRef} style={{ display: "none" }} onChange={handleFileUpload} />
                 <button onClick={() => fileInputRef.current?.click()} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", padding: "0 4px", opacity: loading || isRecording ? 0.5 : 1, transition: "opacity 0.2s" }} disabled={loading || isRecording}>📎</button>
-                
+
                 {isRecording ? (
                   <div style={{ flex: 1, color: "#ef4444", fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, paddingLeft: 8 }}>
                     <span className="record-dot" style={{ width: 10, height: 10, background: "#ef4444", borderRadius: "50%", display: "inline-block" }} />

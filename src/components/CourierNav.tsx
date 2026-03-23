@@ -65,7 +65,7 @@ export function CourierNav({ currentUserId }: { currentUserId: string }) {
       </nav>
 
       {/* Отрисовываем сам компонент чата, он скроет свою плавающую кнопку на телефонах благодаря CSS */}
-      <GlobalChat currentUserId={currentUserId} />
-    </>
+      <GlobalChat currentUserId={currentUserId} isCourier={true} />
+        </>
   );
 }
