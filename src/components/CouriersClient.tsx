@@ -39,8 +39,8 @@ export function CouriersClient({ user }: { user: any }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  
-  const [activeTab, setActiveTab] = useState<"schedule" | "calc" | "routes">("schedule");
+
+  const [activeTab, setActiveTab] = useState<"routes" | "calc" | "schedule">("routes");
 
   // Состояния для Графика
   const scheduleDates = Array.from({ length: 7 }, (_, i) => {
@@ -56,7 +56,7 @@ export function CouriersClient({ user }: { user: any }) {
   const calcDates = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart); d.setDate(d.getDate() + i); return d.toISOString().split("T")[0];
   });
-  const [selectedPays, setSelectedPays] = useState<string[]>([]); 
+  const [selectedPays, setSelectedPays] = useState<string[]>([]);
 
   // Состояния для Маршрутов
   const [routesDate, setRoutesDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }));
@@ -173,12 +173,13 @@ export function CouriersClient({ user }: { user: any }) {
           <div>
             <h1 style={s.title}>Курьеры</h1>
             <div style={s.tabs}>
-              <button style={activeTab === "schedule" ? s.tabActive : s.tabInactive} onClick={() => setActiveTab("schedule")}>📅 График смен</button>
-              <button style={activeTab === "calc" ? s.tabActive : s.tabInactive} onClick={() => setActiveTab("calc")}>💰 Расчет ЗП</button>
               <button style={activeTab === "routes" ? s.tabActive : s.tabInactive} onClick={() => setActiveTab("routes")}>🗺️ Маршруты</button>
+              <button style={activeTab === "calc" ? s.tabActive : s.tabInactive} onClick={() => setActiveTab("calc")}>💰 Расчет ЗП</button>
+              <button style={activeTab === "schedule" ? s.tabActive : s.tabInactive} onClick={() => setActiveTab("schedule")}>📅 График смен</button>
+
             </div>
           </div>
-          
+
           <div style={s.controls}>
             {activeTab === "calc" && (
               <button style={{ ...s.syncBtn, background: selectedPays.length > 0 ? "#10b981" : "#e5e7eb", color: selectedPays.length > 0 ? "#fff" : "#9ca3af" }} disabled={selectedPays.length === 0} onClick={handlePay}>
@@ -200,7 +201,7 @@ export function CouriersClient({ user }: { user: any }) {
                   <th style={{ ...s.th, width: 120 }}>Телефон</th>
                   {scheduleDates.map((d, i) => (
                     <th key={d} style={{ ...s.th, textAlign: "center", cursor: "pointer", color: sortDate === d ? "#4a7aff" : "#a8a49c", background: sortDate === d ? "#eef3ff" : "#fafaf8" }} onClick={() => setSortDate(d)} title="Нажмите, чтобы отсортировать">
-                      {i === 0 ? "Сегодня" : i === 1 ? "Завтра" : formatDay(d)}<br/><span style={{ fontSize: 10, fontWeight: 500 }}>{d.slice(5).replace("-", ".")}</span>
+                      {i === 0 ? "Сегодня" : i === 1 ? "Завтра" : formatDay(d)}<br /><span style={{ fontSize: 10, fontWeight: 500 }}>{d.slice(5).replace("-", ".")}</span>
                     </th>
                   ))}
                 </tr>
@@ -234,61 +235,61 @@ export function CouriersClient({ user }: { user: any }) {
 
         {/* --- ВКЛАДКА: РАСЧЕТ ЗП --- */}
         {activeTab === "calc" && (
-           <div style={s.tableWrap}>
-             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "#fff", borderBottom: "1px solid #e8e6df" }}>
-               <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                 <button style={s.arrowBtn} onClick={() => setWeekStart(d => new Date(d.getTime() - 7 * 86400000))}>◀ Неделя</button>
-                 <span style={{ fontWeight: 700, fontSize: 15, textTransform: "capitalize", color: "#1a1a18" }}>
-                   {weekStart.toLocaleDateString('ru', { month: 'long', year: 'numeric' })}
-                 </span>
-                 <button style={s.arrowBtn} onClick={() => setWeekStart(d => new Date(d.getTime() + 7 * 86400000))}>Неделя ▶</button>
-               </div>
-               <div style={{ fontSize: 12, color: "#a8a49c", display: "none", "@media (min-width: 768px)": { display: "block" } } as any}>
-                  Считаются только "Доставлен"
-               </div>
-             </div>
-             <table style={s.table}>
-               <thead>
-                 <tr>
-                   <th style={{ ...s.th, width: 220 }}>Курьер</th>
-                   {calcDates.map(d => <th key={d} style={{ ...s.th, textAlign: "center" }}>{formatDay(d)}<br/><span style={{ fontSize: 10 }}>{d.slice(5).replace("-", ".")}</span></th>)}
-                   <th style={{ ...s.th, textAlign: "right", color: "#10b981" }}>Итого за неделю</th>
-                 </tr>
-               </thead>
-               <tbody>
-                 {loading ? <tr><td colSpan={9} style={{ padding: 20, textAlign: "center" }}>Загрузка...</td></tr> : calcSorted.map(c => {
-                   const weekTotal = calcDates.reduce((acc, d) => acc + getSum(c.id, d), 0);
-                   const weekTotal106 = weekTotal * 1.06;
-                   return (
-                     <tr key={c.id} style={{ borderBottom: "1px solid #f0efe9", background: "#fff" }}>
-                       <td style={{ ...s.td, fontWeight: 600 }}>{c.fullName}</td>
-                       {calcDates.map(d => {
-                         const count = getCount(c.id, d, true); const sum = getSum(c.id, d);
-                         const isPaid = c.payments?.some(p => p.date === d);
-                         const isSelected = selectedPays.includes(`${c.id}_${d}`);
-                         return (
-                           <td key={d} style={{ ...s.td, textAlign: "center", verticalAlign: "top", background: isPaid ? "#f0fdf4" : "transparent" }}>
-                             {(count > 0 || sum > 0) ? (
-                               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
-                                 <div style={{ fontSize: 12, fontWeight: 700, color: "#1a1a18" }}>{count} шт</div>
-                                 {isPaid ? <div style={{ fontSize: 10, background: "#10b981", color: "#fff", padding: "2px 6px", borderRadius: 4, fontWeight: 600 }}>ОПЛАЧЕН</div> 
-                                 : <input type="checkbox" checked={isSelected} onChange={() => togglePaySelect(c.id, d)} style={s.checkbox} />}
-                                 <div style={{ fontSize: 11, color: "#4a7aff", fontWeight: 700 }}>{sum} ₽</div>
-                               </div>
-                             ) : <span style={{ color: "#d1d5db" }}>—</span>}
-                           </td>
-                         );
-                       })}
-                       <td style={{ ...s.td, textAlign: "right", fontWeight: 700, background: "#fafaf8" }}>
-                         <div style={{ fontSize: 14 }}>{weekTotal.toFixed(0)} ₽</div>
-                         {weekTotal > 0 && <div style={{ fontSize: 11, color: "#10b981", marginTop: 4 }}>x 1.06 = {weekTotal106.toFixed(0)} ₽</div>}
-                       </td>
-                     </tr>
-                   );
-                 })}
-               </tbody>
-             </table>
-           </div>
+          <div style={s.tableWrap}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "#fff", borderBottom: "1px solid #e8e6df" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                <button style={s.arrowBtn} onClick={() => setWeekStart(d => new Date(d.getTime() - 7 * 86400000))}>◀ Неделя</button>
+                <span style={{ fontWeight: 700, fontSize: 15, textTransform: "capitalize", color: "#1a1a18" }}>
+                  {weekStart.toLocaleDateString('ru', { month: 'long', year: 'numeric' })}
+                </span>
+                <button style={s.arrowBtn} onClick={() => setWeekStart(d => new Date(d.getTime() + 7 * 86400000))}>Неделя ▶</button>
+              </div>
+              <div style={{ fontSize: 12, color: "#a8a49c", display: "none", "@media (min-width: 768px)": { display: "block" } } as any}>
+                Считаются только "Доставлен"
+              </div>
+            </div>
+            <table style={s.table}>
+              <thead>
+                <tr>
+                  <th style={{ ...s.th, width: 220 }}>Курьер</th>
+                  {calcDates.map(d => <th key={d} style={{ ...s.th, textAlign: "center" }}>{formatDay(d)}<br /><span style={{ fontSize: 10 }}>{d.slice(5).replace("-", ".")}</span></th>)}
+                  <th style={{ ...s.th, textAlign: "right", color: "#10b981" }}>Итого за неделю</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? <tr><td colSpan={9} style={{ padding: 20, textAlign: "center" }}>Загрузка...</td></tr> : calcSorted.map(c => {
+                  const weekTotal = calcDates.reduce((acc, d) => acc + getSum(c.id, d), 0);
+                  const weekTotal106 = weekTotal * 1.06;
+                  return (
+                    <tr key={c.id} style={{ borderBottom: "1px solid #f0efe9", background: "#fff" }}>
+                      <td style={{ ...s.td, fontWeight: 600 }}>{c.fullName}</td>
+                      {calcDates.map(d => {
+                        const count = getCount(c.id, d, true); const sum = getSum(c.id, d);
+                        const isPaid = c.payments?.some(p => p.date === d);
+                        const isSelected = selectedPays.includes(`${c.id}_${d}`);
+                        return (
+                          <td key={d} style={{ ...s.td, textAlign: "center", verticalAlign: "top", background: isPaid ? "#f0fdf4" : "transparent" }}>
+                            {(count > 0 || sum > 0) ? (
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: "#1a1a18" }}>{count} шт</div>
+                                {isPaid ? <div style={{ fontSize: 10, background: "#10b981", color: "#fff", padding: "2px 6px", borderRadius: 4, fontWeight: 600 }}>ОПЛАЧЕН</div>
+                                  : <input type="checkbox" checked={isSelected} onChange={() => togglePaySelect(c.id, d)} style={s.checkbox} />}
+                                <div style={{ fontSize: 11, color: "#4a7aff", fontWeight: 700 }}>{sum} ₽</div>
+                              </div>
+                            ) : <span style={{ color: "#d1d5db" }}>—</span>}
+                          </td>
+                        );
+                      })}
+                      <td style={{ ...s.td, textAlign: "right", fontWeight: 700, background: "#fafaf8" }}>
+                        <div style={{ fontSize: 14 }}>{weekTotal.toFixed(0)} ₽</div>
+                        {weekTotal > 0 && <div style={{ fontSize: 11, color: "#10b981", marginTop: 4 }}>x 1.06 = {weekTotal106.toFixed(0)} ₽</div>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
 
         {/* --- ВКЛАДКА: МАРШРУТЫ --- */}
@@ -303,7 +304,7 @@ export function CouriersClient({ user }: { user: any }) {
 
             {!loading && filtered.map(c => {
               const cOrders = orders.filter(o => o.courierId === c.id && getODate(o) === routesDate);
-              if (cOrders.length === 0) return null; 
+              if (cOrders.length === 0) return null;
 
               const routeGroups: Record<string, Order[]> = {};
               cOrders.forEach(o => {
@@ -316,8 +317,8 @@ export function CouriersClient({ user }: { user: any }) {
 
               return (
                 <div key={c.id} style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
-                  
-                  <div onClick={() => setExpandedCouriers(prev => ({...prev, [c.id]: !isCExpanded}))} style={{ padding: "14px 16px", background: "#fafaf8", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: isCExpanded ? "1px solid #e8e6df" : "none" }}>
+
+                  <div onClick={() => setExpandedCouriers(prev => ({ ...prev, [c.id]: !isCExpanded }))} style={{ padding: "14px 16px", background: "#fafaf8", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: isCExpanded ? "1px solid #e8e6df" : "none" }}>
                     <div>
                       <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18" }}>{c.fullName}</div>
                       <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 4 }}>Активных: {cOrders.filter(o => o.status !== "DELIVERED" && o.status !== "CANCELLED").length} · Всего: {cOrders.length}</div>
@@ -332,11 +333,11 @@ export function CouriersClient({ user }: { user: any }) {
                         const rName = rObj ? rObj.name : "Без маршрута";
                         const rLink = rObj ? rObj.link : null;
 
-                        rOrders.sort((a,b) => (a.routeOrder || 0) - (b.routeOrder || 0));
+                        rOrders.sort((a, b) => (a.routeOrder || 0) - (b.routeOrder || 0));
 
                         return (
                           <div key={rId} style={{ border: "1px solid #f0efe9", borderRadius: 12, padding: 16, background: "#fff" }}>
-                            
+
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                               <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Маршрут {rName}</h4>
                               {rLink && (
@@ -353,7 +354,7 @@ export function CouriersClient({ user }: { user: any }) {
 
                                 return (
                                   <div key={o.id} style={{ background: "#fafaf8", borderRadius: 10, border: "1px solid #e8e6df", padding: 14, display: "flex", flexDirection: "column" }}>
-                                    
+
                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
                                       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                                         <div style={{ width: 22, height: 22, borderRadius: "50%", background: "#1a1a18", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
@@ -395,7 +396,7 @@ export function CouriersClient({ user }: { user: any }) {
                                     {/* 🔥 Кнопки управления маршрутом */}
                                     <div style={{ marginTop: "auto", paddingTop: 12, display: "flex", gap: 8, borderTop: "1px solid #e8e6df" }}>
                                       {rId !== "no_route" ? (
-                                        <button 
+                                        <button
                                           onClick={() => handleRouteUpdate(o.id, null)}
                                           style={{ width: "100%", background: "rgba(217, 64, 64, 0.08)", color: "#d94040", border: "none", padding: "8px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", transition: "all 0.2s" }}
                                         >
