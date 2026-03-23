@@ -1,6 +1,7 @@
 // src/app/login/page.tsx
 "use client";
 import { useState } from "react";
+import { IMaskInput } from "react-imask";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -8,7 +9,7 @@ export default function LoginPage() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  
+
   const [isOperator, setIsOperator] = useState(false);
   const [secretCode, setSecretCode] = useState("");
 
@@ -43,32 +44,24 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      
+
       // Шаг 3: Загрузка и ФИЛЬТРАЦИЯ курьеров
       if (data.role === "COURIER" && !data.linked) {
         const cRes = await fetch("/api/couriers");
         if (cRes.ok) {
           const cData = await cRes.json();
-          
+
           // 🔥 СПИСОК СЛОВ-МУСОРА ДЛЯ ОТСЕВА ИЗ CRM
           const BAD_WORDS = ["сдэк", "яндекс", "доставк", "курьер", "тест", "пеший", "авто", "logisty", "dostavista"];
-          
-          const validCouriers = cData.filter((c: any) => {
-            // 1. Проверяем, что курьер активен, еще не привязан к почте и у него есть имя
-            if (!c.isActive || c.email || !c.fullName) return false;
-            
-            const lowerName = c.fullName.toLowerCase();
-            
-            // 2. Отсеиваем слишком короткие имена (глюки CRM)
-            if (c.fullName.trim().length < 3) return false;
-            
-            // 3. Отсеиваем мусорные слова
-            if (BAD_WORDS.some(word => lowerName.includes(word))) return false;
 
-            return true; // Если прошел все проверки - показываем в списке
+          const validCouriers = cData.filter((c: any) => {
+            if (!c.isActive || c.email || !c.fullName) return false;
+            const lowerName = c.fullName.toLowerCase();
+            if (c.fullName.trim().length < 3) return false;
+            if (BAD_WORDS.some(word => lowerName.includes(word))) return false;
+            return true;
           });
 
-          // Сортируем по алфавиту для удобства
           validCouriers.sort((a: any, b: any) => a.fullName.localeCompare(b.fullName));
           setCouriers(validCouriers);
         }
@@ -85,10 +78,14 @@ export default function LoginPage() {
   async function handleLinkCourier(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true); setError("");
+
+    // 🔥 Очищаем номер от скобок перед отправкой
+    const cleanPhone = phone.replace(/[^\d+]/g, "");
+
     try {
       const res = await fetch("/api/auth/link-courier", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ courierId: selectedCourierId, phone }) 
+        body: JSON.stringify({ courierId: selectedCourierId, phone: cleanPhone })
       });
       if (!res.ok) {
         const d = await res.json();
@@ -102,7 +99,7 @@ export default function LoginPage() {
   return (
     <div style={s.page}>
       <div style={s.card}>
-        
+
         <div style={s.logoWrap}>
           <img src="/favicon.svg" alt="Logo" style={{ width: 32, height: 32 }} />
           <h1 style={s.logoText}>EventWave</h1>
@@ -114,7 +111,7 @@ export default function LoginPage() {
           <form onSubmit={handleSendCode} style={{ display: "flex", flexDirection: "column" }}>
             <label style={s.label}>Email</label>
             <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="ivan@example.com" style={s.input} />
-            
+
             <label style={{ ...s.label, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", textTransform: "none", color: "#6b6860", fontSize: 13, marginTop: 4, marginBottom: 14 }}>
               <input type="checkbox" checked={isOperator} onChange={e => setIsOperator(e.target.checked)} style={{ accentColor: "#4a7aff", width: 16, height: 16 }} />
               Войти как оператор
@@ -136,10 +133,10 @@ export default function LoginPage() {
         {step === 2 && (
           <form onSubmit={handleVerify} style={{ display: "flex", flexDirection: "column" }}>
             <div style={s.sub}>Код отправлен на <b>{email}</b></div>
-            
+
             <label style={s.label}>Код из письма</label>
             <input type="text" required value={code} onChange={e => setCode(e.target.value)} placeholder="123456" style={{ ...s.input, fontSize: 20, letterSpacing: 4, textAlign: "center", fontWeight: 600 }} />
-            
+
             <button disabled={loading} style={{ ...s.btn, opacity: loading ? 0.7 : 1 }}>
               {loading ? "Проверка..." : "Войти"}
             </button>
@@ -153,7 +150,7 @@ export default function LoginPage() {
               <div style={{ fontSize: 14, color: "#1a1a18", fontWeight: 600, marginBottom: 4 }}>Добро пожаловать!</div>
               Остался последний шаг. Выберите свой профиль.
             </div>
-            
+
             <label style={s.label}>Ваш профиль курьера</label>
             <select required value={selectedCourierId} onChange={e => setSelectedCourierId(e.target.value)} style={{ ...s.input, WebkitAppearance: "none", cursor: "pointer" }}>
               <option value="" disabled>— Выберите профиль —</option>
@@ -161,8 +158,13 @@ export default function LoginPage() {
             </select>
 
             <label style={s.label}>Номер телефона (обязательно)</label>
-            <input type="tel" required value={phone} onChange={e => setPhone(e.target.value)} placeholder="+7 (999) 000-00-00" style={s.input} />
-
+            <IMaskInput
+              mask="+7 (000) 000-00-00"
+              value={phone}
+              onAccept={(value: string) => setPhone(value)}
+              placeholder="+7 (___) ___-__-__"
+              style={s.input}
+            />
             <button disabled={loading || !selectedCourierId || !phone} style={{ ...s.btn, opacity: (selectedCourierId && phone && !loading) ? 1 : 0.5 }}>
               {loading ? "Сохранение..." : "Начать работу"}
             </button>
@@ -173,7 +175,6 @@ export default function LoginPage() {
   );
 }
 
-// 🔥 ВЕРНУЛИ КРАСИВЫЕ СТИЛИ
 const s: Record<string, React.CSSProperties> = {
   page: { minHeight: "100vh", background: "#f5f4f0", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Manrope, system-ui, sans-serif" },
   card: { background: "#fff", border: "1px solid #e8e6df", borderRadius: 16, padding: "40px 36px", width: 100, minWidth: 360, maxWidth: 400, boxShadow: "0 10px 40px rgba(0,0,0,0.05)" },

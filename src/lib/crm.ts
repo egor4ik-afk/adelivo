@@ -351,7 +351,14 @@ export async function pollCrmOrders() {
 
 export async function updateCrmOrder(
   crmId: string,
-  data: { status?: OrderStatus; courier?: string; opComment?: string; address?: string; deliveryType?: string | null }
+  data: { 
+    status?: OrderStatus; 
+    courier?: string; 
+    opComment?: string; 
+    address?: string; 
+    deliveryType?: string | null;
+    recipientPhone?: string; // 🔥 Добавили поле
+  }
 ) {
   if (!CRM_URL || !CRM_KEY) return;
 
@@ -363,6 +370,29 @@ export async function updateCrmOrder(
   if (data.address !== undefined) {
     orderPayload.delivery = orderPayload.delivery ?? {};
     orderPayload.delivery.address = { text: data.address };
+  }
+
+  // 🔥 ДОБАВЛЯЕМ ОБРАБОТКУ ТЕЛЕФОНА
+  if (data.recipientPhone !== undefined) {
+    // Очищаем маску: "+7 (999) 123-45-67" превратится в "+79991234567"
+    orderPayload.phone = data.recipientPhone.replace(/[^\d+]/g, "");
+  }
+
+  if (data.courier !== undefined) {
+    const courierName = data.courier.trim();
+    orderPayload.delivery = orderPayload.delivery ?? {};
+    orderPayload.delivery.code = "logisty";
+
+    if (courierName) {
+      const courierId = await resolveCourierId(courierName);
+      if (courierId) {
+        orderPayload.delivery.data = { id: courierId, courierId: courierId, courier: courierId };
+      }
+      orderPayload.customFields = { courier: courierName, kurier: courierName };
+    } else {
+      orderPayload.delivery.data = { id: "", courierId: "", courier: "" };
+      orderPayload.customFields = { courier: "", kurier: "" };
+    }
   }
 
   if (data.courier !== undefined) {

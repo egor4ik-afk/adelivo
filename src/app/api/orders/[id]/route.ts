@@ -19,9 +19,10 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updateData: any = {};
 
-    if (body.status    !== undefined) updateData.status    = body.status;
-    if (body.opComment !== undefined) updateData.opComment = body.opComment;
-    if (body.address   !== undefined) updateData.address   = body.address;
+    if (body.status         !== undefined) updateData.status         = body.status;
+    if (body.opComment      !== undefined) updateData.opComment      = body.opComment;
+    if (body.address        !== undefined) updateData.address        = body.address;
+    if (body.recipientPhone !== undefined) updateData.recipientPhone = body.recipientPhone; // 🔥 Сохраняем телефон в БД
 
     if (body.courier !== undefined) {
       updateData.courier = body.courier || null;
@@ -48,10 +49,11 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 
     // Вызываем обновление CRM (undefined поля проигнорируются)
     await updateCrmOrder(order.crmId, {
-      status:    crmStatus as OrderStatus | undefined,
-      courier:   body.courier,
-      opComment: body.opComment,
-      address:   body.address,
+      status:         crmStatus as OrderStatus | undefined,
+      courier:        body.courier,
+      opComment:      body.opComment,
+      address:        body.address,
+      recipientPhone: body.recipientPhone, // 🔥 Отправляем телефон в CRM
     });
 
     return NextResponse.json({ ok: true });

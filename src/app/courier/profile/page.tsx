@@ -2,6 +2,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { usePushNotifications } from "@/components/usePushNotifications";
+import { IMaskInput } from "react-imask";
 
 interface Profile {
   id: string; email: string; firstName: string | null; lastName: string | null; phone: string | null;
@@ -14,18 +15,14 @@ export default function CourierProfilePage() {
   const [saving, setSaving] = useState(false);
   const [myShifts, setMyShifts] = useState<string[]>([]);
 
-  // Состояния для установки PWA (Приложения)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [pwaPrompt, setPwaPrompt] = useState<any>(null);
   const [isStandalone, setIsStandalone] = useState(true);
 
-  // Хук для Push-уведомлений
   const { state: pushState, subscribe, unsubscribe } = usePushNotifications();
   const isSubscribed = pushState === "granted";
-  // Показываем баннер только если статус "по умолчанию" (еще не спрашивали)
-  const needsPushBanner = pushState === "default"; 
+  const needsPushBanner = pushState === "default";
 
-  // Генерация ближайших 7 дней для графика
   const days = Array.from({ length: 7 }).map((_, i) => {
     const d = new Date(); d.setDate(d.getDate() + i);
     return {
@@ -45,11 +42,9 @@ export default function CourierProfilePage() {
       if (Array.isArray(data)) setMyShifts(data);
     });
 
-    // Проверка, установлено ли уже PWA-приложение
     const standalone = window.matchMedia('(display-mode: standalone)').matches || ('standalone' in window.navigator && (window.navigator as any).standalone);
     setIsStandalone(standalone);
 
-    // Перехват события установки для Android
     const handleBeforeInstall = (e: Event) => {
       e.preventDefault();
       setPwaPrompt(e);
@@ -76,12 +71,15 @@ export default function CourierProfilePage() {
 
   const handleSavePhone = async () => {
     setSaving(true);
+    // 🔥 Очищаем номер от скобок перед отправкой в БД
+    const cleanPhone = newPhone.replace(/[^\d+]/g, "");
+
     try {
       await fetch("/api/profile", {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: newPhone })
+        body: JSON.stringify({ phone: cleanPhone })
       });
-      setProfile(p => p ? { ...p, phone: newPhone } : null);
+      setProfile(p => p ? { ...p, phone: cleanPhone } : null);
       setEditingPhone(false);
     } catch (e) {
       alert("Не удалось сохранить телефон");
@@ -95,12 +93,10 @@ export default function CourierProfilePage() {
     window.location.href = "/login";
   };
 
-  // 🔥 Безопасное включение Push с перехватом ошибок мобильных браузеров (И ЗАЩИТОЙ ДЛЯ iOS)
   const handleSubscribe = async () => {
     const ua = window.navigator.userAgent.toLowerCase();
     const isIOS = /iphone|ipad|ipod/.test(ua);
 
-    // Apple разрешает Push ТОЛЬКО в установленном PWA
     if (isIOS && !isStandalone) {
       alert("На iPhone уведомления работают только в установленном приложении.\n\nНажмите кнопку «Поделиться» ⍐ в браузере, а затем «На экран Домой» ➕.");
       return;
@@ -114,7 +110,6 @@ export default function CourierProfilePage() {
     }
   };
 
-  // 🔥 Функция установки приложения (PWA)
   const installPWA = async () => {
     if (!pwaPrompt) {
       alert("Для установки на iPhone нажмите «Поделиться» ⍐ в браузере и выберите «На экран Домой» ➕.\n\nНа Android включите установку в настройках браузера.");
@@ -172,7 +167,6 @@ export default function CourierProfilePage() {
           </div>
         </div>
 
-        {/* 🔥 Баннер установки PWA (Скрывается, если уже установлено) */}
         {!isStandalone && (
           <div
             onClick={installPWA}
@@ -194,10 +188,9 @@ export default function CourierProfilePage() {
           </div>
         )}
 
-        {/* Твой красивый баннер для Push-уведомлений */}
         {needsPushBanner && (
           <div
-            onClick={handleSubscribe} // 🔥 ИЗМЕНЕНО на handleSubscribe
+            onClick={handleSubscribe}
             style={{
               margin: "0 0 16px 0", padding: "14px 16px",
               background: "linear-gradient(135deg, #1a1a18 0%, #2d2d2a 100%)",
@@ -224,7 +217,17 @@ export default function CourierProfilePage() {
             <div style={{ flex: 1, paddingRight: 16 }}>
               <div style={{ fontSize: 13, color: "#a8a49c" }}>Номер телефона</div>
               {!editingPhone && <div style={{ fontSize: 15, fontWeight: 600, color: "#1a1a18", marginTop: 4 }}>{profile.phone || "Не указан"}</div>}
-              {editingPhone && <input type="tel" value={newPhone} onChange={e => setNewPhone(e.target.value)} style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontSize: 14, marginTop: 4, boxSizing: "border-box" }} />}
+
+              {/* 🔥 ИСПОЛЬЗУЕМ МАСКУ ЗДЕСЬ */}
+              {editingPhone && (
+                <IMaskInput
+                  mask="+7 (000) 000-00-00"
+                  value={newPhone}
+                  onAccept={(value: string) => setNewPhone(value)}
+                  placeholder="+7 (___) ___-__-__"
+                  style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontSize: 14, marginTop: 4, boxSizing: "border-box" }}
+                />
+              )}
             </div>
             {!editingPhone ? (
               <button onClick={() => setEditingPhone(true)} style={{ background: "none", border: "none", color: "#4a7aff", fontSize: 13, fontWeight: 600, padding: "10px 0", cursor: "pointer" }}>Изменить</button>
@@ -245,7 +248,7 @@ export default function CourierProfilePage() {
                 <input
                   type="checkbox"
                   checked={isSubscribed}
-                  onChange={isSubscribed ? unsubscribe : handleSubscribe} // 🔥 ИЗМЕНЕНО на handleSubscribe
+                  onChange={isSubscribed ? unsubscribe : handleSubscribe}
                   style={{ opacity: 0, width: 0, height: 0, position: "absolute" }}
                 />
                 <span style={{

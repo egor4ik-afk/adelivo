@@ -1,6 +1,7 @@
 // src/components/OrderDetail.tsx
 "use client";
 import { useState, useEffect, useRef } from "react";
+import { IMaskInput } from "react-imask"; // Импортируем библиотеку масок
 import { Order, STATUS_OPTIONS, slotColor } from "@/lib/constants";
 
 interface Props {
@@ -116,44 +117,54 @@ function CourierSelect({ value, onChange, couriers }: {
 }
 
 export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPreviewGeo, fixingAI, setFixingAI }: Props) {
-  const [opComment,   setOpComment]   = useState("");
-  const [editStatus,  setEditStatus]  = useState("");
+  const [opComment, setOpComment] = useState("");
+  const [editStatus, setEditStatus] = useState("");
   const [editCourier, setEditCourier] = useState("");
   const [editAddress, setEditAddress] = useState("");
-  const [saving,      setSaving]      = useState(false);
-  const [saved,       setSaved]       = useState(false);
+  const [editRecipientPhone, setEditRecipientPhone] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
-  const snapshot = useRef<{ status: string; courier: string; opComment: string; address: string } | null>(null);
+  const snapshot = useRef<{ status: string; courier: string; opComment: string; address: string; phone: string } | null>(null);
 
   useEffect(() => {
     if (!selected) return;
+
+    // Телефон из БД (приоритет: получатель -> клиент)
+    const initialPhone = selected.recipientPhone || selected.customerPhone || "";
+
     setOpComment(selected.opComment ?? "");
     setEditStatus(selected.status ?? "");
     setEditCourier(selected.courier ?? "");
     setEditAddress(selected.address ?? "");
+    setEditRecipientPhone(initialPhone);
     setSaved(false);
+
     snapshot.current = {
-      status:    selected.status    ?? "",
-      courier:   selected.courier   ?? "",
+      status: selected.status ?? "",
+      courier: selected.courier ?? "",
       opComment: selected.opComment ?? "",
-      address:   selected.address   ?? "",
+      address: selected.address ?? "",
+      phone: initialPhone,
     };
-  }, [selected?.id]); 
+  }, [selected?.id]);
 
   if (!selected) return null;
 
   const snap = snapshot.current ?? {
-    status:    selected.status    ?? "",
-    courier:   selected.courier   ?? "",
+    status: selected.status ?? "",
+    courier: selected.courier ?? "",
     opComment: selected.opComment ?? "",
-    address:   selected.address   ?? "",
+    address: selected.address ?? "",
+    phone: "",
   };
 
   const hasChanges =
-    editStatus  !== snap.status    ||
-    editCourier !== snap.courier   ||
-    opComment   !== snap.opComment ||
-    editAddress !== snap.address;
+    editStatus !== snap.status ||
+    editCourier !== snap.courier ||
+    opComment !== snap.opComment ||
+    editAddress !== snap.address ||
+    editRecipientPhone !== snap.phone;
 
   async function handleGeocode(mode: "ai" | "manual") {
     setFixingAI(true);
@@ -191,10 +202,11 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
     }
 
     const body: Record<string, string> = {};
-    if (editStatus  !== snap.status)    body.status    = editStatus;
-    if (editCourier !== snap.courier)   body.courier   = editCourier;
-    if (opComment   !== snap.opComment) body.opComment = opComment;
-    if (isAddressChanged)               body.address   = editAddress;
+    if (editStatus !== snap.status) body.status = editStatus;
+    if (editCourier !== snap.courier) body.courier = editCourier;
+    if (opComment !== snap.opComment) body.opComment = opComment;
+    if (isAddressChanged) body.address = editAddress;
+    if (editRecipientPhone !== snap.phone) body.recipientPhone = editRecipientPhone; // Сохраняем телефон как номер получателя
 
     if (Object.keys(body).length > 0) {
       await fetch(`/api/orders/${selected!.id}`, {
@@ -204,7 +216,7 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
       });
     }
 
-    snapshot.current = { status: editStatus, courier: editCourier, opComment, address: editAddress };
+    snapshot.current = { status: editStatus, courier: editCourier, opComment, address: editAddress, phone: editRecipientPhone };
     onPreviewGeo(null);
     onUpdateSuccess();
     setSaving(false);
@@ -232,7 +244,7 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
         <textarea style={ta} rows={2} value={editAddress} onChange={e => setEditAddress(e.target.value)} />
         <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
           <button style={geoBtn} onClick={() => handleGeocode("manual")} disabled={fixingAI}>📍 На карте</button>
-          <button style={aiBtn}  onClick={() => handleGeocode("ai")}     disabled={fixingAI}>
+          <button style={aiBtn} onClick={() => handleGeocode("ai")} disabled={fixingAI}>
             {fixingAI ? "✨ Думает..." : "🪄 AI Исправить"}
           </button>
         </div>
@@ -251,16 +263,30 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
         </div>
       </div>
 
-      <div style={{ marginBottom: 10 }}>
-        <div style={lbl}>Статус</div>
-        <select style={sel} value={editStatus} onChange={e => setEditStatus(e.target.value)}>
-          {STATUS_OPTIONS.filter(opt => !["GEOCODED", "INVALID_ADDRESS", "ALL"].includes(opt.value)).map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-        </select>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+        <div>
+          <div style={lbl}>Статус</div>
+          <select style={sel} value={editStatus} onChange={e => setEditStatus(e.target.value)}>
+            {STATUS_OPTIONS.filter(opt => !["GEOCODED", "INVALID_ADDRESS", "ALL"].includes(opt.value)).map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+          </select>
+        </div>
+
+        <div>
+          <div style={lbl}>Курьер</div>
+          <CourierSelect value={editCourier} onChange={setEditCourier} couriers={couriers} />
+        </div>
       </div>
 
+      {/* 🔥 НОВОЕ ПОЛЕ: Номер получателя */}
       <div style={{ marginBottom: 10 }}>
-        <div style={lbl}>Курьер</div>
-        <CourierSelect value={editCourier} onChange={setEditCourier} couriers={couriers} />
+        <div style={lbl}>Номер получателя</div>
+        <IMaskInput
+          mask="+7 (000) 000-00-00"
+          value={editRecipientPhone}
+          onAccept={(value: string) => setEditRecipientPhone(value)}
+          style={inputPhone}
+          placeholder="+7 (___) ___-__-__"
+        />
       </div>
 
       {selected.items && (
@@ -301,9 +327,10 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
   );
 }
 
-const lbl:    React.CSSProperties = { fontSize: 10, color: "#a8a49c", textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 4 };
-const card:   React.CSSProperties = { background: "#f5f4f0", borderRadius: 7, padding: "7px 9px" };
-const ta:     React.CSSProperties = { width: "100%", padding: "7px 9px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 12, resize: "none", background: "#fafaf8", outline: "none", display: "block" };
-const sel:    React.CSSProperties = { width: "100%", padding: "7px 9px", borderRadius: 7, border: "1px solid #e8e6df", fontSize: 12, background: "#fafaf8", outline: "none", cursor: "pointer" };
+const lbl: React.CSSProperties = { fontSize: 10, color: "#a8a49c", textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 4 };
+const card: React.CSSProperties = { background: "#f5f4f0", borderRadius: 7, padding: "7px 9px" };
+const ta: React.CSSProperties = { width: "100%", padding: "7px 9px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 12, resize: "none", background: "#fafaf8", outline: "none", display: "block" };
+const sel: React.CSSProperties = { width: "100%", padding: "7px 9px", borderRadius: 7, border: "1px solid #e8e6df", fontSize: 12, background: "#fafaf8", outline: "none", cursor: "pointer" };
+const inputPhone: React.CSSProperties = { width: "100%", padding: "7px 9px", borderRadius: 7, border: "1px solid #e8e6df", fontSize: 12, background: "#fafaf8", outline: "none", fontWeight: 600, color: "#1a1a18" };
 const geoBtn: React.CSSProperties = { flex: 1, padding: 7, borderRadius: 6, border: "1px solid #e8e6df", background: "#fff", fontSize: 11, cursor: "pointer", fontWeight: 600 };
-const aiBtn:  React.CSSProperties = { flex: 1, padding: 7, borderRadius: 6, border: "none", background: "#7c4dff", color: "#fff", fontSize: 11, cursor: "pointer", fontWeight: 600 };
+const aiBtn: React.CSSProperties = { flex: 1, padding: 7, borderRadius: 6, border: "none", background: "#7c4dff", color: "#fff", fontSize: 11, cursor: "pointer", fontWeight: 600 };
