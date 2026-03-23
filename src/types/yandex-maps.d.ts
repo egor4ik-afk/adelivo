@@ -5,6 +5,32 @@ declare namespace ymaps {
   type Ready = (callback: () => void) => void;
   export const ready: Ready;
 
+  // 🔥 Добавляем фабрику шаблонов для кастомных пинов
+  export namespace templateLayoutFactory {
+    export function createClass(template: string, overrides?: any): any;
+  }
+
+  // 🔥 Добавляем multiRouter (Мультимаршрутизация)
+  export namespace multiRouter {
+    class MultiRoute {
+      constructor(
+        model: {
+          referencePoints: (number[] | string)[];
+          params?: { routingMode?: 'auto' | 'masstransit' | 'pedestrian' | 'bicycle'; [key: string]: any };
+        },
+        options?: any
+      );
+      model: {
+        events: {
+          add(event: string, handler: (e?: any) => void): void;
+          remove(event: string, handler: (e?: any) => void): void;
+        };
+      };
+      getActiveRoute(): any;
+      destroy(): void;
+    }
+  }
+
   // 🔥 Добавляем функцию route
   export function route(
     points: (number[] | string)[],
@@ -34,13 +60,15 @@ declare namespace ymaps {
       state: {
         center: number[];
         zoom: number;
-        controls: string[];
+        controls?: string[];
       },
-      options: any
+      options?: any
     );
 
     geoObjects: {
-      add(clusterer: Clusterer | Placemark | any): void;
+      add(geoObject: Clusterer | Placemark | multiRouter.MultiRoute | any): void;
+      removeAll(): void;
+      getBounds(): number[][] | null;
     };
     container: {
       fitToViewport(): void;
@@ -50,9 +78,16 @@ declare namespace ymaps {
       zoom?: number,
       options?: { duration: number }
     ): void;
+    setBounds(
+      bounds: number[][],
+      options?: { checkZoomRange?: boolean; zoomMargin?: number; maxZoom?: number; duration?: number }
+    ): void;
     events: {
       add(event: string, handler: (e: any) => void): void;
       remove(event: string, handler: (e: any) => void): void;
+    };
+    controls: {
+      get(controlName: string): any;
     };
   }
 
@@ -62,12 +97,18 @@ declare namespace ymaps {
       properties?: {
         balloonContentHeader?: string;
         balloonContentBody?: string;
+        balloonContent?: string;
         hintContent?: string;
+        iconContent?: string;
+        iconCaption?: string;
         [key: string]: unknown;
       },
       options?: {
         preset?: string;
         iconColor?: string;
+        iconLayout?: string | any;
+        iconShape?: any;
+        iconOffset?: number[];
         [key: string]: unknown;
       }
     );
@@ -85,7 +126,7 @@ declare namespace ymaps {
       clusterIconPieChartStrokeWidth?: number;
       [key: string]: unknown;
     });
-    add(placemarks: Placemark | Placemark[]): void;
+    add(placemarks: Placemark | Placemark[] | any): void;
     remove(placemarks: Placemark | Placemark[]): void;
     removeAll(): void;
   }

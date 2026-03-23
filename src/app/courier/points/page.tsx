@@ -9,7 +9,6 @@ interface CourierOrder {
   route?: { id: string; name: string } | null;
 }
 
-// 🔥 Хелпер для проверки координат
 function hasCoords(o: CourierOrder): o is CourierOrder & { lat: number; lng: number } {
   return o.lat !== null && o.lng !== null;
 }
@@ -17,7 +16,7 @@ function hasCoords(o: CourierOrder): o is CourierOrder & { lat: number; lng: num
 export default function CourierPointsPage() {
   const mapRef = useRef<HTMLDivElement>(null);
   const ymapRef = useRef<any>(null);
-  const mapInitialized = useRef(false); // 🔥 Флаг чтобы не инициализировать дважды
+  const mapInitialized = useRef(false);
   const [orders, setOrders] = useState<CourierOrder[]>([]);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [showList, setShowList] = useState(false);
@@ -36,7 +35,7 @@ export default function CourierPointsPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // 🔥 Инициализация карты — ждём и DOM и данные
+  // Инициализация карты
   useEffect(() => {
     if (mapInitialized.current) return;
 
@@ -44,8 +43,15 @@ export default function CourierPointsPage() {
       if (!mapRef.current || mapInitialized.current) return;
       mapInitialized.current = true;
       ymapRef.current = new window.ymaps.Map(mapRef.current, {
-        center: [55.75, 37.61], zoom: 12, controls: ["zoomControl"]
+        center: [55.75, 37.61], 
+        zoom: 12, 
+        // 🔥 ДОБАВЛЕНО: geolocationControl (Кнопка "Где я")
+        controls: ["zoomControl", "geolocationControl"] 
       }, {});
+
+      // Автоматически пытаемся найти курьера при загрузке карты
+      const geoControl = ymapRef.current.controls.get('geolocationControl');
+      if (geoControl) geoControl.events.add('locationchange', () => {});
     }
 
     if (typeof window === "undefined") return;
@@ -60,17 +66,15 @@ export default function CourierPointsPage() {
         s.onload = () => window.ymaps.ready(initMap);
         document.head.appendChild(s);
       } else {
-        // Скрипт уже грузится — ждём
         existing.addEventListener("load", () => window.ymaps.ready(initMap));
       }
     }
   }, []);
 
-  // 🔥 Маркеры — перерисовываем при изменении заказов или активного
+  // Отрисовка маршрутов и маркеров
   useEffect(() => {
     if (!window?.ymaps) return;
 
-    // Если карта ещё не готова — ждём её инициализации
     if (!ymapRef.current) {
       const wait = setInterval(() => {
         if (ymapRef.current) { clearInterval(wait); renderMarkers(); }
@@ -86,20 +90,52 @@ export default function CourierPointsPage() {
 
       const validOrders = orders.filter(o => hasCoords(o) && o.status !== "DELIVERED");
 
+      // 🔥 1. Рисуем реальные маршруты по дорогам
+      const routeGroups: Record<string, CourierOrder[]> = {};
+      validOrders.forEach(o => {
+        const key = o.route?.id || "no-route";
+        if (!routeGroups[key]) routeGroups[key] = [];
+        routeGroups[key].push(o);
+      });
+
+      if (window.ymaps.multiRouter) {
+        Object.values(routeGroups).forEach(routeOrders => {
+          if (routeOrders.length < 2) return; // Маршрут строим только если точек 2 и больше
+          
+          const sorted = routeOrders.sort((a, b) => (a.routeOrder || 0) - (b.routeOrder || 0));
+          const points = sorted.filter(hasCoords).map(o => [o.lat, o.lng]);
+
+          const multiRoute = new window.ymaps.multiRouter.MultiRoute({
+            referencePoints: points,
+            params: { routingMode: 'auto' } // 'auto' - на автомобиле
+          }, {
+            boundsAutoApply: false,
+            wayPointVisible: false,   // Скрываем стандартные маркеры (мы нарисуем свои поверх)
+            viaPointVisible: false,
+            routeActiveStrokeWidth: 4,
+            routeActiveStrokeColor: "#4a7aff", // Синяя линия
+            routeStrokeWidth: 0       // Скрываем серые альтернативные маршруты
+          });
+          ymapRef.current.geoObjects.add(multiRoute);
+        });
+      }
+
+      // 🔥 2. Рисуем сами точки (маркеры) поверх линии маршрута
       validOrders.forEach(o => {
         if (!hasCoords(o)) return;
-        const coords: [number, number] = [o.lat, o.lng]; // Теперь TypeScript доволен
+        const coords: [number, number] = [o.lat, o.lng]; 
         const isDelivery = o.status === "IN_DELIVERY";
         const isSelected = o.id === activeOrderId;
 
         const pm = new window.ymaps.Placemark(coords, {
-          balloonContent: o.address
+          balloonContent: o.address,
+          iconContent: o.routeOrder ? String(o.routeOrder) : undefined // Показываем цифру порядка в кружке
         }, {
           preset: isSelected
-            ? "islands#redDotIcon"
+            ? "islands#redCircleIcon" // Выделенная точка
             : isDelivery
-              ? "islands#greenDotIcon"
-              : "islands#blueDotIcon"
+              ? "islands#greenCircleIcon" // Везем сейчас
+              : "islands#blueCircleIcon"  // Ожидает
         });
 
         pm.events.add("click", () => {
@@ -170,7 +206,6 @@ export default function CourierPointsPage() {
         </button>
       </div>
 
-      {/* Карта — всегда в DOM, никогда не скрываем через display:none */}
       <div ref={mapRef} style={{ flex: 1, width: "100%", background: "#e8e6df" }} />
 
       {showList && (

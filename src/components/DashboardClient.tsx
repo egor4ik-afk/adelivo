@@ -66,6 +66,9 @@ export function DashboardClient({ user }: { user: User }) {
   const [dismissedInvalid, setDismissedInvalid] = useState(false);
   const [previewGeo, setPreviewGeo] = useState<{ lat: number, lng: number } | null>(null);
   const [fixingAI, setFixingAI] = useState(false);
+  
+  // 🔥 ДОБАВЛЕНО: Стейт готовности карты
+  const [mapReady, setMapReady] = useState(false);
 
   const [sortConfig, setSortConfig] = useState<{ key: string, dir: 'asc' | 'desc' }>({ key: 'changedAt', dir: 'desc' });
 
@@ -198,15 +201,14 @@ export function DashboardClient({ user }: { user: User }) {
     return s && selectedSlots.includes(s.label);
   });
 
-  // 🔥 НОВАЯ СОРТИРОВКА для Боковой панели (Side Panel)
   const sidePanelOrders = [...filtered].sort((a, b) => {
     const getPriority = (o: Order) => {
-      if (/самовывоз/i.test(o.address || "")) return 6; // Самовывоз в самый низ
+      if (/самовывоз/i.test(o.address || "")) return 6; 
       if (o.status === "IN_DELIVERY") return 1;
       if (o.status === "NEW") return 2;
       if (o.status === "ASSIGNED") return 3;
       if (o.status === "DELIVERED") return 4;
-      return 5; // RETURNED, CANCELLED, etc
+      return 5; 
     };
 
     const pA = getPriority(a);
@@ -218,7 +220,6 @@ export function DashboardClient({ user }: { user: User }) {
     return slotA.localeCompare(slotB);
   });
 
-  // На карте не показываем отменённые, возвраты и самовывоз
   const MAP_EXCLUDED_STATUSES = ["CANCELLED", "RETURNED"];
   const filteredForMap = filtered.filter(
     o => !MAP_EXCLUDED_STATUSES.includes(o.status) && !/Самовывоз/i.test(o.address ?? "")
@@ -245,6 +246,7 @@ export function DashboardClient({ user }: { user: User }) {
     setSortConfig(prev => ({ key, dir: prev.key === key && prev.dir === 'asc' ? 'desc' : 'asc' }));
   };
 
+  // 🔥 ИНИЦИАЛИЗАЦИЯ КАРТЫ С УВЕДОМЛЕНИЕМ О ГОТОВНОСТИ (mapReady)
   useEffect(() => {
     let mounted = true;
     loadYMaps().then(() => {
@@ -262,6 +264,9 @@ export function DashboardClient({ user }: { user: User }) {
       map.geoObjects.add(storePm as any);
       ymapRef.current = map;
       clustererRef.current = clusterer;
+      
+      // Говорим реакту, что карта полностью загружена и можно рисовать точки!
+      setMapReady(true);
     });
     return () => { mounted = false; };
   }, []);
@@ -283,8 +288,9 @@ export function DashboardClient({ user }: { user: User }) {
     });
   };
 
-  // Плейсмарки — используем filteredForMap (без отменённых, возвратов и самовывоза)
+  // 🔥 Отрисовка точек теперь слушает mapReady
   useEffect(() => {
+    if (!mapReady) return; // Ждём карту!
     const clusterer = clustererRef.current;
     if (!clusterer || typeof window === "undefined" || !window.ymaps) return;
     clusterer.removeAll();
@@ -358,7 +364,7 @@ export function DashboardClient({ user }: { user: User }) {
     });
 
     if (placemarks.length > 0) clusterer.add(placemarks as any);
-  }, [filteredForMap, selectedId, previewGeo, currentZoom, selectedSlots, isBulkMode, bulkSelectedIds, showTime, showCourierNames, isMobile]);
+  }, [filteredForMap, selectedId, previewGeo, currentZoom, selectedSlots, isBulkMode, bulkSelectedIds, showTime, showCourierNames, isMobile, mapReady]); // 🔥 Добавили mapReady в зависимости
 
   useEffect(() => {
     if (selectedId && ymapRef.current && !previewGeo && !isBulkMode) {
@@ -948,7 +954,6 @@ function CourierSearchSelect({ value, onChange, options }: { value: string, onCh
 const s: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", overflow: "hidden" },
   topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 16px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 10, position: "relative", overflowX: "auto" },
-  // 🔥 Обновленный логотип, больше не сжимается
   logo: { fontSize: 15, fontWeight: 600, color: "#1a1a18", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap", flexShrink: 0, minWidth: "max-content", marginRight: "auto" },
   navBtn: { padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#1a1a18", whiteSpace: "nowrap" },
   datePicker: { padding: "4px 8px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 11, outline: "none", color: "#1a1a18", background: "#fff", marginLeft: 8 },
