@@ -28,6 +28,13 @@ export default function LoginPage() {
 
   async function handleSendCode(e: React.FormEvent) {
     e.preventDefault();
+    
+    // 🔥 НОВОЕ: Проверяем пароль до отправки email-кода
+    if (isOperator && secretCode !== "0007") {
+      setError("Неверный секретный пароль оператора!");
+      return;
+    }
+
     setLoading(true); setError("");
     try {
       const res = await fetch("/api/auth/send-code", {
