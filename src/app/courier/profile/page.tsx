@@ -10,8 +10,11 @@ interface Profile {
 
 export default function CourierProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [editingPhone, setEditingPhone] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
+  
   const [newPhone, setNewPhone] = useState("");
+  const [newFirstName, setNewFirstName] = useState("");
+  const [newLastName, setNewLastName] = useState("");
   const [saving, setSaving] = useState(false);
   const [myShifts, setMyShifts] = useState<string[]>([]);
 
@@ -36,6 +39,8 @@ export default function CourierProfilePage() {
     fetch("/api/profile").then(r => r.json()).then(data => {
       setProfile(data);
       setNewPhone(data.phone || "");
+      setNewFirstName(data.firstName || "");
+      setNewLastName(data.lastName || "");
     });
 
     fetch("/api/courier/my-shifts").then(r => r.json()).then(data => {
@@ -69,20 +74,19 @@ export default function CourierProfilePage() {
     }
   };
 
-  const handleSavePhone = async () => {
+  const handleSaveProfile = async () => {
     setSaving(true);
-    // 🔥 Очищаем номер от скобок перед отправкой в БД
     const cleanPhone = newPhone.replace(/[^\d+]/g, "");
 
     try {
       await fetch("/api/profile", {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: cleanPhone })
+        body: JSON.stringify({ phone: cleanPhone, firstName: newFirstName, lastName: newLastName })
       });
-      setProfile(p => p ? { ...p, phone: cleanPhone } : null);
-      setEditingPhone(false);
+      setProfile(p => p ? { ...p, phone: cleanPhone, firstName: newFirstName, lastName: newLastName } : null);
+      setEditingProfile(false);
     } catch (e) {
-      alert("Не удалось сохранить телефон");
+      alert("Не удалось сохранить данные");
     } finally {
       setSaving(false);
     }
@@ -98,7 +102,7 @@ export default function CourierProfilePage() {
     const isIOS = /iphone|ipad|ipod/.test(ua);
 
     if (isIOS && !isStandalone) {
-      alert("На iPhone уведомления работают только в установленном приложении.\n\nНажмите кнопку «Поделиться» ⍐ в браузере, а затем «На экран Домой» ➕.");
+      alert("На iPhone уведомления работают только в установленном приложении.\\n\\nНажмите кнопку «Поделиться» ⍐ в браузере, а затем «На экран Домой» ➕.");
       return;
     }
 
@@ -112,7 +116,7 @@ export default function CourierProfilePage() {
 
   const installPWA = async () => {
     if (!pwaPrompt) {
-      alert("Для установки на iPhone нажмите «Поделиться» ⍐ в браузере и выберите «На экран Домой» ➕.\n\nНа Android включите установку в настройках браузера.");
+      alert("Для установки на iPhone нажмите «Поделиться» ⍐ в браузере и выберите «На экран Домой» ➕.\\n\\nНа Android включите установку в настройках браузера.");
       return;
     }
     pwaPrompt.prompt();
@@ -213,26 +217,49 @@ export default function CourierProfilePage() {
         <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
           <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", margin: "0 0 12px 0", textTransform: "uppercase" }}>Настройки</h2>
 
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: "1px solid #f0efe9" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "12px 0", borderBottom: "1px solid #f0efe9" }}>
             <div style={{ flex: 1, paddingRight: 16 }}>
-              <div style={{ fontSize: 13, color: "#a8a49c" }}>Номер телефона</div>
-              {!editingPhone && <div style={{ fontSize: 15, fontWeight: 600, color: "#1a1a18", marginTop: 4 }}>{profile.phone || "Не указан"}</div>}
-
-              {/* 🔥 ИСПОЛЬЗУЕМ МАСКУ ЗДЕСЬ */}
-              {editingPhone && (
-                <IMaskInput
-                  mask="+7 (000) 000-00-00"
-                  value={newPhone}
-                  onAccept={(value: string) => setNewPhone(value)}
-                  placeholder="+7 (___) ___-__-__"
-                  style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontSize: 14, marginTop: 4, boxSizing: "border-box" }}
-                />
+              
+              {!editingProfile ? (
+                <>
+                  <div style={{ fontSize: 13, color: "#a8a49c" }}>Личные данные</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: "#1a1a18", marginTop: 4 }}>
+                    {profile.firstName} {profile.lastName}
+                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: "#1a1a18", marginTop: 4 }}>
+                    {profile.phone || "Телефон не указан"}
+                  </div>
+                </>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 12, color: "#a8a49c", marginBottom: 4 }}>Имя</div>
+                    <input value={newFirstName} onChange={e => setNewFirstName(e.target.value)} style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontSize: 14 }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, color: "#a8a49c", marginBottom: 4 }}>Фамилия</div>
+                    <input value={newLastName} onChange={e => setNewLastName(e.target.value)} style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontSize: 14 }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, color: "#a8a49c", marginBottom: 4 }}>Телефон</div>
+                    <IMaskInput
+                      mask="+7 (000) 000-00-00"
+                      value={newPhone}
+                      onAccept={(value: string) => setNewPhone(value)}
+                      placeholder="+7 (___) ___-__-__"
+                      style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontSize: 14 }}
+                    />
+                  </div>
+                </div>
               )}
             </div>
-            {!editingPhone ? (
-              <button onClick={() => setEditingPhone(true)} style={{ background: "none", border: "none", color: "#4a7aff", fontSize: 13, fontWeight: 600, padding: "10px 0", cursor: "pointer" }}>Изменить</button>
+            
+            {!editingProfile ? (
+              <button onClick={() => setEditingProfile(true)} style={{ background: "none", border: "none", color: "#4a7aff", fontSize: 13, fontWeight: 600, padding: "10px 0", cursor: "pointer" }}>Изменить</button>
             ) : (
-              <button onClick={handleSavePhone} disabled={saving} style={{ background: "#4a7aff", border: "none", color: "#fff", padding: "8px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>{saving ? "..." : "Сохранить"}</button>
+              <button onClick={handleSaveProfile} disabled={saving} style={{ background: "#4a7aff", border: "none", color: "#fff", padding: "8px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", marginTop: 18 }}>
+                {saving ? "..." : "Сохранить"}
+              </button>
             )}
           </div>
 

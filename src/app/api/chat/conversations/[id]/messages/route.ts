@@ -34,33 +34,40 @@ export async function GET(
 }
 
 export async function POST(
-  req: NextRequest,
+  req: NextRequest, 
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // 1. Достаем id из params точно так же, как в GET
   const { id } = await params;
+  const { text, mediaUrl, mediaType } = await req.json();
 
-  const conv = await prisma.conversation.findFirst({
-    where: { id, OR: [{ user1Id: session.id }, { user2Id: session.id }] },
-  });
-  if (!conv) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!text?.trim() && !mediaUrl) {
+    return NextResponse.json({ error: "Empty message" }, { status: 400 });
+  }
 
-  const { text } = await req.json();
-  if (!text?.trim()) return NextResponse.json({ error: "Empty" }, { status: 400 });
-
+  // 2. Создаем сообщение
   const message = await prisma.message.create({
-    data: { conversationId: id, senderId: session.id, text: text.trim() },
+    data: {
+      text: text?.trim() || null,
+      mediaUrl: mediaUrl || null,
+      mediaType: mediaType || null,
+      conversationId: id, // Используем переменную id
+      senderId: session.id,
+    },
     include: {
       sender: { select: { id: true, firstName: true, lastName: true, role: true } },
     },
   });
 
+  // 3. Обновляем время последнего изменения диалога (чтобы он был первым в списке)
   await prisma.conversation.update({
     where: { id },
     data: { updatedAt: new Date() },
   });
 
+  // 4. Возвращаем сообщение
   return NextResponse.json(message);
 }
