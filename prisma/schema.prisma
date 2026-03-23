@@ -50,7 +50,9 @@ model User {
   sessions          Session[]
   authCodes         AuthCode[]
   pushSubscriptions PushSubscription[]
-  routeMessages     RouteMessage[]     // 🔥 НОВОЕ: Сообщения юзера в чатах
+  conversations1    Conversation[]     @relation("ConvUser1")
+  conversations2    Conversation[]     @relation("ConvUser2")
+  sentMessages      Message[]          @relation("SentMessages")
 }
 
 model Session {
@@ -208,25 +210,49 @@ model Route {
   courier   Courier  @relation(fields: [courierId], references: [id])
   
   orders    Order[]
-  messages  RouteMessage[] // Чат маршрута
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-// Модель сообщения в чате маршрута
-model RouteMessage {
-  id        String   @id @default(cuid())
-  text      String   @db.Text
+// Диалог между двумя пользователями
+model Conversation {
+  id          String    @id @default(cuid())
   
-  routeId   String
-  route     Route    @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  user1Id     String
+  user2Id     String
+  user1       User      @relation("ConvUser1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2       User      @relation("ConvUser2", fields: [user2Id], references: [id], onDelete: Cascade)
   
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  messages    Message[]
   
-  createdAt DateTime @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  @@index([routeId])
-  @@index([createdAt])
+  @@unique([user1Id, user2Id]) // Один диалог между парой
+  @@index([user1Id])
+  @@index([user2Id])
+}
+
+// Сообщение в диалоге
+model Message {
+  id             String       @id @default(cuid())
+  text           String?      @db.Text
+  
+  // Медиа (Yandex S3) — добавим позже
+  mediaUrl       String?      @db.Text
+  mediaType      String?      // "image" | "audio"
+  
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  senderId       String
+  sender         User         @relation("SentMessages", fields: [senderId], references: [id])
+  
+  readAt         DateTime?    // null = непрочитано
+  
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
 }
