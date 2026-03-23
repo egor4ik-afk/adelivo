@@ -138,11 +138,6 @@ export async function mapCrmOrder(order: CrmOrder) {
     parsedDate = new Date(rawDate.getTime() - 5 * 60 * 60 * 1000);
   }
 
-  const customerName = [order.firstName, order.lastName].filter(Boolean).join(" ") 
-    || [order.customer?.firstName, order.customer?.lastName].filter(Boolean).join(" ") || null;
-  const customerPhone = order.phone || order.customer?.phones?.[0]?.number || null;
-  const customerEmail = order.email || order.customer?.email || null;
-
   return {
     crmId: String(order.id),
     externalId: order.externalId ?? order.number ?? null,
@@ -161,9 +156,6 @@ export async function mapCrmOrder(order: CrmOrder) {
     slotRaw: slot.text,
     deliveryType: order.delivery?.code ?? null,
     crmCreatedAt: parsedDate,
-    customerName,
-    customerPhone,
-    customerEmail,
   };
 }
 

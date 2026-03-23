@@ -1,11 +1,13 @@
 // migrate-db.js
 const { Client } = require('pg');
-
-const SOURCE_URL = "postgresql://neondb_owner:npg_huWUM8EwNL9e@ep-weathered-king-agkh6xje.c-2.eu-central-1.aws.neon.tech/neondb?sslmode=require"; // Откуда качаем
-const TARGET_URL = "postgresql://neondb_owner:npg_U7HMrwz4iBvI@ep-soft-hill-alt5qg1o.c-3.eu-central-1.aws.neon.tech/neondb?sslmode=require"; // Куда заливаем
+const SOURCE_URL = "postgresql://neondb_owner:npg_U7HMrwz4iBvI@ep-soft-hill-alt5qg1o.c-3.eu-central-1.aws.neon.tech/neondb?sslmode=require"; // Куда заливаем
 // migrate-db.js
 
-// 🔥 СТРОГИЙ ПОРЯДОК ТАБЛИЦ (Сначала независимые, потом зависимые)
+// ОТКУДА: Твой Neon (источник)
+
+// КУДА: Твой Yandex Cloud (база event)
+const TARGET_URL = "postgresql://relaxdev_user:DWEjv5hZRSiKVru@c-c9qus4d0oi5d0gke65tu.rw.mdb.yandexcloud.net:6432/event?";
+
 const TABLE_ORDER = [
   'SyncState',
   'NotificationLog',
@@ -21,16 +23,19 @@ const TABLE_ORDER = [
   'RouteMessage'
 ];
 
+// Поля, которые были удалены в новой схеме (чтобы скрипт их игнорировал)
+const IGNORED_COLUMNS = ['customerName', 'customerPhone', 'customerEmail'];
+
 async function run() {
   const src = new Client({ connectionString: SOURCE_URL, ssl: { rejectUnauthorized: false } });
   const tgt = new Client({ connectionString: TARGET_URL, ssl: { rejectUnauthorized: false } });
 
-  await src.connect();
-  await tgt.connect();
-  console.log("🚀 Успешно подключились к обеим базам данных!");
+  try { // Оставили только ОДИН блок try
+    await src.connect();
+    await tgt.connect();
+    console.log("🚀 Успешно подключились к обеим базам данных!");
 
-  try {
-    // 1. Сначала очищаем все таблицы в новой БД (CASCADE удалит всё связанное)
+    // 1. Сначала очищаем все таблицы в новой БД
     console.log("🧹 Очищаем новую базу перед заливкой...");
     for (const tablename of [...TABLE_ORDER].reverse()) {
       await tgt.query(`TRUNCATE TABLE "${tablename}" CASCADE;`).catch(() => {});
@@ -47,26 +52,32 @@ async function run() {
         continue;
       }
 
-      const columns = Object.keys(rows[0]);
-      const colNames = columns.map(c => `"${c}"`).join(', ');
+      // Получаем все колонки из старой базы и отфильтровываем удаленные
+      const allColumns = Object.keys(rows[0]);
+      const validColumns = allColumns.filter(col => !IGNORED_COLUMNS.includes(col));
+      const colNames = validColumns.map(c => `"${c}"`).join(', ');
 
       const BATCH_SIZE = 500;
       let inserted = 0;
 
       for (let i = 0; i < rows.length; i += BATCH_SIZE) {
         const batch = rows.slice(i, i + BATCH_SIZE);
-        
         let valuesArr = [];
         let queryParams = [];
         let paramIndex = 1;
 
         for (const row of batch) {
           let rowParams = [];
-          for (const col of columns) {
+          
+          // Проходимся только по тем колонкам, которые есть в новой БД
+          for (const col of validColumns) {
             let val = row[col];
+            
+            // Обработка объектов для JSON полей
             if (typeof val === 'object' && val !== null && !(val instanceof Date)) {
               val = JSON.stringify(val);
             }
+            
             queryParams.push(val);
             rowParams.push(`$${paramIndex++}`);
           }

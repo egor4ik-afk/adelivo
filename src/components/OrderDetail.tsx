@@ -131,7 +131,7 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
     if (!selected) return;
 
     // Телефон из БД (приоритет: получатель -> клиент)
-    const initialPhone = selected.recipientPhone || selected.customerPhone || "";
+    const initialPhone = selected.recipientPhone || "";
 
     setOpComment(selected.opComment ?? "");
     setEditStatus(selected.status ?? "");

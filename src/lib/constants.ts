@@ -8,7 +8,6 @@ export interface Order {
   deliveryType: string | null; deliveryDate: string | null;
   isInvalid: boolean; invalidReason: string | null;
   crmCreatedAt: string | null; updatedAt?: string;
-  customerPhone?: string | null;
   recipientPhone?: string | null;
 }
 

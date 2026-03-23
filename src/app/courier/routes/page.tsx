@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 
 interface RouteOrder {
   id: string; externalId: string; crmId: string; address: string; status: string;
-  slotRaw: string | null; customerPhone: string | null; recipientPhone: string | null;
+  slotRaw: string | null; recipientPhone: string | null;
   price: number | null; items: string | null; comment: string | null;
-  routeId: string | null; routeOrder: number | null; customerName: string | null;
+  routeId: string | null; routeOrder: number | null; 
   deliveryDate: string | null; // 🔥 Добавили для фильтрации по дате
   route?: { id: string; name: string; link: string | null; date: string } | null;
 }
@@ -137,7 +137,7 @@ export default function CourierRoutesPage() {
 
                   {routePoints.map((o) => {
                     const st = STATUS_MAP[o.status] || STATUS_MAP.ASSIGNED;
-                    const phone = o.recipientPhone || o.customerPhone || "—";
+                    const phone = o.recipientPhone || "—";
 
                     return (
                       <div key={o.id} style={{ background: "#fff", borderRadius: 10, border: "1px solid #f0efe9", padding: 14 }}>

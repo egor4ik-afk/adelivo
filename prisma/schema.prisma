@@ -164,9 +164,7 @@ model Order {
   updatedAt     DateTime    @updatedAt
   changedAt     DateTime?
   courierManual Boolean     @default(false)
-  customerName  String?
-  customerPhone String?
-  customerEmail String?
+
   
   // 🔥 НОВЫЕ ПОЛЯ:
   recipientPhone String? // Телефон получателя
