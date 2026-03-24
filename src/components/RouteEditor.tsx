@@ -12,7 +12,7 @@ const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> =
 };
 
 export function RouteEditor({ 
-  routeId, routeName, routeLink, initialOrders, unassignedOrders, 
+  routeId, routeName, routeLink, initialOrders, globalFreeOrders, 
   courierId, routesDate, isMobile, onSaved, onStatusChange, onOpenDetail 
 }: any) {
   const [orders, setOrders] = useState<any[]>([]);
@@ -40,14 +40,13 @@ export function RouteEditor({
   };
 
   const add = (id: string) => {
-    const orderToAdd = unassignedOrders.find((x: any) => x.id === id);
+    const orderToAdd = globalFreeOrders.find((x: any) => x.id === id);
     if (orderToAdd) {
       setOrders(prev => [...prev, orderToAdd]);
       setHasChanges(true);
     }
   };
 
-  // 🔥 НОВАЯ ФУНКЦИЯ: Сброс изменений
   const cancelChanges = () => {
     setOrders([...initialOrders].sort((a, b) => (a.routeOrder || 0) - (b.routeOrder || 0)));
     setHasChanges(false);
@@ -75,6 +74,9 @@ export function RouteEditor({
     }
   };
 
+  // Исключаем точки, которые уже добавлены в этот маршрут
+  const availableToADD = globalFreeOrders.filter((free: any) => !orders.find(lo => lo.id === free.id));
+
   return (
     <div style={{ border: hasChanges ? "2px solid #4a7aff" : "1px solid #f0efe9", borderRadius: 12, padding: isMobile ? 12 : 16, background: hasChanges ? "#f4f7ff" : "#fff", transition: "all 0.3s", position: "relative" }}>
       
@@ -90,11 +92,9 @@ export function RouteEditor({
           )}
           {hasChanges && (
             <>
-              {/* 🔥 КНОПКА ОТМЕНЫ */}
               <button onClick={cancelChanges} disabled={saving} style={{ flex: isMobile ? 1 : "none", background: "#fff", color: "#1a1a18", border: "1px solid #e8e6df", padding: "8px 14px", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
                 Отменить
               </button>
-              {/* 🔥 ИЗМЕНЕННАЯ КНОПКА СОХРАНЕНИЯ */}
               <button onClick={save} disabled={saving} style={{ flex: isMobile ? 1 : "none", background: "#4a7aff", color: "#fff", border: "none", padding: "8px 14px", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer", boxShadow: "0 4px 12px rgba(74,122,255,0.3)" }}>
                 {saving ? "Сохранение..." : "💾 Сохранить"}
               </button>
@@ -154,13 +154,20 @@ export function RouteEditor({
         })}
       </div>
 
-      {unassignedOrders.filter((uo: any) => !orders.find(lo => lo.id === uo.id)).length > 0 && (
+      {availableToADD.length > 0 && (
         <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid #e8e6df" }}>
-          <select value="" onChange={(e) => add(e.target.value)} style={{ width: "100%", maxWidth: isMobile ? "100%" : 350, background: "rgba(74, 122, 255, 0.08)", color: "#4a7aff", border: "none", padding: "10px 14px", borderRadius: 8, fontSize: 13, fontWeight: 700, outline: "none", cursor: "pointer" }}>
-            <option value="" disabled>➕ Добавить точку в этот маршрут...</option>
-            {unassignedOrders.filter((uo: any) => !orders.find(lo => lo.id === uo.id)).map((uo: any) => (
-              <option key={uo.id} value={uo.id}>{uo.slotRaw} · {uo.address?.slice(0, 35)}...</option>
-            ))}
+          <select value="" onChange={(e) => add(e.target.value)} style={{ width: "100%", maxWidth: isMobile ? "100%" : 450, background: "rgba(74, 122, 255, 0.08)", color: "#4a7aff", border: "none", padding: "10px 14px", borderRadius: 8, fontSize: 13, fontWeight: 700, outline: "none", cursor: "pointer", textOverflow: "ellipsis" }}>
+            <option value="" disabled>➕ Добавить свободную точку в маршрут...</option>
+            {availableToADD.map((free: any) => {
+              const belongsToOther = free.courierId && free.courierId !== courierId;
+              const suffix = belongsToOther ? `(У курьера: ${free.courier})` : (!free.courierId ? "(Новый / Без курьера)" : "");
+              
+              return (
+                <option key={free.id} value={free.id}>
+                  {free.slotRaw} · {free.address?.slice(0, 30)}... {suffix}
+                </option>
+              );
+            })}
           </select>
         </div>
       )}

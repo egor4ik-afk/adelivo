@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { OrderDetail } from "./OrderDetail";
-import { RouteEditor } from "./RouteEditor"; // 🔥 Импортируем вынесенный компонент
+import { RouteEditor } from "./RouteEditor";
 
 interface CourierShift { id: string; date: string; }
 interface CourierPayment { id: string; date: string; }
@@ -13,8 +13,6 @@ interface Courier {
   isActive: boolean; shifts: CourierShift[]; payments: CourierPayment[];
 }
 
-// 🔥 ДОБАВЛЕНЫ НЕДОСТАЮЩИЕ ПОЛЯ, ЧТОБЫ TS НЕ РУГАЛСЯ НА OrderDetail:
-// lat, lng, courier, slotFrom, slotTo
 interface Order {
   id: string; courierId: number | null; status: string; price: number | null;
   deliveryDate: string | null; crmCreatedAt: string | null;
@@ -160,6 +158,14 @@ export function CouriersClient({ user }: { user: any }) {
     return a.fullName.localeCompare(b.fullName);
   });
 
+  // 🔥 Вычисляем ВСЕ свободные точки на эту дату (нет routeId)
+  const globalFreeOrders = orders.filter(o => 
+    !o.routeId && 
+    getODate(o) === routesDate && 
+    o.status !== "DELIVERED" && 
+    o.status !== "CANCELLED"
+  );
+
   return (
     <div style={s.app}>
       <div style={s.topbar}>
@@ -177,10 +183,9 @@ export function CouriersClient({ user }: { user: any }) {
           <div>
             <h1 style={s.title}>Курьеры</h1>
             <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch" }}>
-            <button style={activeTab === "routes" ? s.tabActive : s.tabInactive} onClick={() => setActiveTab("routes")}>🗺️ Маршруты</button>
+              <button style={activeTab === "routes" ? s.tabActive : s.tabInactive} onClick={() => setActiveTab("routes")}>🗺️ Маршруты</button>
               <button style={activeTab === "schedule" ? s.tabActive : s.tabInactive} onClick={() => setActiveTab("schedule")}>📅 График</button>
               <button style={activeTab === "calc" ? s.tabActive : s.tabInactive} onClick={() => setActiveTab("calc")}>💰 ЗП</button>
-
             </div>
           </div>
           
@@ -314,7 +319,7 @@ export function CouriersClient({ user }: { user: any }) {
                 routeGroups[key].push(o);
               });
 
-              const unassignedOrders = routeGroups["no_route"] || [];
+              const courierUnassignedOrders = routeGroups["no_route"] || [];
               const isCExpanded = expandedCouriers[c.id] ?? true;
               const routeKeys = Object.keys(routeGroups).filter(k => k !== "no_route").sort((a, b) => b.localeCompare(a));
 
@@ -343,7 +348,7 @@ export function CouriersClient({ user }: { user: any }) {
                             key={rId}
                             routeId={rId} routeName={rName} routeLink={rLink}
                             initialOrders={rOrders}
-                            unassignedOrders={unassignedOrders}
+                            globalFreeOrders={globalFreeOrders} // 🔥 Передаем ВСЕ свободные заказы для выпадающего списка
                             courierId={c.id}
                             routesDate={routesDate}
                             isMobile={isMobile}
@@ -354,11 +359,11 @@ export function CouriersClient({ user }: { user: any }) {
                         );
                       })}
 
-                      {unassignedOrders.length > 0 && (
+                      {courierUnassignedOrders.length > 0 && (
                         <div>
-                          <h4 style={{ margin: "0 0 12px 0", fontSize: 14, fontWeight: 700, color: "#6b6860" }}>Без маршрута ({unassignedOrders.length})</h4>
+                          <h4 style={{ margin: "0 0 12px 0", fontSize: 14, fontWeight: 700, color: "#6b6860" }}>Без маршрута ({courierUnassignedOrders.length})</h4>
                           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
-                            {unassignedOrders.map(o => {
+                            {courierUnassignedOrders.map(o => {
                               const st = STATUS_MAP[o.status] || STATUS_MAP.NEW;
                               return (
                                 <div key={o.id} style={{ background: "#fafaf8", borderRadius: 10, border: "1px dashed #a8a49c", padding: 14, display: "flex", flexDirection: "column" }}>
