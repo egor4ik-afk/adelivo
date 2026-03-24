@@ -1,3 +1,4 @@
+// src/app/courier/points/page.tsx
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { NAV_HEIGHT } from "@/components/CourierNav";
@@ -85,16 +86,18 @@ export default function CourierPointsPage() {
       ymapRef.current = new window.ymaps.Map(mapRef.current, {
         center: [55.75, 37.61],
         zoom: 11,
-        controls: ["zoomControl", "geolocationControl"],
+        controls: ["zoomControl", "geolocationControl", "compassControl"], // 🔥 Добавлен компас
+        type: 'yandex#map', // 🔥 Указываем тип для TS и Вектора
       }, {
         suppressMapOpenBlock: true,
+        vector: true, // 🔥 Включаем Векторный движок (без него карта не крутится!)
       });
 
       ymapRef.current.behaviors.enable([
         "default",
         "scrollZoom",
         "drag",
-        "multiTouch",
+        "multiTouch", // 🔥 Явно включаем управление жестами (зум + поворот)
       ]);
 
       ymapRef.current.container.fitToViewport();
@@ -118,7 +121,8 @@ export default function CourierPointsPage() {
       const existing = document.querySelector(`script[src*="api-maps.yandex.ru"]`);
       if (!existing) {
         const s = document.createElement("script");
-        s.src = `https://api-maps.yandex.ru/2.1/?apikey=${process.env.NEXT_PUBLIC_YANDEX_MAPS_KEY}&lang=ru_RU`;
+        // 🔥 Добавлен параметр mode=vector в ссылку Яндекса
+        s.src = `https://api-maps.yandex.ru/2.1/?apikey=${process.env.NEXT_PUBLIC_YANDEX_MAPS_KEY}&lang=ru_RU&mode=vector`;
         s.onload = () => window.ymaps.ready(initMap);
         document.head.appendChild(s);
       } else {
@@ -227,6 +231,22 @@ export default function CourierPointsPage() {
     }
   }, [orders, activeOrderId, mapReady, buildRouteToPoint]);
 
+  const handleStatusChange = async (id: string, newStatus: string) => {
+    setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o));
+    setActiveOrderId(null);
+    setRouteInfo(null);
+
+    if (activeRouteRef.current && ymapRef.current) {
+      try { ymapRef.current.geoObjects.remove(activeRouteRef.current); } catch {}
+      activeRouteRef.current = null;
+    }
+
+    await fetch(`/api/orders/${id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    });
+  };
+
   const handleListPointClick = (order: CourierOrder) => {
     setActiveOrderId(order.id);
     setShowList(false);
@@ -243,8 +263,6 @@ export default function CourierPointsPage() {
       try { ymapRef.current.geoObjects.remove(activeRouteRef.current); } catch {}
       activeRouteRef.current = null;
     }
-    const bounds = ymapRef.current?.geoObjects.getBounds();
-    if (bounds) ymapRef.current.setBounds(bounds, { checkZoomRange: true, zoomMargin: 50, maxZoom: 14 });
   };
 
   const toggleRoute = (rId: string) => {
@@ -273,70 +291,93 @@ export default function CourierPointsPage() {
       flexDirection: "column",
     }}>
 
-      {/* 🔥 ОБНОВЛЕННАЯ ШАПКА */}
+      {/* 🔥 УМНАЯ ШАПКА: Заменяется на инфу о заказе, если он выбран */}
       <div style={{
         padding: "12px 16px",
         background: "#fff",
         borderBottom: "1px solid #e8e6df",
         zIndex: 10,
         display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
+        flexDirection: "column",
         flexShrink: 0,
-        minHeight: 64, // Фиксированная минимальная высота, чтобы интерфейс не прыгал
       }}>
         {activeOrder ? (
-          <div style={{ flex: 1, minWidth: 0, paddingRight: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {activeOrder.address}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div style={{ flex: 1, minWidth: 0, paddingRight: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#4a7aff", textTransform: "uppercase", marginBottom: 2 }}>
+                  {activeOrder.status === "IN_DELIVERY" ? "🚀 Везем сейчас" : "Ожидает"}
+                </div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {activeOrder.address}
+                </div>
               </div>
               <button 
                 onClick={handleCloseActiveOrder} 
-                style={{ background: "rgba(0,0,0,0.05)", border: "none", borderRadius: "50%", width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "#6b6860", cursor: "pointer", flexShrink: 0 }}
+                style={{ background: "rgba(0,0,0,0.05)", border: "none", borderRadius: "50%", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: "#6b6860", cursor: "pointer", flexShrink: 0 }}
               >
                 ✕
               </button>
             </div>
-            <div style={{ display: "flex", gap: 12, fontSize: 12, fontWeight: 600 }}>
-              {routeInfo ? (
-                <>
-                  <span style={{ color: "#4a7aff" }}>📍 {routeInfo.distance}</span>
-                  <span style={{ color: "#10b981" }}>⏱ {routeInfo.duration}</span>
-                </>
-              ) : userLocation ? (
-                <span style={{ color: "#a8a49c" }}>Считаем маршрут...</span>
-              ) : (
-                <span style={{ color: "#b45309" }}>Включите геолокацию</span>
-              )}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>
+                {routeInfo ? (
+                  <>
+                    <span style={{ color: "#4a7aff" }}>📍 {routeInfo.distance}</span>
+                    <span style={{ color: "#10b981", marginLeft: 12 }}>⏱ {routeInfo.duration}</span>
+                  </>
+                ) : userLocation ? (
+                  <span style={{ color: "#a8a49c" }}>Считаем...</span>
+                ) : (
+                  <span style={{ color: "#b45309" }}>Включите GPS</span>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                {activeOrder.status === "ASSIGNED" && (
+                  <button 
+                    onClick={() => handleStatusChange(activeOrder.id, "IN_DELIVERY")} 
+                    style={{ padding: "6px 12px", borderRadius: 8, background: "#4a7aff", color: "#fff", border: "none", fontWeight: 600, fontSize: 12, cursor: "pointer" }}
+                  >
+                    Поехал
+                  </button>
+                )}
+                {activeOrder.status === "IN_DELIVERY" && (
+                  <button 
+                    onClick={() => handleStatusChange(activeOrder.id, "DELIVERED")} 
+                    style={{ padding: "6px 12px", borderRadius: 8, background: "#10b981", color: "#fff", border: "none", fontWeight: 600, fontSize: 12, cursor: "pointer" }}
+                  >
+                    Доставлен
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         ) : (
-          <div>
-            <h1 style={{ margin: 0, fontSize: 18, color: "#1a1a18" }}>Карта доставок</h1>
-            <p style={{ margin: 0, fontSize: 12, color: "#a8a49c", marginTop: 2 }}>{activeOrdersCount} точек на карте</p>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <h1 style={{ margin: 0, fontSize: 18, color: "#1a1a18" }}>Карта доставок</h1>
+              <p style={{ margin: 0, fontSize: 12, color: "#a8a49c", marginTop: 2 }}>{activeOrdersCount} точек на карте</p>
+            </div>
+            <button
+              onClick={() => setShowList(!showList)}
+              style={{
+                background: showList ? "#1a1a18" : "#f5f4f0",
+                color: showList ? "#fff" : "#1a1a18",
+                border: "1px solid #e8e6df",
+                padding: "8px 14px",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer"
+              }}
+            >
+              {showList ? "Скрыть список" : "☰ Список"}
+            </button>
           </div>
         )}
-
-        <button
-          onClick={() => setShowList(!showList)}
-          style={{
-            background: showList ? "#1a1a18" : "#f5f4f0",
-            color: showList ? "#fff" : "#1a1a18",
-            border: "1px solid #e8e6df",
-            padding: "8px 14px",
-            borderRadius: 8,
-            fontSize: 13,
-            fontWeight: 600,
-            whiteSpace: "nowrap",
-            flexShrink: 0
-          }}
-        >
-          {showList ? "Скрыть" : "☰ Список"}
-        </button>
       </div>
 
-      {/* Карта */}
+      {/* 🔥 Карта: touchAction="none" не дает браузеру скроллить сайт, отдавая все жесты карте */}
       <div
         ref={mapRef}
         style={{
@@ -349,10 +390,10 @@ export default function CourierPointsPage() {
       />
 
       {/* Список точек (слой поверх карты) */}
-      {showList && (
+      {showList && !activeOrder && (
         <div style={{
           position: "absolute",
-          top: 64, // Высота шапки
+          top: 64, // Отступ под шапку
           left: 0,
           right: 0,
           bottom: 0,

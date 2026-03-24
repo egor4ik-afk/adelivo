@@ -57,22 +57,23 @@ declare namespace ymaps {
         center: number[];
         zoom: number;
         controls?: string[];
-        behaviors?: string[]; // 🔥 Добавлено behaviors
+        behaviors?: string[]; // 🔥 Добавлено
+        type?: string;        // 🔥 Добавлено
       },
       options?: any
     );
 
     geoObjects: {
       add(geoObject: Clusterer | Placemark | multiRouter.MultiRoute | any): void;
-      remove(geoObject: any): void; // 🔥 Добавлен remove
+      remove(geoObject: any): void; // 🔥 Добавлено
       removeAll(): void;
-      each(callback: (geoObject: any) => void): void; // 🔥 Добавлен each
+      each(callback: (geoObject: any) => void): void; // 🔥 Добавлено
       getBounds(): number[][] | null;
     };
     container: {
       fitToViewport(): void;
     };
-    behaviors: { // 🔥 Добавлен объект behaviors
+    behaviors: { // 🔥 Добавлено
       enable(behavior: string | string[]): void;
       disable(behavior: string | string[]): void;
     };
