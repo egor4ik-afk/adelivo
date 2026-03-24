@@ -8,19 +8,20 @@ const STORE_COORDS = "55.749511,37.596205"; // База (магазин)
 
 export async function POST(req: Request) {
   try {
-    // 🔥 ДОБАВИЛИ returnToBase
-    const { orderIds, courierId, routeType = "auto", returnToBase = false } = await req.json();
+    // Принимаем routeDate (если фронт решит его передавать в будущем)
+    const { orderIds, courierId, routeType = "auto", returnToBase = false, routeDate } = await req.json();
     if (!orderIds?.length || !courierId) return NextResponse.json({ error: "Неверные данные" }, { status: 400 });
 
+    // 🔥 ДОБАВИЛИ в select поля deliveryDate и crmCreatedAt, чтобы взять дату из заказа
     const orders = await prisma.order.findMany({
       where: { id: { in: orderIds } },
-      select: { id: true, lat: true, lng: true, crmId: true }
+      select: { id: true, lat: true, lng: true, crmId: true, deliveryDate: true, crmCreatedAt: true }
     });
 
     const sortedOrders = orderIds.map((id: string) => orders.find((o) => o.id === id)).filter(Boolean);
     const coordsList = sortedOrders.map((o: any) => o.lat && o.lng ? `${o.lat},${o.lng}` : null).filter(Boolean);
     
-    // 🔥 Формируем строку маршрута с учетом возврата на базу
+    // Формируем строку маршрута с учетом возврата на базу
     const rtextArr = [STORE_COORDS, ...coordsList];
     if (returnToBase) rtextArr.push(STORE_COORDS);
     
@@ -28,10 +29,26 @@ export async function POST(req: Request) {
     const link = `https://yandex.ru/maps/?rtext=${rtext}&rtt=${routeType}`;
 
     const routeName = `M-${Math.floor(1000 + Math.random() * 9000)}`;
-    const today = new Date().toISOString().split('T')[0];
+    
+    // 🔥 ВЫСЧИТЫВАЕМ ПРАВИЛЬНУЮ ДАТУ МАРШРУТА
+    // По умолчанию московское сегодня
+    let finalRouteDate = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }); 
+    
+    if (routeDate) {
+      finalRouteDate = routeDate;
+    } else if (sortedOrders.length > 0) {
+      // Берем дату доставки первого заказа из маршрута
+      const firstOrder = sortedOrders[0];
+      if (firstOrder.deliveryDate) {
+        finalRouteDate = firstOrder.deliveryDate.split('T')[0];
+      } else if (firstOrder.crmCreatedAt) {
+        finalRouteDate = firstOrder.crmCreatedAt.toISOString().split('T')[0];
+      }
+    }
 
+    // Создаем маршрут с правильной датой
     const newRoute = await prisma.route.create({
-      data: { name: routeName, link, date: today, courierId: Number(courierId) }
+      data: { name: routeName, link, date: finalRouteDate, courierId: Number(courierId) }
     });
 
     const courierDb = await prisma.courier.findUnique({ where: { id: Number(courierId) } });

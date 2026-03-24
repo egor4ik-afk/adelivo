@@ -54,7 +54,8 @@ export default function LoginPage() {
     try {
       const res = await fetch("/api/auth/verify", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, code, secretCode: isOperator ? secretCode : undefined }),
+        // 🔥 ДОБАВЛЕНО: Явно передаем isOperator на сервер
+        body: JSON.stringify({ email, code, isOperator, secretCode: isOperator ? secretCode : undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);

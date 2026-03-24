@@ -5,7 +5,8 @@ import { signToken } from "@/lib/auth";
 
 export async function POST(req: Request) {
   try {
-    const { email: rawEmail, code, secretCode } = await req.json();
+    // 🔥 Принимаем isOperator от клиента
+    const { email: rawEmail, code, isOperator, secretCode } = await req.json();
     if (!rawEmail || !code) return NextResponse.json({ error: "Email и код обязательны" }, { status: 400 });
 
     const email = rawEmail.toLowerCase().trim();
@@ -26,17 +27,28 @@ export async function POST(req: Request) {
     await prisma.authCode.update({ where: { id: authCode.id }, data: { used: true } });
     let user = authCode.user;
 
-    if (secretCode === "0007" && user.role === "COURIER") {
-      user = await prisma.user.update({
-        where: { id: user.id }, data: { role: "OPERATOR" }
-      });
+    // 🔥 ЯВНОЕ УПРАВЛЕНИЕ РОЛЯМИ
+    if (isOperator && secretCode === "0007") {
+      // Если стоит галочка и код верный — делаем оператором
+      if (user.role !== "OPERATOR" && user.role !== "ADMIN") {
+        user = await prisma.user.update({
+          where: { id: user.id }, data: { role: "OPERATOR" }
+        });
+      }
+    } else if (!isOperator) {
+      // Если заходим без галочки (как курьер), возвращаем роль курьера
+      // Это спасет от "застревания" в операторах после тестов
+      if (user.role === "OPERATOR") {
+        user = await prisma.user.update({
+          where: { id: user.id }, data: { role: "COURIER" }
+        });
+      }
     }
 
     await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
     const sessionToken = await signToken({ userId: user.id, role: user.role });
     
-    // 🔥 ИЗМЕНЕНО: Устанавливаем куку на 365 дней (1 год)
     const expiresInDays = 365;
     const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
 
@@ -54,7 +66,6 @@ export async function POST(req: Request) {
 
     const res = NextResponse.json({ ok: true, role: user.role, linked });
     
-    // 🔥 ИЗМЕНЕНО: Добавили maxAge для надежности в Safari PWA
     res.cookies.set("flowerops_session", sessionToken, { 
       httpOnly: true, 
       secure: process.env.NODE_ENV === "production", 
