@@ -1,13 +1,16 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 import imageCompression from "browser-image-compression";
+import { usePathname } from "next/navigation";
 
 type UserInfo = { id: string; firstName?: string | null; lastName?: string | null; email: string; phone?: string | null; role: string };
 type LastMessage = { id: string; text?: string | null; mediaType?: string | null; createdAt: string; senderId: string; readAt?: string | null };
 type Conversation = { id: string; user1: UserInfo; user2: UserInfo; messages: LastMessage[]; unread: number; updatedAt: string };
-type Message = { id: string; text?: string | null; mediaType?: string | null; mediaUrl?: string | null; createdAt: string; sender: UserInfo };
+// 🔥 Добавили поле readAt в тип Message
+type Message = { id: string; text?: string | null; mediaType?: string | null; mediaUrl?: string | null; createdAt: string; sender: UserInfo; readAt?: string | null };
 
 export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId: string, isCourier?: boolean }) {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"list" | "dialog" | "search">("list");
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -27,20 +30,17 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // Запрос прав на уведомления
   useEffect(() => {
     if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
       Notification.requestPermission();
     }
   }, []);
 
-  // Синхронизация бейджей (Вкладка + CustomEvent для Nav)
   useEffect(() => {
     document.title = totalUnread > 0 ? `(${totalUnread}) KAMRIKA` : "KAMRIKA";
     window.dispatchEvent(new CustomEvent("chat-unread", { detail: totalUnread }));
   }, [totalUnread]);
 
-  // Слушаем открытие чата из CourierNav
   useEffect(() => {
     const handleOpenChat = () => setOpen(true);
     window.addEventListener("open-chat", handleOpenChat);
@@ -59,8 +59,8 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
       if (unreadCount > prevUnreadRef.current) {
         try {
           const audio = new Audio('/message.mp3');
-          audio.play().catch(() => { }); // Игнорируем ошибку автоплея
-        } catch (e) { }
+          audio.play().catch(() => {}); 
+        } catch (e) {}
         if ("Notification" in window && Notification.permission === "granted" && !open) {
           new Notification("Новое сообщение", { icon: "/favicon-96x96.png" });
         }
@@ -80,7 +80,6 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
     } catch (e) { console.error(e); }
   }, [activeConv?.unread]);
 
-  // Поллинг
   useEffect(() => {
     if (!open) return;
     fetchConversations();
@@ -136,7 +135,6 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
     } finally { setLoading(false); }
   };
 
-  // ─── Загрузка файлов (Прямая ссылка + Сжатие) ───
   const uploadFileToS3 = async (file: File | Blob, filename: string, type: string) => {
     let finalFile = file;
     if (type.startsWith("image/")) {
@@ -163,17 +161,16 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
       if (file.type.startsWith("image/")) type = "image";
       else if (file.type.startsWith("video/")) type = "video";
       else if (file.type.startsWith("audio/")) type = "audio";
-
+      
       const url = await uploadFileToS3(file, file.name, file.type);
       await send({ mediaUrl: url, mediaType: type });
-    } catch (e) { alert("Ошибка загрузки файла"); }
+    } catch (e) { alert("Ошибка загрузки файла"); } 
     finally {
       setLoading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
-  // ─── Запись голосовых ───
   const toggleRecording = async () => {
     if (isRecording && mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
@@ -192,7 +189,7 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
           const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
           const url = await uploadFileToS3(audioBlob, "voice.webm", "audio/webm");
           await send({ mediaUrl: url, mediaType: "audio" });
-        } catch (e) { alert("Ошибка отправки голосового"); }
+        } catch (e) { alert("Ошибка отправки голосового"); } 
         finally {
           setLoading(false);
           stream.getTracks().forEach(track => track.stop());
@@ -203,7 +200,6 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
     } catch (e) { alert("Доступ к микрофону запрещен"); }
   };
 
-  // Поиск пользователей (Debounced)
   useEffect(() => {
     if (view !== "search") return;
     const t = setTimeout(async () => {
@@ -220,9 +216,7 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
 
   return (
     <>
-      {/* Стили анимаций и скрытия десктопной кнопки на мобилках */}
-      <style dangerouslySetInnerHTML={{
-        __html: `
+      <style dangerouslySetInnerHTML={{__html: `
         @keyframes slideUpFade {
           from { opacity: 0; transform: translateY(20px) scale(0.95); }
           to { opacity: 1; transform: translateY(0) scale(1); }
@@ -234,6 +228,7 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
         }
         .chat-window { animation: slideUpFade 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         .record-dot { animation: pulseDot 1.5s infinite; }
+        
         ${isCourier ? '@media (max-width: 768px) { .desktop-chat-btn { display: none !important; } }' : ''}
       `}} />
 
@@ -244,7 +239,6 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
           border: "1px solid #e8e6df", display: "flex", flexDirection: "column", overflow: "hidden", zIndex: 10000,
         }}>
 
-          {/* ── Шапка ── */}
           <div style={{ padding: "11px 14px", background: "#1a1a18", color: "#fff", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
             {view !== "list" && (
               <button onClick={() => { setView("list"); setActiveConv(null); setMessages([]); }} style={{ background: "none", border: "none", color: "#fff", fontSize: 18, cursor: "pointer", padding: 0, lineHeight: 1 }}>←</button>
@@ -277,8 +271,21 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
                         <span style={{ fontSize: 13, fontWeight: 600, color: "#1a1a18", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{userName(other)}</span>
                         {last && <span style={{ fontSize: 10, color: "#a8a49c" }}>{new Date(last.createdAt).toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })}</span>}
                       </div>
-                      <div style={{ fontSize: 12, color: "#6b6860", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}>
-                        {last ? (last.text ?? (last.mediaType === "image" ? "📷 Фото" : last.mediaType === "video" ? "🎥 Видео" : "🎤 Голосовое")) : <span style={{ color: "#a8a49c" }}>Нет сообщений</span>}
+                      
+                      {/* 🔥 Галочки в списке диалогов */}
+                      <div style={{ fontSize: 12, color: "#6b6860", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2, display: "flex", alignItems: "center", gap: 4 }}>
+                        {last ? (
+                          <>
+                            {last.senderId === currentUserId && (
+                              <span style={{ color: last.readAt ? "#4a7aff" : "#a8a49c", fontSize: 11, letterSpacing: last.readAt ? -1 : 0 }}>
+                                {last.readAt ? "✓✓" : "✓"}
+                              </span>
+                            )}
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {last.text ?? (last.mediaType === "image" ? "📷 Фото" : last.mediaType === "video" ? "🎥 Видео" : "🎤 Голосовое")}
+                            </span>
+                          </>
+                        ) : <span style={{ color: "#a8a49c" }}>Нет сообщений</span>}
                       </div>
                     </div>
                     {c.unread > 0 && <div style={{ background: "#ef4444", color: "#fff", borderRadius: "50%", minWidth: 20, height: 20, padding: "0 6px", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{c.unread > 9 ? "9+" : c.unread}</div>}
@@ -288,7 +295,6 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
             </div>
           )}
 
-          {/* ── Поиск ── */}
           {view === "search" && (
             <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
               <div style={{ padding: "10px 12px", borderBottom: "1px solid #e8e6df" }}>
@@ -321,9 +327,17 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
                       {m.mediaType === "image" && m.mediaUrl && <img src={m.mediaUrl} alt="Фото" style={{ width: "100%", borderRadius: 8, marginBottom: m.text ? 6 : 0 }} />}
                       {m.mediaType === "video" && m.mediaUrl && <video controls src={m.mediaUrl} style={{ width: "100%", borderRadius: 8, marginBottom: m.text ? 6 : 0, maxHeight: 250, backgroundColor: "#000" }} />}
                       {m.mediaType === "audio" && m.mediaUrl && <audio controls src={m.mediaUrl} style={{ height: 36, width: 220, marginBottom: m.text ? 6 : 0 }} />}
+                      
                       {m.text && <div style={{ fontSize: 14, lineHeight: 1.4, wordBreak: "break-word" }}>{m.text}</div>}
-                      <div style={{ fontSize: 10, textAlign: "right", marginTop: 4, color: isMe ? "rgba(255,255,255,0.5)" : "#a8a49c" }}>
-                        {new Date(m.createdAt).toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })}
+                      
+                      {/* 🔥 Галочки внутри диалога (рядом со временем) */}
+                      <div style={{ fontSize: 10, display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 4, marginTop: 4, color: isMe ? "rgba(255,255,255,0.5)" : "#a8a49c" }}>
+                        <span>{new Date(m.createdAt).toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })}</span>
+                        {isMe && (
+                          <span style={{ color: m.readAt ? "#4a7aff" : "inherit", fontSize: 11, letterSpacing: m.readAt ? -1 : 0 }}>
+                            {m.readAt ? "✓✓" : "✓"}
+                          </span>
+                        )}
                       </div>
                     </div>
                   );
@@ -331,11 +345,10 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
                 <div ref={endRef} />
               </div>
 
-              {/* ── Панель Ввода ── */}
               <div style={{ padding: 10, borderTop: "1px solid #e8e6df", display: "flex", gap: 8, background: "#fff", flexShrink: 0, alignItems: "center" }}>
                 <input type="file" accept="image/*,audio/*,video/*" ref={fileInputRef} style={{ display: "none" }} onChange={handleFileUpload} />
                 <button onClick={() => fileInputRef.current?.click()} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", padding: "0 4px", opacity: loading || isRecording ? 0.5 : 1, transition: "opacity 0.2s" }} disabled={loading || isRecording}>📎</button>
-
+                
                 {isRecording ? (
                   <div style={{ flex: 1, color: "#ef4444", fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, paddingLeft: 8 }}>
                     <span className="record-dot" style={{ width: 10, height: 10, background: "#ef4444", borderRadius: "50%", display: "inline-block" }} />
@@ -358,7 +371,6 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
         </div>
       )}
 
-      {/* Плавающая кнопка для ПК */}
       <button className="desktop-chat-btn" onClick={() => setOpen(v => !v)} style={{ position: "fixed", bottom: 24, right: 24, width: 56, height: 56, borderRadius: "50%", background: "#1a1a18", color: "#fff", border: "none", fontSize: 24, cursor: "pointer", boxShadow: "0 6px 20px rgba(0,0,0,0.25)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, transition: "transform 0.2s" }} onMouseDown={e => e.currentTarget.style.transform = "scale(0.95)"} onMouseUp={e => e.currentTarget.style.transform = "scale(1)"} onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
         {open ? "×" : "💬"}
         {!open && totalUnread > 0 && <span style={{ position: "absolute", top: 4, right: 4, background: "#ef4444", color: "#fff", borderRadius: "50%", minWidth: 20, height: 20, padding: "0 5px", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid #1a1a18" }}>{totalUnread > 9 ? "9+" : totalUnread}</span>}
