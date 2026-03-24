@@ -24,7 +24,8 @@ export default function AboutPage() {
       });
     }, { threshold: 0.1 });
 
-    document.querySelectorAll('.route-card, .courier-card, .notif-item').forEach(el => {
+    // Добавил .app-mockup в наблюдатель для анимации телефона
+    document.querySelectorAll('.route-card, .courier-card, .notif-item, .app-mockup').forEach(el => {
       observer.observe(el);
     });
 
@@ -114,7 +115,6 @@ const HTML_CONTENT = `
   }
   .landing-body nav a:hover { color: var(--accent); }
 
-  /* Кнопка Войти в шапке */
   .landing-body .btn-login {
     background: rgba(56,189,248,0.1);
     border: 1px solid rgba(56,189,248,0.3);
@@ -274,6 +274,7 @@ const HTML_CONTENT = `
     line-height: 1.7;
   }
 
+  /* === DASHBOARD MODULE === */
   .landing-body .dash-section { background: var(--surface); }
 
   .landing-body .dash-layout {
@@ -351,6 +352,7 @@ const HTML_CONTENT = `
   .landing-body .fi-text h4 { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.2rem; }
   .landing-body .fi-text p { font-size: 0.8rem; color: var(--muted); line-height: 1.5; }
 
+  /* === MAP MODULE === */
   .landing-body .map-section { background: var(--bg); }
 
   .landing-body .map-layout {
@@ -398,6 +400,7 @@ const HTML_CONTENT = `
   .landing-body .filter-chip.day.active { border-color: #10B981; color: #10B981; background: rgba(16,185,129,0.08); }
   .landing-body .filter-chip.evening.active { border-color: var(--accent2); color: #A78BFA; background: rgba(124,58,237,0.08); }
 
+  /* === ROUTES MODULE === */
   .landing-body .route-section { background: var(--surface); }
 
   .landing-body .route-grid {
@@ -467,6 +470,7 @@ const HTML_CONTENT = `
   .landing-body .stop-arrows { color: var(--muted); font-size: 0.9rem; cursor: pointer; }
   .landing-body .stop-arrows:hover { color: var(--accent); }
 
+  /* === COURIERS MODULE === */
   .landing-body .couriers-section { background: var(--bg); }
 
   .landing-body .couriers-layout {
@@ -544,7 +548,34 @@ const HTML_CONTENT = `
   .landing-body .cal-day.shift::after { background: var(--accent3); }
   .landing-body .cal-day.shift2::after { background: var(--accent); }
 
-  .landing-body .notif-section { background: var(--surface); }
+  /* === NEW: COURIER APP (PWA) MODULE === */
+  .landing-body .app-section { background: var(--surface); }
+  .landing-body .app-mockup {
+    width: 100%; max-width: 320px; margin: 0 auto;
+    background: #FAFAF8; /* Светлая тема курьерского приложения */
+    border: 8px solid #1A1A18;
+    border-radius: 36px;
+    padding: 1rem;
+    position: relative;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    opacity: 0; transform: translateY(20px);
+    transition: all 0.6s ease;
+  }
+  .landing-body .app-mockup[style*="opacity: 1"] { transform: translateY(0); }
+  .landing-body .app-mockup::before {
+    content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: 120px; height: 24px; background: #1A1A18;
+    border-bottom-left-radius: 16px; border-bottom-right-radius: 16px;
+  }
+  .landing-body .app-header { margin-top: 1rem; padding-bottom: 1rem; border-bottom: 1px solid #E8E6DF; display: flex; justify-content: space-between; align-items: center; }
+  .landing-body .app-title { font-family: 'Golos Text'; font-weight: 700; color: #1A1A18; font-size: 1.1rem; }
+  .landing-body .app-card { background: #FFF; border: 1px solid #E8E6DF; border-radius: 12px; padding: 1rem; margin-top: 1rem; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
+  .landing-body .app-card-title { color: #1A1A18; font-weight: 700; font-size: 0.95rem; line-height: 1.3; margin-bottom: 0.5rem; }
+  .landing-body .app-btn { background: #4A7AFF; color: #FFF; border-radius: 10px; padding: 0.8rem; text-align: center; font-weight: 600; font-size: 0.85rem; margin-top: 0.8rem; cursor: pointer; }
+
+
+  /* === NOTIFICATIONS MODULE === */
+  .landing-body .notif-section { background: var(--bg); }
 
   .landing-body .notif-layout {
     display: grid;
@@ -596,11 +627,13 @@ const HTML_CONTENT = `
   }
   .landing-body .toggle.on::after { transform: translateX(18px); }
 
-  .landing-body .int-section { background: var(--bg); }
+  /* === INTEGRATIONS MODULE === */
+  .landing-body .int-section { background: var(--surface); }
 
   .landing-body .int-badges {
     display: flex; gap: 1.5rem; flex-wrap: wrap;
     margin-top: 3rem;
+    justify-content: center;
   }
   .landing-body .int-badge {
     display: flex; align-items: center; gap: 0.7rem;
@@ -696,8 +729,8 @@ const HTML_CONTENT = `
         <a href="#dashboard">Дашборд</a>
         <a href="#map">Карта</a>
         <a href="#routes">Маршруты</a>
-        <a href="#couriers">Курьеры</a>
-        <a href="#notifications">Уведомления</a>
+        <a href="#couriers">Для курьеров</a>
+        <a href="#integrations">Интеграции</a>
       </nav>
       <a href="/login" class="btn-login">Войти</a>
     </div>
@@ -710,8 +743,8 @@ const HTML_CONTENT = `
       <div class="hero-badge">Система диспетчеризации и логистики</div>
       <h1 class="hero-title">EVENT<br><span class="wave">WAVE</span></h1>
       <p class="hero-sub">
-        Единое рабочее пространство для логистов. Реальное время, умная маршрутизация,
-        полная интеграция с RetailCRM и Яндекс.Картами.
+        Единое рабочее пространство для логистов и курьеров. Умная маршрутизация, 
+        моментальный отклик и <b>возможность подключения к любой CRM</b>.
       </p>
       
       <div style="margin-top: 2.5rem; animation: fadeDown 0.7s 0.3s ease both;">
@@ -720,20 +753,20 @@ const HTML_CONTENT = `
 
       <div class="hero-stats">
         <div class="stat">
+          <div class="stat-val">Любая</div>
+          <div class="stat-label">Поддержка CRM систем</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val">1 сек</div>
+          <div class="stat-label">Отклик курьера</div>
+        </div>
+        <div class="stat">
           <div class="stat-val">50+</div>
           <div class="stat-label">Точек в маршруте</div>
         </div>
         <div class="stat">
           <div class="stat-val">3–4×</div>
           <div class="stat-label">Быстрее работа</div>
-        </div>
-        <div class="stat">
-          <div class="stat-val">0</div>
-          <div class="stat-label">Потерянных заказов</div>
-        </div>
-        <div class="stat">
-          <div class="stat-val">100%</div>
-          <div class="stat-label">Синхронизация с CRM</div>
         </div>
       </div>
     </div>
@@ -827,7 +860,7 @@ const HTML_CONTENT = `
             <div class="fi-icon">⚡</div>
             <div class="fi-text">
               <h4>Webhooks & Реал-тайм</h4>
-              <p>Обновления статусов, курьеров и адресов из RetailCRM прилетают за доли секунды без перезагрузки страницы.</p>
+              <p>Обновления статусов, курьеров и адресов из любой CRM прилетают за доли секунды без перезагрузки страницы.</p>
             </div>
           </li>
           <li>
@@ -1077,27 +1110,27 @@ const HTML_CONTENT = `
   <section class="couriers-section" id="couriers">
     <div class="section-inner">
       <div class="section-label">Модуль 04</div>
-      <h2 class="section-title">Курьеры и финансы</h2>
-      <p class="section-desc">Умное ранжирование сотрудников при назначении доставок, календарный график смен и прозрачный контроль взаиморасчётов.</p>
+      <h2 class="section-title">Проверенные курьеры и финансы</h2>
+      <p class="section-desc">Единая база надежных исполнителей. Умное ранжирование сотрудников при назначении доставок, календарный график смен и прозрачный контроль взаиморасчётов.</p>
 
       <div class="couriers-layout">
         <div>
-          <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem">Система предлагает первыми тех, кто сейчас на смене или везет заказы</p>
+          <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem">Система предлагает первыми тех, кто сейчас свободен или везет заказы в тот же район</p>
           <div class="courier-list">
             <div class="courier-card" style="border-color:rgba(16,185,129,0.3)">
               <div class="courier-ava">АК</div>
               <div class="courier-info">
                 <div class="courier-name">Антон Краснов</div>
-                <div class="courier-meta">Смена сегодня · 3 заказа в пути</div>
+                <div class="courier-meta">Рейтинг 5.0 · 3 заказа в пути</div>
               </div>
               <div class="courier-orders"><span>7</span><span>сегодня</span></div>
-              <div><span class="courier-badge cb-active">На смене</span></div>
+              <div><span class="courier-badge cb-active">Готов взять</span></div>
             </div>
             <div class="courier-card" style="border-color:rgba(56,189,248,0.3)">
               <div class="courier-ava" style="background:linear-gradient(135deg,#10B981,#38BDF8)">ДМ</div>
               <div class="courier-info">
                 <div class="courier-name">Дима Максимов</div>
-                <div class="courier-meta">Смена сегодня · 1 заказ в пути</div>
+                <div class="courier-meta">Рейтинг 4.9 · Смена сегодня</div>
               </div>
               <div class="courier-orders"><span>5</span><span>сегодня</span></div>
               <div><span class="courier-badge cb-active">На смене</span></div>
@@ -1124,7 +1157,24 @@ const HTML_CONTENT = `
         </div>
 
         <div>
-          <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem">Календарь выхода на смену</p>
+          <ul class="feature-list" style="margin-top:0">
+            <li>
+              <div class="fi-icon">🛡️</div>
+              <div class="fi-text">
+                <h4>База проверенных исполнителей</h4>
+                <p>Работайте только с надежными курьерами. История доставок, статистика и финансовый контроль в один клик.</p>
+              </div>
+            </li>
+            <li>
+              <div class="fi-icon">🎯</div>
+              <div class="fi-text">
+                <h4>Умное распределение</h4>
+                <p>Не нужно обзванивать водителей. Система сама подскажет, кому выгоднее и быстрее передать новый заказ.</p>
+              </div>
+            </li>
+          </ul>
+
+          <p style="font-size:0.8rem;color:var(--muted);margin-top:2rem;margin-bottom:1rem">Календарь выхода на смену</p>
           <div class="shift-cal">
             <div class="cal-header">
               <span class="cal-nav">‹</span>
@@ -1161,9 +1211,70 @@ const HTML_CONTENT = `
 
   <div class="divider"></div>
 
-  <section class="notif-section" id="notifications">
+  <section class="app-section" id="courier-app">
     <div class="section-inner">
       <div class="section-label">Модуль 05</div>
+      <h2 class="section-title">Приложение для курьеров (PWA)</h2>
+      <p class="section-desc">Полноценное мобильное приложение для курьеров, которое работает прямо из браузера. Никаких скачиваний из AppStore или Google Play — моментальный доступ.</p>
+
+      <div class="dash-layout">
+        <ul class="feature-list">
+          <li>
+            <div class="fi-icon">🚀</div>
+            <div class="fi-text">
+              <h4>Моментальный отклик</h4>
+              <p>Курьер получает уведомление, нажимает кнопку <b>«Поехал сюда»</b>, и статус заказа в CRM логиста обновляется за 1 секунду.</p>
+            </div>
+          </li>
+          <li>
+            <div class="fi-icon">🔐</div>
+            <div class="fi-text">
+              <h4>Вход без паролей</h4>
+              <p>Водителям не нужно запоминать сложные логины. Вход осуществляется по безопасному одноразовому 6-значному коду из Email.</p>
+            </div>
+          </li>
+          <li>
+            <div class="fi-icon">📍</div>
+            <div class="fi-text">
+              <h4>Встроенная навигация</h4>
+              <p>Внутри каждого маршрута есть прямая кнопка "Открыть в Яндекс.Навигаторе", которая сразу строит маршрут до двери клиента без ручного ввода адреса.</p>
+            </div>
+          </li>
+        </ul>
+
+        <div class="app-mockup">
+          <div class="app-header">
+            <div class="app-title">Карта доставок</div>
+            <div style="font-size:0.8rem;color:#A8A49C;font-family:'Golos Text'">4 точки</div>
+          </div>
+          
+          <div style="background:#E8E6DF; border-radius:12px; height:140px; margin-top:1rem; position:relative; overflow:hidden">
+            <div style="position:absolute; top:40%; left:50%; width:16px; height:16px; background:#10B981; border:3px solid #FFF; border-radius:50%; transform:translate(-50%,-50%)"></div>
+            <div style="position:absolute; top:60%; left:30%; width:16px; height:16px; background:#1A1A18; border:3px solid #FFF; border-radius:50%; transform:translate(-50%,-50%)"></div>
+          </div>
+
+          <div class="app-card">
+            <div style="font-size:0.7rem; color:#4A7AFF; font-weight:700; text-transform:uppercase; margin-bottom:4px">🚀 Ожидает</div>
+            <div class="app-card-title">ул. Ленина, 42, кв. 7</div>
+            <div style="font-size:0.75rem; color:#6B6860">Заказ #4821 · Слот: 09:00 - 12:00</div>
+            
+            <div style="background:#F5F4F0; padding:8px; border-radius:8px; display:flex; justify-content:space-between; margin-top:10px; font-size:0.8rem; font-weight:600; color:#1A1A18">
+              <span>📍 5.2 км</span>
+              <span>⏱ 12 мин</span>
+            </div>
+
+            <div class="app-btn">Поехал сюда</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="divider"></div>
+
+  <section class="notif-section" id="notifications">
+    <div class="section-inner">
+      <div class="section-label">Модуль 06</div>
       <h2 class="section-title">Push-уведомления и профиль</h2>
       <p class="section-desc">Система информирует о важных событиях даже если вкладка браузера свёрнута. Доступна точечная настройка для каждого логиста.</p>
 
@@ -1256,15 +1367,22 @@ const HTML_CONTENT = `
   <section class="int-section" id="integrations">
     <div class="section-inner" style="padding-top:4rem;padding-bottom:4rem">
       <div class="section-label">Интеграции</div>
-      <h2 class="section-title">Глубокое подключение</h2>
-      <p class="section-desc">EventWave работает как центральный хаб, синхронизируясь с вашими инструментами в реальном времени через Webhooks.</p>
+      <h2 class="section-title">Подключение к любой CRM</h2>
+      <p class="section-desc">EventWave работает как мощный логистический хаб. Благодаря нашему универсальному API и системе Webhooks, вы можете подключить систему к вашему бизнесу за пару дней.</p>
 
       <div class="int-badges">
         <div class="int-badge">
+          <span class="ib-icon">🔄</span>
+          <div>
+            <div style="font-weight:600">Собственное API</div>
+            <div style="font-size:0.72rem;color:var(--muted)">Подключение к любой самописной CRM</div>
+          </div>
+        </div>
+        <div class="int-badge">
           <span class="ib-icon">🛒</span>
           <div>
-            <div style="font-weight:600">RetailCRM</div>
-            <div style="font-size:0.72rem;color:var(--muted)">Инлайн редактирование и Webhook</div>
+            <div style="font-weight:600">RetailCRM / Amo / Битрикс</div>
+            <div style="font-size:0.72rem;color:var(--muted)">Двусторонняя синхронизация статусов</div>
           </div>
         </div>
         <div class="int-badge">
@@ -1272,20 +1390,6 @@ const HTML_CONTENT = `
           <div>
             <div style="font-weight:600">Яндекс.Карты</div>
             <div style="font-size:0.72rem;color:var(--muted)">Геокодирование и умные маршруты</div>
-          </div>
-        </div>
-        <div class="int-badge">
-          <span class="ib-icon">🧭</span>
-          <div>
-            <div style="font-weight:600">Яндекс.Навигатор</div>
-            <div style="font-size:0.72rem;color:var(--muted)">Ссылки для курьеров (до 50 точек)</div>
-          </div>
-        </div>
-        <div class="int-badge">
-          <span class="ib-icon">🔔</span>
-          <div>
-            <div style="font-weight:600">Web Push API</div>
-            <div style="font-size:0.72rem;color:var(--muted)">Кастомные уведомления операторам</div>
           </div>
         </div>
         <div class="int-badge">
@@ -1303,7 +1407,7 @@ const HTML_CONTENT = `
     <div class="section-inner" style="padding-top:2rem">
       <div class="cta-card">
         <h2>Готовы ускорить логистику?</h2>
-        <p>EventWave берёт на себя рутину. Логисты работают в 3–4 раза быстрее, а данные всегда остаются в безопасности.</p>
+        <p>EventWave берёт на себя рутину. Логисты работают в 3–4 раза быстрее, а курьеры получают маршруты моментально в удобном приложении без паролей.</p>
         <a href="/login" class="btn-primary">Войти в систему →</a>
       </div>
     </div>
