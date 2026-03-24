@@ -5,12 +5,20 @@ import { signToken } from "@/lib/auth";
 
 export async function POST(req: Request) {
   try {
-    const { email, code, secretCode } = await req.json();
-    if (!email || !code) return NextResponse.json({ error: "Email и код обязательны" }, { status: 400 });
+    const { email: rawEmail, code, secretCode } = await req.json();
+    if (!rawEmail || !code) return NextResponse.json({ error: "Email и код обязательны" }, { status: 400 });
+
+    const email = rawEmail.toLowerCase().trim();
 
     const authCode = await prisma.authCode.findFirst({
-      where: { user: { email }, code, used: false, expiresAt: { gt: new Date() } },
+      where: { 
+        user: { email: { equals: email, mode: "insensitive" } }, 
+        code, 
+        used: false, 
+        expiresAt: { gt: new Date() } 
+      },
       include: { user: true },
+      orderBy: { createdAt: "desc" }
     });
 
     if (!authCode) return NextResponse.json({ error: "Неверный или просроченный код" }, { status: 400 });
@@ -18,7 +26,6 @@ export async function POST(req: Request) {
     await prisma.authCode.update({ where: { id: authCode.id }, data: { used: true } });
     let user = authCode.user;
 
-    // Апгрейд до оператора при наличии секретного кода
     if (secretCode === "0007" && user.role === "COURIER") {
       user = await prisma.user.update({
         where: { id: user.id }, data: { role: "OPERATOR" }
@@ -28,19 +35,34 @@ export async function POST(req: Request) {
     await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
     const sessionToken = await signToken({ userId: user.id, role: user.role });
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    
+    // 🔥 ИЗМЕНЕНО: Устанавливаем куку на 365 дней (1 год)
+    const expiresInDays = 365;
+    const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
 
     await prisma.session.create({ data: { token: sessionToken, userId: user.id, expiresAt } });
 
-    // 🔥 ПРОВЕРКА: Привязан ли этот email к курьеру в CRM базе?
     let linked = true;
     if (user.role === "COURIER") {
-      const courier = await prisma.courier.findFirst({ where: { email: user.email } });
+      const courier = await prisma.courier.findFirst({ 
+        where: { 
+          email: { equals: user.email, mode: "insensitive" } 
+        } 
+      });
       if (!courier) linked = false;
     }
 
     const res = NextResponse.json({ ok: true, role: user.role, linked });
-    res.cookies.set("flowerops_session", sessionToken, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", expires: expiresAt });
+    
+    // 🔥 ИЗМЕНЕНО: Добавили maxAge для надежности в Safari PWA
+    res.cookies.set("flowerops_session", sessionToken, { 
+      httpOnly: true, 
+      secure: process.env.NODE_ENV === "production", 
+      sameSite: "lax", 
+      path: "/", 
+      expires: expiresAt,
+      maxAge: expiresInDays * 24 * 60 * 60
+    });
 
     return res;
   } catch (e) {

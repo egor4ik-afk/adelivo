@@ -6,7 +6,7 @@ import { NextRequest } from "next/server";
 
 const SECRET = new TextEncoder().encode(process.env.JWT_SECRET!);
 const SESSION_COOKIE = "flowerops_session";
-const SESSION_DAYS = 7;
+const SESSION_DAYS = 365; // 🔥 ИЗМЕНЕНО: Теперь сессия живет 1 год (было 7 дней)
 
 // ── JWT ───────────────────────────────────────────────────
 export async function signToken(payload: Record<string, unknown>) {
@@ -35,13 +35,13 @@ export async function createSession(userId: string) {
     data: { userId, token, expiresAt },
   });
 
-  // Set cookie (server-side)
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     expires: expiresAt,
+    maxAge: SESSION_DAYS * 86400, // 🔥 ДОБАВЛЕНО: Айфоны лучше понимают maxAge
     path: "/",
   });
 
@@ -89,21 +89,25 @@ export function generateCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-export async function saveAuthCode(email: string): Promise<string> {
-  // Find or create user
-  let user = await prisma.user.findUnique({ where: { email } });
+export async function saveAuthCode(rawEmail: string): Promise<string> {
+  const email = rawEmail.toLowerCase().trim();
+
+  let user = await prisma.user.findFirst({
+    where: { email: { equals: email, mode: "insensitive" } },
+    orderBy: { createdAt: "asc" }
+  });
+
   if (!user) {
     user = await prisma.user.create({ data: { email } });
   }
 
-  // Invalidate old codes
   await prisma.authCode.updateMany({
     where: { userId: user.id, used: false },
     data: { used: true },
   });
 
   const code = generateCode();
-  const expiresAt = new Date(Date.now() + 10 * 60_000); // 10 min
+  const expiresAt = new Date(Date.now() + 10 * 60_000); 
 
   await prisma.authCode.create({
     data: { userId: user.id, code, expiresAt },
@@ -112,8 +116,14 @@ export async function saveAuthCode(email: string): Promise<string> {
   return code;
 }
 
-export async function verifyAuthCode(email: string, code: string) {
-  const user = await prisma.user.findUnique({ where: { email } });
+export async function verifyAuthCode(rawEmail: string, code: string) {
+  const email = rawEmail.toLowerCase().trim();
+
+  const user = await prisma.user.findFirst({
+    where: { email: { equals: email, mode: "insensitive" } },
+    orderBy: { createdAt: "asc" }
+  });
+
   if (!user) return null;
 
   const authCode = await prisma.authCode.findFirst({
