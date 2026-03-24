@@ -212,8 +212,7 @@ export default function CourierPointsPage() {
         </button>
       </div>
 
-      <div ref={mapRef} style={{ flex: 1, width: "100%", background: "#e8e6df" }} />
-
+      <div ref={mapRef} style={{ flex: 1, width: "100%", background: "#e8e6df", touchAction: "none" }} />
       {showList && (
         <div style={{ position: "absolute", top: 70, left: 0, right: 0, bottom: activeOrder ? 180 : 0, background: "#f5f4f0", zIndex: 20, overflowY: "auto", padding: 12 }}>
           {routeKeys.map((rId) => {
