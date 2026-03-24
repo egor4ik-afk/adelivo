@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { usePushNotifications } from "@/components/usePushNotifications";
 import { IMaskInput } from "react-imask";
+import { NAV_HEIGHT } from "@/components/CourierNav";
 
 interface Profile {
   id: string; email: string; firstName: string | null; lastName: string | null; phone: string | null;

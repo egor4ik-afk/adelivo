@@ -22,8 +22,8 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
   const [loading, setLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [hasNewGlobal, setHasNewGlobal] = useState(false);
+  const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
 
-  // Состояние звука с сохранением в localStorage
   const [soundEnabled, setSoundEnabled] = useState(true);
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -38,6 +38,8 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
   };
 
   const endRef = useRef<HTMLDivElement>(null);
+  const chatBodyRef = useRef<HTMLDivElement>(null); // 🔥 Реф для контейнера сообщений
+  const textareaRef = useRef<HTMLTextAreaElement>(null); // 🔥 Реф для поля ввода
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevUnreadRef = useRef(0);
@@ -67,9 +69,28 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
     }
   }, [soundEnabled]);
 
+  // 🔥 ФУНКЦИЯ ДЛЯ РЕАЛЬНОГО СКАЧИВАНИЯ ФАЙЛОВ ИЗ S3
+  const forceDownload = async (url: string, filename: string) => {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Network response was not ok");
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = filename || "download";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error("Ошибка скачивания, открываем в новой вкладке", error);
+      window.open(url, "_blank"); // Фолбэк, если CORS блокирует fetch
+    }
+  };
+
   const fetchConversations = useCallback(async () => {
     try {
-      // 1. Обычные диалоги
       const res = await fetch("/api/chat/conversations");
       if (res.ok) {
         const data: Conversation[] = await res.json();
@@ -86,7 +107,6 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
         prevUnreadRef.current = unreadCount;
       }
 
-      // 2. Проверка Общего чата
       const gRes = await fetch("/api/chat/general");
       if (gRes.ok) {
         const gMsgs = await gRes.json();
@@ -106,14 +126,24 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
     } catch (e) { console.error(e); }
   }, [open, currentUserId, playNotificationSound]);
 
-  const fetchMessages = useCallback(async (convId: string) => {
+  // 🔥 ИСПРАВЛЕННЫЙ СКРОЛЛ
+  const fetchMessages = useCallback(async (convId: string, isInitialLoad = false) => {
     try {
       const url = convId === "general" ? "/api/chat/general" : `/api/chat/conversations/${convId}/messages`;
       const res = await fetch(url);
       if (!res.ok) return;
       const msgs = await res.json();
+      
+      // Проверяем, находится ли скролл в самом низу ПЕРЕД обновлением сообщений
+      const container = chatBodyRef.current;
+      const isAtBottom = container ? (container.scrollHeight - container.scrollTop - container.clientHeight < 150) : true;
+
       setMessages(msgs);
-      setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+
+      // Скроллим вниз только при первом открытии или если мы УЖЕ были внизу
+      if (isInitialLoad || isAtBottom) {
+        setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+      }
       
       if (convId === "general") {
         if (msgs.length > 0) localStorage.setItem("last_global_msg", msgs[msgs.length - 1].id);
@@ -133,7 +163,7 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
 
   useEffect(() => {
     if (!open || !activeConv) return;
-    const iv = setInterval(() => fetchMessages(activeConv.id), 5000);
+    const iv = setInterval(() => fetchMessages(activeConv.id, false), 5000);
     return () => clearInterval(iv);
   }, [open, activeConv, fetchMessages]);
 
@@ -149,11 +179,11 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
       setActiveConv({ id: "general" } as any);
       setView("dialog");
       setHasNewGlobal(false);
-      await fetchMessages("general");
+      await fetchMessages("general", true); // true = первый лоад, скроллим вниз
     } else {
       setActiveConv(convOrId);
       setView("dialog");
-      await fetchMessages(convOrId.id);
+      await fetchMessages(convOrId.id, true);
     }
   };
 
@@ -169,7 +199,10 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
   const send = async (payload?: { mediaUrl: string; mediaType: string }) => {
     const val = text.trim();
     if ((!val && !payload) || !activeConv || loading) return;
+    
     setText("");
+    if (textareaRef.current) textareaRef.current.style.height = "auto"; // Сбрасываем высоту
+    
     setLoading(true);
     try {
       const url = activeConv.id === "general" ? "/api/chat/general" : `/api/chat/conversations/${activeConv.id}/messages`;
@@ -181,7 +214,7 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
       if (res.ok) {
         const msg: Message = await res.json();
         setMessages(prev => [...prev, msg]);
-        setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+        setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 50); // При своей отправке скроллим всегда
         if (activeConv.id === "general") localStorage.setItem("last_global_msg", msg.id);
         fetchConversations();
       }
@@ -225,8 +258,7 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
     }
   };
 
-  // 🔥 Загрузка скриншота по Ctrl+V / Cmd+V
-  const handlePaste = async (e: React.ClipboardEvent<HTMLInputElement>) => {
+  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const items = e.clipboardData?.items;
     if (!items || !activeConv) return;
     for (let i = 0; i < items.length; i++) {
@@ -285,6 +317,15 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
     return () => clearTimeout(t);
   }, [searchQ, view]);
 
+  // 🔥 ОБРАБОТКА ИЗМЕНЕНИЯ ВЫСОТЫ TEXTAREA
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setText(e.target.value);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+    }
+  };
+
   const userName = (u: UserInfo) => [u.firstName, u.lastName].filter(Boolean).join(" ") || u.email;
   const roleLabel = (r: string) => r === "ADMIN" ? "Админ" : r === "OPERATOR" ? "Оператор" : "Курьер";
   const roleColor = (r: string) => r === "COURIER" ? "#10b981" : "#4a7aff";
@@ -302,11 +343,45 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
           50% { transform: scale(1.2); opacity: 1; box-shadow: 0 0 8px rgba(239, 68, 68, 0.6); }
           100% { transform: scale(0.8); opacity: 0.5; }
         }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes spin { 
+          to { transform: rotate(360deg); } 
+        }
         .chat-window { animation: slideUpFade 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         .record-dot { animation: pulseDot 1.5s infinite; }
+        .lightbox { animation: fadeIn 0.2s ease forwards; }
+        .spinner { animation: spin 1s linear infinite; }
         
+        /* Скрываем скроллбар в textarea для красоты, оставляя прокрутку */
+        .chat-textarea::-webkit-scrollbar { width: 4px; }
+        .chat-textarea::-webkit-scrollbar-thumb { background: #dcdcdc; border-radius: 4px; }
+
         ${isCourier ? '@media (max-width: 768px) { .desktop-chat-btn { display: none !important; } }' : ''}
       `}} />
+
+      {/* ПОЛНОЭКРАННАЯ КАРТИНКА */}
+      {fullscreenImage && (
+        <div 
+          className="lightbox"
+          onClick={() => setFullscreenImage(null)} 
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100000, display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out", padding: 20 }}
+        >
+          <img src={fullscreenImage} alt="Fullscreen" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8, boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }} />
+          <div style={{ position: "absolute", top: 20, right: 20, display: "flex", gap: 10 }}>
+            {/* 🔥 КНОПКА СКАЧАТЬ (ФОРСИРУЕТ СКАЧИВАНИЕ) */}
+            <button 
+              onClick={(e) => { e.stopPropagation(); forceDownload(fullscreenImage, "image.jpg"); }}
+              style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", padding: "8px 16px", borderRadius: 20, fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
+            >
+              📥 Скачать
+            </button>
+            <button style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", width: 36, height: 36, borderRadius: "50%", fontSize: 24, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+          </div>
+        </div>
+      )}
 
       {open && (
         <div className="chat-window" style={{
@@ -325,7 +400,6 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
               {view === "dialog" && activeConv && (activeConv.id === "general" ? "🌐 Общий чат" : userName(interlocutor(activeConv)))}
             </span>
             
-            {/* 🔥 Кнопка ЗВУК */}
             <button onClick={toggleSound} title={soundEnabled ? "Выключить звук" : "Включить звук"} style={{ background: "none", border: "none", color: "#fff", fontSize: 16, cursor: "pointer", padding: "0 4px", opacity: soundEnabled ? 1 : 0.5 }}>
               {soundEnabled ? "🔔" : "🔕"}
             </button>
@@ -336,15 +410,10 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
             <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", color: "#fff", fontSize: 22, cursor: "pointer", lineHeight: 1, marginLeft: 4 }}>×</button>
           </div>
 
-          {/* ── Список диалогов ── */}
           {view === "list" && (
             <div style={{ flex: 1, overflowY: "auto" }}>
-              
-              {/* 🔥 ОБЩИЙ ЧАТ (закреплен сверху) */}
               <div onClick={() => openDialog("general")} style={{ padding: "10px 14px", borderBottom: "1px solid #f0ede8", cursor: "pointer", display: "flex", gap: 10, alignItems: "center", background: "#fcfcfa", transition: "background 0.15s" }}>
-                <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#4a7aff", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 20, flexShrink: 0 }}>
-                  🌐
-                </div>
+                <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#4a7aff", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 20, flexShrink: 0 }}>🌐</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span style={{ fontSize: 13, fontWeight: 700, color: "#1a1a18" }}>Общий чат</span>
@@ -412,33 +481,54 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
           {/* ── Диалог ── */}
           {view === "dialog" && activeConv && (
             <>
-              <div style={{ flex: 1, overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 10, background: "#fafaf8" }}>
+              <div ref={chatBodyRef} style={{ flex: 1, overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 10, background: "#fafaf8", position: "relative" }}>
+                
+                {loading && (
+                  <div style={{ position: "sticky", top: 10, left: "50%", transform: "translateX(-50%)", background: "rgba(26, 26, 24, 0.8)", color: "#fff", padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 8, zIndex: 100, alignSelf: "center", backdropFilter: "blur(4px)" }}>
+                    <span className="spinner" style={{ width: 14, height: 14, border: "2px solid #fff", borderTopColor: "transparent", borderRadius: "50%" }}></span>
+                    Загрузка...
+                  </div>
+                )}
+
                 {messages.length === 0 && <div style={{ fontSize: 12, color: "#a8a49c", textAlign: "center", margin: "auto" }}>Напишите первое сообщение</div>}
                 {messages.map(m => {
                   const isMe = m.sender.id === currentUserId;
                   return (
                     <div key={m.id} style={{ alignSelf: isMe ? "flex-end" : "flex-start", maxWidth: "85%", display: "flex", flexDirection: "column" }}>
                       
-                      {/* Имя отправителя (только для Общего чата) */}
                       {activeConv.id === "general" && !isMe && (
                         <div style={{ fontSize: 11, color: "#a8a49c", marginBottom: 2, marginLeft: 4, fontWeight: 600 }}>{userName(m.sender)}</div>
                       )}
 
                       <div style={{ background: isMe ? "#1a1a18" : "#fff", color: isMe ? "#fff" : "#1a1a18", padding: "8px 12px", borderRadius: 14, borderBottomRightRadius: isMe ? 4 : 14, borderBottomLeftRadius: isMe ? 14 : 4, border: isMe ? "none" : "1px solid #e8e6df", boxShadow: "0 2px 4px rgba(0,0,0,0.04)" }}>
                         
-                        {m.mediaType === "image" && m.mediaUrl && <img src={m.mediaUrl} alt="Фото" style={{ width: "100%", borderRadius: 8, marginBottom: m.text ? 6 : 0 }} />}
+                        {m.mediaType === "image" && m.mediaUrl && (
+                          <img 
+                            src={m.mediaUrl} 
+                            alt="Фото" 
+                            onClick={() => setFullscreenImage(m.mediaUrl!)}
+                            style={{ width: "100%", borderRadius: 8, marginBottom: m.text ? 6 : 0, cursor: "zoom-in", display: "block" }} 
+                          />
+                        )}
+                        
                         {m.mediaType === "video" && m.mediaUrl && <video controls src={m.mediaUrl} style={{ width: "100%", borderRadius: 8, marginBottom: m.text ? 6 : 0, maxHeight: 250, backgroundColor: "#000" }} />}
                         {m.mediaType === "audio" && m.mediaUrl && <audio controls src={m.mediaUrl} style={{ height: 36, width: 220, marginBottom: m.text ? 6 : 0 }} />}
                         
-                        {/* 🔥 Отображение ЛЮБОГО ДОКУМЕНТА */}
+                        {/* 🔥 ДОКУМЕНТ С ПРИНУДИТЕЛЬНЫМ СКАЧИВАНИЕМ */}
                         {m.mediaType === "file" && m.mediaUrl && (
-                          <a href={m.mediaUrl} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 8, background: isMe ? "rgba(255,255,255,0.15)" : "#f5f4f0", padding: "8px 12px", borderRadius: 8, textDecoration: "none", color: isMe ? "#fff" : "#1a1a18", marginBottom: m.text ? 6 : 0 }}>
-                            <span style={{ fontSize: 24 }}>📄</span>
-                            <span style={{ fontSize: 13, fontWeight: 600 }}>Документ / Файл</span>
-                          </a>
+                          <div 
+                            onClick={(e) => { e.preventDefault(); forceDownload(m.mediaUrl!, "document"); }}
+                            style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 10, background: isMe ? "rgba(255,255,255,0.15)" : "#f5f4f0", padding: "8px 12px", borderRadius: 8, color: isMe ? "#fff" : "#1a1a18", marginBottom: m.text ? 6 : 0 }}
+                          >
+                            <span style={{ fontSize: 24, flexShrink: 0 }}>📄</span>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                              <span style={{ fontSize: 13, fontWeight: 600 }}>Документ / Файл</span>
+                              <span style={{ fontSize: 11, opacity: 0.8, textDecoration: "underline", color: isMe ? "#a5c2ff" : "#4a7aff" }}>Скачать файл</span>
+                            </div>
+                          </div>
                         )}
 
-                        {m.text && <div style={{ fontSize: 14, lineHeight: 1.4, wordBreak: "break-word" }}>{m.text}</div>}
+                        {m.text && <div style={{ fontSize: 14, lineHeight: 1.4, wordBreak: "break-word", whiteSpace: "pre-wrap" }}>{m.text}</div>}
                         
                         <div style={{ fontSize: 10, display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 4, marginTop: 4, color: isMe ? "rgba(255,255,255,0.5)" : "#a8a49c" }}>
                           <span>{new Date(m.createdAt).toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })}</span>
@@ -455,32 +545,40 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
                 <div ref={endRef} />
               </div>
 
-              <div style={{ padding: 10, borderTop: "1px solid #e8e6df", display: "flex", gap: 8, background: "#fff", flexShrink: 0, alignItems: "center" }}>
-                {/* 🔥 accept удалён, теперь можно выбрать ЛЮБОЙ файл (PDF, Excel, Word) */}
+              {/* 🔥 ОБНОВЛЕННЫЙ БЛОК ВВОДА С TEXTAREA */}
+              <div style={{ padding: 10, borderTop: "1px solid #e8e6df", display: "flex", gap: 8, background: "#fff", flexShrink: 0, alignItems: "flex-end" }}>
                 <input type="file" ref={fileInputRef} style={{ display: "none" }} onChange={handleFileUpload} />
-                <button onClick={() => fileInputRef.current?.click()} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", padding: "0 4px", opacity: loading || isRecording ? 0.5 : 1, transition: "opacity 0.2s" }} disabled={loading || isRecording}>📎</button>
+                <button onClick={() => fileInputRef.current?.click()} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", padding: "6px 4px", opacity: loading || isRecording ? 0.5 : 1, transition: "opacity 0.2s" }} disabled={loading || isRecording}>📎</button>
                 
                 {isRecording ? (
-                  <div style={{ flex: 1, color: "#ef4444", fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, paddingLeft: 8 }}>
+                  <div style={{ flex: 1, color: "#ef4444", fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, paddingLeft: 8, height: 38 }}>
                     <span className="record-dot" style={{ width: 10, height: 10, background: "#ef4444", borderRadius: "50%", display: "inline-block" }} />
                     Идет запись...
                   </div>
                 ) : (
-                  <input 
+                  <textarea 
+                    className="chat-textarea"
+                    ref={textareaRef}
                     value={text} 
-                    onChange={e => setText(e.target.value)} 
-                    onKeyDown={e => e.key === "Enter" && !e.shiftKey && send()} 
-                    onPaste={handlePaste} // 🔥 Вставка скрина по Ctrl+V
-                    placeholder="Сообщение или Ctrl+V..." 
+                    onChange={handleTextChange} 
+                    onKeyDown={e => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        send();
+                      }
+                    }} 
+                    onPaste={handlePaste}
+                    placeholder="Сообщение (Shift+Enter)..." 
                     disabled={loading} 
-                    style={{ flex: 1, padding: "10px 14px", borderRadius: 20, border: "1px solid #e8e6df", background: "#f5f4f0", outline: "none", fontSize: 14, transition: "border 0.2s" }} 
+                    rows={1}
+                    style={{ flex: 1, padding: "10px 14px", borderRadius: 20, border: "1px solid #e8e6df", background: "#f5f4f0", outline: "none", fontSize: 14, transition: "border 0.2s", resize: "none", minHeight: 40, maxHeight: 120, boxSizing: "border-box", fontFamily: "inherit" }} 
                   />
                 )}
 
                 {text.trim() ? (
-                  <button onClick={() => send()} disabled={loading} style={{ background: "#4a7aff", color: "#fff", border: "none", borderRadius: 20, padding: "0 16px", fontWeight: 600, fontSize: 15, cursor: "pointer", opacity: loading ? 0.5 : 1, height: 38, boxShadow: "0 2px 8px rgba(74,122,255,0.2)", transition: "all 0.2s" }}>➤</button>
+                  <button onClick={() => send()} disabled={loading} style={{ background: "#4a7aff", color: "#fff", border: "none", borderRadius: "50%", width: 38, height: 38, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: 15, cursor: "pointer", opacity: loading ? 0.5 : 1, boxShadow: "0 2px 8px rgba(74,122,255,0.2)", transition: "all 0.2s", flexShrink: 0, paddingLeft: 4 }}>➤</button>
                 ) : (
-                  <button onClick={toggleRecording} disabled={loading} style={{ background: isRecording ? "#ef4444" : "#f5f4f0", color: isRecording ? "#fff" : "#1a1a18", border: isRecording ? "none" : "1px solid #e8e6df", borderRadius: "50%", width: 38, height: 38, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: 18, cursor: "pointer", opacity: loading ? 0.5 : 1, transition: "all 0.2s", boxShadow: isRecording ? "0 2px 12px rgba(239, 68, 68, 0.3)" : "none" }}>
+                  <button onClick={toggleRecording} disabled={loading} style={{ background: isRecording ? "#ef4444" : "#f5f4f0", color: isRecording ? "#fff" : "#1a1a18", border: isRecording ? "none" : "1px solid #e8e6df", borderRadius: "50%", width: 38, height: 38, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: 18, cursor: "pointer", opacity: loading ? 0.5 : 1, transition: "all 0.2s", boxShadow: isRecording ? "0 2px 12px rgba(239, 68, 68, 0.3)" : "none", flexShrink: 0 }}>
                     {isRecording ? "⏹" : "🎤"}
                   </button>
                 )}

@@ -1,13 +1,14 @@
 // src/app/courier/routes/page.tsx
 "use client";
 import { useState, useEffect } from "react";
+import { NAV_HEIGHT } from "@/components/CourierNav"; // 🔥 Импортируем константу
 
 interface RouteOrder {
   id: string; externalId: string; crmId: string; address: string; status: string;
   slotRaw: string | null; recipientPhone: string | null;
   price: number | null; items: string | null; comment: string | null;
-  routeId: string | null; routeOrder: number | null; 
-  deliveryDate: string | null; // 🔥 Добавили для фильтрации по дате
+  routeId: string | null; routeOrder: number | null;
+  deliveryDate: string | null;
   route?: { id: string; name: string; link: string | null; date: string } | null;
 }
 
@@ -21,7 +22,7 @@ export default function CourierRoutesPage() {
   const [orders, setOrders] = useState<RouteOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedRoutes, setExpandedRoutes] = useState<Record<string, boolean>>({});
-  const [showPast, setShowPast] = useState(false); // 🔥 Состояние для аккордеона прошлых заказов
+  const [showPast, setShowPast] = useState(false);
 
   const fetchOrders = async () => {
     try {
@@ -51,15 +52,13 @@ export default function CourierRoutesPage() {
 
   if (loading) return <div style={{ padding: 20, textAlign: "center", color: "#a8a49c" }}>Загрузка маршрутов...</div>;
 
-  // 🔥 Получаем сегодняшнюю дату в формате YYYY-MM-DD (по Москве)
   const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" });
 
   const todayOrders: RouteOrder[] = [];
   const pastOrders: RouteOrder[] = [];
 
-  // 🔥 Разделяем заказы на сегодня/будущие и прошлые
   orders.forEach(o => {
-    const d = o.route?.date || (o.deliveryDate ? o.deliveryDate.split('T')[0] : null) || todayStr;
+    const d = o.route?.date || (o.deliveryDate ? o.deliveryDate.split("T")[0] : null) || todayStr;
     if (d >= todayStr) {
       todayOrders.push(o);
     } else {
@@ -67,7 +66,6 @@ export default function CourierRoutesPage() {
     }
   });
 
-  // Группируем сегодняшние по маршрутам
   const todayGrouped: Record<string, RouteOrder[]> = {};
   todayOrders.forEach(o => {
     const key = o.route?.id || "Без маршрута";
@@ -76,33 +74,36 @@ export default function CourierRoutesPage() {
   });
   const todayRouteKeys = Object.keys(todayGrouped).sort();
 
-  // Группируем прошлые по датам
   const pastGrouped: Record<string, RouteOrder[]> = {};
   pastOrders.forEach(o => {
-    const d = o.route?.date || (o.deliveryDate ? o.deliveryDate.split('T')[0] : "Ранее");
+    const d = o.route?.date || (o.deliveryDate ? o.deliveryDate.split("T")[0] : "Ранее");
     if (!pastGrouped[d]) pastGrouped[d] = [];
     pastGrouped[d].push(o);
   });
-  // Сортируем даты по убыванию (свежие сверху)
-  const pastDates = Object.keys(pastGrouped).sort((a, b) => b.localeCompare(a)); 
+  const pastDates = Object.keys(pastGrouped).sort((a, b) => b.localeCompare(a));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#f5f4f0", overflowY: "auto", paddingBottom: 80 }}>
-      
-      {/* Шапка с правильным счетчиком */}
+    <div style={{
+      display: "flex",
+      flexDirection: "column",
+      height: "100%",
+      background: "#f5f4f0",
+      overflowY: "auto",
+      // 🔥 Используем CSS-переменную вместо хардкода 80px.
+      // calc() складывает высоту навбара + safe area (для iPhone с вырезом)
+      paddingBottom: `calc(var(--nav-height, ${NAV_HEIGHT}px) + env(safe-area-inset-bottom) + 16px)`,
+    }}>
+
       <div style={{ padding: "16px", background: "#fff", borderBottom: "1px solid #e8e6df", position: "sticky", top: 0, zIndex: 10 }}>
         <h1 style={{ margin: 0, fontSize: 18, color: "#1a1a18" }}>Мои маршруты</h1>
         <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 4 }}>На сегодня: {todayOrders.length} точек</div>
       </div>
 
       <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 16 }}>
-        
-        {/* АКТУАЛЬНЫЕ МАРШРУТЫ НА СЕГОДНЯ */}
+
         {todayRouteKeys.map((rId) => {
           const routePoints = todayGrouped[rId].sort((a, b) => (a.routeOrder || 0) - (b.routeOrder || 0));
           const isExpanded = expandedRoutes[rId] ?? true;
-          const routeSum = routePoints.reduce((sum, o) => sum + (o.price || 0), 0);
-
           const routeObj = routePoints[0]?.route;
           const routeName = routeObj ? routeObj.name : "Без маршрута";
           const routeLink = routeObj ? routeObj.link : null;
@@ -168,9 +169,13 @@ export default function CourierRoutesPage() {
                         <div style={{ background: "#f5f4f0", borderRadius: 8, padding: 10, marginBottom: 10 }}>
                           <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 2 }}>Номер получателя</div>
                           <div style={{ fontSize: 13, fontWeight: 600, color: "#1a1a18" }}>
-                            {phone !== "—" ? <a href={`tel:${phone}`} style={{ color: "#4a7aff", textDecoration: "none" }}>{phone}</a> : "—"}
+                            {phone !== "—"
+                              ? <a href={`tel:${phone}`} style={{ color: "#4a7aff", textDecoration: "none" }}>{phone}</a>
+                              : "—"}
                           </div>
-                          {o.comment && <div style={{ fontSize: 12, color: "#d94040", marginTop: 6, fontWeight: 500 }}>⚠ {o.comment}</div>}
+                          {o.comment && (
+                            <div style={{ fontSize: 12, color: "#d94040", marginTop: 6, fontWeight: 500 }}>⚠ {o.comment}</div>
+                          )}
                         </div>
                       </div>
                     );
@@ -181,7 +186,6 @@ export default function CourierRoutesPage() {
           );
         })}
 
-        {/* 🔥 ПРОШЛЫЕ ЗАКАЗЫ (АККОРДЕОН ПО ДАТАМ) */}
         {pastOrders.length > 0 && (
           <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "hidden", marginTop: 8 }}>
             <div
@@ -197,25 +201,25 @@ export default function CourierRoutesPage() {
                 {pastDates.map(date => (
                   <div key={date}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: "#a8a49c", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                      {/* Красиво форматируем дату: Ср, 15 марта */}
-                      {date === "Ранее" ? "Неизвестная дата" : new Date(date).toLocaleDateString("ru-RU", { weekday: 'short', day: 'numeric', month: 'long', timeZone: 'Europe/Moscow' })}
+                      {date === "Ранее"
+                        ? "Неизвестная дата"
+                        : new Date(date).toLocaleDateString("ru-RU", { weekday: "short", day: "numeric", month: "long", timeZone: "Europe/Moscow" })}
                     </div>
-                    
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       {pastGrouped[date].map(o => {
-                          const st = STATUS_MAP[o.status] || STATUS_MAP.ASSIGNED;
-                          return (
-                            <div key={o.id} style={{ background: "#fafaf8", borderRadius: 8, padding: 12, border: "1px solid #f0efe9" }}>
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                                <div style={{ fontSize: 11, color: "#a8a49c", fontFamily: "monospace" }}>{o.externalId ?? o.crmId}</div>
-                                <div style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: st.bg, color: st.color }}>
-                                  {st.label}
-                                </div>
+                        const st = STATUS_MAP[o.status] || STATUS_MAP.ASSIGNED;
+                        return (
+                          <div key={o.id} style={{ background: "#fafaf8", borderRadius: 8, padding: 12, border: "1px solid #f0efe9" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                              <div style={{ fontSize: 11, color: "#a8a49c", fontFamily: "monospace" }}>{o.externalId ?? o.crmId}</div>
+                              <div style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: st.bg, color: st.color }}>
+                                {st.label}
                               </div>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: "#1a1a18", marginBottom: 4 }}>{o.address}</div>
-                              {o.items && <div style={{ fontSize: 11, color: "#6b6860" }}>{o.items}</div>}
                             </div>
-                          );
+                            <div style={{ fontSize: 13, fontWeight: 600, color: "#1a1a18", marginBottom: 4 }}>{o.address}</div>
+                            {o.items && <div style={{ fontSize: 11, color: "#6b6860" }}>{o.items}</div>}
+                          </div>
+                        );
                       })}
                     </div>
                   </div>
@@ -224,7 +228,7 @@ export default function CourierRoutesPage() {
             )}
           </div>
         )}
-        
+
         {todayOrders.length === 0 && pastOrders.length === 0 && (
           <div style={{ textAlign: "center", padding: 40, color: "#a8a49c", fontSize: 14 }}>
             Нет назначенных заказов
