@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { OrderDetail } from "./OrderDetail";
 import { RouteEditor } from "./RouteEditor";
+import Link from "next/link";
 
 interface CourierShift { id: string; date: string; }
 interface CourierPayment { id: string; date: string; }
@@ -169,10 +170,12 @@ export function CouriersClient({ user }: { user: any }) {
   return (
     <div style={s.app}>
       <div style={s.topbar}>
-        <div style={s.logo}>
-          <img src="/favicon.svg" alt="Logo" style={{ width: 22, height: 22 }} />
-          EventWave
-        </div>
+        <Link href="/dashbord" style={{ textDecoration: "none" }}>
+          <div style={s.logo}>
+            <img src="/favicon.svg" alt="Logo" style={{ width: 22, height: 22 }} />
+            EventWave
+          </div>
+        </Link>
         <button onClick={() => router.push('/dashboard')} style={s.navBtn}>🗺️ Дашборд</button>
         <button onClick={() => router.push('/orders')} style={s.navBtn}>≡ Заказы</button>
         <div style={{ flex: 1 }} />

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ProfilePanel } from "./ProfilePanel";
 import { OrderDetail } from "./OrderDetail";
 import { Order, STATUS_OPTIONS, STATUS_LABELS, SLOTS, slotColor } from "@/lib/constants";
+import Link from "next/link";
 
 const STORE_LAT = 55.749511;
 const STORE_LNG = 37.596205;
@@ -563,10 +564,12 @@ export function DashboardClient({ user }: { user: User }) {
   return (
     <div style={isMobile ? sm.app : s.app}>
       <div style={isMobile ? sm.topbar : s.topbar}>
-        <div style={s.logo}>
-          <img src="/favicon.svg" alt="Logo" style={{ width: 22, height: 22 }} />
-          {!isMobile && "EventWave"}
-        </div>
+        <Link href="/about" style={{ textDecoration: "none" }}>
+          <div style={s.logo}>
+            <img src="/favicon.svg" alt="Logo" style={{ width: 22, height: 22 }} />
+            {!isMobile && "EventWave"}
+          </div>
+        </Link>
         <button onClick={() => router.push('/orders')} style={s.navBtn}>
           ≡ Заказы
           <span style={{ background: '#eef3ff', color: '#4a7aff', padding: '1px 6px', borderRadius: 10, marginLeft: 6, fontSize: 10, fontWeight: 700 }}>

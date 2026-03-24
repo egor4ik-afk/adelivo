@@ -101,15 +101,31 @@ export default function OrdersPage() {
 
   return (
     <div style={{ fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", minHeight: "100vh" }}>
-      {/* Шапка */}
-      <div style={{ background: "#fff", borderBottom: "1px solid #e8e6df", padding: "0 24px", height: 56, display: "flex", alignItems: "center", gap: 16 }}>
-        <Link href="/dashboard" style={{ color: "#a8a49c", textDecoration: "none", fontSize: 13, fontWeight: 500 }}>← Дашборд</Link>
+      
+      {/* 🔥 ОБНОВЛЕННАЯ ШАПКА В ЕДИНОМ СТИЛЕ */}
+      <div style={{ background: "#fff", borderBottom: "1px solid #e8e6df", padding: "0 24px", height: 56, display: "flex", alignItems: "center", gap: 16, overflowX: "auto" }}>
+        
+        <Link href="/dashboard" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 7, color: "#1a1a18", fontWeight: 600, fontSize: 15, flexShrink: 0 }}>
+          <img src="/favicon.svg" alt="Logo" style={{ width: 22, height: 22 }} />
+          EventWave
+        </Link>
+        
         <div style={{ width: 1, height: 20, background: "#e8e6df" }} />
-        <span style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18" }}>Все заказы</span>
+        
+        <Link href="/dashboard" style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#1a1a18", textDecoration: "none", whiteSpace: "nowrap" }}>
+          🗺️ Дашборд
+        </Link>
+        <Link href="/couriers" style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#1a1a18", textDecoration: "none", whiteSpace: "nowrap" }}>
+          🚚 Курьеры
+        </Link>
+
+        <span style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", marginLeft: 8, whiteSpace: "nowrap" }}>Все заказы</span>
+        
         <div style={{ flex: 1 }} />
+        
         <button
           onClick={handleSync} disabled={syncing}
-          style={{ padding: "6px 14px", background: syncing ? "#e8e6df" : "#1a9e5c", color: syncing ? "#a8a49c" : "#fff", border: "none", borderRadius: 7, cursor: syncing ? "wait" : "pointer", fontSize: 12, fontWeight: 600 }}
+          style={{ padding: "6px 14px", background: syncing ? "#e8e6df" : "#1a1a18", color: syncing ? "#a8a49c" : "#fff", border: "none", borderRadius: 7, cursor: syncing ? "wait" : "pointer", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", transition: "all 0.2s" }}
         >
           {syncing ? "Синхронизация..." : "↻ Обновить из CRM"}
         </button>
@@ -192,7 +208,7 @@ export default function OrdersPage() {
                       <td style={{ padding: "10px 14px" }}>
                         <Link
                           href={`/dashboard?orderId=${o.id}`}
-                          style={{ color: "#4a7aff", textDecoration: "none", fontSize: 11, fontWeight: 600, background: "#eef3ff", padding: "4px 8px", borderRadius: 6, whiteSpace: "nowrap" }}
+                          style={{ color: "#1a1a18", textDecoration: "none", fontSize: 11, fontWeight: 600, background: "#f5f4f0", border: "1px solid #e8e6df", padding: "4px 8px", borderRadius: 6, whiteSpace: "nowrap", transition: "all 0.2s" }}
                         >
                           📍 Открыть
                         </Link>
@@ -218,5 +234,5 @@ const inputStyle: React.CSSProperties = {
   color: "#1a1a18",
   background: "#fff",
   fontFamily: "inherit",
-  maxWidth: 160, // 🔥 ДОБАВЛЕНО
+  maxWidth: 160, 
 };

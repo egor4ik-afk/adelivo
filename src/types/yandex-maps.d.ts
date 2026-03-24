@@ -5,12 +5,10 @@ declare namespace ymaps {
   type Ready = (callback: () => void) => void;
   export const ready: Ready;
 
-  // 🔥 Добавляем фабрику шаблонов для кастомных пинов
   export namespace templateLayoutFactory {
     export function createClass(template: string, overrides?: any): any;
   }
 
-  // 🔥 Добавляем multiRouter (Мультимаршрутизация)
   export namespace multiRouter {
     class MultiRoute {
       constructor(
@@ -31,13 +29,11 @@ declare namespace ymaps {
     }
   }
 
-  // 🔥 Добавляем функцию route
   export function route(
     points: (number[] | string)[],
     options?: { routingMode?: 'auto' | 'masstransit' | 'pedestrian' | 'bicycle'; [key: string]: any }
   ): Promise<Route>;
 
-  // Описываем возвращаемый объект маршрута
   interface Route {
     getHumanTime(): string;
     getHumanLength(): string;
@@ -61,17 +57,24 @@ declare namespace ymaps {
         center: number[];
         zoom: number;
         controls?: string[];
+        behaviors?: string[]; // 🔥 Добавлено behaviors
       },
       options?: any
     );
 
     geoObjects: {
       add(geoObject: Clusterer | Placemark | multiRouter.MultiRoute | any): void;
+      remove(geoObject: any): void; // 🔥 Добавлен remove
       removeAll(): void;
+      each(callback: (geoObject: any) => void): void; // 🔥 Добавлен each
       getBounds(): number[][] | null;
     };
     container: {
       fitToViewport(): void;
+    };
+    behaviors: { // 🔥 Добавлен объект behaviors
+      enable(behavior: string | string[]): void;
+      disable(behavior: string | string[]): void;
     };
     setCenter(
       center: number[],
