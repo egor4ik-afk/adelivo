@@ -8,13 +8,14 @@ interface CourierOrder {
   lat: number | null; lng: number | null; slotRaw: string | null;
   routeId: string | null; routeOrder: number | null;
   route?: { id: string; name: string } | null;
+  deliveryDate?: string | null;
+  crmCreatedAt?: string | null;
 }
 
 function hasCoords(o: CourierOrder): o is CourierOrder & { lat: number; lng: number } {
   return o.lat !== null && o.lng !== null;
 }
 
-// Статусы для фильтра
 const FILTERS = [
   { id: 'IN_DELIVERY', label: 'В пути', color: '#10b981' },
   { id: 'ASSIGNED', label: 'Назначен', color: '#4a7aff' },
@@ -32,6 +33,13 @@ export default function CourierPointsPage() {
   const [orders, setOrders] = useState<CourierOrder[]>([]);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<'IN_DELIVERY' | 'ASSIGNED' | 'DELIVERED' | 'ALL'>('IN_DELIVERY');
+  
+  // Дата по дефолту - сегодня (по Москве)
+  const [filterDate, setFilterDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }));
+  
+  // Тип маршрута: auto (автомобиль) или mt (общественный транспорт)
+  const [routeType, setRouteType] = useState<"auto" | "mt">("mt");
+
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -49,7 +57,6 @@ export default function CourierPointsPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Получение местоположения при загрузке
   useEffect(() => {
     if (typeof window !== "undefined" && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -60,18 +67,20 @@ export default function CourierPointsPage() {
     }
   }, []);
 
-  const buildRouteToPoint = useCallback((to: [number, number]) => {
+  const buildRouteToPoint = useCallback((to: [number, number], mode: "auto" | "mt") => {
     if (!userLocation || !window?.ymaps?.multiRouter || !ymapRef.current) return;
 
     if (activeRouteRef.current) {
       try { ymapRef.current.geoObjects.remove(activeRouteRef.current); } catch {}
     }
+    setRouteInfo(null);
 
     const route = new window.ymaps.multiRouter.MultiRoute({
       referencePoints: [userLocation, to],
-      params: { routingMode: "auto" }
+      params: { routingMode: mode === "mt" ? "masstransit" : "auto" }
     }, {
-      boundsAutoApply: false,
+      // 🔥 true = карта автоматически подгонит зум, чтобы вместить и курьера, и точку
+      boundsAutoApply: true, 
       wayPointVisible: false,
       routeActiveStrokeWidth: 6,
       routeActiveStrokeColor: "#4a7aff",
@@ -81,6 +90,7 @@ export default function CourierPointsPage() {
     route.model.events.add("requestsuccess", () => {
       const activeRoute = route.getActiveRoute();
       if (!activeRoute) return;
+      
       const distance = activeRoute.properties.get("distance")?.text ?? "—";
       const duration = activeRoute.properties.get("duration")?.text ?? "—";
       setRouteInfo({ distance, duration });
@@ -89,6 +99,16 @@ export default function CourierPointsPage() {
     ymapRef.current.geoObjects.add(route);
     activeRouteRef.current = route;
   }, [userLocation]);
+
+  // Перестраиваем маршрут, если сменили тип (Авто/Транспорт)
+  useEffect(() => {
+    if (activeOrderId && userLocation) {
+      const order = orders.find(o => o.id === activeOrderId);
+      if (order && hasCoords(order)) {
+        buildRouteToPoint([order.lat, order.lng], routeType);
+      }
+    }
+  }, [routeType, activeOrderId, userLocation, buildRouteToPoint, orders]);
 
   useEffect(() => {
     if (mapInitialized.current) return;
@@ -119,12 +139,17 @@ export default function CourierPointsPage() {
     }
   }, []);
 
-  // Отрисовка точек с учетом фильтра
   useEffect(() => {
     if (!mapReady || !ymapRef.current) return;
 
     const filteredOrders = orders.filter(o => {
       if (!hasCoords(o)) return false;
+      
+      // Фильтр по дате
+      const oDate = o.deliveryDate || (o.crmCreatedAt ? o.crmCreatedAt.split('T')[0] : null);
+      if (oDate && oDate !== filterDate) return false;
+
+      // Фильтр по статусу
       if (filterStatus === 'ALL') return true;
       return o.status === filterStatus;
     });
@@ -146,21 +171,27 @@ export default function CourierPointsPage() {
 
       pm.events.add("click", () => {
         setActiveOrderId(o.id);
-        buildRouteToPoint([o.lat, o.lng]);
+        // buildRouteToPoint вызывается через useEffect
       });
 
       ymapRef.current.geoObjects.add(pm);
       markersRef.current.set(o.id, pm);
     });
 
+    // Если нет выбранного заказа, авто-центрируемся по всем точкам
     if (filteredOrders.length > 0 && !activeOrderId) {
       const lats = filteredOrders.map(o => o.lat!);
       const lngs = filteredOrders.map(o => o.lng!);
       ymapRef.current.setBounds([[Math.min(...lats), Math.min(...lngs)], [Math.max(...lats), Math.max(...lngs)]], { zoomMargin: 40, checkZoomRange: true });
     }
-  }, [orders, filterStatus, mapReady, activeOrderId, buildRouteToPoint]);
+  }, [orders, filterStatus, filterDate, mapReady, activeOrderId]);
 
   const activeOrder = orders.find(o => o.id === activeOrderId);
+
+  // Ссылка для открытия в Я.Картах
+  const yandexMapsUrl = activeOrder && userLocation 
+    ? `https://yandex.ru/maps/?rtext=${userLocation[0]},${userLocation[1]}~${activeOrder.lat},${activeOrder.lng}&rtt=${routeType}`
+    : "#";
 
   return (
     <div style={{
@@ -169,11 +200,21 @@ export default function CourierPointsPage() {
       display: "flex", flexDirection: "column", background: "#f5f4f0"
     }}>
       
-      {/* Компактный фильтр сверху */}
+      {/* Панель фильтров */}
       <div style={{
         padding: "8px 12px", background: "#fff", borderBottom: "1px solid #e8e6df",
-        zIndex: 100, display: "flex", gap: 6, overflowX: "auto", flexShrink: 0
+        zIndex: 100, display: "flex", gap: 6, overflowX: "auto", flexShrink: 0, alignItems: "center"
       }}>
+        <input 
+          type="date" 
+          value={filterDate} 
+          onChange={(e) => { setFilterDate(e.target.value); setActiveOrderId(null); }}
+          style={{ 
+            padding: "5px 10px", borderRadius: 20, border: "1px solid #e8e6df", 
+            fontSize: 12, fontWeight: 600, color: "#1a1a18", outline: "none", background: "#fafaf8"
+          }}
+        />
+        <div style={{ width: 1, height: 20, background: "#e8e6df", flexShrink: 0, margin: "0 4px" }} />
         {FILTERS.map(f => (
           <button
             key={f.id}
@@ -191,57 +232,79 @@ export default function CourierPointsPage() {
         ))}
       </div>
 
-      {/* Инфо о маршруте (вместо нижней панели) */}
+      {/* Инфо о маршруте (Плавающая карточка) */}
       {activeOrder && (
         <div style={{
           position: "absolute", top: 56, left: 12, right: 12, zIndex: 110,
           background: "#fff", padding: "12px", borderRadius: 12, border: "1px solid #e8e6df",
-          boxShadow: "0 4px 15px rgba(0,0,0,0.1)", display: "flex", flexDirection: "column", gap: 8
+          boxShadow: "0 4px 15px rgba(0,0,0,0.1)", display: "flex", flexDirection: "column", gap: 10
         }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a18", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {activeOrder.address}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div style={{ paddingRight: 10 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", lineHeight: 1.3 }}>
+                {activeOrder.address}
+              </div>
+              <div style={{ fontSize: 11, color: "#a8a49c", marginTop: 4 }}>
+                {activeOrder.slotRaw} · {activeOrder.externalId ?? activeOrder.crmId}
+              </div>
             </div>
-            <button onClick={() => { setActiveOrderId(null); setRouteInfo(null); }} style={{ border: "none", background: "none", fontSize: 18, color: "#a8a49c" }}>✕</button>
+            <button onClick={() => { setActiveOrderId(null); setRouteInfo(null); }} style={{ border: "none", background: "#f5f4f0", width: 26, height: 26, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: "#6b6860", flexShrink: 0 }}>✕</button>
           </div>
           
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {/* Тип маршрута и Время */}
+          <div style={{ display: "flex", gap: 8, alignItems: "center", background: "#f5f4f0", padding: "6px 8px", borderRadius: 8 }}>
+            <div style={{ display: "flex", background: "#e8e6df", borderRadius: 6, padding: 2 }}>
+              <button onClick={() => setRouteType("auto")} style={{ padding: "4px 8px", borderRadius: 4, border: "none", fontSize: 12, fontWeight: 600, background: routeType === "auto" ? "#fff" : "transparent", color: routeType === "auto" ? "#1a1a18" : "#6b6860", boxShadow: routeType === "auto" ? "0 1px 2px rgba(0,0,0,0.1)" : "none" }}>🚗</button>
+              <button onClick={() => setRouteType("mt")} style={{ padding: "4px 8px", borderRadius: 4, border: "none", fontSize: 12, fontWeight: 600, background: routeType === "mt" ? "#fff" : "transparent", color: routeType === "mt" ? "#1a1a18" : "#6b6860", boxShadow: routeType === "mt" ? "0 1px 2px rgba(0,0,0,0.1)" : "none" }}>🚌</button>
+            </div>
+            
             {routeInfo ? (
-              <div style={{ flex: 1, display: "flex", gap: 12, fontSize: 13, fontWeight: 700, color: "#4a7aff" }}>
-                <span>📍 {routeInfo.distance}</span>
-                <span>⏱ {routeInfo.duration}</span>
+              <div style={{ flex: 1, display: "flex", justifyContent: "flex-end", gap: 12, fontSize: 13, fontWeight: 700, color: "#1a1a18" }}>
+                <span>{routeInfo.distance}</span>
+                <span style={{ color: "#4a7aff" }}>{routeInfo.duration}</span>
               </div>
             ) : (
-              <div style={{ flex: 1, fontSize: 12, color: "#a8a49c" }}>
-                {userLocation ? "⏳ Считаем путь..." : "📍 Включите GPS для расчета"}
+              <div style={{ flex: 1, textAlign: "right", fontSize: 12, color: "#a8a49c", fontWeight: 600 }}>
+                {userLocation ? "Считаем..." : "Включите GPS"}
               </div>
             )}
+          </div>
+          
+          {/* Кнопки действий */}
+          <div style={{ display: "flex", gap: 8 }}>
+            <a 
+              href={yandexMapsUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              style={{ flex: 1, padding: "8px", borderRadius: 8, background: "#facc15", color: "#1a1a18", textDecoration: "none", textAlign: "center", fontSize: 12, fontWeight: 700 }}
+            >
+              🗺 В навигатор
+            </a>
             
-            <div style={{ display: "flex", gap: 4 }}>
-              {activeOrder.status === "ASSIGNED" && (
-                <button 
-                  onClick={async () => {
-                    await fetch(`/api/orders/${activeOrder.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "IN_DELIVERY" }) });
-                    fetchOrders();
-                  }}
-                  style={{ padding: "6px 10px", borderRadius: 6, background: "#10b981", color: "#fff", border: "none", fontSize: 11, fontWeight: 700 }}
-                >
-                  Поехал
-                </button>
-              )}
-              {activeOrder.status === "IN_DELIVERY" && (
-                <button 
-                  onClick={async () => {
-                    await fetch(`/api/orders/${activeOrder.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "DELIVERED" }) });
-                    setActiveOrderId(null);
-                    fetchOrders();
-                  }}
-                  style={{ padding: "6px 10px", borderRadius: 6, background: "#4a7aff", color: "#fff", border: "none", fontSize: 11, fontWeight: 700 }}
-                >
-                  Доставил
-                </button>
-              )}
-            </div>
+            {activeOrder.status === "ASSIGNED" && (
+              <button 
+                onClick={async () => {
+                  await fetch(`/api/orders/${activeOrder.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "IN_DELIVERY" }) });
+                  fetchOrders();
+                }}
+                style={{ flex: 1, padding: "8px", borderRadius: 8, background: "#10b981", color: "#fff", border: "none", fontSize: 12, fontWeight: 700 }}
+              >
+                🚀 Поехал
+              </button>
+            )}
+            
+            {activeOrder.status === "IN_DELIVERY" && (
+              <button 
+                onClick={async () => {
+                  await fetch(`/api/orders/${activeOrder.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "DELIVERED" }) });
+                  setActiveOrderId(null);
+                  fetchOrders();
+                }}
+                style={{ flex: 1, padding: "8px", borderRadius: 8, background: "#4a7aff", color: "#fff", border: "none", fontSize: 12, fontWeight: 700 }}
+              >
+                ✅ Доставил
+              </button>
+            )}
           </div>
         </div>
       )}
