@@ -53,6 +53,7 @@ model User {
   conversations1    Conversation[]     @relation("ConvUser1")
   conversations2    Conversation[]     @relation("ConvUser2")
   sentMessages      Message[]          @relation("SentMessages")
+  sentGlobalMessages GlobalMessage[] @relation("SentGlobalMessages")
 }
 
 model Session {
@@ -254,5 +255,22 @@ model Message {
   createdAt      DateTime     @default(now())
 
   @@index([conversationId, createdAt])
+  @@index([senderId])
+}
+
+// Сообщение в Общем чате
+model GlobalMessage {
+  id             String       @id @default(cuid())
+  text           String?      @db.Text
+  
+  mediaUrl       String?      @db.Text
+  mediaType      String?      // "image" | "audio" | "video" | "file"
+  
+  senderId       String
+  sender         User         @relation("SentGlobalMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  
+  createdAt      DateTime     @default(now())
+
+  @@index([createdAt])
   @@index([senderId])
 }
