@@ -103,7 +103,8 @@ export async function mapCrmOrder(order: CrmOrder) {
   const slot = parseSlot(order.delivery?.time);
   const items = order.items?.map(i => {
     const name = i.offer?.displayName ?? i.offer?.name ?? i.productName ?? "?";
-    return (i.initialPrice ?? 0) > 0 ? `${name} — ${i.initialPrice}₽, ${i.quantity ?? 1}шт` : `${name} — ${i.quantity ?? 1}шт`;
+    // 🔥 ИЗМЕНЕНО: Оставляем только название и количество, убираем цену
+    return `${name} — ${i.quantity ?? 1} шт`;
   }).join("; ");
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
