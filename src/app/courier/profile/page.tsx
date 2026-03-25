@@ -25,7 +25,7 @@ interface ProfileData {
   notifyItems: boolean;
 }
 
-export function ProfilePanel({ onClose, onLogout }: Props) {
+export default function ProfilePanel({ onClose, onLogout }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
