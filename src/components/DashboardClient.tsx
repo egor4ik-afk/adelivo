@@ -1,10 +1,10 @@
 // src/components/DashboardClient.tsx
 "use client";
-import React, { useState, useEffect, useCallback, useRef, Fragment } from "react";
+import React, { useState, useEffect, useCallback, useRef, Fragment, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { ProfilePanel } from "./ProfilePanel";
 import { OrderDetail } from "./OrderDetail";
-import { Order, STATUS_OPTIONS, STATUS_LABELS, SLOTS, slotColor } from "@/lib/constants";
+import { STATUS_OPTIONS, STATUS_LABELS, SLOTS, slotColor } from "@/lib/constants";
 import Link from "next/link";
 
 const STORE_LAT = 55.749511;
@@ -12,7 +12,23 @@ const STORE_LNG = 37.596205;
 const STORE_COORDS = `${STORE_LAT},${STORE_LNG}`;
 
 interface User { id: string; email: string; role: string; }
-interface DbCourier { id: number; fullName: string; isActive: boolean; shifts: { date: string }[]; }
+interface DbCourier { 
+  id: number; fullName: string; isActive: boolean; shifts: { date: string }[]; 
+  lat?: number | null; lng?: number | null; homeLat?: number | null; homeLng?: number | null; 
+}
+
+// 🔥 Расширенный интерфейс для устранения ошибок TypeScript
+export interface DashboardOrder {
+  id: string; crmId: string; externalId?: string | null; status: string;
+  address?: string | null; lat?: number | null; lng?: number | null;
+  price?: number | null; courierId?: number | null; courier?: string | null;
+  comment?: string | null; opComment?: string | null; items?: string | null;
+  slotFrom?: string | null; slotTo?: string | null; slotRaw?: string | null;
+  deliveryDate?: string | null; crmCreatedAt?: string | null;
+  isInvalid?: boolean; invalidReason?: string | null;
+  routeId?: string | null; routeOrder?: number | null; route?: any; 
+  createdAt?: string; updatedAt?: string; changedAt?: string;
+}
 
 let ymapsReady: Promise<void> | null = null;
 function loadYMaps(): Promise<void> {
@@ -33,6 +49,7 @@ export function DashboardClient({ user }: { user: User }) {
   const mapRef = useRef<HTMLDivElement>(null);
   const ymapRef = useRef<any>(null);
   const clustererRef = useRef<any>(null);
+  const couriersGeoObjectsRef = useRef<any>(null);
   const clickedFromMapRef = useRef(false);
 
   const [isMobile, setIsMobile] = useState(false);
@@ -51,9 +68,10 @@ export function DashboardClient({ user }: { user: User }) {
 
   const [showCourierNames, setShowCourierNames] = useState(true);
   const [showTime, setShowTime] = useState(true);
+  const [showCouriers, setShowCouriers] = useState(false);
 
   const [filterDate, setFilterDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }));
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<DashboardOrder[]>([]);
   const [dbCouriers, setDbCouriers] = useState<DbCourier[]>([]);
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
   const [filterStatus, setFilterStatus] = useState("ALL");
@@ -68,9 +86,7 @@ export function DashboardClient({ user }: { user: User }) {
   const [previewGeo, setPreviewGeo] = useState<{ lat: number, lng: number } | null>(null);
   const [fixingAI, setFixingAI] = useState(false);
   
-  // 🔥 ДОБАВЛЕНО: Стейт готовности карты
   const [mapReady, setMapReady] = useState(false);
-
   const [sortConfig, setSortConfig] = useState<{ key: string, dir: 'asc' | 'desc' }>({ key: 'changedAt', dir: 'desc' });
 
   // Маршруты
@@ -81,11 +97,15 @@ export function DashboardClient({ user }: { user: User }) {
   const [bulkSaving, setBulkSaving] = useState(false);
   const [routeType, setRouteType] = useState<"auto" | "mt">("auto");
   const [returnToBase, setReturnToBase] = useState(true);
+  
+  // Вкладки: Создание vs Текущие
+  const [routeTabMode, setRouteTabMode] = useState<"new" | "current">("new");
+  const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
 
-  // ETA
   const [routeLegs, setRouteLegs] = useState<string[]>([]);
   const [routeTotals, setRouteTotals] = useState<{time: string, dist: string} | null>(null);
   const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
+  const [departureAdvice, setDepartureAdvice] = useState<string | null>(null);
 
   useEffect(() => {
     const fd = localStorage.getItem("fo_filterDate");
@@ -180,7 +200,7 @@ export function DashboardClient({ user }: { user: User }) {
         if (cnt > 0) flags.push(`${cnt} зак.`);
         label += ` (${flags.join(", ")})`;
       }
-      return { id: c.id, value: c.fullName, label };
+      return { id: c.id, value: String(c.id), label };
     });
   })();
 
@@ -196,14 +216,13 @@ export function DashboardClient({ user }: { user: User }) {
 
   const selected = orders.find(o => o.id === selectedId) ?? null;
   const invalid = dateAndStatusOrders.filter(o => o.isInvalid);
-
   const filtered = selectedSlots.length === 0 ? dateAndStatusOrders : dateAndStatusOrders.filter(o => {
     const s = SLOTS.find(x => x.from === o.slotFrom && x.to === o.slotTo);
     return s && selectedSlots.includes(s.label);
   });
 
   const sidePanelOrders = [...filtered].sort((a, b) => {
-    const getPriority = (o: Order) => {
+    const getPriority = (o: DashboardOrder) => {
       if (/самовывоз/i.test(o.address || "")) return 6; 
       if (o.status === "IN_DELIVERY") return 1;
       if (o.status === "NEW") return 2;
@@ -211,62 +230,53 @@ export function DashboardClient({ user }: { user: User }) {
       if (o.status === "DELIVERED") return 4;
       return 5; 
     };
-
     const pA = getPriority(a);
     const pB = getPriority(b);
     if (pA !== pB) return pA - pB;
-
     const slotA = a.slotFrom || "23:59";
     const slotB = b.slotFrom || "23:59";
     return slotA.localeCompare(slotB);
   });
 
   const MAP_EXCLUDED_STATUSES = ["CANCELLED", "RETURNED"];
-  const filteredForMap = filtered.filter(
-    o => !MAP_EXCLUDED_STATUSES.includes(o.status) && !/Самовывоз/i.test(o.address ?? "")
-  );
+  const filteredForMap = filtered.filter(o => !MAP_EXCLUDED_STATUSES.includes(o.status) && !/Самовывоз/i.test(o.address ?? ""));
 
   const tableOrders = [...filtered].sort((a, b) => {
     let valA: any = (a as any)[sortConfig.key] ?? "";
     let valB: any = (b as any)[sortConfig.key] ?? "";
-
     if (sortConfig.key === "changedAt") {
-      valA = new Date((a as any).changedAt || a.updatedAt || 0).getTime();
-      valB = new Date((b as any).changedAt || b.updatedAt || 0).getTime();
+      valA = new Date(a.changedAt || a.updatedAt || 0).getTime();
+      valB = new Date(b.changedAt || b.updatedAt || 0).getTime();
     } else if (sortConfig.key === "crmCreatedAt") {
       valA = new Date(a.crmCreatedAt || 0).getTime();
       valB = new Date(b.crmCreatedAt || 0).getTime();
     }
-
     if (valA < valB) return sortConfig.dir === 'asc' ? -1 : 1;
     if (valA > valB) return sortConfig.dir === 'asc' ? 1 : -1;
     return 0;
   });
 
-  const handleSort = (key: string) => {
-    setSortConfig(prev => ({ key, dir: prev.key === key && prev.dir === 'asc' ? 'desc' : 'asc' }));
-  };
+  const handleSort = (key: string) => { setSortConfig(prev => ({ key, dir: prev.key === key && prev.dir === 'asc' ? 'desc' : 'asc' })); };
 
-  // 🔥 ИНИЦИАЛИЗАЦИЯ КАРТЫ С УВЕДОМЛЕНИЕМ О ГОТОВНОСТИ (mapReady)
   useEffect(() => {
     let mounted = true;
     loadYMaps().then(() => {
       if (!mounted || !mapRef.current || ymapRef.current) return;
       const map = new window.ymaps.Map(mapRef.current, { center: [STORE_LAT, STORE_LNG], zoom: 11, controls: ["zoomControl"] }, {});
       map.events.add('boundschange', (e: any) => { if (e.get('newZoom') !== e.get('oldZoom')) setCurrentZoom(e.get('newZoom')); });
+      
       const clusterer = new window.ymaps.Clusterer({ clusterIconLayout: "default#pieChart", clusterIconPieChartRadius: 20 });
       map.geoObjects.add(clusterer);
       
-      const storePm = new window.ymaps.Placemark([STORE_LAT, STORE_LNG], {
-        hintContent: "БАЗА: Большой Афанасьевский переулок, 39",
-        iconCaption: "База"
-      }, { preset: 'islands#blackDotIcon' });
+      const courierColl = new window.ymaps.GeoObjectCollection();
+      map.geoObjects.add(courierColl);
       
+      const storePm = new window.ymaps.Placemark([STORE_LAT, STORE_LNG], { hintContent: "БАЗА: Большой Афанасьевский переулок, 39", iconCaption: "База" }, { preset: 'islands#blackDotIcon' });
       map.geoObjects.add(storePm as any);
+      
       ymapRef.current = map;
       clustererRef.current = clusterer;
-      
-      // Говорим реакту, что карта полностью загружена и можно рисовать точки!
+      couriersGeoObjectsRef.current = courierColl;
       setMapReady(true);
     });
     return () => { mounted = false; };
@@ -289,9 +299,41 @@ export function DashboardClient({ user }: { user: User }) {
     });
   };
 
-  // 🔥 Отрисовка точек теперь слушает mapReady
+  const optimizeRoute = () => {
+    setBulkSelectedIds(prev => {
+      const validOrders = prev.map(id => orders.find(o => o.id === id)).filter(Boolean) as DashboardOrder[];
+      const dist = (lat1: number, lng1: number, lat2: number, lng2: number) => Math.sqrt(Math.pow(lat1 - lat2, 2) + Math.pow(lng1 - lng2, 2));
+
+      let currentLat = STORE_LAT;
+      let currentLng = STORE_LNG;
+      const sorted: string[] = [];
+      const remaining = [...validOrders];
+
+      while (remaining.length > 0) {
+        remaining.sort((a, b) => {
+          const timeA = a.slotFrom || "23:59";
+          const timeB = b.slotFrom || "23:59";
+          if (timeA !== timeB) return timeA.localeCompare(timeB); 
+          
+          const dA = (a.lat && a.lng) ? dist(currentLat, currentLng, a.lat, a.lng) : Infinity;
+          const dB = (b.lat && b.lng) ? dist(currentLat, currentLng, b.lat, b.lng) : Infinity;
+          return dA - dB; 
+        });
+        
+        const next = remaining.shift()!;
+        sorted.push(next.id);
+        if (next.lat && next.lng) {
+          currentLat = next.lat;
+          currentLng = next.lng;
+        }
+      }
+      return sorted;
+    });
+  };
+
+  // Отрисовка точек на карте
   useEffect(() => {
-    if (!mapReady) return; // Ждём карту!
+    if (!mapReady) return; 
     const clusterer = clustererRef.current;
     if (!clusterer || typeof window === "undefined" || !window.ymaps) return;
     clusterer.removeAll();
@@ -311,7 +353,7 @@ export function DashboardClient({ user }: { user: User }) {
       const isBulkSelected = bulkIndex !== -1;
       const lat = isSelected && previewGeo ? previewGeo.lat : order.lat!;
       const lng = isSelected && previewGeo ? previewGeo.lng : order.lng!;
-      const color = slotColor(order);
+      const color = slotColor(order as any);
 
       const displayTime = showTime && currentZoom >= 13 && !!order.slotRaw && selectedSlots.length === 0;
       const displayName = showCourierNames && !!order.courier;
@@ -321,9 +363,12 @@ export function DashboardClient({ user }: { user: User }) {
 
       if (displayTime) {
         let pinColor = isSelected ? (previewGeo ? '#9ca3af' : '#facc15') : color;
-        if (isBulkMode) pinColor = isBulkSelected ? '#1a9e5c' : '#d1d5db';
+        // 🔥 В режиме Маршрутов (и Новый и Редактирование) красим точки
+        if (isBulkMode && routeTabMode === "new") {
+           pinColor = isBulkSelected ? '#1a9e5c' : '#d1d5db';
+        }
 
-        const finalSlotLabel = (isBulkMode && isBulkSelected) ? `${bulkIndex + 1}. ${slotLabelText}` : slotLabelText;
+        const finalSlotLabel = (isBulkMode && routeTabMode === "new" && isBulkSelected) ? `${bulkIndex + 1}. ${slotLabelText}` : slotLabelText;
 
         pm = new ymaps.Placemark([lat, lng], {
           balloonContentHeader: order.externalId ?? order.crmId, hintContent: order.address ?? "—",
@@ -333,26 +378,21 @@ export function DashboardClient({ user }: { user: User }) {
         let preset = 'islands#dotIcon';
         let iconContent = undefined;
 
-        if (isBulkMode) {
-          if (isBulkSelected) {
-             preset = 'islands#greenIcon'; 
-             iconContent = `${bulkIndex + 1}`;
-          } else {
-             preset = 'islands#grayCircleDotIcon';
-          }
+        if (isBulkMode && routeTabMode === "new") {
+          if (isBulkSelected) { preset = 'islands#greenIcon'; iconContent = `${bulkIndex + 1}`; } 
+          else { preset = 'islands#grayCircleDotIcon'; }
         } else {
           if (isSelected) preset = previewGeo ? "islands#grayDotIcon" : "islands#redDotIcon";
         }
 
         pm = new ymaps.Placemark([lat, lng], {
           balloonContentHeader: order.externalId ?? order.crmId, hintContent: order.address ?? "—",
-          iconCaption: (displayName) ? order.courier : undefined,
-          iconContent: iconContent
+          iconCaption: (displayName) ? order.courier : undefined, iconContent
         }, { preset, iconColor: (isBulkMode || isSelected) ? undefined : color });
       }
 
       pm.events.add("click", () => {
-        if (isBulkMode) {
+        if (isBulkMode && routeTabMode === "new") {
           toggleBulkSelect(order.id);
         } else {
           clickedFromMapRef.current = true;
@@ -365,7 +405,48 @@ export function DashboardClient({ user }: { user: User }) {
     });
 
     if (placemarks.length > 0) clusterer.add(placemarks as any);
-  }, [filteredForMap, selectedId, previewGeo, currentZoom, selectedSlots, isBulkMode, bulkSelectedIds, showTime, showCourierNames, isMobile, mapReady]); // 🔥 Добавили mapReady в зависимости
+  }, [filteredForMap, selectedId, previewGeo, currentZoom, selectedSlots, isBulkMode, bulkSelectedIds, showTime, showCourierNames, isMobile, mapReady, routeTabMode]);
+
+  // Отрисовка курьеров
+  useEffect(() => {
+    if (!mapReady || !couriersGeoObjectsRef.current) return;
+    const coll = couriersGeoObjectsRef.current;
+    coll.removeAll();
+    if (!showCouriers || typeof window === "undefined" || !window.ymaps) return;
+    
+    dbCouriers.forEach(c => {
+       const lat = c.lat ?? c.homeLat;
+       const lng = c.lng ?? c.homeLng;
+       if (lat && lng) {
+          const isLive = c.lat && c.lng;
+          const pm = new window.ymaps.Placemark([lat, lng], {
+             balloonContentHeader: c.fullName, balloonContentBody: isLive ? "Текущее местоположение" : "Домашний адрес",
+             hintContent: `${c.fullName} (${isLive ? "в сети" : "дома"})`, iconCaption: c.fullName,
+          }, { preset: isLive ? "islands#blueWalkingIcon" : "islands#grayHomeIcon" });
+          coll.add(pm as any);
+       }
+    });
+  }, [dbCouriers, showCouriers, mapReady]);
+
+  // 🔥 Группировка текущих маршрутов
+  const existingRoutes = useMemo(() => {
+    const routesMap = new Map<string, any>();
+    orders.forEach((o) => {
+      const oDate = o.deliveryDate || (o.crmCreatedAt ? o.crmCreatedAt.split('T')[0] : null);
+      if (o.route && oDate === filterDate) {
+        if (!routesMap.has(o.route.id)) {
+          routesMap.set(o.route.id, {
+             id: o.route.id, name: o.route.name, link: o.route.link, date: o.route.date,
+             orders: [], courierId: o.courierId, 
+             updatedAt: o.route.updatedAt || o.changedAt || o.createdAt
+          });
+        }
+        routesMap.get(o.route.id).orders.push(o);
+      }
+    });
+    // Сортировка по имени по убыванию
+    return Array.from(routesMap.values()).sort((a, b) => b.name.localeCompare(a.name));
+  }, [orders, filterDate]);
 
   useEffect(() => {
     if (selectedId && ymapRef.current && !previewGeo && !isBulkMode) {
@@ -376,31 +457,38 @@ export function DashboardClient({ user }: { user: User }) {
         clickedFromMapRef.current = false;
       }
     }
-  }, [selectedId, isBulkMode, orders]);
+  }, [selectedId, isBulkMode, orders, previewGeo]);
 
-  const selectedRouteOrders = bulkSelectedIds.map(id => orders.find(o => o.id === id)).filter(Boolean) as Order[];
+
+  // Оставляем переменную для рендера списка в UI
+  const selectedRouteOrders = useMemo(() => {
+    return bulkSelectedIds.map(id => orders.find(o => o.id === id)).filter(Boolean) as DashboardOrder[];
+  }, [bulkSelectedIds, orders]);
 
   useEffect(() => {
-    if (!isBulkMode || (isMobile && routeTab !== "list") || bulkSelectedIds.length === 0) {
-      setRouteLegs([]); setRouteTotals(null); return;
+    if (!isBulkMode || routeTabMode !== "new" || (isMobile && routeTab !== "list") || bulkSelectedIds.length === 0) {
+      setRouteLegs([]); setRouteTotals(null); setDepartureAdvice(null); return;
     }
     
     const ymapsAny = window.ymaps as any;
     if (!ymapsAny || !ymapsAny.multiRouter) return;
 
-    const validOrders = selectedRouteOrders.filter(o => o.lat && o.lng);
+    // 🔥 Ищем точки прямо тут, внутри эффекта
+    const validOrders = bulkSelectedIds
+      .map(id => orders.find(o => o.id === id))
+      .filter(o => o && o.lat && o.lng) as DashboardOrder[];
+
     if (validOrders.length === 0) return;
 
     const points = [ [STORE_LAT, STORE_LNG], ...validOrders.map(o => [o.lat!, o.lng!]) ];
     if (returnToBase) points.push([STORE_LAT, STORE_LNG]);
 
-    setIsCalculatingRoute(true);
+    setIsCalculatingRoute(true); setDepartureAdvice(null);
     let multiRoute: any = null;
 
     const timer = setTimeout(() => {
       multiRoute = new ymapsAny.multiRouter.MultiRoute({
-        referencePoints: points,
-        params: { routingMode: routeType === 'mt' ? 'masstransit' : 'auto' }
+        referencePoints: points, params: { routingMode: routeType === 'mt' ? 'masstransit' : 'auto' }
       }, { boundsAutoApply: false });
 
       multiRoute.model.events.add('requestsuccess', () => {
@@ -408,31 +496,47 @@ export function DashboardClient({ user }: { user: User }) {
         if (!activeRoute) { setIsCalculatingRoute(false); return; }
 
         const cleanHtml = (str: string) => str ? str.replace(/&#160;/g, " ") : "";
-
-        setRouteTotals({
-          time: cleanHtml(activeRoute.properties.get("duration")?.text || "—"),
-          dist: cleanHtml(activeRoute.properties.get("distance")?.text || "—")
-        });
+        setRouteTotals({ time: cleanHtml(activeRoute.properties.get("duration")?.text || "—"), dist: cleanHtml(activeRoute.properties.get("distance")?.text || "—") });
 
         const legsArr: string[] = [];
-        activeRoute.getPaths().each((path: any) => {
+        let cumulativeSeconds = 0; let strictestDeparture: { time: Date, externalId: string, slotTo: string } | null = null;
+
+        activeRoute.getPaths().each((path: any, idx: number) => {
           legsArr.push(cleanHtml(path.properties.get("duration")?.text || "—"));
+          if (idx < validOrders.length) {
+            const legSeconds = path.properties.get("duration")?.value || 0;
+            cumulativeSeconds += legSeconds + (5 * 60); 
+            const order = validOrders[idx];
+            if (order.slotTo) {
+              const [hh, mm] = order.slotTo.split(":").map(Number);
+              if (!isNaN(hh) && !isNaN(mm)) {
+                const deadline = new Date(); deadline.setHours(hh, mm, 0, 0);
+                const requiredDeparture = new Date(deadline.getTime() - (cumulativeSeconds * 1000));
+                if (!strictestDeparture || requiredDeparture < strictestDeparture.time) {
+                  strictestDeparture = { time: requiredDeparture, externalId: order.externalId ?? order.crmId, slotTo: order.slotTo };
+                }
+              }
+            }
+          }
         });
         
-        setRouteLegs(legsArr);
-        setIsCalculatingRoute(false);
-      });
-
-      multiRoute.model.events.add('requestfail', (e: any) => {
-        console.error("Route calc error:", e.get("error"));
-        setIsCalculatingRoute(false);
+        if (strictestDeparture) {
+          const sDep = strictestDeparture as { time: Date, externalId: string, slotTo: string };
+          const depHH = String(sDep.time.getHours()).padStart(2, '0'); const depMM = String(sDep.time.getMinutes()).padStart(2, '0');
+          setDepartureAdvice(`Совет: выехать до ${depHH}:${depMM} (к ${sDep.slotTo} на зак. ${sDep.externalId})`);
+        } else {
+          setDepartureAdvice("Слоты не строгие, выезд в любое время");
+        }
+        
+        setRouteLegs(legsArr); setIsCalculatingRoute(false);
       });
     }, 800);
 
     return () => { clearTimeout(timer); if (multiRoute) multiRoute.destroy(); };
   }, [bulkSelectedIds, routeType, returnToBase, routeTab, isBulkMode, isMobile]);
 
-  const generateYandexUrl = (ordersToRoute: Order[], type: "auto" | "mt", rtb: boolean) => {
+  // 🔥 Изменил тип параметра на DashboardOrder
+  const generateYandexUrl = (ordersToRoute: DashboardOrder[], type: "auto" | "mt", rtb: boolean) => {
     const validOrders = ordersToRoute.filter(o => o.lat && o.lng && !o.isInvalid);
     if (validOrders.length === 0) return null;
     if (validOrders.length > 50) validOrders.length = 50;
@@ -441,12 +545,12 @@ export function DashboardClient({ user }: { user: User }) {
     return `https://yandex.ru/maps/?rtext=${rtextArr.join("~")}&rtt=${type}`;
   };
 
-  const handleOpenRoute = (ordersToRoute: Order[]) => {
+  const handleOpenRoute = (ordersToRoute: DashboardOrder[]) => {
     const url = generateYandexUrl(ordersToRoute, routeType, returnToBase);
     if (url) window.open(url, "_blank"); else alert("Нет координат для построения");
   };
 
-  const handleShareRoute = async (ordersToRoute: Order[]) => {
+  const handleShareRoute = async (ordersToRoute: DashboardOrder[]) => {
     const url = generateYandexUrl(ordersToRoute, routeType, returnToBase);
     if (!url) { alert("Нет координат"); return; }
     try {
@@ -464,16 +568,25 @@ export function DashboardClient({ user }: { user: User }) {
     try {
       const res = await fetch(`/api/routes/assign`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderIds: bulkSelectedIds, courierId: bulkCourier, routeType, returnToBase })
+        body: JSON.stringify({ 
+          orderIds: bulkSelectedIds, 
+          courierId: bulkCourier, 
+          routeType, 
+          returnToBase, 
+          oldRouteId: editingRouteId,
+          departureAdvice // 🔥 Передаем совет на сервер
+        })
       });
       if (!res.ok) throw new Error("Ошибка сервера");
-      setBulkCourier("");
+      setBulkCourier(""); setBulkSelectedIds([]); setEditingRouteId(null);
       await fetchData(); 
-      alert("✅ Маршрут создан, курьер уведомлен!");
+      alert(editingRouteId ? "✅ Изменения в маршруте сохранены!" : "✅ Маршрут создан!");
+      setRouteTabMode("current");
     } catch { alert("Произошла ошибка"); }
     finally { setBulkSaving(false); }
   }
 
+  // 🔥 Восстановил правильную функцию toggleSlot
   const toggleSlot = (label: string) => {
     if (label === "all") setSelectedSlots([]);
     else setSelectedSlots(prev => prev.includes(label) ? prev.filter(x => x !== label) : [...prev, label]);
@@ -484,80 +597,125 @@ export function DashboardClient({ user }: { user: User }) {
   const renderRouteListPanel = () => (
     <div style={{ maxWidth: 600, margin: isMobile ? 0 : "0 auto", background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: isMobile ? 16 : 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 18, color: "#1a1a18" }}>Маршрут · {bulkSelectedIds.length} точек</h2>
+        <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 18, color: "#1a1a18" }}>Работа с маршрутами</h2>
         {!isMobile && <button onClick={() => { setIsBulkMode(false); setRouteTab("map"); }} style={{ background: "none", border: "none", fontSize: 24, cursor: "pointer", color: "#a8a49c", padding: "0 8px" }}>×</button>}
       </div>
 
-      <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 12, marginBottom: 16, background: "#f5f4f0", padding: "6px 8px", borderRadius: 8, alignItems: isMobile ? "stretch" : "center" }}>
-        <div style={{ display: "flex", gap: 4, flex: 1 }}>
-          <button onClick={() => setRouteType("auto")} style={{ ...s.actionBtn, flex: 1, background: routeType === "auto" ? "#fff" : "transparent", color: routeType === "auto" ? "#1a1a18" : "#a8a49c", boxShadow: routeType === "auto" ? "0 1px 3px rgba(0,0,0,0.1)" : "none", padding: "6px 14px", borderRadius: 6 }}>🚗 На авто</button>
-          <button onClick={() => setRouteType("mt")} style={{ ...s.actionBtn, flex: 1, background: routeType === "mt" ? "#fff" : "transparent", color: routeType === "mt" ? "#1a1a18" : "#a8a49c", boxShadow: routeType === "mt" ? "0 1px 3px rgba(0,0,0,0.1)" : "none", padding: "6px 14px", borderRadius: 6 }}>🚌 Транспорт</button>
-        </div>
-        <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", color: "#1a1a18", fontWeight: 600, padding: isMobile ? "4px 6px" : 0 }}>
-          <input type="checkbox" checked={returnToBase} onChange={e => setReturnToBase(e.target.checked)} style={{ accentColor: "#4a7aff", width: 16, height: 16 }} />
-          Вернуться на базу
-        </label>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, background: "#f5f4f0", padding: 4, borderRadius: 10 }}>
+        <button 
+          onClick={() => { setRouteTabMode("new"); setEditingRouteId(null); setBulkSelectedIds([]); }} 
+          style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", background: routeTabMode === "new" ? "#fff" : "transparent", color: routeTabMode === "new" ? "#1a1a18" : "#a8a49c", boxShadow: routeTabMode === "new" ? "0 2px 8px rgba(0,0,0,0.05)" : "none", transition: "all 0.2s" }}
+        >
+          {editingRouteId ? "✏️ Редактирование" : "Новый маршрут"}
+        </button>
+        <button 
+          onClick={() => { setRouteTabMode("current"); setEditingRouteId(null); }} 
+          style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", background: routeTabMode === "current" ? "#fff" : "transparent", color: routeTabMode === "current" ? "#1a1a18" : "#a8a49c", boxShadow: routeTabMode === "current" ? "0 2px 8px rgba(0,0,0,0.05)" : "none", transition: "all 0.2s" }}
+        >
+          Текущие ({existingRoutes.length})
+        </button>
       </div>
 
-      {routeTotals && (
-        <div style={{fontSize: 13, color: "#1a1a18", background: "#eef3ff", padding: "10px 14px", borderRadius: 8, marginBottom: 16, fontWeight: 600}}>
-          {isCalculatingRoute ? "⏳ Считаем время в пути..." : `🏁 Итого: ~${routeTotals.time} (${routeTotals.dist})`}
+      {routeTabMode === "current" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {existingRoutes.length === 0 && <div style={{ textAlign: "center", color: "#a8a49c", padding: 20 }}>Нет маршрутов на {filterDate}</div>}
+          {existingRoutes.map(r => (
+            <div key={r.id} onClick={() => {
+              // 🔥 ВАЖНО: При клике мы подгружаем точки маршрута и включаем карту (режим "new")
+              setBulkSelectedIds(r.orders.map((o: any) => o.id));
+              setBulkCourier(String(r.courierId));
+              setEditingRouteId(r.id);
+              setRouteTabMode("new"); 
+            }} style={{ background: "#fafaf8", border: "1px solid #e8e6df", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18" }}>
+                  {r.name} <span style={{fontSize: 11, color: "#a8a49c", fontWeight: 500}}>изм. {new Date(r.updatedAt).toLocaleTimeString('ru', {hour: '2-digit', minute:'2-digit'})}</span>
+                </div>
+                <div style={{ fontSize: 12, color: "#6b6860", marginTop: 4 }}>
+                  Курьер: {dbCouriers.find(c => c.id === r.courierId)?.fullName || "Неизвестен"} · {r.orders.length} точек
+                </div>
+              </div>
+              <div style={{ fontSize: 20, color: "#a8a49c" }}>✏️</div>
+            </div>
+          ))}
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 10, marginBottom: 20, flexDirection: isMobile ? "column" : "row" }}>
-        <button onClick={() => handleOpenRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "#facc15", color: "#1a1a18" }}>🗺️ Открыть в Яндексе</button>
-        <button onClick={() => handleShareRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "#fafaf8", border: "1px solid #e8e6df", color: "#1a1a18" }}>🔗 Скопировать ссылку</button>
-      </div>
-
-      <div style={{ background: "#fafaf8", padding: 16, borderRadius: 8, marginBottom: 20 }}>
-        <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Назначить курьера</div>
-        <div style={{ display: "flex", gap: 10, flexDirection: isMobile ? "column" : "row" }}>
-          <CourierSearchSelect 
-            value={bulkCourier} 
-            onChange={setBulkCourier} 
-            options={sortedCouriers.map(c => ({ value: String(c.id), label: c.label }))} 
-          />
-          <button style={{ ...s.actionBtn, width: isMobile ? "100%" : 120, background: bulkCourier && bulkSelectedIds.length > 0 ? '#4a7aff' : '#e8e6df', color: bulkCourier && bulkSelectedIds.length > 0 ? '#fff' : '#a8a49c' }} disabled={!bulkCourier || bulkSelectedIds.length === 0 || bulkSaving} onClick={handleBulkAssign}>
-            {bulkSaving ? "..." : "Назначить"}
-          </button>
-        </div>
-      </div>
-
-      <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Очередь доставки</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        
-        {routeLegs[0] && (
-          <div style={{ fontSize: 11, color: "#a8a49c", paddingLeft: 46, paddingBottom: 6 }}>
-            ↓ {routeLegs[0]} от базы
-          </div>
-        )}
-
-        {selectedRouteOrders.map((o, index) => (
-          <Fragment key={o.id}>
-            <div style={{ padding: "10px 12px", background: "#fff", border: "1px solid #e8e6df", borderRadius: 8, display: "flex", gap: 12, alignItems: "center" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                <button disabled={index === 0} onClick={() => moveBulkItem(index, 'up')} style={{ background: "none", border: "none", cursor: index === 0 ? "default" : "pointer", opacity: index === 0 ? 0.3 : 1, fontSize: 11, padding: 2, color: "#6b6860" }}>▲</button>
-                <button disabled={index === selectedRouteOrders.length - 1} onClick={() => moveBulkItem(index, 'down')} style={{ background: "none", border: "none", cursor: index === selectedRouteOrders.length - 1 ? "default" : "pointer", opacity: index === selectedRouteOrders.length - 1 ? 0.3 : 1, fontSize: 11, padding: 2, color: "#6b6860" }}>▼</button>
-              </div>
-
-              <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#4a7aff", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{index + 1}</div>
-              <div style={{ flex: 1, overflow: "hidden" }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#1a1a18", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.address}</div>
-                <div style={{ fontSize: 11, color: "#a8a49c", marginTop: 2 }}>Слот: {o.slotRaw} · {o.externalId ?? o.crmId}</div>
-              </div>
-              <button onClick={() => toggleBulkSelect(o.id)} style={{ background: "none", border: "none", color: "#d94040", cursor: "pointer", fontSize: 18, padding: 4 }}>×</button>
+      {routeTabMode === "new" && (
+        <>
+          {editingRouteId && (
+            <div style={{ marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#4a7aff" }}>Редактирование маршрута</span>
+              <button onClick={() => { setEditingRouteId(null); setBulkSelectedIds([]); setRouteTabMode("current"); }} style={{ background: "none", border: "none", color: "#d94040", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Отменить</button>
             </div>
-            
-            {routeLegs[index + 1] && (
-              <div style={{ fontSize: 11, color: "#a8a49c", paddingLeft: 46, paddingBottom: 6, paddingTop: 4 }}>
-                ↓ {routeLegs[index + 1]} {index === selectedRouteOrders.length - 1 && returnToBase ? "возврат на базу" : ""}
+          )}
+
+          <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 12, marginBottom: 16, background: "#f5f4f0", padding: "6px 8px", borderRadius: 8, alignItems: isMobile ? "stretch" : "center" }}>
+            <div style={{ display: "flex", gap: 4, flex: 1 }}>
+              <button onClick={() => setRouteType("auto")} style={{ ...s.actionBtn, flex: 1, background: routeType === "auto" ? "#fff" : "transparent", color: routeType === "auto" ? "#1a1a18" : "#a8a49c", boxShadow: routeType === "auto" ? "0 1px 3px rgba(0,0,0,0.1)" : "none", padding: "6px 14px", borderRadius: 6 }}>🚗 На авто</button>
+              <button onClick={() => setRouteType("mt")} style={{ ...s.actionBtn, flex: 1, background: routeType === "mt" ? "#fff" : "transparent", color: routeType === "mt" ? "#1a1a18" : "#a8a49c", boxShadow: routeType === "mt" ? "0 1px 3px rgba(0,0,0,0.1)" : "none", padding: "6px 14px", borderRadius: 6 }}>🚌 Транспорт</button>
+            </div>
+            <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", color: "#1a1a18", fontWeight: 600, padding: isMobile ? "4px 6px" : 0 }}>
+              <input type="checkbox" checked={returnToBase} onChange={e => setReturnToBase(e.target.checked)} style={{ accentColor: "#4a7aff", width: 16, height: 16 }} />
+          Вернуться на базу
+            </label>
+          </div>
+
+          {routeTotals && (
+            <div style={{fontSize: 13, color: "#1a1a18", background: "#eef3ff", padding: "12px 14px", borderRadius: 8, marginBottom: 16, fontWeight: 600}}>
+              {isCalculatingRoute ? "⏳ Считаем время в пути..." : `🏁 Итого: ~${routeTotals.time} (${routeTotals.dist})`}
+              {!isCalculatingRoute && departureAdvice && (
+                <div style={{ marginTop: 6, fontSize: 12, color: "#4a7aff", fontWeight: 700 }}>💡 {departureAdvice}</div>
+              )}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 10, marginBottom: 20, flexDirection: "column" }}>
+            <button onClick={optimizeRoute} style={{ ...s.actionBtn, background: "#f4f7ff", color: "#4a7aff", border: "1px solid #c9d8ff" }}>✨ Умная оптимизация (Время + Расстояние)</button>
+            {/* 🔥 Вернул кнопки действий с маршрутом */}
+            {selectedRouteOrders.length > 0 && (
+              <div style={{ display: "flex", gap: 8 }}>
+                 <button onClick={() => handleOpenRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "#fff", color: "#1a1a18", border: "1px solid #e8e6df" }}>🗺️ Открыть в Яндексе</button>
+                 <button onClick={() => handleShareRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "#fff", color: "#1a1a18", border: "1px solid #e8e6df" }}>🔗 Скопировать ссылку</button>
               </div>
             )}
-          </Fragment>
-        ))}
-        {selectedRouteOrders.length === 0 && <div style={{ fontSize: 13, color: "#a8a49c", textAlign: "center", padding: 20 }}>Точки не выбраны</div>}
-      </div>
+          </div>
+
+          <div style={{ background: "#fafaf8", padding: 16, borderRadius: 8, marginBottom: 20 }}>
+            <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Курьер</div>
+            <div style={{ display: "flex", gap: 10, flexDirection: isMobile ? "column" : "row" }}>
+              <CourierSearchSelect value={bulkCourier} onChange={setBulkCourier} options={courierOptions.map(c => ({ value: String(c.value), label: c.label }))} />
+              <button style={{ ...s.actionBtn, width: isMobile ? "100%" : 120, background: bulkCourier && bulkSelectedIds.length > 0 ? '#4a7aff' : '#e8e6df', color: bulkCourier && bulkSelectedIds.length > 0 ? '#fff' : '#a8a49c' }} disabled={!bulkCourier || bulkSelectedIds.length === 0 || bulkSaving} onClick={handleBulkAssign}>
+                {bulkSaving ? "..." : (editingRouteId ? "Сохранить" : "Создать")}
+              </button>
+            </div>
+          </div>
+
+          <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Очередь доставки ({bulkSelectedIds.length})</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {routeLegs[0] && <div style={{ fontSize: 11, color: "#a8a49c", paddingLeft: 46, paddingBottom: 6 }}>↓ {routeLegs[0]} от базы</div>}
+            
+            {selectedRouteOrders.map((o, index) => (
+              <Fragment key={o.id}>
+                <div style={{ padding: "10px 12px", background: "#fff", border: "1px solid #e8e6df", borderRadius: 8, display: "flex", gap: 12, alignItems: "center" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    <button disabled={index === 0} onClick={() => moveBulkItem(index, 'up')} style={{ background: "none", border: "none", cursor: index === 0 ? "default" : "pointer", opacity: index === 0 ? 0.3 : 1, fontSize: 11, padding: 2, color: "#6b6860" }}>▲</button>
+                    <button disabled={index === selectedRouteOrders.length - 1} onClick={() => moveBulkItem(index, 'down')} style={{ background: "none", border: "none", cursor: index === selectedRouteOrders.length - 1 ? "default" : "pointer", opacity: index === selectedRouteOrders.length - 1 ? 0.3 : 1, fontSize: 11, padding: 2, color: "#6b6860" }}>▼</button>
+                  </div>
+                  <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#4a7aff", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{index + 1}</div>
+                  <div style={{ flex: 1, overflow: "hidden" }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#1a1a18", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.address}</div>
+                    <div style={{ fontSize: 11, color: "#a8a49c", marginTop: 2 }}>Слот: {o.slotRaw} · {o.externalId ?? o.crmId}</div>
+                  </div>
+                  <button onClick={() => toggleBulkSelect(o.id)} style={{ background: "none", border: "none", color: "#d94040", cursor: "pointer", fontSize: 18, padding: 4 }}>×</button>
+                </div>
+                {routeLegs[index + 1] && <div style={{ fontSize: 11, color: "#a8a49c", paddingLeft: 46, paddingBottom: 6, paddingTop: 4 }}>↓ {routeLegs[index + 1]} {index === selectedRouteOrders.length - 1 && returnToBase ? "возврат на базу" : ""}</div>}
+              </Fragment>
+            ))}
+            {selectedRouteOrders.length === 0 && <div style={{ fontSize: 13, color: "#a8a49c", textAlign: "center", padding: 20 }}>Отметьте точки на карте</div>}
+          </div>
+        </>
+      )}
     </div>
   );
 
@@ -588,7 +746,7 @@ export function DashboardClient({ user }: { user: User }) {
           onClick={() => { setIsBulkMode(!isBulkMode); setRouteTab("map"); setBulkSelectedIds([]); setSelectedId(null); setIsDetailVisible(false); }}
           style={{ ...s.navBtn, background: isBulkMode ? "#1a1a18" : "#fff", color: isBulkMode ? "#fff" : "#1a1a18", border: isBulkMode ? "1px solid #1a1a18" : "1px solid #e8e6df", marginLeft: 8 }}
         >
-          {isBulkMode ? "✕ Маршрут" : "📍 Маршрут"}
+          {isBulkMode ? "✕ Маршруты" : "📍 Маршруты"}
         </button>
         {!isMobile && (
           <div style={s.slotBar}>
@@ -599,15 +757,14 @@ export function DashboardClient({ user }: { user: User }) {
         <div style={{ flex: 1 }} />
         {!isMobile && (
           <div style={{ display: 'flex', gap: 10, marginRight: 8, alignItems: 'center' }}>
+            <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 4, cursor: 'pointer' }}>
+              <input type="checkbox" checked={showCouriers} onChange={e => setShowCouriers(e.target.checked)} />Курьеры
+            </label>
             <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 4, cursor: 'pointer' }}><input type="checkbox" checked={showCourierNames} onChange={e => setShowCourierNames(e.target.checked)} /> Имена</label>
             <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 4, cursor: 'pointer' }}><input type="checkbox" checked={showTime} onChange={e => setShowTime(e.target.checked)} /> Время</label>
           </div>
         )}
-        {invalid.length > 0 && (
-          <button style={s.alertBadge} onClick={() => { setAlertsOpen(!alertsOpen); setProfileOpen(false); }}>
-            ⚠ {!isMobile && `${invalid.length}`}
-          </button>
-        )}
+        {invalid.length > 0 && <button style={s.alertBadge} onClick={() => { setAlertsOpen(!alertsOpen); setProfileOpen(false); }}>⚠ {!isMobile && `${invalid.length}`}</button>}
         {!isMobile && lastSync && <span style={s.syncLabel}>обновлено {lastSync}</span>}
         <button style={s.userBtn} onClick={() => { setProfileOpen(!profileOpen); setAlertsOpen(false); }}>{user.email.slice(0, 2).toUpperCase()}</button>
       </div>
@@ -626,8 +783,7 @@ export function DashboardClient({ user }: { user: User }) {
             <b>{invalid.length} заказов</b> с проблемными адресами —{" "}
             {invalid.map((o, i) => (
               <span key={o.id}>
-                <span style={s.invalidBannerLink} onClick={() => { setSelectedId(o.id); setIsDetailVisible(true); }}>{o.externalId ?? o.crmId}</span>
-                {i < invalid.length - 1 ? ", " : ""}
+                <span style={s.invalidBannerLink} onClick={() => { setSelectedId(o.id); setIsDetailVisible(true); }}>{o.externalId ?? o.crmId}</span>{i < invalid.length - 1 ? ", " : ""}
               </span>
             ))}
           </span>
@@ -645,14 +801,14 @@ export function DashboardClient({ user }: { user: User }) {
       {isMobile && isBulkMode && (
         <div style={{ display: "flex", padding: "8px 10px", background: "#fff", gap: 8, flexShrink: 0, borderBottom: "1px solid #e8e6df", zIndex: 10 }}>
           <button onClick={() => setRouteTab("map")} style={{ ...s.routeTabBtn, flex: 1, background: routeTab === "map" ? "#eef3ff" : "#fff", color: routeTab === "map" ? "#4a7aff" : "#6b6860" }}>📍 Точки на карте</button>
-          <button onClick={() => setRouteTab("list")} style={{ ...s.routeTabBtn, flex: 1, background: routeTab === "list" ? "#eef3ff" : "#fff", color: routeTab === "list" ? "#4a7aff" : "#6b6860" }}>📋 Маршрут ({bulkSelectedIds.length})</button>
+          <button onClick={() => setRouteTab("list")} style={{ ...s.routeTabBtn, flex: 1, background: routeTab === "list" ? "#eef3ff" : "#fff", color: routeTab === "list" ? "#4a7aff" : "#6b6860" }}>📋 Управление</button>
         </div>
       )}
 
       <div style={isMobile ? sm.body : s.body}>
         {!isMobile && (
           <div style={{ display: 'flex', width: '100%', height: '100%' }}>
-            {showLeftPanel && (
+            {((isListVisible || isDetailVisible) && !isBulkMode) && (
               <div style={s.leftPanel}>
                 {isListVisible && (
                   <div style={{ ...s.cardsSection, flex: (isDetailVisible && selected) ? "0 0 50%" : 1, borderBottom: (isDetailVisible && selected) ? "1px solid #e8e6df" : "none" }}>
@@ -666,11 +822,7 @@ export function DashboardClient({ user }: { user: User }) {
                       {loading ? <div style={s.empty}>Загрузка...</div> : sidePanelOrders.length === 0 ? <div style={s.empty}>Заказов нет</div> : sidePanelOrders.map(o =>
                         <OrderCard key={o.id} order={o} selected={selectedId === o.id} isBulkMode={isBulkMode} isBulkSelected={bulkSelectedIds.includes(o.id)} onSelect={() => {
                           if (isBulkMode) toggleBulkSelect(o.id);
-                          else {
-                            const newId = selectedId === o.id ? null : o.id;
-                            setSelectedId(newId);
-                            setIsDetailVisible(!!newId);
-                          }
+                          else { const newId = selectedId === o.id ? null : o.id; setSelectedId(newId); setIsDetailVisible(!!newId); }
                         }} />
                       )}
                     </div>
@@ -678,7 +830,7 @@ export function DashboardClient({ user }: { user: User }) {
                 )}
                 {(isDetailVisible && selected) && (
                   <div style={{ ...s.detailSection, flex: isListVisible ? "0 0 50%" : 1 }}>
-                    <OrderDetail selected={selected} couriers={sortedCouriers} onClose={() => { setSelectedId(null); setIsDetailVisible(false); }} onUpdateSuccess={fetchData} onPreviewGeo={(geo) => { setPreviewGeo(geo); if (geo && ymapRef.current) ymapRef.current.setCenter([geo.lat, geo.lng], 15, { duration: 400 }); }} fixingAI={fixingAI} setFixingAI={setFixingAI} />
+                    <OrderDetail selected={selected as any} couriers={sortedCouriers} onClose={() => { setSelectedId(null); setIsDetailVisible(false); }} onUpdateSuccess={fetchData} onPreviewGeo={(geo) => { setPreviewGeo(geo); if (geo && ymapRef.current) ymapRef.current.setCenter([geo.lat, geo.lng], 15, { duration: 400 }); }} fixingAI={fixingAI} setFixingAI={setFixingAI} />
                   </div>
                 )}
               </div>
@@ -696,15 +848,10 @@ export function DashboardClient({ user }: { user: User }) {
 
               <div style={{ flex: 1, position: "relative", display: "flex", flexDirection: "column", minWidth: 0 }}>
                 <div ref={mapRef} style={{ flex: 1, width: '100%' }} />
-                
                 {!isBulkMode && (
                   <div style={{ position: 'absolute', top: 12, left: 0, zIndex: 100, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    {!isListVisible && (
-                      <button onClick={() => setIsListVisible(true)} style={s.expandSideBtn} title="Показать список">≡</button>
-                    )}
-                    {(!isDetailVisible && selectedId) && (
-                      <button onClick={() => setIsDetailVisible(true)} style={{ ...s.expandSideBtn, marginTop: isListVisible ? 0 : 4 }} title="Показать карточку">☰</button>
-                    )}
+                    {!isListVisible && <button onClick={() => setIsListVisible(true)} style={s.expandSideBtn} title="Показать список">≡</button>}
+                    {(!isDetailVisible && selectedId) && <button onClick={() => setIsDetailVisible(true)} style={{ ...s.expandSideBtn, marginTop: isListVisible ? 0 : 4 }} title="Показать карточку">☰</button>}
                   </div>
                 )}
               </div>
@@ -738,7 +885,7 @@ export function DashboardClient({ user }: { user: User }) {
                 </div>
                 {selected && (
                   <div style={sm.detailSection}>
-                    <OrderDetail selected={selected} couriers={sortedCouriers} onClose={() => setSelectedId(null)} onUpdateSuccess={fetchData} onPreviewGeo={(geo) => { setPreviewGeo(geo); if (geo && ymapRef.current) ymapRef.current.setCenter([geo.lat, geo.lng], 15, { duration: 400 }); }} fixingAI={fixingAI} setFixingAI={setFixingAI} />
+                    <OrderDetail selected={selected as any} couriers={sortedCouriers} onClose={() => setSelectedId(null)} onUpdateSuccess={fetchData} onPreviewGeo={(geo) => { setPreviewGeo(geo); if (geo && ymapRef.current) ymapRef.current.setCenter([geo.lat, geo.lng], 15, { duration: 400 }); }} fixingAI={fixingAI} setFixingAI={setFixingAI} />
                   </div>
                 )}
               </div>
@@ -769,25 +916,8 @@ export function DashboardClient({ user }: { user: User }) {
               <table style={s.table}>
                 <thead>
                   <tr>
-                    {[
-                      { label: "Внешний ID", key: "externalId" },
-                      { label: "Время", key: "slotFrom" },
-                      { label: "Адрес", key: "address" },
-                      { label: "Курьер", key: "courier" },
-                      { label: "Сумма", key: "price" },
-                      { label: "Статус", key: "status" },
-                      { label: "Комментарий", key: "comment" },
-                      { label: "Оператор", key: "opComment" },
-                      { label: "Состав", key: "items" },
-                      { label: "Создан", key: "crmCreatedAt" },
-                      { label: "Изменён", key: "changedAt" }
-                    ].map(col => (
-                      <th
-                        key={col.key}
-                        style={{ ...s.th, cursor: "pointer", userSelect: "none" }}
-                        onClick={() => handleSort(col.key)}
-                        title={`Сортировать по: ${col.label}`}
-                      >
+                    {[ { label: "Внешний ID", key: "externalId" }, { label: "Время", key: "slotFrom" }, { label: "Адрес", key: "address" }, { label: "Курьер", key: "courier" }, { label: "Сумма", key: "price" }, { label: "Статус", key: "status" }, { label: "Комментарий", key: "comment" }, { label: "Оператор", key: "opComment" }, { label: "Состав", key: "items" }, { label: "Создан", key: "crmCreatedAt" }, { label: "Изменён", key: "changedAt" } ].map(col => (
+                      <th key={col.key} style={{ ...s.th, cursor: "pointer", userSelect: "none" }} onClick={() => handleSort(col.key)} title={`Сортировать по: ${col.label}`}>
                         {col.label} {sortConfig.key === col.key ? (sortConfig.dir === 'asc' ? '↑' : '↓') : ''}
                       </th>
                     ))}
@@ -795,14 +925,9 @@ export function DashboardClient({ user }: { user: User }) {
                 </thead>
                 <tbody>
                   {tableOrders.map((o, i) => {
-                    const color = slotColor(o);
+                    const color = slotColor(o as any);
                     return (
-                      <tr
-                        id={`row-${o.id}`} 
-                        key={o.id}
-                        style={{ background: selectedId === o.id ? "#eef3ff" : i % 2 === 0 ? "#fff" : "#fafaf8", cursor: "pointer" }}
-                        onClick={() => { setSelectedId(o.id); setIsListVisible(true); setIsDetailVisible(true); }}
-                      >
+                      <tr id={`row-${o.id}`} key={o.id} style={{ background: selectedId === o.id ? "#eef3ff" : i % 2 === 0 ? "#fff" : "#fafaf8", cursor: "pointer" }} onClick={() => { setSelectedId(o.id); setIsListVisible(true); setIsDetailVisible(true); }}>
                         <td style={{ ...s.td, whiteSpace: "nowrap" }}><span style={{ ...s.statusDot, background: color }} /><span style={{ fontFamily: "monospace", fontSize: 10, color: "#a8a49c" }}>{o.externalId ?? o.crmId}</span></td>
                         <td style={{ ...s.td, whiteSpace: "nowrap", color }}>{o.slotRaw ?? "—"}</td>
                         <td style={{ ...s.td, minWidth: 160, maxWidth: 220 }}>{o.address ?? "—"}</td>
@@ -812,12 +937,8 @@ export function DashboardClient({ user }: { user: User }) {
                         <td style={{ ...s.td, minWidth: 140, maxWidth: 200, color: "#6b6860" }}>{o.comment ?? "—"}</td>
                         <td style={{ ...s.td, minWidth: 120, maxWidth: 180, color: "#4a7aff" }}>{o.opComment ?? "—"}</td>
                         <td style={{ ...s.td, minWidth: 140, maxWidth: 220, color: "#6b6860" }}>{o.items ?? "—"}</td>
-                        <td style={{ ...s.td, whiteSpace: "nowrap", color: "#a8a49c", fontSize: 10 }}>
-                          {o.crmCreatedAt ? new Date(o.crmCreatedAt).toLocaleString("ru", { timeZone: "Europe/Moscow", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}
-                        </td>
-                        <td style={{ ...s.td, whiteSpace: "nowrap", color: (o as any).changedAt ? "#1a1a18" : "#a8a49c", fontSize: 10 }}>
-                          {((o as any).changedAt || o.updatedAt) ? new Date((o as any).changedAt || o.updatedAt!).toLocaleString("ru", { timeZone: "Europe/Moscow", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}
-                        </td>
+                        <td style={{ ...s.td, whiteSpace: "nowrap", color: "#a8a49c", fontSize: 10 }}>{o.crmCreatedAt ? new Date(o.crmCreatedAt).toLocaleString("ru", { timeZone: "Europe/Moscow", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
+                        <td style={{ ...s.td, whiteSpace: "nowrap", color: o.changedAt ? "#1a1a18" : "#a8a49c", fontSize: 10 }}>{(o.changedAt || o.updatedAt) ? new Date(o.changedAt || o.updatedAt!).toLocaleString("ru", { timeZone: "Europe/Moscow", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
                       </tr>
                     );
                   })}
@@ -828,12 +949,7 @@ export function DashboardClient({ user }: { user: User }) {
         </div>
       )}
 
-      {profileOpen && (
-        <div style={{ position: "fixed", top: 52, right: 8, zIndex: 200 }}>
-          <ProfilePanel onClose={() => setProfileOpen(false)} onLogout={() => router.push("/login")} />
-        </div>
-      )}
-
+      {profileOpen && <div style={{ position: "fixed", top: 52, right: 8, zIndex: 200 }}><ProfilePanel onClose={() => setProfileOpen(false)} onLogout={() => router.push("/login")} /></div>}
       {alertsOpen && invalid.length > 0 && (
         <div style={{ ...s.popup, right: 52 }} onClick={e => e.stopPropagation()}>
           <div style={s.alertTitle}>⚠ Проблемные адреса</div>
@@ -845,7 +961,6 @@ export function DashboardClient({ user }: { user: User }) {
           ))}
         </div>
       )}
-
       {(profileOpen || alertsOpen) && <div style={s.overlay} onClick={() => { setProfileOpen(false); setAlertsOpen(false); }} />}
     </div>
   );
@@ -889,8 +1004,7 @@ function CourierSearchSelect({ value, onChange, options }: { value: string, onCh
 
   useEffect(() => {
     const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener("mousedown", handler); return () => document.removeEventListener("mousedown", handler);
   }, []);
 
   const filtered = options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()));
@@ -900,49 +1014,21 @@ function CourierSearchSelect({ value, onChange, options }: { value: string, onCh
     <div ref={ref} style={{ position: "relative", flex: 1 }}>
       <div
         onClick={() => setOpen(!open)}
-        style={{
-          padding: "8px 12px", borderRadius: 8, border: "1px solid #e8e6df", background: "#fff",
-          fontSize: 13, color: value ? "#1a1a18" : "#a8a49c", cursor: "pointer", display: "flex", 
-          justifyContent: "space-between", alignItems: "center", height: "100%", fontWeight: 600
-        }}
+        style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #e8e6df", background: "#fff", fontSize: 13, color: value ? "#1a1a18" : "#a8a49c", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", height: "100%", fontWeight: 600 }}
       >
         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedLabel}</span>
         <span style={{ fontSize: 10, color: "#a8a49c", transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "rotate(0deg)" }}>▼</span>
       </div>
 
       {open && (
-        <div style={{
-          position: "absolute", bottom: "calc(100% + 6px)", left: 0, right: 0,
-          background: "#fff", border: "1px solid #e8e6df", borderRadius: 10, boxShadow: "0 -4px 24px rgba(0,0,0,0.12)",
-          zIndex: 500, maxHeight: 280, display: "flex", flexDirection: "column", overflow: "hidden"
-        }}>
+        <div style={{ position: "absolute", bottom: "calc(100% + 6px)", left: 0, right: 0, background: "#fff", border: "1px solid #e8e6df", borderRadius: 10, boxShadow: "0 -4px 24px rgba(0,0,0,0.12)", zIndex: 500, maxHeight: 280, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div style={{ padding: "8px", borderBottom: "1px solid #f0efe9", background: "#fafaf8" }}>
-            <input
-              autoFocus
-              placeholder="Поиск курьера..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 13, outline: "none" }}
-            />
+            <input autoFocus placeholder="Поиск курьера..." value={search} onChange={e => setSearch(e.target.value)} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 13, outline: "none" }} />
           </div>
           <div style={{ overflowY: "auto", padding: "4px 0", flex: 1 }}>
-            <div
-              onClick={() => { onChange(""); setOpen(false); setSearch(""); }}
-              style={{ padding: "10px 14px", fontSize: 13, cursor: "pointer", color: !value ? "#4a7aff" : "#a8a49c", background: !value ? "#f4f7ff" : "transparent" }}
-            >
-              — Выберите курьера —
-            </div>
+            <div onClick={() => { onChange(""); setOpen(false); setSearch(""); }} style={{ padding: "10px 14px", fontSize: 13, cursor: "pointer", color: !value ? "#4a7aff" : "#a8a49c", background: !value ? "#f4f7ff" : "transparent" }}>— Выберите курьера —</div>
             {filtered.map(o => (
-              <div
-                key={o.value}
-                onClick={() => { onChange(String(o.value)); setOpen(false); setSearch(""); }}
-                style={{ 
-                  padding: "10px 14px", fontSize: 13, cursor: "pointer", borderBottom: "1px solid #f5f4f0",
-                  color: String(o.value) === String(value) ? "#4a7aff" : "#1a1a18", 
-                  background: String(o.value) === String(value) ? "#f4f7ff" : "transparent",
-                  fontWeight: String(o.value) === String(value) ? 700 : 500
-                }}
-              >
+              <div key={o.value} onClick={() => { onChange(String(o.value)); setOpen(false); setSearch(""); }} style={{ padding: "10px 14px", fontSize: 13, cursor: "pointer", borderBottom: "1px solid #f5f4f0", color: String(o.value) === String(value) ? "#4a7aff" : "#1a1a18", background: String(o.value) === String(value) ? "#f4f7ff" : "transparent", fontWeight: String(o.value) === String(value) ? 700 : 500 }}>
                 {o.label}
               </div>
             ))}

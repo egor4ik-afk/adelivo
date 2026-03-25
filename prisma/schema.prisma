@@ -107,7 +107,11 @@ model Courier {
   email       String?
   description String?  // Примечание из CRM
   isActive    Boolean  @default(true) // Работает ли он вообще в компании
-
+  lat         Float?   // Текущая широта (с телефона курьера)
+  lng         Float?   // Текущая долгота
+  homeLat     Float?   // Домашняя широта
+  homeLng     Float?   // Домашняя долгота
+  homeAddress String?  // 🔥 НОВОЕ: Домашний адрес текстом
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -206,7 +210,7 @@ model Route {
   name      String   // Например, "M-1234"
   link      String?  @db.Text // Ссылка на Яндекс
   date      String   // Дата "YYYY-MM-DD"
-  
+  departureAdvice String?
   courierId Int
   courier   Courier  @relation(fields: [courierId], references: [id])
   
