@@ -3,22 +3,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { geocodeAddress } from "@/lib/crm";
+
 
 const updateSchema = z.object({
   firstName: z.string().min(1).max(50).optional(),
-  lastName:  z.string().max(50).optional(),
-  phone:     z.string().max(20).optional(),
+  lastName: z.string().max(50).optional(),
+  phone: z.string().max(20).optional(),
   homeAddress: z.string().max(200).optional(), // 🔥 Добавили валидацию адреса
-  
+
   // Настройки уведомлений
-  notifyNewOrder:  z.boolean().optional(),
-  notifyStatus:    z.boolean().optional(),
-  notifyCourier:   z.boolean().optional(),
-  notifyAddress:   z.boolean().optional(),
-  notifyTime:      z.boolean().optional(),
-  notifyComment:   z.boolean().optional(),
+  notifyNewOrder: z.boolean().optional(),
+  notifyStatus: z.boolean().optional(),
+  notifyCourier: z.boolean().optional(),
+  notifyAddress: z.boolean().optional(),
+  notifyTime: z.boolean().optional(),
+  notifyComment: z.boolean().optional(),
   notifyOpComment: z.boolean().optional(),
-  notifyItems:     z.boolean().optional(),
+  notifyItems: z.boolean().optional(),
 });
 
 // GET /api/profile
@@ -58,7 +60,7 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const body = await req.json();
-    
+
     // 🔥 Отделяем homeAddress от остальных данных, так как они лежат в разных таблицах
     const { homeAddress, ...userData } = updateSchema.parse(body);
 
@@ -85,6 +87,19 @@ export async function PATCH(req: NextRequest) {
         where: { email: user.email },
         data: courierData
       });
+      if (homeAddress) {
+        try {
+          const geo = await geocodeAddress(homeAddress);
+          if (geo?.lat && geo?.lng) {
+            await prisma.courier.updateMany({
+              where: { email: user.email },
+              data: { homeLat: geo.lat, homeLng: geo.lng }
+            });
+          }
+        } catch (_) {
+          // Геокодирование не критично — не блокируем ответ
+        }
+      }
     }
 
     return NextResponse.json({ ...updated, homeAddress });

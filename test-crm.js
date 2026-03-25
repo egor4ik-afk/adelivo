@@ -1,7 +1,7 @@
 // scripts/check-order.ts
 import axios from "axios";
 import * as dotenv from "dotenv";
-dotenv.config({ path: ".env.local" });
+dotenv.config({ path: ".env" });
 
 const CRM_URL = process.env.RETAILCRM_API_URL;
 const CRM_KEY = process.env.RETAILCRM_API_KEY;

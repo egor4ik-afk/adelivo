@@ -256,7 +256,7 @@ export default function CourierPointsPage() {
         </div>
       )}
 
-      <div ref={mapRef} style={{ flex: 1, width: "100%", background: "#e8e6df" }} />
+      <div ref={mapRef} style={{ flex: 1, width: "100%", touchAction: 'none', background: "#e8e6df" }} />
     </div>
   );
 }

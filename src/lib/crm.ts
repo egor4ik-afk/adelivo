@@ -380,22 +380,7 @@ export async function updateCrmOrder(
     }
   }
 
-  if (data.courier !== undefined) {
-    const courierName = data.courier.trim();
-    orderPayload.delivery = orderPayload.delivery ?? {};
-    orderPayload.delivery.code = "logisty";
-
-    if (courierName) {
-      const courierId = await resolveCourierId(courierName);
-      if (courierId) {
-        orderPayload.delivery.data = { id: courierId, courierId: courierId, courier: courierId };
-      }
-      orderPayload.customFields = { courier: courierName, kurier: courierName };
-    } else {
-      orderPayload.delivery.data = { id: "", courierId: "", courier: "" };
-      orderPayload.customFields = { courier: "", kurier: "" };
-    }
-  }
+  
 
   if (Object.keys(orderPayload).length === 0) return;
 
