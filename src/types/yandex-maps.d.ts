@@ -5,6 +5,18 @@ declare namespace ymaps {
   type Ready = (callback: () => void) => void;
   export const ready: Ready;
 
+  // 🔥 Добавили геокодер
+  export function geocode(request: string | number[], options?: any): Promise<any>;
+
+  // 🔥 Добавили подсказки
+  export class SuggestView {
+    constructor(elementId: string | HTMLElement, options?: any);
+    events: { 
+      add(event: string, handler: (e: any) => void): void; 
+      remove(event: string, handler: (e: any) => void): void; 
+    };
+  }
+
   export namespace templateLayoutFactory {
     export function createClass(template: string, overrides?: any): any;
   }
