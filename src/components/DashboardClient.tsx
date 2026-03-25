@@ -12,9 +12,11 @@ const STORE_LNG = 37.596205;
 const STORE_COORDS = `${STORE_LAT},${STORE_LNG}`;
 
 interface User { id: string; email: string; role: string; }
-interface DbCourier { 
-  id: number; fullName: string; isActive: boolean; shifts: { date: string }[]; 
-  lat?: number | null; lng?: number | null; homeLat?: number | null; homeLng?: number | null; 
+interface DbCourier {
+  id: number; fullName: string; isActive: boolean; shifts: { date: string }[];
+  lat?: number | null; lng?: number | null;
+  homeLat?: number | null; homeLng?: number | null;
+  locationUpdatedAt?: string | null;
 }
 
 // 🔥 Расширенный интерфейс для устранения ошибок TypeScript
@@ -26,7 +28,7 @@ export interface DashboardOrder {
   slotFrom?: string | null; slotTo?: string | null; slotRaw?: string | null;
   deliveryDate?: string | null; crmCreatedAt?: string | null;
   isInvalid?: boolean; invalidReason?: string | null;
-  routeId?: string | null; routeOrder?: number | null; route?: any; 
+  routeId?: string | null; routeOrder?: number | null; route?: any;
   createdAt?: string; updatedAt?: string; changedAt?: string;
 }
 
@@ -85,7 +87,7 @@ export function DashboardClient({ user }: { user: User }) {
   const [dismissedInvalid, setDismissedInvalid] = useState(false);
   const [previewGeo, setPreviewGeo] = useState<{ lat: number, lng: number } | null>(null);
   const [fixingAI, setFixingAI] = useState(false);
-  
+
   const [mapReady, setMapReady] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: string, dir: 'asc' | 'desc' }>({ key: 'changedAt', dir: 'desc' });
 
@@ -97,7 +99,7 @@ export function DashboardClient({ user }: { user: User }) {
   const [bulkSaving, setBulkSaving] = useState(false);
   const [routeType, setRouteType] = useState<"auto" | "mt">("auto");
   const [returnToBase, setReturnToBase] = useState(true);
-  
+
   // Вкладки: Создание vs Текущие
   const [routeTabMode, setRouteTabMode] = useState<"new" | "current">("new");
   const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
@@ -210,16 +212,15 @@ export function DashboardClient({ user }: { user: User }) {
     const oDate = o.deliveryDate || (o.crmCreatedAt ? o.crmCreatedAt.split('T')[0] : null);
     if (oDate !== filterDate) return false;
     if (filterStatus !== "ALL" && o.status !== filterStatus) return false;
-    
-    // 🔥 ИСПРАВЛЕНИЕ: Теперь сравниваем по ID курьера (courierId), а не по имени
+
     if (filterCourier !== "ALL") {
       if (filterCourier === "UNASSIGNED") {
-        if (o.courierId) return false; // Если ищем "Не назначен", скрываем тех, у кого есть курьер
+        if (o.courierId) return false;
       } else {
-        if (String(o.courierId) !== filterCourier) return false; // Точное сравнение по ID
+        if (String(o.courierId) !== filterCourier) return false;
       }
     }
-    
+
     return true;
   });
 
@@ -232,12 +233,12 @@ export function DashboardClient({ user }: { user: User }) {
 
   const sidePanelOrders = [...filtered].sort((a, b) => {
     const getPriority = (o: DashboardOrder) => {
-      if (/самовывоз/i.test(o.address || "")) return 6; 
+      if (/самовывоз/i.test(o.address || "")) return 6;
       if (o.status === "IN_DELIVERY") return 1;
       if (o.status === "NEW") return 2;
       if (o.status === "ASSIGNED") return 3;
       if (o.status === "DELIVERED") return 4;
-      return 5; 
+      return 5;
     };
     const pA = getPriority(a);
     const pB = getPriority(b);
@@ -273,16 +274,16 @@ export function DashboardClient({ user }: { user: User }) {
       if (!mounted || !mapRef.current || ymapRef.current) return;
       const map = new window.ymaps.Map(mapRef.current, { center: [STORE_LAT, STORE_LNG], zoom: 11, controls: ["zoomControl"] }, {});
       map.events.add('boundschange', (e: any) => { if (e.get('newZoom') !== e.get('oldZoom')) setCurrentZoom(e.get('newZoom')); });
-      
+
       const clusterer = new window.ymaps.Clusterer({ clusterIconLayout: "default#pieChart", clusterIconPieChartRadius: 20 });
       map.geoObjects.add(clusterer);
-      
+
       const courierColl = new window.ymaps.GeoObjectCollection();
       map.geoObjects.add(courierColl);
-      
+
       const storePm = new window.ymaps.Placemark([STORE_LAT, STORE_LNG], { hintContent: "БАЗА: Большой Афанасьевский переулок, 39", iconCaption: "База" }, { preset: 'islands#blackDotIcon' });
       map.geoObjects.add(storePm as any);
-      
+
       ymapRef.current = map;
       clustererRef.current = clusterer;
       couriersGeoObjectsRef.current = courierColl;
@@ -322,13 +323,13 @@ export function DashboardClient({ user }: { user: User }) {
         remaining.sort((a, b) => {
           const timeA = a.slotFrom || "23:59";
           const timeB = b.slotFrom || "23:59";
-          if (timeA !== timeB) return timeA.localeCompare(timeB); 
-          
+          if (timeA !== timeB) return timeA.localeCompare(timeB);
+
           const dA = (a.lat && a.lng) ? dist(currentLat, currentLng, a.lat, a.lng) : Infinity;
           const dB = (b.lat && b.lng) ? dist(currentLat, currentLng, b.lat, b.lng) : Infinity;
-          return dA - dB; 
+          return dA - dB;
         });
-        
+
         const next = remaining.shift()!;
         sorted.push(next.id);
         if (next.lat && next.lng) {
@@ -342,7 +343,7 @@ export function DashboardClient({ user }: { user: User }) {
 
   // Отрисовка точек на карте
   useEffect(() => {
-    if (!mapReady) return; 
+    if (!mapReady) return;
     const clusterer = clustererRef.current;
     if (!clusterer || typeof window === "undefined" || !window.ymaps) return;
     clusterer.removeAll();
@@ -372,7 +373,6 @@ export function DashboardClient({ user }: { user: User }) {
 
       if (displayTime) {
         let pinColor = isSelected ? (previewGeo ? '#9ca3af' : '#facc15') : color;
-        // 🔥 В режиме Маршрутов (и Новый и Редактирование) красим точки
         if (isBulkMode && routeTabMode === "new") {
            pinColor = isBulkSelected ? '#1a9e5c' : '#d1d5db';
         }
@@ -388,7 +388,7 @@ export function DashboardClient({ user }: { user: User }) {
         let iconContent = undefined;
 
         if (isBulkMode && routeTabMode === "new") {
-          if (isBulkSelected) { preset = 'islands#greenIcon'; iconContent = `${bulkIndex + 1}`; } 
+          if (isBulkSelected) { preset = 'islands#greenIcon'; iconContent = `${bulkIndex + 1}`; }
           else { preset = 'islands#grayCircleDotIcon'; }
         } else {
           if (isSelected) preset = previewGeo ? "islands#grayDotIcon" : "islands#redDotIcon";
@@ -405,7 +405,7 @@ export function DashboardClient({ user }: { user: User }) {
           toggleBulkSelect(order.id);
         } else {
           clickedFromMapRef.current = true;
-          setSelectedId(order.id); 
+          setSelectedId(order.id);
           if (!isMobile) { setIsListVisible(true); setIsDetailVisible(true); }
           else setMobileView("split");
         }
@@ -422,12 +422,13 @@ export function DashboardClient({ user }: { user: User }) {
     const coll = couriersGeoObjectsRef.current;
     coll.removeAll();
     if (!showCouriers || typeof window === "undefined" || !window.ymaps) return;
-    
+
     dbCouriers.forEach(c => {
        const lat = c.lat ?? c.homeLat;
        const lng = c.lng ?? c.homeLng;
        if (lat && lng) {
-          const isLive = c.lat && c.lng;
+          const ONLINE_THRESHOLD_MS = 5 * 60 * 1000;
+          const isLive = c.lat && c.lng && c.locationUpdatedAt && (Date.now() - new Date(c.locationUpdatedAt).getTime()) < ONLINE_THRESHOLD_MS;
           const pm = new window.ymaps.Placemark([lat, lng], {
              balloonContentHeader: c.fullName, balloonContentBody: isLive ? "Текущее местоположение" : "Домашний адрес",
              hintContent: `${c.fullName} (${isLive ? "в сети" : "дома"})`, iconCaption: c.fullName,
@@ -437,7 +438,6 @@ export function DashboardClient({ user }: { user: User }) {
     });
   }, [dbCouriers, showCouriers, mapReady]);
 
-  // 🔥 Группировка текущих маршрутов
   const existingRoutes = useMemo(() => {
     const routesMap = new Map<string, any>();
     orders.forEach((o) => {
@@ -446,7 +446,7 @@ export function DashboardClient({ user }: { user: User }) {
         if (!routesMap.has(o.route.id)) {
           routesMap.set(o.route.id, {
              id: o.route.id, name: o.route.name, link: o.route.link, date: o.route.date,
-             orders: [], courierId: o.courierId, 
+             orders: [], courierId: o.courierId,
              updatedAt: o.route.updatedAt || o.changedAt || o.createdAt
           });
         }
@@ -454,34 +454,25 @@ export function DashboardClient({ user }: { user: User }) {
       }
     });
 
-    // 🔥 ИСПРАВЛЕНИЕ: Сортируем заказы внутри каждого маршрута согласно их порядку (routeOrder)
     routesMap.forEach(route => {
       route.orders.sort((a: DashboardOrder, b: DashboardOrder) => (a.routeOrder ?? 0) - (b.routeOrder ?? 0));
     });
 
-    // Сортировка по имени по убыванию
     return Array.from(routesMap.values()).sort((a, b) => b.name.localeCompare(a.name));
   }, [orders, filterDate]);
 
-  // 🔥 ИЗМЕНЕНИЕ: Обновлена логика центрирования карты при выборе заказа
   useEffect(() => {
     if (selectedId && ymapRef.current && !previewGeo && !isBulkMode) {
       const order = orders.find(o => o.id === selectedId);
       if (order?.lat && order?.lng) {
-        // Если клик был НЕ с карты (т.е. с боковой панели или таблицы),
-        // центрируем карту на точке без изменения масштаба.
         if (!clickedFromMapRef.current) {
           ymapRef.current.setCenter([order.lat, order.lng], undefined, { duration: 500 });
         }
-        // Сбрасываем флаг, чтобы следующие выборы работали корректно.
-        // При клике с карты никаких действий с картой не происходит.
         clickedFromMapRef.current = false;
       }
     }
   }, [selectedId, isBulkMode, orders, previewGeo]);
 
-
-  // Оставляем переменную для рендера списка в UI
   const selectedRouteOrders = useMemo(() => {
     return bulkSelectedIds.map(id => orders.find(o => o.id === id)).filter(Boolean) as DashboardOrder[];
   }, [bulkSelectedIds, orders]);
@@ -490,11 +481,10 @@ export function DashboardClient({ user }: { user: User }) {
     if (!isBulkMode || routeTabMode !== "new" || (isMobile && routeTab !== "list") || bulkSelectedIds.length === 0) {
       setRouteLegs([]); setRouteTotals(null); setDepartureAdvice(null); return;
     }
-    
+
     const ymapsAny = window.ymaps as any;
     if (!ymapsAny || !ymapsAny.multiRouter) return;
 
-    // 🔥 Ищем точки прямо тут, внутри эффекта
     const validOrders = bulkSelectedIds
       .map(id => orders.find(o => o.id === id))
       .filter(o => o && o.lat && o.lng) as DashboardOrder[];
@@ -526,23 +516,22 @@ export function DashboardClient({ user }: { user: User }) {
           legsArr.push(cleanHtml(path.properties.get("duration")?.text || "—"));
           if (idx < validOrders.length) {
             const legSeconds = path.properties.get("duration")?.value || 0;
-            cumulativeSeconds += legSeconds + (5 * 60); 
+            cumulativeSeconds += legSeconds + (5 * 60);
             const order = validOrders[idx];
             if (order.slotFrom) {
               const [hh, mm] = order.slotFrom.split(":").map(Number);
               if (!isNaN(hh) && !isNaN(mm)) {
                 const deadline = new Date(); deadline.setHours(hh, mm, 0, 0);
                 const requiredDeparture = new Date(deadline.getTime() - (cumulativeSeconds * 1000));
-                
+
                 if (!strictestDeparture || requiredDeparture < strictestDeparture.time) {
-                  // Сохраняем slotFrom вместо slotTo
-                  strictestDeparture = { time: requiredDeparture, externalId: order.externalId ?? order.crmId, slotTo: order.slotFrom }; 
+                  strictestDeparture = { time: requiredDeparture, externalId: order.externalId ?? order.crmId, slotTo: order.slotFrom };
                 }
               }
             }
           }
         });
-        
+
         if (strictestDeparture) {
           const sDep = strictestDeparture as { time: Date, externalId: string, slotTo: string };
           const depHH = String(sDep.time.getHours()).padStart(2, '0'); const depMM = String(sDep.time.getMinutes()).padStart(2, '0');
@@ -550,7 +539,7 @@ export function DashboardClient({ user }: { user: User }) {
         } else {
           setDepartureAdvice("Слоты не строгие, выезд в любое время");
         }
-        
+
         setRouteLegs(legsArr); setIsCalculatingRoute(false);
       });
     }, 800);
@@ -558,7 +547,6 @@ export function DashboardClient({ user }: { user: User }) {
     return () => { clearTimeout(timer); if (multiRoute) multiRoute.destroy(); };
   }, [bulkSelectedIds, routeType, returnToBase, routeTab, isBulkMode, isMobile]);
 
-  // 🔥 Изменил тип параметра на DashboardOrder
   const generateYandexUrl = (ordersToRoute: DashboardOrder[], type: "auto" | "mt", rtb: boolean) => {
     const validOrders = ordersToRoute.filter(o => o.lat && o.lng && !o.isInvalid);
     if (validOrders.length === 0) return null;
@@ -591,25 +579,24 @@ export function DashboardClient({ user }: { user: User }) {
     try {
       const res = await fetch(`/api/routes/assign`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          orderIds: bulkSelectedIds, 
-          courierId: bulkCourier, 
-          routeType, 
-          returnToBase, 
+        body: JSON.stringify({
+          orderIds: bulkSelectedIds,
+          courierId: bulkCourier,
+          routeType,
+          returnToBase,
           oldRouteId: editingRouteId,
-          departureAdvice // 🔥 Передаем совет на сервер
+          departureAdvice
         })
       });
       if (!res.ok) throw new Error("Ошибка сервера");
       setBulkCourier(""); setBulkSelectedIds([]); setEditingRouteId(null);
-      await fetchData(); 
+      await fetchData();
       alert(editingRouteId ? "✅ Изменения в маршруте сохранены!" : "✅ Маршрут создан!");
       setRouteTabMode("current");
     } catch { alert("Произошла ошибка"); }
     finally { setBulkSaving(false); }
   }
 
-  // 🔥 Восстановил правильную функцию toggleSlot
   const toggleSlot = (label: string) => {
     if (label === "all") setSelectedSlots([]);
     else setSelectedSlots(prev => prev.includes(label) ? prev.filter(x => x !== label) : [...prev, label]);
@@ -625,14 +612,14 @@ export function DashboardClient({ user }: { user: User }) {
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16, background: "#f5f4f0", padding: 4, borderRadius: 10 }}>
-        <button 
+        <button
           onClick={() => { setRouteTabMode("new"); setEditingRouteId(null); setBulkSelectedIds([]); setBulkCourier(""); }}
           style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", background: routeTabMode === "new" ? "#fff" : "transparent", color: routeTabMode === "new" ? "#1a1a18" : "#a8a49c", boxShadow: routeTabMode === "new" ? "0 2px 8px rgba(0,0,0,0.05)" : "none", transition: "all 0.2s" }}
         >
           {editingRouteId ? "✏️ Редактирование" : "Новый маршрут"}
         </button>
-        <button 
-          onClick={() => { setRouteTabMode("current"); setEditingRouteId(null); }} 
+        <button
+          onClick={() => { setRouteTabMode("current"); setEditingRouteId(null); }}
           style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", background: routeTabMode === "current" ? "#fff" : "transparent", color: routeTabMode === "current" ? "#1a1a18" : "#a8a49c", boxShadow: routeTabMode === "current" ? "0 2px 8px rgba(0,0,0,0.05)" : "none", transition: "all 0.2s" }}
         >
           Текущие ({existingRoutes.length})
@@ -644,11 +631,10 @@ export function DashboardClient({ user }: { user: User }) {
           {existingRoutes.length === 0 && <div style={{ textAlign: "center", color: "#a8a49c", padding: 20 }}>Нет маршрутов на {filterDate}</div>}
           {existingRoutes.map(r => (
             <div key={r.id} onClick={() => {
-              // 🔥 ВАЖНО: При клике мы подгружаем точки маршрута и включаем карту (режим "new")
               setBulkSelectedIds(r.orders.map((o: any) => o.id));
               setBulkCourier(String(r.courierId));
               setEditingRouteId(r.id);
-              setRouteTabMode("new"); 
+              setRouteTabMode("new");
             }} style={{ background: "#fafaf8", border: "1px solid #e8e6df", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18" }}>
@@ -695,7 +681,6 @@ export function DashboardClient({ user }: { user: User }) {
 
           <div style={{ display: "flex", gap: 10, marginBottom: 20, flexDirection: "column" }}>
             <button onClick={optimizeRoute} style={{ ...s.actionBtn, background: "#f4f7ff", color: "#4a7aff", border: "1px solid #c9d8ff" }}>✨ Умная оптимизация (Время + Расстояние)</button>
-            {/* 🔥 Вернул кнопки действий с маршрутом */}
             {selectedRouteOrders.length > 0 && (
               <div style={{ display: "flex", gap: 8 }}>
                  <button onClick={() => handleOpenRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "#fff", color: "#1a1a18", border: "1px solid #e8e6df" }}>🗺️ Открыть в Яндексе</button>
@@ -717,7 +702,7 @@ export function DashboardClient({ user }: { user: User }) {
           <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Очередь доставки ({bulkSelectedIds.length})</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {routeLegs[0] && <div style={{ fontSize: 11, color: "#a8a49c", paddingLeft: 46, paddingBottom: 6 }}>↓ {routeLegs[0]} от базы</div>}
-            
+
             {selectedRouteOrders.map((o, index) => (
               <Fragment key={o.id}>
                 <div style={{ padding: "10px 12px", background: "#fff", border: "1px solid #e8e6df", borderRadius: 8, display: "flex", gap: 12, alignItems: "center" }}>
@@ -860,7 +845,7 @@ export function DashboardClient({ user }: { user: User }) {
             )}
 
             <div style={{ flex: 1, position: 'relative', display: "flex", flexDirection: "row", minWidth: 0 }}>
-              
+
               {isBulkMode && (
                 <div style={{ width: 600, flexShrink: 0, background: "#f5f4f0", borderRight: "1px solid #e8e6df", zIndex: 10, display: "flex", flexDirection: "column" }}>
                   <div style={{ flex: 1, overflowY: "auto", overflowX: "auto", padding: 16 }}>
@@ -878,7 +863,7 @@ export function DashboardClient({ user }: { user: User }) {
                   </div>
                 )}
               </div>
-              
+
             </div>
           </div>
         )}

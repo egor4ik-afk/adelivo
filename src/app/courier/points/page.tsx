@@ -55,7 +55,9 @@ export default function CourierPointsPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // 🔥 ПОСТОЯННЫЙ ФОНОВЫЙ ТРЕКИНГ GPS
+  const lastLocationSentRef = useRef<number>(0);
+  const lastLocationRef = useRef<[number, number] | null>(null);
+
   useEffect(() => {
     if (typeof window !== "undefined" && navigator.geolocation) {
       const watchId = navigator.geolocation.watchPosition(
@@ -63,12 +65,19 @@ export default function CourierPointsPage() {
           const lat = pos.coords.latitude;
           const lng = pos.coords.longitude;
           setUserLocation([lat, lng]);
-          
-          // Отправка координат в фоне на сервер
+
+          const now = Date.now();
+          const last = lastLocationRef.current;
+          const distChanged = !last || Math.abs(lat - last[0]) > 0.0005 || Math.abs(lng - last[1]) > 0.0005;
+          const timeOk = now - lastLocationSentRef.current > 30_000;
+          if (!distChanged && !timeOk) return;
+          lastLocationSentRef.current = now;
+          lastLocationRef.current = [lat, lng];
+
           fetch("/api/courier/location", {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ lat, lng })
-          }).catch(() => {});
+          }).catch(() => { });
         },
         (err) => console.warn("Геолокация недоступна", err),
         { enableHighAccuracy: true, maximumAge: 10000, timeout: 10000 }
@@ -81,7 +90,7 @@ export default function CourierPointsPage() {
     if (!userLocation || !window?.ymaps?.multiRouter || !ymapRef.current) return;
 
     if (activeRouteRef.current) {
-      try { ymapRef.current.geoObjects.remove(activeRouteRef.current); } catch {}
+      try { ymapRef.current.geoObjects.remove(activeRouteRef.current); } catch { }
     }
     setRouteInfo(null);
 
@@ -89,7 +98,7 @@ export default function CourierPointsPage() {
       referencePoints: [userLocation, to],
       params: { routingMode: mode === "mt" ? "masstransit" : "auto" }
     }, {
-      boundsAutoApply: true, 
+      boundsAutoApply: true,
       wayPointVisible: false,
       routeActiveStrokeWidth: 6,
       routeActiveStrokeColor: "#4a7aff",
@@ -124,9 +133,10 @@ export default function CourierPointsPage() {
       mapInitialized.current = true;
       ymapRef.current = new window.ymaps.Map(mapRef.current, {
         center: [55.75, 37.61], zoom: 11, controls: ["zoomControl", "geolocationControl"],
-        behaviors: ['default', 'scrollZoom', 'multiTouch'] // 🔥 Добавлено для вращения 2 пальцами
+        behaviors: ['default', 'scrollZoom', 'multiTouch', 'pinchZoom']
       }, { suppressMapOpenBlock: true });
-
+      ymapRef.current.behaviors.enable('pinchZoom');
+      ymapRef.current.behaviors.enable('multiTouch');
       ymapRef.current.container.fitToViewport();
       setMapReady(true);
     }
@@ -160,21 +170,20 @@ export default function CourierPointsPage() {
       const pm = new window.ymaps.Placemark([o.lat, o.lng], {
         hintContent: o.address, iconContent: o.routeOrder ? String(o.routeOrder) : undefined,
       }, {
-        preset: isSelected ? "islands#redCircleIcon" : 
-                o.status === "DELIVERED" ? "islands#grayCircleIcon" :
-                o.status === "IN_DELIVERY" ? "islands#greenCircleIcon" : "islands#blueCircleIcon",
+        preset: isSelected ? "islands#redCircleIcon" :
+          o.status === "DELIVERED" ? "islands#grayCircleIcon" :
+            o.status === "IN_DELIVERY" ? "islands#greenCircleIcon" : "islands#blueCircleIcon",
       });
 
       pm.events.add("click", () => {
         setActiveOrderId(o.id);
-        setIsCardMinimized(false); // Разворачиваем плашку при клике на точку
+        setIsCardMinimized(false);
       });
 
       ymapRef.current.geoObjects.add(pm);
       markersRef.current.set(o.id, pm);
     });
 
-    // 🔥 Зуммируем карту ТОЛЬКО ОДИН РАЗ при загрузке данных
     if (filteredOrders.length > 0 && !boundsInitialized.current) {
       boundsInitialized.current = true;
       const lats = filteredOrders.map(o => o.lat!);
@@ -184,12 +193,12 @@ export default function CourierPointsPage() {
   }, [orders, filterStatus, filterDate, mapReady, activeOrderId]);
 
   const activeOrder = orders.find(o => o.id === activeOrderId);
-  const yandexMapsUrl = activeOrder && userLocation 
+  const yandexMapsUrl = activeOrder && userLocation
     ? `https://yandex.ru/maps/?rtext=${userLocation[0]},${userLocation[1]}~${activeOrder.lat},${activeOrder.lng}&rtt=${routeType}` : "#";
 
   return (
     <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: `calc(var(--nav-height, ${NAV_HEIGHT}px) + env(safe-area-inset-bottom))`, display: "flex", flexDirection: "column", background: "#f5f4f0" }}>
-      
+
       <div style={{ padding: "8px 12px", background: "#fff", borderBottom: "1px solid #e8e6df", zIndex: 100, display: "flex", gap: 6, overflowX: "auto", flexShrink: 0, alignItems: "center" }}>
         <input type="date" value={filterDate} onChange={(e) => { setFilterDate(e.target.value); setActiveOrderId(null); boundsInitialized.current = false; }} style={{ padding: "5px 10px", borderRadius: 20, border: "1px solid #e8e6df", fontSize: 12, fontWeight: 600, color: "#1a1a18", outline: "none", background: "#fafaf8" }} />
         <div style={{ width: 1, height: 20, background: "#e8e6df", flexShrink: 0, margin: "0 4px" }} />
@@ -202,8 +211,7 @@ export default function CourierPointsPage() {
 
       {activeOrder && (
         <div style={{ position: "absolute", top: 56, left: 12, right: 12, zIndex: 110, background: "#fff", padding: isCardMinimized ? "8px 12px" : "12px", borderRadius: 12, border: "1px solid #e8e6df", boxShadow: "0 4px 15px rgba(0,0,0,0.1)", display: "flex", flexDirection: "column", gap: isCardMinimized ? 0 : 10, transition: "all 0.3s" }}>
-          
-          {/* Свернутый вид */}
+
           {isCardMinimized ? (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: "#4a7aff" }}>
@@ -216,7 +224,6 @@ export default function CourierPointsPage() {
             </div>
           ) : (
             <>
-              {/* Полный вид */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div style={{ paddingRight: 10 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", lineHeight: 1.3 }}>{activeOrder.address}</div>
@@ -227,7 +234,7 @@ export default function CourierPointsPage() {
                   <button onClick={() => { setActiveOrderId(null); setRouteInfo(null); }} style={{ border: "none", background: "#f5f4f0", width: 26, height: 26, borderRadius: "50%", fontSize: 14, color: "#6b6860" }}>✕</button>
                 </div>
               </div>
-              
+
               <div style={{ display: "flex", gap: 8, alignItems: "center", background: "#f5f4f0", padding: "6px 8px", borderRadius: 8 }}>
                 <div style={{ display: "flex", background: "#e8e6df", borderRadius: 6, padding: 2 }}>
                   <button onClick={() => setRouteType("auto")} style={{ padding: "4px 8px", borderRadius: 4, border: "none", fontSize: 12, fontWeight: 600, background: routeType === "auto" ? "#fff" : "transparent", color: routeType === "auto" ? "#1a1a18" : "#6b6860" }}>🚗</button>
@@ -241,7 +248,7 @@ export default function CourierPointsPage() {
                   <div style={{ flex: 1, textAlign: "right", fontSize: 12, color: "#a8a49c", fontWeight: 600 }}>{userLocation ? "Считаем..." : "Включите GPS"}</div>
                 )}
               </div>
-              
+
               <div style={{ display: "flex", gap: 8 }}>
                 <a href={yandexMapsUrl} target="_blank" rel="noopener noreferrer" style={{ flex: 1, padding: "8px", borderRadius: 8, background: "#facc15", color: "#1a1a18", textDecoration: "none", textAlign: "center", fontSize: 12, fontWeight: 700 }}>🗺 В навигатор</a>
                 {activeOrder.status === "ASSIGNED" && (
@@ -256,7 +263,7 @@ export default function CourierPointsPage() {
         </div>
       )}
 
-      <div ref={mapRef} style={{ flex: 1, width: "100%", touchAction: 'none', background: "#e8e6df" }} />
+      <div ref={mapRef} style={{ flex: 1, width: "100%", touchAction: 'none' }} />
     </div>
   );
 }

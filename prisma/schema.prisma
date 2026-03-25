@@ -98,22 +98,23 @@ model PushSubscription {
 }
 
 model Courier {
-  id          Int      @id // Внутренний ID курьера из CRM
-  firstName   String?
-  lastName    String?
-  patronymic  String?
-  fullName    String   // Склеенное ФИО для удобного поиска
-  phone       String?
-  email       String?
-  description String?  // Примечание из CRM
-  isActive    Boolean  @default(true) // Работает ли он вообще в компании
-  lat         Float?   // Текущая широта (с телефона курьера)
-  lng         Float?   // Текущая долгота
-  homeLat     Float?   // Домашняя широта
-  homeLng     Float?   // Домашняя долгота
-  homeAddress String?  // 🔥 НОВОЕ: Домашний адрес текстом
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                Int        @id // Внутренний ID курьера из CRM
+  firstName         String?
+  lastName          String?
+  patronymic        String?
+  fullName          String   // Склеенное ФИО для удобного поиска
+  phone             String?
+  email             String?
+  description       String?  // Примечание из CRM
+  isActive          Boolean    @default(true) // Работает ли он вообще в компании
+  lat               Float?   // Текущая широта (с телефона курьера)
+  lng               Float?   // Текущая долгота
+  locationUpdatedAt DateTime?
+  homeLat           Float?   // Домашняя широта
+  homeLng           Float?   // Домашняя долгота
+  homeAddress       String?  // 🔥 НОВОЕ: Домашний адрес текстом
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
 
   // Связи
   shifts      CourierShift[]
