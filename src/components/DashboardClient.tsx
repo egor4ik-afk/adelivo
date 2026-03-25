@@ -210,7 +210,16 @@ export function DashboardClient({ user }: { user: User }) {
     const oDate = o.deliveryDate || (o.crmCreatedAt ? o.crmCreatedAt.split('T')[0] : null);
     if (oDate !== filterDate) return false;
     if (filterStatus !== "ALL" && o.status !== filterStatus) return false;
-    if (filterCourier !== "ALL" && (o.courier || "UNASSIGNED") !== filterCourier) return false;
+    
+    // 🔥 ИСПРАВЛЕНИЕ: Теперь сравниваем по ID курьера (courierId), а не по имени
+    if (filterCourier !== "ALL") {
+      if (filterCourier === "UNASSIGNED") {
+        if (o.courierId) return false; // Если ищем "Не назначен", скрываем тех, у кого есть курьер
+      } else {
+        if (String(o.courierId) !== filterCourier) return false; // Точное сравнение по ID
+      }
+    }
+    
     return true;
   });
 

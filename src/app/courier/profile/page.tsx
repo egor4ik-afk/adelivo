@@ -1,231 +1,137 @@
-// src/components/ProfilePanel.tsx
+// src/app/courier/profile/page.tsx
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
+import { usePushNotifications } from "@/components/usePushNotifications";
 import { IMaskInput } from "react-imask";
+import { NAV_HEIGHT } from "@/components/CourierNav";
 
-interface Props {
-  onClose: () => void;
-  onLogout: () => void;
+interface Profile {
+  id: string; email: string; firstName: string | null; lastName: string | null; phone: string | null; homeAddress: string | null;
 }
 
-interface ProfileData {
-  firstName: string;
-  lastName: string;
-  phone: string;
-  homeAddress: string;
-  homeLat?: number | null;
-  homeLng?: number | null;
-  notifyNewOrder: boolean;
-  notifyStatus: boolean;
-  notifyCourier: boolean;
-  notifyAddress: boolean;
-  notifyTime: boolean;
-  notifyComment: boolean;
-  notifyOpComment: boolean;
-  notifyItems: boolean;
-}
-
-export default function ProfilePanel({ onClose, onLogout }: Props) {
-  const [loading, setLoading] = useState(true);
+export default function CourierProfilePage() {
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [editingProfile, setEditingProfile] = useState(false);
+  
+  const [newPhone, setNewPhone] = useState("");
+  const [newFirstName, setNewFirstName] = useState("");
+  const [newLastName, setNewLastName] = useState("");
+  const [newHomeAddress, setNewHomeAddress] = useState(""); // 🔥 Новое поле
+  
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [myShifts, setMyShifts] = useState<string[]>([]);
+  const [pwaPrompt, setPwaPrompt] = useState<any>(null);
+  const [isStandalone, setIsStandalone] = useState(true);
 
-  const [formData, setFormData] = useState<ProfileData>({
-    firstName: "", lastName: "", phone: "", homeAddress: "",
-    homeLat: null, homeLng: null,
-    notifyNewOrder: false, notifyStatus: false, notifyCourier: false,
-    notifyAddress: false, notifyTime: false, notifyComment: false,
-    notifyOpComment: false, notifyItems: false,
+  const { state: pushState, subscribe, unsubscribe } = usePushNotifications();
+  const isSubscribed = pushState === "granted";
+  const needsPushBanner = pushState === "default";
+
+  const days = Array.from({ length: 7 }).map((_, i) => {
+    const d = new Date(); d.setDate(d.getDate() + i);
+    return { date: d.toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }), dayName: d.toLocaleDateString("ru-RU", { weekday: "short" }), dayNum: d.getDate() };
   });
 
-  // Загрузка данных профиля
-  const fetchProfile = useCallback(async () => {
-    try {
-      const res = await fetch("/api/profile");
-      if (!res.ok) throw new Error("Ошибка загрузки профиля");
-      const data = await res.json();
-      
-      setFormData({
-        firstName: data.firstName || "",
-        lastName: data.lastName || "",
-        phone: data.phone || "",
-        homeAddress: data.homeAddress || "",
-        // Настройки уведомлений
-        notifyNewOrder: !!data.notifyNewOrder,
-        notifyStatus: !!data.notifyStatus,
-        notifyCourier: !!data.notifyCourier,
-        notifyAddress: !!data.notifyAddress,
-        notifyTime: !!data.notifyTime,
-        notifyComment: !!data.notifyComment,
-        notifyOpComment: !!data.notifyOpComment,
-        notifyItems: !!data.notifyItems,
-      });
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
+  useEffect(() => {
+    fetch("/api/profile").then(r => r.json()).then(data => {
+      setProfile(data);
+      setNewPhone(data.phone || "");
+      setNewFirstName(data.firstName || "");
+      setNewLastName(data.lastName || "");
+      setNewHomeAddress(data.homeAddress || "");
+    });
+
+    fetch("/api/courier/my-shifts").then(r => r.json()).then(data => { if (Array.isArray(data)) setMyShifts(data); });
+
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || ('standalone' in window.navigator && (window.navigator as any).standalone);
+    setIsStandalone(standalone);
+
+    const handleBeforeInstall = (e: Event) => { e.preventDefault(); setPwaPrompt(e); };
+    window.addEventListener("beforeinstallprompt", handleBeforeInstall);
+    return () => window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
   }, []);
 
-  useEffect(() => {
-    fetchProfile();
-  }, [fetchProfile]);
-
-  // 🔥 Подключение Яндекс Подсказок (SuggestView)
-  useEffect(() => {
-    if (typeof window !== "undefined" && (window as any).ymaps) {
-      (window as any).ymaps.ready(() => {
-        const ymaps = (window as any).ymaps;
-        
-        // Привязываемся к input по ID
-        const suggestView = new ymaps.SuggestView("home-address-input", { 
-          results: 5,
-          boundedBy: [[55.55, 37.35], [55.95, 37.85]], // Ограничиваем подсказки Москвой и МО (опционально)
-        });
-
-        // Когда курьер выбрал адрес из выпадающего списка
-        suggestView.events.add("select", (e: any) => {
-          const selectedStr = e.get("item").value;
-          
-          setFormData(prev => ({ ...prev, homeAddress: selectedStr }));
-
-          // Сразу получаем координаты выбранного адреса
-          ymaps.geocode(selectedStr).then((res: any) => {
-            const firstGeoObject = res.geoObjects.get(0);
-            if (firstGeoObject) {
-              const coords = firstGeoObject.geometry.getCoordinates();
-              setFormData(prev => ({ ...prev, homeLat: coords[0], homeLng: coords[1] }));
-            }
-          });
-        });
-      });
-    }
-  }, [loading]); // Инициализируем после того, как инпут отрендерился
-
-  const handleSave = async () => {
-    setSaving(true);
-    setError(null);
+  const toggleShift = async (date: string) => {
+    const isWorking = !myShifts.includes(date);
+    setMyShifts(prev => isWorking ? [...prev, date] : prev.filter(d => d !== date));
     try {
-      const res = await fetch("/api/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || "Ошибка сохранения");
-      }
-
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-      
-      // Закрываем панель после успешного сохранения
-      setTimeout(() => onClose(), 1000);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setSaving(false);
+      await fetch("/api/courier/my-shifts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date, isWorking }) });
+    } catch (e) {
+      alert("Ошибка сохранения смены.");
+      setMyShifts(prev => !isWorking ? [...prev, date] : prev.filter(d => d !== date));
     }
   };
 
-  if (loading) return <div style={s.panel}><div style={{ padding: 20 }}>Загрузка...</div></div>;
+  const handleSaveProfile = async () => {
+    setSaving(true);
+    const cleanPhone = newPhone.replace(/[^\d+]/g, "");
+    try {
+      await fetch("/api/profile", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: cleanPhone, firstName: newFirstName, lastName: newLastName, homeAddress: newHomeAddress })
+      });
+      setProfile(p => p ? { ...p, phone: cleanPhone, firstName: newFirstName, lastName: newLastName, homeAddress: newHomeAddress } : null);
+      setEditingProfile(false);
+    } catch (e) { alert("Не удалось сохранить данные"); } finally { setSaving(false); }
+  };
+
+  const handleLogout = () => { document.cookie = "flowerops_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"; window.location.href = "/login"; };
+  const handleSubscribe = async () => { /* ... */ };
+  const installPWA = async () => { /* ... */ };
+
+  if (!profile) return <div style={{ padding: 20, textAlign: "center", color: "#a8a49c" }}>Загрузка профиля...</div>;
 
   return (
-    <div style={s.panel} onClick={e => e.stopPropagation()}>
-      <div style={s.header}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: "#1a1a18" }}>Мой профиль</div>
-        <button onClick={onClose} style={s.closeBtn}>✕</button>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#f5f4f0", overflowY: "auto", paddingBottom: 80 }}>
+      <div style={{ padding: "24px 16px", background: "#fff", display: "flex", alignItems: "center", gap: 16, borderBottom: "1px solid #e8e6df" }}>
+        <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#4a7aff", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 700, flexShrink: 0 }}>
+          {(profile.firstName?.[0] || "") + (profile.lastName?.[0] || "")}
+        </div>
+        <div style={{ flex: 1, overflow: "hidden" }}>
+          <h1 style={{ margin: 0, fontSize: 20, color: "#1a1a18", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{profile.firstName} {profile.lastName}</h1>
+          <p style={{ margin: 0, fontSize: 13, color: "#a8a49c", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Курьер • {profile.email}</p>
+        </div>
       </div>
 
-      <div style={s.content}>
-        {error && <div style={s.errorBadge}>{error}</div>}
+      <div style={{ padding: 16 }}>
+        <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
+          <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", margin: "0 0 12px 0", textTransform: "uppercase" }}>Настройки</h2>
 
-        <div style={s.sectionTitle}>Личные данные</div>
-        <div style={s.inputGroup}>
-          <input style={s.input} placeholder="Имя" value={formData.firstName} onChange={e => setFormData({ ...formData, firstName: e.target.value })} />
-          <input style={s.input} placeholder="Фамилия" value={formData.lastName} onChange={e => setFormData({ ...formData, lastName: e.target.value })} />
-        </div>
-        
-        <div style={{ marginBottom: 16 }}>
-          <IMaskInput
-            mask="+7 (000) 000-00-00"
-            value={formData.phone}
-            onAccept={(val: string) => setFormData({ ...formData, phone: val })}
-            placeholder="Телефон"
-            style={s.input}
-          />
-        </div>
-
-        {/* 🔥 Поле адреса с привязанным Яндекс.SuggestView */}
-        <div style={{ marginBottom: 24 }}>
-          <div style={s.sectionTitle}>Домашний адрес (База курьера)</div>
-          <input
-            id="home-address-input"
-            style={s.input}
-            placeholder="Начните вводить адрес..."
-            value={formData.homeAddress}
-            onChange={e => {
-              setFormData({ ...formData, homeAddress: e.target.value, homeLat: null, homeLng: null });
-            }}
-          />
-          {formData.homeLat && formData.homeLng && (
-            <div style={{ fontSize: 10, color: "#1a9e5c", marginTop: 4, fontWeight: 600 }}>
-              ✓ Координаты найдены
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "12px 0", borderBottom: "1px solid #f0efe9" }}>
+            <div style={{ flex: 1, paddingRight: 16 }}>
+              {!editingProfile ? (
+                <>
+                  <div style={{ fontSize: 13, color: "#a8a49c" }}>Личные данные</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: "#1a1a18", marginTop: 4 }}>{profile.firstName} {profile.lastName}</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: "#1a1a18", marginTop: 4 }}>{profile.phone || "Телефон не указан"}</div>
+                  <div style={{ fontSize: 13, color: "#a8a49c", marginTop: 8 }}>Домашний адрес (для карты)</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "#1a1a18", marginTop: 2 }}>{profile.homeAddress || "Не указан"}</div>
+                </>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div><div style={{ fontSize: 12, color: "#a8a49c", marginBottom: 4 }}>Имя</div><input value={newFirstName} onChange={e => setNewFirstName(e.target.value)} style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontSize: 14 }} /></div>
+                  <div><div style={{ fontSize: 12, color: "#a8a49c", marginBottom: 4 }}>Фамилия</div><input value={newLastName} onChange={e => setNewLastName(e.target.value)} style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontSize: 14 }} /></div>
+                  <div>
+                    <div style={{ fontSize: 12, color: "#a8a49c", marginBottom: 4 }}>Телефон</div>
+                    <IMaskInput mask="+7 (000) 000-00-00" value={newPhone} onAccept={(value: string) => setNewPhone(value)} placeholder="+7 (___) ___-__-__" style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontSize: 14 }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, color: "#a8a49c", marginBottom: 4 }}>Домашний адрес (Город, Улица, Дом)</div>
+                    <input value={newHomeAddress} onChange={e => setNewHomeAddress(e.target.value)} placeholder="Москва, ул. Пушкина, д. 1" style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontSize: 14 }} />
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+            
+            {!editingProfile ? (
+              <button onClick={() => setEditingProfile(true)} style={{ background: "none", border: "none", color: "#4a7aff", fontSize: 13, fontWeight: 600, padding: "10px 0", cursor: "pointer" }}>Изменить</button>
+            ) : (
+              <button onClick={handleSaveProfile} disabled={saving} style={{ background: "#4a7aff", border: "none", color: "#fff", padding: "8px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", marginTop: 18 }}>{saving ? "..." : "Сохранить"}</button>
+            )}
+          </div>
         </div>
-
-        <div style={s.sectionTitle}>Уведомления (Push)</div>
-        <div style={s.togglesList}>
-          <Toggle label="Новые заказы" checked={formData.notifyNewOrder} onChange={v => setFormData({ ...formData, notifyNewOrder: v })} />
-          <Toggle label="Изменение статуса" checked={formData.notifyStatus} onChange={v => setFormData({ ...formData, notifyStatus: v })} />
-          <Toggle label="Смена курьера" checked={formData.notifyCourier} onChange={v => setFormData({ ...formData, notifyCourier: v })} />
-          <Toggle label="Изменение адреса" checked={formData.notifyAddress} onChange={v => setFormData({ ...formData, notifyAddress: v })} />
-          <Toggle label="Изменение времени" checked={formData.notifyTime} onChange={v => setFormData({ ...formData, notifyTime: v })} />
-          <Toggle label="Комментарий оператора" checked={formData.notifyOpComment} onChange={v => setFormData({ ...formData, notifyOpComment: v })} />
-        </div>
-
-      </div>
-
-      <div style={s.footer}>
-        <button onClick={onLogout} style={s.logoutBtn}>Выйти</button>
-        <button onClick={handleSave} disabled={saving} style={{ ...s.saveBtn, background: saved ? "#1a9e5c" : "#4a7aff" }}>
-          {saving ? "Сохраняем..." : saved ? "✓ Сохранено" : "Сохранить"}
-        </button>
+        <button onClick={handleLogout} style={{ width: "100%", background: "rgba(217,64,64,0.08)", color: "#d94040", border: "1px solid rgba(217,64,64,0.2)", padding: 14, borderRadius: 12, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Выйти из аккаунта</button>
       </div>
     </div>
   );
 }
-
-// Вспомогательный компонент для переключателей
-function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", padding: "8px 0", borderBottom: "1px solid #f5f4f0" }}>
-      <span style={{ fontSize: 13, color: "#1a1a18", fontWeight: 500 }}>{label}</span>
-      <input 
-        type="checkbox" 
-        checked={checked} 
-        onChange={e => onChange(e.target.checked)} 
-        style={{ accentColor: "#4a7aff", width: 18, height: 18, cursor: "pointer" }} 
-      />
-    </label>
-  );
-}
-
-// Стили
-const s: Record<string, React.CSSProperties> = {
-  panel: { width: 340, background: "#fff", borderRadius: 12, boxShadow: "0 8px 32px rgba(0,0,0,0.12)", border: "1px solid #e8e6df", display: "flex", flexDirection: "column", maxHeight: "85vh", overflow: "hidden" },
-  header: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid #f0efe9", background: "#fafaf8" },
-  closeBtn: { background: "none", border: "none", fontSize: 16, color: "#a8a49c", cursor: "pointer" },
-  content: { padding: 20, overflowY: "auto", flex: 1 },
-  sectionTitle: { fontSize: 11, color: "#a8a49c", textTransform: "uppercase", letterSpacing: ".4px", fontWeight: 700, marginBottom: 8 },
-  inputGroup: { display: "flex", gap: 8, marginBottom: 8 },
-  input: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #e8e6df", fontSize: 13, background: "#fafaf8", outline: "none", color: "#1a1a18", fontWeight: 500 },
-  togglesList: { display: "flex", flexDirection: "column" },
-  footer: { padding: "16px 20px", borderTop: "1px solid #f0efe9", display: "flex", gap: 12, background: "#fafaf8" },
-  logoutBtn: { flex: 1, padding: "10px", borderRadius: 8, border: "1px solid #e8e6df", background: "#fff", color: "#d94040", fontSize: 13, fontWeight: 700, cursor: "pointer" },
-  saveBtn: { flex: 2, padding: "10px", borderRadius: 8, border: "none", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "background 0.2s" },
-  errorBadge: { background: "rgba(217,64,64,0.1)", color: "#d94040", padding: "8px 12px", borderRadius: 8, fontSize: 12, marginBottom: 16, fontWeight: 600 },
-};
