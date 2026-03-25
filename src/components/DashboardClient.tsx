@@ -507,13 +507,15 @@ export function DashboardClient({ user }: { user: User }) {
             const legSeconds = path.properties.get("duration")?.value || 0;
             cumulativeSeconds += legSeconds + (5 * 60); 
             const order = validOrders[idx];
-            if (order.slotTo) {
-              const [hh, mm] = order.slotTo.split(":").map(Number);
+            if (order.slotFrom) {
+              const [hh, mm] = order.slotFrom.split(":").map(Number);
               if (!isNaN(hh) && !isNaN(mm)) {
                 const deadline = new Date(); deadline.setHours(hh, mm, 0, 0);
                 const requiredDeparture = new Date(deadline.getTime() - (cumulativeSeconds * 1000));
+                
                 if (!strictestDeparture || requiredDeparture < strictestDeparture.time) {
-                  strictestDeparture = { time: requiredDeparture, externalId: order.externalId ?? order.crmId, slotTo: order.slotTo };
+                  // Сохраняем slotFrom вместо slotTo
+                  strictestDeparture = { time: requiredDeparture, externalId: order.externalId ?? order.crmId, slotTo: order.slotFrom }; 
                 }
               }
             }
