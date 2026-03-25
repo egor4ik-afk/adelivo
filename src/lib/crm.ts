@@ -17,6 +17,7 @@ async function resolveCourierId(name: string): Promise<number | null> {
 }
 
 export function parseSlot(raw: unknown) {
+  console.log("[parseSlot] raw =", JSON.stringify(raw)); // ← добавь
   if (!raw) return { from: null, to: null, text: null };
   if (typeof raw === "object" && raw !== null) {
     const r = raw as Record<string, string>;
