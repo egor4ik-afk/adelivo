@@ -1,15 +1,14 @@
 // src/app/api/profile/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth"; // Используем твою мощную функцию!
 import { z } from "zod";
 
-// Схема валидации (чтобы поля краснели при ошибках)
 const updateSchema = z.object({
-  firstName: z.string().min(1, "Имя не может быть пустым").max(50, "Слишком длинное имя").optional(),
-  lastName:  z.string().max(50, "Слишком длинная фамилия").optional(),
-  phone:     z.string().max(20, "Слишком длинный номер телефона").optional(),
-  homeAddress: z.string().max(200, "Слишком длинный адрес").optional(),
+  firstName: z.string().min(1).max(50).optional(),
+  lastName:  z.string().max(50).optional(),
+  phone:     z.string().max(20).optional(),
+  homeAddress: z.string().max(200).optional(), // 🔥 Добавили валидацию адреса
   
   // Настройки уведомлений
   notifyNewOrder:  z.boolean().optional(),
@@ -24,92 +23,72 @@ const updateSchema = z.object({
 
 // GET /api/profile
 export async function GET(req: NextRequest) {
-  // 1. Используем твой getSession. Он сам разберется с await cookies() и именем flowerops_session
-  const userAuth = await getSession(req);
-  if (!userAuth) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
+  const user = await getSession(req);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // 2. Достаем полные данные пользователя (включая настройки и телефон)
-  const user = await prisma.user.findUnique({
-    where: { id: userAuth.id },
+  const profile = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: {
+      id: true, email: true, role: true,
+      firstName: true, lastName: true, phone: true,
+      lastLoginAt: true, createdAt: true,
+      notifyNewOrder: true, notifyStatus: true, notifyCourier: true,
+      notifyAddress: true, notifyTime: true, notifyComment: true,
+      notifyOpComment: true, notifyItems: true,
+    },
   });
-  if (!user) return NextResponse.json({ error: "Профиль не найден" }, { status: 404 });
 
-  // 3. Ищем адрес курьера, если есть email
+  if (!profile) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+  // 🔥 Подтягиваем адрес из таблицы Courier
   let homeAddress = "";
-  if (user.email) {
-    const courier = await prisma.courier.findFirst({ where: { email: user.email } });
+  if (profile.email) {
+    const courier = await prisma.courier.findFirst({ where: { email: profile.email } });
     homeAddress = courier?.homeAddress || "";
   }
 
-  // Отдаем всё вместе
-  return NextResponse.json({
-    id: user.id, 
-    email: user.email, 
-    role: user.role,
-    firstName: user.firstName, 
-    lastName: user.lastName, 
-    phone: user.phone,
-    notifyNewOrder: user.notifyNewOrder,
-    notifyStatus: user.notifyStatus,
-    notifyCourier: user.notifyCourier,
-    notifyAddress: user.notifyAddress,
-    notifyTime: user.notifyTime,
-    notifyComment: user.notifyComment,
-    notifyOpComment: user.notifyOpComment,
-    notifyItems: user.notifyItems,
-    homeAddress // Домашний адрес из таблицы курьера
-  });
+  // Склеиваем и отдаем на клиент
+  return NextResponse.json({ ...profile, homeAddress });
 }
 
 // PATCH /api/profile
 export async function PATCH(req: NextRequest) {
+  const user = await getSession(req);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   try {
-    // Снова доверяем авторизацию твоей функции
-    const userAuth = await getSession(req);
-    if (!userAuth) return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
-
     const body = await req.json();
+    
+    // 🔥 Отделяем homeAddress от остальных данных, так как они лежат в разных таблицах
+    const { homeAddress, ...userData } = updateSchema.parse(body);
 
-    // Безопасная валидация
-    const validationResult = updateSchema.safeParse(body);
-    if (!validationResult.success) {
-      return NextResponse.json(
-        { 
-          error: "Ошибка валидации", 
-          details: validationResult.error.flatten().fieldErrors 
-        }, 
-        { status: 400 }
-      );
-    }
+    // 1. Обновляем таблицу User
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: userData,
+      select: {
+        id: true, email: true, role: true,
+        firstName: true, lastName: true, phone: true,
+        notifyNewOrder: true, notifyStatus: true, notifyCourier: true,
+        notifyAddress: true, notifyTime: true, notifyComment: true,
+        notifyOpComment: true, notifyItems: true,
+      },
+    });
 
-    const data = validationResult.data;
-    const { homeAddress, ...userUpdateData } = data;
+    // 2. Обновляем таблицу Courier (сохраняем адрес и дублируем телефон для надежности)
+    if (user.email && (homeAddress !== undefined || userData.phone !== undefined)) {
+      const courierData: { homeAddress?: string; phone?: string } = {};
+      if (homeAddress !== undefined) courierData.homeAddress = homeAddress;
+      if (userData.phone !== undefined) courierData.phone = userData.phone;
 
-    // Обновляем модель User (имя, телефон, уведомления)
-    if (Object.keys(userUpdateData).length > 0) {
-      await prisma.user.update({
-        where: { id: userAuth.id },
-        data: userUpdateData
+      await prisma.courier.updateMany({
+        where: { email: user.email },
+        data: courierData
       });
     }
 
-    // Обновляем модель Courier (телефон и адрес)
-    if (userAuth.email) {
-      const courierUpdateData: { phone?: string; homeAddress?: string } = {};
-      if (data.phone !== undefined) courierUpdateData.phone = data.phone;
-      if (data.homeAddress !== undefined) courierUpdateData.homeAddress = data.homeAddress;
-
-      if (Object.keys(courierUpdateData).length > 0) {
-        await prisma.courier.updateMany({
-          where: { email: userAuth.email },
-          data: courierUpdateData
-        });
-      }
-    }
-
-    return NextResponse.json({ success: true });
-  } catch (e: any) {
-    console.error("Profile update error:", e);
-    return NextResponse.json({ error: "Внутренняя ошибка сервера" }, { status: 500 });
+    return NextResponse.json({ ...updated, homeAddress });
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 400 });
   }
 }

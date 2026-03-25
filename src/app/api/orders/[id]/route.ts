@@ -62,8 +62,9 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 
     // 🔥 ИЗМЕНЕНИЕ: Фильтруем статусы перед отправкой в CRM
     let crmStatus = body.status;
-    // Если статус "Назначен" или "В пути", мы его в CRM НЕ отправляем
-    if (crmStatus === "ASSIGNED" || crmStatus === "IN_DELIVERY") {
+    
+    // "В пути" (IN_DELIVERY) теперь отправляем в CRM. Блокируем только "Назначен" (ASSIGNED)
+    if (crmStatus === "ASSIGNED") {
       crmStatus = undefined;
     }
 

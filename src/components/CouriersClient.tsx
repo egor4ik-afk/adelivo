@@ -170,7 +170,7 @@ export function CouriersClient({ user }: { user: any }) {
   return (
     <div style={s.app}>
       <div style={s.topbar}>
-        <Link href="/dashbord" style={{ textDecoration: "none" }}>
+        <Link href="/dashboard" style={{ textDecoration: "none" }}>
           <div style={s.logo}>
             <img src="/favicon.svg" alt="Logo" style={{ width: 22, height: 22 }} />
             EventWave
