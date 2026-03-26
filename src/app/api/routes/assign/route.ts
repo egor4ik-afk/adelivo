@@ -48,7 +48,7 @@ export async function POST(req: Request) {
     }
 
     const newRoute = await prisma.route.create({
-      data: { name: routeName, link, date: finalRouteDate, courierId: Number(courierId) }
+      data: { name: routeName, link, date: finalRouteDate, departureAdvice: departureAdvice || null, courierId: Number(courierId) }
     });
 
     const courierDb = await prisma.courier.findUnique({ where: { id: Number(courierId) } });

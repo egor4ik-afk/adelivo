@@ -16,6 +16,7 @@
     "@aws-sdk/client-s3": "^3.1014.0",
     "@aws-sdk/s3-request-presigner": "^3.1014.0",
     "@prisma/client": "^6.19.2",
+    "@yandex/ymaps3-types": "^1.0.19017058",
     "axios": "^1.8.4",
     "browser-image-compression": "^2.0.2",
     "jose": "^6.2.1",

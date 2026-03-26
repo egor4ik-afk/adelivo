@@ -105,7 +105,7 @@ export function DashboardClient({ user }: { user: User }) {
   const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
 
   const [routeLegs, setRouteLegs] = useState<string[]>([]);
-  const [routeTotals, setRouteTotals] = useState<{time: string, dist: string} | null>(null);
+  const [routeTotals, setRouteTotals] = useState<{ time: string, dist: string } | null>(null);
   const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
   const [departureAdvice, setDepartureAdvice] = useState<string | null>(null);
 
@@ -374,7 +374,7 @@ export function DashboardClient({ user }: { user: User }) {
       if (displayTime) {
         let pinColor = isSelected ? (previewGeo ? '#9ca3af' : '#facc15') : color;
         if (isBulkMode && routeTabMode === "new") {
-           pinColor = isBulkSelected ? '#1a9e5c' : '#d1d5db';
+          pinColor = isBulkSelected ? '#1a9e5c' : '#d1d5db';
         }
 
         const finalSlotLabel = (isBulkMode && routeTabMode === "new" && isBulkSelected) ? `${bulkIndex + 1}. ${slotLabelText}` : slotLabelText;
@@ -424,17 +424,17 @@ export function DashboardClient({ user }: { user: User }) {
     if (!showCouriers || typeof window === "undefined" || !window.ymaps) return;
 
     dbCouriers.forEach(c => {
-       const lat = c.lat ?? c.homeLat;
-       const lng = c.lng ?? c.homeLng;
-       if (lat && lng) {
-          const ONLINE_THRESHOLD_MS = 5 * 60 * 1000;
-          const isLive = c.lat && c.lng && c.locationUpdatedAt && (Date.now() - new Date(c.locationUpdatedAt).getTime()) < ONLINE_THRESHOLD_MS;
-          const pm = new window.ymaps.Placemark([lat, lng], {
-             balloonContentHeader: c.fullName, balloonContentBody: isLive ? "Текущее местоположение" : "Домашний адрес",
-             hintContent: `${c.fullName} (${isLive ? "в сети" : "дома"})`, iconCaption: c.fullName,
-          }, { preset: isLive ? "islands#blueWalkingIcon" : "islands#grayHomeIcon" });
-          coll.add(pm as any);
-       }
+      const lat = c.lat ?? c.homeLat;
+      const lng = c.lng ?? c.homeLng;
+      if (lat && lng) {
+        const ONLINE_THRESHOLD_MS = 5 * 60 * 1000;
+        const isLive = c.lat && c.lng && c.locationUpdatedAt && (Date.now() - new Date(c.locationUpdatedAt).getTime()) < ONLINE_THRESHOLD_MS;
+        const pm = new window.ymaps.Placemark([lat, lng], {
+          balloonContentHeader: c.fullName, balloonContentBody: isLive ? "Текущее местоположение" : "Домашний адрес",
+          hintContent: `${c.fullName} (${isLive ? "в сети" : "дома"})`, iconCaption: c.fullName,
+        }, { preset: isLive ? "islands#blueWalkingIcon" : "islands#grayHomeIcon" });
+        coll.add(pm as any);
+      }
     });
   }, [dbCouriers, showCouriers, mapReady]);
 
@@ -445,9 +445,9 @@ export function DashboardClient({ user }: { user: User }) {
       if (o.route && oDate === filterDate) {
         if (!routesMap.has(o.route.id)) {
           routesMap.set(o.route.id, {
-             id: o.route.id, name: o.route.name, link: o.route.link, date: o.route.date,
-             orders: [], courierId: o.courierId,
-             updatedAt: o.route.updatedAt || o.changedAt || o.createdAt
+            id: o.route.id, name: o.route.name, link: o.route.link, date: o.route.date,
+            orders: [], courierId: o.courierId,
+            updatedAt: o.route.updatedAt || o.changedAt || o.createdAt
           });
         }
         routesMap.get(o.route.id).orders.push(o);
@@ -491,7 +491,7 @@ export function DashboardClient({ user }: { user: User }) {
 
     if (validOrders.length === 0) return;
 
-    const points = [ [STORE_LAT, STORE_LNG], ...validOrders.map(o => [o.lat!, o.lng!]) ];
+    const points = [[STORE_LAT, STORE_LNG], ...validOrders.map(o => [o.lat!, o.lng!])];
     if (returnToBase) points.push([STORE_LAT, STORE_LNG]);
 
     setIsCalculatingRoute(true); setDepartureAdvice(null);
@@ -502,45 +502,93 @@ export function DashboardClient({ user }: { user: User }) {
         referencePoints: points, params: { routingMode: routeType === 'mt' ? 'masstransit' : 'auto' }
       }, { boundsAutoApply: false });
 
+      // ═══════════════════════════════════════════════════════════════════════
+      // ЗАМЕНА в src/components/DashboardClient.tsx
+      // Найти блок: multiRoute.model.events.add('requestsuccess', () => {
+      // и заменить всё внутри на это:
+      // ═══════════════════════════════════════════════════════════════════════
+
       multiRoute.model.events.add('requestsuccess', () => {
         const activeRoute = multiRoute.getActiveRoute();
         if (!activeRoute) { setIsCalculatingRoute(false); return; }
 
         const cleanHtml = (str: string) => str ? str.replace(/&#160;/g, " ") : "";
-        setRouteTotals({ time: cleanHtml(activeRoute.properties.get("duration")?.text || "—"), dist: cleanHtml(activeRoute.properties.get("distance")?.text || "—") });
+
+        // Итоговые время и расстояние всего маршрута
+        setRouteTotals({
+          time: cleanHtml(activeRoute.properties.get("duration")?.text || "—"),
+          dist: cleanHtml(activeRoute.properties.get("distance")?.text || "—"),
+        });
 
         const legsArr: string[] = [];
-        let cumulativeSeconds = 0; let strictestDeparture: { time: Date, externalId: string, slotTo: string } | null = null;
+
+        // ── НОВАЯ ЛОГИКА СОВЕТНИКА ────────────────────────────────────────────
+        // ymaps multiRouter возвращает время С УЧЁТОМ ПРОБОК (реальный трафик).
+        // Для каждой точки считаем: когда курьер туда приедет если выедет СЕЙЧАС.
+        // Если приедет позже слота — показываем предупреждение.
+        // Если раньше — показываем когда забрать (начало слота).
+        //
+        // Совет пишем для курьера: "Заберите заказы до HH:MM — иначе опоздаете на №X"
+        // ─────────────────────────────────────────────────────────────────────
+
+        const nowMs = Date.now();
+        let cumulativeMs = 0; // накопленное время в пути от базы
+
+        // Будем искать самую раннюю точку, на которую курьер опоздает если выедет сейчас
+        let earliestDeadline: { externalId: string; slotFrom: string; pickupDeadlineMs: number } | null = null;
 
         activeRoute.getPaths().each((path: any, idx: number) => {
+          const legSeconds = path.properties.get("duration")?.value || 0; // уже с пробками
           legsArr.push(cleanHtml(path.properties.get("duration")?.text || "—"));
+
           if (idx < validOrders.length) {
-            const legSeconds = path.properties.get("duration")?.value || 0;
-            cumulativeSeconds += legSeconds + (5 * 60);
+            cumulativeMs += (legSeconds + 5 * 60) * 1000; // +5 мин на остановку
             const order = validOrders[idx];
+
             if (order.slotFrom) {
               const [hh, mm] = order.slotFrom.split(":").map(Number);
               if (!isNaN(hh) && !isNaN(mm)) {
-                const deadline = new Date(); deadline.setHours(hh, mm, 0, 0);
-                const requiredDeparture = new Date(deadline.getTime() - (cumulativeSeconds * 1000));
+                // Дедлайн этой точки — начало слота
+                const slotStartMs = new Date().setHours(hh, mm, 0, 0);
+                // Когда курьер туда приедет если выедет прямо сейчас
+                const arrivalIfLeaveNowMs = nowMs + cumulativeMs;
+                // Самое позднее когда нужно забрать заказы с базы чтобы успеть
+                const latestPickupMs = slotStartMs - cumulativeMs;
 
-                if (!strictestDeparture || requiredDeparture < strictestDeparture.time) {
-                  strictestDeparture = { time: requiredDeparture, externalId: order.externalId ?? order.crmId, slotTo: order.slotFrom };
+                if (!earliestDeadline || latestPickupMs < earliestDeadline.pickupDeadlineMs) {
+                  earliestDeadline = {
+                    externalId: order.externalId ?? order.crmId,
+                    slotFrom: order.slotFrom,
+                    pickupDeadlineMs: latestPickupMs,
+                  };
                 }
               }
             }
           }
         });
 
-        if (strictestDeparture) {
-          const sDep = strictestDeparture as { time: Date, externalId: string, slotTo: string };
-          const depHH = String(sDep.time.getHours()).padStart(2, '0'); const depMM = String(sDep.time.getMinutes()).padStart(2, '0');
-          setDepartureAdvice(`Совет: выехать до ${depHH}:${depMM} (к ${sDep.slotTo} на зак. ${sDep.externalId})`);
+        // Формируем текст совета
+        if (earliestDeadline) {
+          const ed = earliestDeadline as { externalId: string; slotFrom: string; pickupDeadlineMs: number };
+          const deadlineDate = new Date(ed.pickupDeadlineMs);
+          const hh = String(deadlineDate.getHours()).padStart(2, "0");
+          const mm = String(deadlineDate.getMinutes()).padStart(2, "0");
+
+          const isAlreadyLate = ed.pickupDeadlineMs < nowMs;
+
+          if (isAlreadyLate) {
+            // Курьер уже опаздывает даже если выедет немедленно
+            setDepartureAdvice(`⚠️ Нужно выехать немедленно — к ${ed.slotFrom} на зак. ${ed.externalId} уже поздно!`);
+          } else {
+            // Нормальный совет: забрать заказы до HH:MM
+            setDepartureAdvice(`Забрать заказы до ${hh}:${mm} — первый заказ ${ed.slotFrom} на зак. ${ed.externalId}`);
+          }
         } else {
-          setDepartureAdvice("Слоты не строгие, выезд в любое время");
+          setDepartureAdvice("Слоты не строгие — выезд в любое время");
         }
 
-        setRouteLegs(legsArr); setIsCalculatingRoute(false);
+        setRouteLegs(legsArr);
+        setIsCalculatingRoute(false);
       });
     }, 800);
 
@@ -638,7 +686,7 @@ export function DashboardClient({ user }: { user: User }) {
             }} style={{ background: "#fafaf8", border: "1px solid #e8e6df", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18" }}>
-                  {r.name} <span style={{fontSize: 11, color: "#a8a49c", fontWeight: 500}}>изм. {new Date(r.updatedAt).toLocaleTimeString('ru', {hour: '2-digit', minute:'2-digit'})}</span>
+                  {r.name} <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 500 }}>изм. {new Date(r.updatedAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
                 <div style={{ fontSize: 12, color: "#6b6860", marginTop: 4 }}>
                   Курьер: {dbCouriers.find(c => c.id === r.courierId)?.fullName || "Неизвестен"} · {r.orders.length} точек
@@ -666,12 +714,12 @@ export function DashboardClient({ user }: { user: User }) {
             </div>
             <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", color: "#1a1a18", fontWeight: 600, padding: isMobile ? "4px 6px" : 0 }}>
               <input type="checkbox" checked={returnToBase} onChange={e => setReturnToBase(e.target.checked)} style={{ accentColor: "#4a7aff", width: 16, height: 16 }} />
-          Вернуться на базу
+              Вернуться на базу
             </label>
           </div>
 
           {routeTotals && (
-            <div style={{fontSize: 13, color: "#1a1a18", background: "#eef3ff", padding: "12px 14px", borderRadius: 8, marginBottom: 16, fontWeight: 600}}>
+            <div style={{ fontSize: 13, color: "#1a1a18", background: "#eef3ff", padding: "12px 14px", borderRadius: 8, marginBottom: 16, fontWeight: 600 }}>
               {isCalculatingRoute ? "⏳ Считаем время в пути..." : `🏁 Итого: ~${routeTotals.time} (${routeTotals.dist})`}
               {!isCalculatingRoute && departureAdvice && (
                 <div style={{ marginTop: 6, fontSize: 12, color: "#4a7aff", fontWeight: 700 }}>💡 {departureAdvice}</div>
@@ -683,8 +731,8 @@ export function DashboardClient({ user }: { user: User }) {
             <button onClick={optimizeRoute} style={{ ...s.actionBtn, background: "#f4f7ff", color: "#4a7aff", border: "1px solid #c9d8ff" }}>✨ Умная оптимизация (Время + Расстояние)</button>
             {selectedRouteOrders.length > 0 && (
               <div style={{ display: "flex", gap: 8 }}>
-                 <button onClick={() => handleOpenRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "#fff", color: "#1a1a18", border: "1px solid #e8e6df" }}>🗺️ Открыть в Яндексе</button>
-                 <button onClick={() => handleShareRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "#fff", color: "#1a1a18", border: "1px solid #e8e6df" }}>🔗 Скопировать ссылку</button>
+                <button onClick={() => handleOpenRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "#fff", color: "#1a1a18", border: "1px solid #e8e6df" }}>🗺️ Открыть в Яндексе</button>
+                <button onClick={() => handleShareRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "#fff", color: "#1a1a18", border: "1px solid #e8e6df" }}>🔗 Скопировать ссылку</button>
               </div>
             )}
           </div>
@@ -924,7 +972,7 @@ export function DashboardClient({ user }: { user: User }) {
               <table style={s.table}>
                 <thead>
                   <tr>
-                    {[ { label: "Внешний ID", key: "externalId" }, { label: "Время", key: "slotFrom" }, { label: "Адрес", key: "address" }, { label: "Курьер", key: "courier" }, { label: "Сумма", key: "price" }, { label: "Статус", key: "status" }, { label: "Комментарий", key: "comment" }, { label: "Оператор", key: "opComment" }, { label: "Состав", key: "items" }, { label: "Создан", key: "crmCreatedAt" }, { label: "Изменён", key: "changedAt" } ].map(col => (
+                    {[{ label: "Внешний ID", key: "externalId" }, { label: "Время", key: "slotFrom" }, { label: "Адрес", key: "address" }, { label: "Курьер", key: "courier" }, { label: "Сумма", key: "price" }, { label: "Статус", key: "status" }, { label: "Комментарий", key: "comment" }, { label: "Оператор", key: "opComment" }, { label: "Состав", key: "items" }, { label: "Создан", key: "crmCreatedAt" }, { label: "Изменён", key: "changedAt" }].map(col => (
                       <th key={col.key} style={{ ...s.th, cursor: "pointer", userSelect: "none" }} onClick={() => handleSort(col.key)} title={`Сортировать по: ${col.label}`}>
                         {col.label} {sortConfig.key === col.key ? (sortConfig.dir === 'asc' ? '↑' : '↓') : ''}
                       </th>
@@ -1005,7 +1053,7 @@ function OrderCard({ order, selected, isBulkMode, isBulkSelected, onSelect }: an
   );
 }
 
-function CourierSearchSelect({ value, onChange, options }: { value: string, onChange: (v: string) => void, options: {value: string | number, label: string}[] }) {
+function CourierSearchSelect({ value, onChange, options }: { value: string, onChange: (v: string) => void, options: { value: string | number, label: string }[] }) {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
