@@ -1,4 +1,3 @@
-// scripts/check-order.ts
 import axios from "axios";
 import * as dotenv from "dotenv";
 dotenv.config({ path: ".env" });
@@ -6,16 +5,33 @@ dotenv.config({ path: ".env" });
 const CRM_URL = process.env.RETAILCRM_API_URL;
 const CRM_KEY = process.env.RETAILCRM_API_KEY;
 
-async function main() {
-  const res = await axios.get(`${CRM_URL}/api/v5/orders/20508`, {
-    params: { apiKey: CRM_KEY, by: "id" },
-  });
-  const order = res.data?.order;
-  console.log("delivery.time raw:", JSON.stringify(order?.delivery?.time, null, 2));
-  console.log("slotFrom/To после parse:", JSON.stringify(
-    // повторяем логику parseSlot
-    order?.delivery?.time
-  ));
-}
+// Шаг 1: сбрасываем на self-delivery
+const params1 = new URLSearchParams();
+params1.append("apiKey", CRM_KEY);
+params1.append("order", JSON.stringify({ delivery: { code: "self-delivery" } }));
+params1.append("by", "id");
 
-main().catch(console.error);
+await axios.post(
+  `${CRM_URL}/api/v5/orders/20172/edit`,
+  params1.toString(),
+  { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+);
+console.log("✅ Шаг 1: сброс на self-delivery");
+
+// Шаг 2: возвращаем logisty без курьера
+const params2 = new URLSearchParams();
+params2.append("apiKey", CRM_KEY);
+params2.append("order", JSON.stringify({ 
+  delivery: { code: "logisty", typeId: 5 },
+  customFields: { courier: null, kurier: null }
+}));
+params2.append("by", "id");
+
+const res = await axios.post(
+  `${CRM_URL}/api/v5/orders/20172/edit`,
+  params2.toString(),
+  { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+);
+
+const delivery = res.data?.order?.delivery;
+console.log("✅ Шаг 2 delivery:", JSON.stringify(delivery, null, 2));

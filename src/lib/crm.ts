@@ -375,8 +375,20 @@ export async function updateCrmOrder(
       }
       orderPayload.customFields = { courier: courierName, kurier: courierName };
     } else {
-      orderPayload.delivery.data = { id: "", courierId: "", courier: "" };
-      orderPayload.customFields = { courier: "", kurier: "" };
+      // Шаг 1: сброс на self-delivery чтобы снять locked
+      const resetParams = new URLSearchParams();
+      resetParams.append("apiKey", CRM_KEY);
+      resetParams.append("order", JSON.stringify({ delivery: { code: "self-delivery" } }));
+      resetParams.append("by", "id");
+      await axios.post(
+        `${CRM_URL}/api/v5/orders/${crmId}/edit`,
+        resetParams.toString(),
+        { headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 5000 }
+      ).catch(() => {});
+
+      // Шаг 2: возвращаем logisty без курьера
+      orderPayload.delivery = { code: "logisty", typeId: 5 };
+      orderPayload.customFields = { courier: null, kurier: null };
     }
   }
 
