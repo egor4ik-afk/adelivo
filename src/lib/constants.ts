@@ -31,5 +31,9 @@ export const STATUS_LABELS: Record<string, string> = Object.fromEntries(STATUS_O
 
 export function slotColor(o: Order): string {
   if (o.isInvalid) return "#d94040";
-  return SLOTS.find(s => s.from === o.slotFrom && s.to === o.slotTo)?.color ?? "#4a7aff";
+  if (!o.slotFrom) return "#4a7aff";
+  const exact = SLOTS.find(s => s.from === o.slotFrom && s.to === o.slotTo);
+  if (exact) return exact.color;
+  const match = SLOTS.find(s => o.slotFrom! > s.from && o.slotFrom! <= s.to);
+  return match?.color ?? "#4a7aff";
 }

@@ -212,7 +212,6 @@ export function DashboardClient({ user }: { user: User }) {
     const oDate = o.deliveryDate || (o.crmCreatedAt ? o.crmCreatedAt.split('T')[0] : null);
     if (oDate !== filterDate) return false;
     if (filterStatus !== "ALL" && o.status !== filterStatus) return false;
-
     if (filterCourier !== "ALL") {
       if (filterCourier === "UNASSIGNED") {
         if (o.courierId) return false;
@@ -227,8 +226,14 @@ export function DashboardClient({ user }: { user: User }) {
   const selected = orders.find(o => o.id === selectedId) ?? null;
   const invalid = dateAndStatusOrders.filter(o => o.isInvalid);
   const filtered = selectedSlots.length === 0 ? dateAndStatusOrders : dateAndStatusOrders.filter(o => {
-    const s = SLOTS.find(x => x.from === o.slotFrom && x.to === o.slotTo);
-    return s && selectedSlots.includes(s.label);
+    if (!o.slotFrom) return false;
+    // Точное совпадение — приоритет
+    const exact = SLOTS.find(s => s.from === o.slotFrom && s.to === o.slotTo);
+    if (exact) return selectedSlots.includes(exact.label);
+    // Для нестандартных слотов — ищем по slotFrom: from <= slotFrom < to
+    // Граница (например 12:00) принадлежит слоту где она является концом (10-12)
+    const match = SLOTS.find(s => o.slotFrom! > s.from && o.slotFrom! <= s.to);
+    return match ? selectedSlots.includes(match.label) : false;
   });
 
   const sidePanelOrders = [...filtered].sort((a, b) => {
