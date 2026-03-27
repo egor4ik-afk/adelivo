@@ -1,11 +1,10 @@
 // src/app/api/auth/link-courier/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth"; // 🔥 ИСПРАВЛЕН ИМПОРТ
+import { getSession } from "@/lib/auth";
 
 export async function POST(request: Request) {
   try {
-    // 🔥 Берем сессию (cookie читаются автоматически внутри getSession)
     const user = await getSession(); 
     if (!user || user.role !== "COURIER") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -20,42 +19,73 @@ export async function POST(request: Request) {
     // Собираем полное имя
     const fullName = `${firstName.trim()} ${lastName.trim()}`;
 
-    // 1. Ищем существующего курьера с таким именем (без учета регистра)
+    // 1. Ищем существующего курьера с таким именем локально
     let courier = await prisma.courier.findFirst({
       where: {
         fullName: {
           equals: fullName,
-          mode: 'insensitive' // поиск не зависит от больших/маленьких букв
+          mode: 'insensitive' 
         }
       }
     });
 
     if (courier) {
-      // Если курьер найден в БД, обновляем его данные
-      // 🔥 Связь с аккаунтом идет ТОЛЬКО через email
+      // Если курьер найден в БД, просто обновляем его данные
       courier = await prisma.courier.update({
         where: { id: courier.id },
         data: {
           phone: phone,
-          email: user.email, // Система по email поймет, что это его профиль
+          email: user.email, 
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           isActive: true
         }
       });
     } else {
-      // 2. Если курьера нет в БД, создаем нового
-      // Так как id в таблице Courier не autoincrement, генерируем случайный (например, 9xxxxx)
-      const generateId = Math.floor(Math.random() * 100000) + 900000;
+      // 2. Если курьера нет локально — создаем его СНАЧАЛА в RetailCRM
+      const crmUrl = process.env.RETAILCRM_URL;
+      const crmKey = process.env.RETAILCRM_KEY;
       
+      if (!crmUrl || !crmKey) {
+        throw new Error("Не настроены ключи RetailCRM (RETAILCRM_URL, RETAILCRM_KEY)");
+      }
+
+      // Формируем параметры в формате form-urlencoded, как требует RetailCRM
+      const formData = new URLSearchParams();
+      formData.append("apiKey", crmKey);
+      formData.append("courier[firstName]", firstName.trim());
+      formData.append("courier[lastName]", lastName.trim());
+      formData.append("courier[active]", "true");
+      if (user.email) formData.append("courier[email]", user.email);
+      formData.append("courier[phone][number]", phone.replace(/[^\d+]/g, "")); // Отправляем чистый номер
+
+      const crmRes = await fetch(`${crmUrl}/api/v5/reference/couriers/create`, {
+        method: "POST",
+        body: formData,
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      });
+
+      const crmData = await crmRes.json();
+
+      if (!crmData.success) {
+        console.error("Ошибка RetailCRM:", crmData);
+        throw new Error(crmData.errorMsg || "Не удалось создать курьера в CRM");
+      }
+
+      // 🔥 Берем ID прямо из ответа RetailCRM
+      const crmCourierId = crmData.id;
+
+      // 3. Создаем в нашей локальной БД с ID из CRM
       courier = await prisma.courier.create({
         data: {
-          id: generateId, // 🔥 Назначаем сгенерированный ID
+          id: crmCourierId, 
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           fullName: fullName,
           phone: phone,
-          email: user.email, // Привязка к аккаунту
+          email: user.email,
           isActive: true,
         }
       });
