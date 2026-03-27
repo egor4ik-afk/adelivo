@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import Script from "next/script"; // 🔥 Импорт скрипта для Метрики
 import "./globals.css";
 import "@/lib/cron";
 import { GlobalChatWrapper } from "@/components/GlobalChatWrapper";
@@ -24,9 +25,22 @@ export const metadata: Metadata = {
     template: "%s | Event Wave",
   },
 
+  // 🔥 Расширил описание для лучшего сниппета в поисковиках
   description:
-    "Event Wave — система логистики и диспетчеризации курьеров. Контроль заказов, маршрутов и доставки в реальном времени.",
+    "Продвинутая система логистики и диспетчеризации курьеров Event Wave. Умная маршрутизация, контроль заказов и доставки в реальном времени. Интеграция с любой CRM.",
 
+  // 🔥 Добавил ключевые слова для поисковиков
+  keywords: [
+    "логистика",
+    "диспетчеризация",
+    "управление курьерами",
+    "маршрутизация",
+    "программа для логистов",
+    "crm для доставки",
+    "доставка",
+    "маршрутный лист",
+    "Event Wave",
+  ],
 
   applicationName: "Event Wave",
   authors: [{ name: "Event Wave" }],
@@ -101,8 +115,40 @@ export default function RootLayout({
   return (
     <html lang="ru">
       <body className={inter.className}>
+        
         {children}
         <GlobalChatWrapper />
+
+        {/* 🟢 ЯНДЕКС МЕТРИКА (Оптимизировано для Next.js) 🟢 */}
+        <Script id="yandex-metrika" strategy="afterInteractive">
+          {`
+            (function(m,e,t,r,i,k,a){
+                m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+                m[i].l=1*new Date();
+                for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+                k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
+            })(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=108276874', 'ym');
+
+            ym(108276874, 'init', {
+              ssr:true, 
+              webvisor:true, 
+              clickmap:true, 
+              ecommerce:"dataLayer", 
+              referrer: document.referrer, 
+              url: location.href, 
+              accurateTrackBounce:true, 
+              trackLinks:true
+            });
+          `}
+        </Script>
+        <noscript>
+          <div>
+            <img src="https://mc.yandex.ru/watch/108276874" style={{ position: "absolute", left: "-9999px" }} alt="" />
+          </div>
+        </noscript>
+        {/* 🔴 КОНЕЦ ЯНДЕКС МЕТРИКИ 🔴 */}
+
+        {/* 🟢 Микроразметка Schema.org для SEO 🟢 */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
@@ -111,14 +157,20 @@ export default function RootLayout({
               "@type": "SoftwareApplication",
               name: "Event Wave",
               applicationCategory: "BusinessApplication",
-              operatingSystem: "Web",
-              url: "https://event-wave.ru",
+              operatingSystem: "Web, iOS, Android", // Подчеркиваем PWA-сущность
+              url: SITE_URL,
               description:
                 "Система логистики и диспетчеризации курьеров в реальном времени",
               provider: {
                 "@type": "Organization",
                 name: "Event Wave",
+                url: SITE_URL
               },
+              offers: {
+                "@type": "Offer",
+                price: "0", // Заглушка, чтобы Google Search Console не ругался на отсутствие цены в SoftwareApplication
+                priceCurrency: "RUB"
+              }
             }),
           }}
         />
