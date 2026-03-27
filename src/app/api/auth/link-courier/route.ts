@@ -16,7 +16,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Заполните все поля" }, { status: 400 });
     }
 
-    // Собираем полное имя
+    // Собираем полное имя для поиска
     const fullName = `${firstName.trim()} ${lastName.trim()}`;
 
     // 1. Ищем существующего курьера с таким именем локально
@@ -47,18 +47,26 @@ export async function POST(request: Request) {
       const crmKey = process.env.RETAILCRM_API_KEY;
       
       if (!crmUrl || !crmKey) {
-        throw new Error("Не настроены ключи RetailCRM (RETAILCRM)");
+        throw new Error("Не настроены ключи RetailCRM (RETAILCRM_API_URL, RETAILCRM_API_KEY)");
       }
 
-      // Формируем параметры в формате form-urlencoded, как требует RetailCRM
+      // Собираем объект курьера в формате, который ждет CRM
+      const courierPayload = {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        active: true,
+        email: user.email ? user.email : undefined,
+        phone: {
+          number: phone.replace(/[^\d+]/g, "") // Оставляем только цифры и плюс
+        }
+      };
+
+      // Упаковываем в URLSearchParams (ключ + сериализованный JSON)
       const formData = new URLSearchParams();
       formData.append("apiKey", crmKey);
-      formData.append("courier[firstName]", firstName.trim());
-      formData.append("courier[lastName]", lastName.trim());
-      formData.append("courier[active]", "true");
-      if (user.email) formData.append("courier[email]", user.email);
-      formData.append("courier[phone][number]", phone.replace(/[^\d+]/g, "")); // Отправляем чистый номер
+      formData.append("courier", JSON.stringify(courierPayload));
 
+      // Отправляем запрос
       const crmRes = await fetch(`${crmUrl}/api/v5/reference/couriers/create`, {
         method: "POST",
         body: formData,
@@ -68,13 +76,15 @@ export async function POST(request: Request) {
       });
 
       const crmData = await crmRes.json();
+      
+      // Логируем ответ для контроля
+      console.log("ОТВЕТ ОТ RETAILCRM (КУРЬЕРЫ):", JSON.stringify(crmData, null, 2));
 
       if (!crmData.success) {
-        console.error("Ошибка RetailCRM:", crmData);
-        throw new Error(crmData.errorMsg || "Не удалось создать курьера в CRM");
+        throw new Error(`Ошибка CRM: ${crmData.errorMsg} ` + JSON.stringify(crmData.errors || {}));
       }
 
-      // 🔥 Берем ID прямо из ответа RetailCRM
+      // Берем ID прямо из ответа RetailCRM
       const crmCourierId = crmData.id;
 
       // 3. Создаем в нашей локальной БД с ID из CRM
