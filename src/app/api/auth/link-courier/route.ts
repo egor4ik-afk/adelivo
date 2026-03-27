@@ -43,11 +43,11 @@ export async function POST(request: Request) {
       });
     } else {
       // 2. Если курьера нет локально — создаем его СНАЧАЛА в RetailCRM
-      const crmUrl = process.env.RETAILCRM_URL;
-      const crmKey = process.env.RETAILCRM_KEY;
+      const crmUrl = process.env.RETAILCRM_API_URL;
+      const crmKey = process.env.RETAILCRM_API_KEY;
       
       if (!crmUrl || !crmKey) {
-        throw new Error("Не настроены ключи RetailCRM (RETAILCRM_URL, RETAILCRM_KEY)");
+        throw new Error("Не настроены ключи RetailCRM (RETAILCRM)");
       }
 
       // Формируем параметры в формате form-urlencoded, как требует RetailCRM
