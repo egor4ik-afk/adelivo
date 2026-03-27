@@ -1,7 +1,7 @@
 // src/components/OrderDetail.tsx
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { IMaskInput } from "react-imask"; // Импортируем библиотеку масок
+import { IMaskInput } from "react-imask";
 import { Order, STATUS_OPTIONS, slotColor } from "@/lib/constants";
 
 interface Props {
@@ -14,7 +14,6 @@ interface Props {
   setFixingAI: (v: boolean) => void;
 }
 
-// Дропдаун с поиском для курьеров
 function CourierSelect({ value, onChange, couriers }: {
   value: string;
   onChange: (v: string) => void;
@@ -71,21 +70,13 @@ function CourierSelect({ value, onChange, couriers }: {
               placeholder="Поиск курьера..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              style={{
-                width: "100%", padding: "5px 8px", borderRadius: 6,
-                border: "1px solid #e8e6df", fontSize: 11, outline: "none",
-              }}
+              style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 11, outline: "none" }}
             />
           </div>
           <div style={{ overflowY: "auto", flex: 1 }}>
             <div
               onMouseDown={() => { onChange(""); setOpen(false); }}
-              style={{
-                padding: "7px 10px", fontSize: 12, cursor: "pointer",
-                color: !value ? "#4a7aff" : "#a8a49c",
-                background: !value ? "#f4f7ff" : "transparent",
-                borderBottom: "1px solid #f5f4f0",
-              }}
+              style={{ padding: "7px 10px", fontSize: 12, cursor: "pointer", color: !value ? "#4a7aff" : "#a8a49c", background: !value ? "#f4f7ff" : "transparent", borderBottom: "1px solid #f5f4f0" }}
             >
               — Не назначен —
             </div>
@@ -93,21 +84,13 @@ function CourierSelect({ value, onChange, couriers }: {
               <div
                 key={c.value}
                 onMouseDown={() => { onChange(c.value); setOpen(false); }}
-                style={{
-                  padding: "7px 10px", fontSize: 12, cursor: "pointer",
-                  color: c.value === value ? "#4a7aff" : "#1a1a18",
-                  background: c.value === value ? "#f4f7ff" : "transparent",
-                  borderBottom: "1px solid #f5f4f0",
-                  fontWeight: c.value === value ? 600 : 400,
-                }}
+                style={{ padding: "7px 10px", fontSize: 12, cursor: "pointer", color: c.value === value ? "#4a7aff" : "#1a1a18", background: c.value === value ? "#f4f7ff" : "transparent", borderBottom: "1px solid #f5f4f0", fontWeight: c.value === value ? 600 : 400 }}
               >
                 {c.label}
               </div>
             ))}
             {filtered.length === 0 && (
-              <div style={{ padding: "10px", fontSize: 12, color: "#a8a49c", textAlign: "center" }}>
-                Не найдено
-              </div>
+              <div style={{ padding: "10px", fontSize: 12, color: "#a8a49c", textAlign: "center" }}>Не найдено</div>
             )}
           </div>
         </div>
@@ -129,17 +112,13 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
 
   useEffect(() => {
     if (!selected) return;
-
-    // Телефон из БД (приоритет: получатель -> клиент)
     const initialPhone = selected.recipientPhone || "";
-
     setOpComment(selected.opComment ?? "");
     setEditStatus(selected.status ?? "");
     setEditCourier(selected.courier ?? "");
     setEditAddress(selected.address ?? "");
     setEditRecipientPhone(initialPhone);
     setSaved(false);
-
     snapshot.current = {
       status: selected.status ?? "",
       courier: selected.courier ?? "",
@@ -147,6 +126,41 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
       address: selected.address ?? "",
       phone: initialPhone,
     };
+  }, [selected?.id]);
+
+  // 🔥 Саджест адреса — твой рабочий паттерн из профиля
+  useEffect(() => {
+    if (!selected) return;
+    if (typeof window === "undefined") return;
+  
+    const inputId = `order-address-${selected.id}`;
+  
+    const initSuggest = () => {
+      const ymaps = (window as any).ymaps;
+      if (!ymaps) return;
+      ymaps.ready(() => {
+        // 🔥 Даём React время отрендерить инпут
+        setTimeout(() => {
+          const input = document.getElementById(inputId);
+          if (input && !(input as any).isSuggestInitialized) {
+            const suggestView = new ymaps.SuggestView(inputId, { results: 5 });
+            suggestView.events.add("select", (e: any) => {
+              setEditAddress(e.get("item").value);
+            });
+            (input as any).isSuggestInitialized = true;
+          }
+        }, 100);
+      });
+    };
+  
+    if ((window as any).ymaps) {
+      initSuggest();
+    } else {
+      const script = document.createElement("script");
+      script.src = `https://api-maps.yandex.ru/2.1/?apikey=${process.env.NEXT_PUBLIC_YANDEX_MAPS_KEY}&suggest_apikey=${process.env.NEXT_PUBLIC_YANDEX_SUGGEST_KEY || process.env.NEXT_PUBLIC_YANDEX_MAPS_KEY}&lang=ru_RU`;
+      script.onload = initSuggest;
+      document.head.appendChild(script);
+    }
   }, [selected?.id]);
 
   if (!selected) return null;
@@ -206,7 +220,7 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
     if (editCourier !== snap.courier) body.courier = editCourier;
     if (opComment !== snap.opComment) body.opComment = opComment;
     if (isAddressChanged) body.address = editAddress;
-    if (editRecipientPhone !== snap.phone) body.recipientPhone = editRecipientPhone; // Сохраняем телефон как номер получателя
+    if (editRecipientPhone !== snap.phone) body.recipientPhone = editRecipientPhone;
 
     if (Object.keys(body).length > 0) {
       await fetch(`/api/orders/${selected!.id}`, {
@@ -241,7 +255,13 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
 
       <div style={{ marginBottom: 10 }}>
         <div style={lbl}>Адрес доставки</div>
-        <textarea style={ta} rows={2} value={editAddress} onChange={e => setEditAddress(e.target.value)} />
+        {/* 🔥 id для саджеста — уникальный на каждый заказ */}
+        <input
+          id={`order-address-${selected.id}`}
+          value={editAddress}
+          onChange={e => setEditAddress(e.target.value)}
+          style={{ ...ta, resize: undefined }}
+        />
         <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
           <button style={geoBtn} onClick={() => handleGeocode("manual")} disabled={fixingAI}>📍 На карте</button>
           <button style={aiBtn} onClick={() => handleGeocode("ai")} disabled={fixingAI}>
@@ -267,17 +287,17 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
         <div>
           <div style={lbl}>Статус</div>
           <select style={sel} value={editStatus} onChange={e => setEditStatus(e.target.value)}>
-            {STATUS_OPTIONS.filter(opt => !["GEOCODED", "INVALID_ADDRESS", "ALL"].includes(opt.value)).map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+            {STATUS_OPTIONS.filter(opt => !["GEOCODED", "INVALID_ADDRESS", "ALL"].includes(opt.value)).map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
           </select>
         </div>
-
         <div>
           <div style={lbl}>Курьер</div>
           <CourierSelect value={editCourier} onChange={setEditCourier} couriers={couriers} />
         </div>
       </div>
 
-      {/* 🔥 НОВОЕ ПОЛЕ: Номер получателя */}
       <div style={{ marginBottom: 10 }}>
         <div style={lbl}>Номер получателя</div>
         <IMaskInput
@@ -315,21 +335,20 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
           background: saved ? "#1a9e5c" : hasChanges ? "#4a7aff" : "#e8e6df",
           color: hasChanges || saved ? "#fff" : "#a8a49c",
           cursor: hasChanges ? "pointer" : "default",
-          marginBottom: 16
+          marginBottom: 16,
         }}
         disabled={!hasChanges || saving}
         onClick={saveChanges}
       >
         {saved ? "✓ Сохранено" : saving ? "Сохраняем..." : "Сохранить изменения"}
       </button>
-
     </div>
   );
 }
 
 const lbl: React.CSSProperties = { fontSize: 10, color: "#a8a49c", textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 4 };
 const card: React.CSSProperties = { background: "#f5f4f0", borderRadius: 7, padding: "7px 9px" };
-const ta: React.CSSProperties = { width: "100%", padding: "7px 9px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 12, resize: "none", background: "#fafaf8", outline: "none", display: "block" };
+const ta: React.CSSProperties = { width: "100%", padding: "7px 9px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 12, resize: "none", background: "#fafaf8", outline: "none", display: "block", fontFamily: "Manrope, system-ui, sans-serif", boxSizing: "border-box" as const };
 const sel: React.CSSProperties = { width: "100%", padding: "7px 9px", borderRadius: 7, border: "1px solid #e8e6df", fontSize: 12, background: "#fafaf8", outline: "none", cursor: "pointer" };
 const inputPhone: React.CSSProperties = { width: "100%", padding: "7px 9px", borderRadius: 7, border: "1px solid #e8e6df", fontSize: 12, background: "#fafaf8", outline: "none", fontWeight: 600, color: "#1a1a18" };
 const geoBtn: React.CSSProperties = { flex: 1, padding: 7, borderRadius: 6, border: "1px solid #e8e6df", background: "#fff", fontSize: 11, cursor: "pointer", fontWeight: 600 };

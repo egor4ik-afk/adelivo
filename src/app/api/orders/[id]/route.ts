@@ -5,6 +5,8 @@ import { getSession } from "@/lib/auth";
 import { updateCrmOrder } from "@/lib/crm";
 import { OrderStatus } from "@prisma/client";
 
+const STORE_COORDS = "55.749511,37.596205"; // База
+
 export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const user = await getSession(req);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -22,62 +24,69 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     if (body.status         !== undefined) updateData.status         = body.status;
     if (body.opComment      !== undefined) updateData.opComment      = body.opComment;
     if (body.address        !== undefined) updateData.address        = body.address;
-    if (body.recipientPhone !== undefined) updateData.recipientPhone = body.recipientPhone; // 🔥 Сохраняем телефон в БД
+    if (body.recipientPhone !== undefined) updateData.recipientPhone = body.recipientPhone;
 
-    // 🔥 Поддержка ручного назначения/удаления маршрута с фронтенда
-    if (body.routeId !== undefined) updateData.routeId = body.routeId;
+    // Поддержка ручного назначения/удаления маршрута с фронтенда
+    if (body.routeId    !== undefined) updateData.routeId    = body.routeId;
     if (body.routeOrder !== undefined) updateData.routeOrder = body.routeOrder;
 
     if (body.courier !== undefined) {
-      updateData.courier = body.courier || null;
       if (body.courier) {
+        // 🔥 Ищем по fullName ИЛИ по числовому id (защита если фронт прислал id вместо имени)
+        const numericId = Number(body.courier);
         const dbCourier = await prisma.courier.findFirst({
-          where: { fullName: body.courier },
+          where: isNaN(numericId)
+            ? { fullName: body.courier }  // прислали имя → ищем по имени
+            : { id: numericId },          // прислали id  → ищем по id
         });
+        updateData.courier   = dbCourier?.fullName ?? body.courier;
         updateData.courierId = dbCourier?.id ?? null;
+
+        // 🔥 Генерируем ссылку БАЗА → точка заказа
+        const lat = order.lat;
+        const lng = order.lng;
+        if (lat && lng) {
+          updateData.courierLink = `https://yandex.ru/maps/?rtext=${STORE_COORDS}~${lat},${lng}&rtt=auto`;
+        }
       } else {
+        // Снятие курьера — только courier/courierId, courierLink не трогаем
+        updateData.courier   = null;
         updateData.courierId = null;
       }
     }
 
-    // 🔥 АВТОМАТИЧЕСКИЙ ВЫБРОС ИЗ МАРШРУТА
-    const newStatus = body.status || order.status;
+    // АВТОМАТИЧЕСКИЙ ВЫБРОС ИЗ МАРШРУТА при отмене/возврате/самовывозе
+    const newStatus  = body.status  || order.status;
     const newAddress = body.address || order.address;
     const isCancelledOrReturned = newStatus === "CANCELLED" || newStatus === "RETURNED";
-    const isPickup = newAddress?.toLowerCase().includes("самовывоз");
+    const isPickup   = newAddress?.toLowerCase().includes("самовывоз");
 
     if (isCancelledOrReturned || isPickup) {
-      updateData.routeId = null;
+      updateData.routeId    = null;
       updateData.routeOrder = null;
     }
 
     let updatedOrder = order;
     if (Object.keys(updateData).length > 0) {
-      updatedOrder = await prisma.order.update({ 
-        where: { id }, 
+      updatedOrder = await prisma.order.update({
+        where: { id },
         data: updateData,
-        include: { route: true } // Обязательно возвращаем маршрут на фронт
+        include: { route: true },
       });
     }
 
-    // 🔥 ИЗМЕНЕНИЕ: Фильтруем статусы перед отправкой в CRM
+    // Фильтруем статусы перед отправкой в CRM (ASSIGNED не отправляем)
     let crmStatus = body.status;
-    
-    // "В пути" (IN_DELIVERY) теперь отправляем в CRM. Блокируем только "Назначен" (ASSIGNED)
-    if (crmStatus === "ASSIGNED") {
-      crmStatus = undefined;
-    }
+    if (crmStatus === "ASSIGNED") crmStatus = undefined;
 
-    // Вызываем обновление CRM (undefined поля проигнорируются)
     await updateCrmOrder(order.crmId, {
       status:         crmStatus as OrderStatus | undefined,
-      courier:        body.courier,
+      courier:        updateData.courier ?? body.courier,
       opComment:      body.opComment,
       address:        body.address,
-      recipientPhone: body.recipientPhone, // 🔥 Отправляем телефон в CRM
+      recipientPhone: body.recipientPhone,
     });
 
-    // Возвращаем обновленный объект заказа для UI
     return NextResponse.json(updatedOrder);
   } catch (e) {
     console.error("PATCH /api/orders/[id] error:", e);

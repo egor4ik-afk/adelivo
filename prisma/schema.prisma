@@ -179,6 +179,7 @@ model Order {
   routeId        String? // Привязка к маршруту
   route          Route?  @relation(fields: [routeId], references: [id], onDelete: SetNull)
   routeOrder     Int?    // Порядок в маршруте
+  courierLink    String? @db.Text  // 🔥 НОВОЕ: Ссылка база→точка при ручном назначении
 
   @@index([createdAt])
   @@index([slotFrom, slotTo])
