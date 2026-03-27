@@ -57,8 +57,8 @@ export default function LoginPage() {
         return;
       }
 
-      if (data.role === "COURIER") window.location.href = "/courier/profile";
-      else window.location.href = "/dashboard";
+      if (data.role === "COURIER") window.location.replace("/courier/profile");
+else window.location.replace("/dashboard");
     } catch (err: any) { setError(err.message); }
     finally { setLoading(false); }
   }
@@ -84,7 +84,7 @@ export default function LoginPage() {
         const d = await res.json();
         throw new Error(d.error || "Ошибка создания/привязки профиля");
       }
-      window.location.href = "/courier/profile";
+      window.location.replace("/courier/profile");
     } catch (err: any) { setError(err.message); }
     finally { setLoading(false); }
   }

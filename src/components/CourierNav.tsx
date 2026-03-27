@@ -1,3 +1,4 @@
+// src/components/CourierNav.tsx
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -17,9 +18,47 @@ export function CourierNav({ currentUserId }: { currentUserId: string }) {
     return () => window.removeEventListener("chat-unread", handleUnread);
   }, []);
 
-  // 🔥 Устанавливаем CSS-переменную --nav-height на :root при маунте
+  // Устанавливаем CSS-переменную --nav-height на :root при маунте
   useEffect(() => {
     document.documentElement.style.setProperty("--nav-height", `${NAV_HEIGHT}px`);
+  }, []);
+
+  // 🔥 ЛОГИКА СЛЕЖЕНИЯ ЗА ГЕОПОЗИЦИЕЙ КУРЬЕРА
+  useEffect(() => {
+    if (typeof window === "undefined" || !("geolocation" in navigator)) return;
+
+    const sendLocation = async (lat: number, lng: number) => {
+      try {
+        await fetch("/api/courier/location", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lat, lng }),
+        });
+      } catch (err) {
+        console.error("Ошибка отправки локации:", err);
+      }
+    };
+
+    // 1. watchPosition реагирует на движение устройства и работает в фоне
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => sendLocation(position.coords.latitude, position.coords.longitude),
+      (err) => console.warn("Ошибка геолокации:", err),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    );
+
+    // 2. Для надежности дублируем запрос каждые 2 минуты (если курьер стоит на месте)
+    const intervalId = setInterval(() => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => sendLocation(position.coords.latitude, position.coords.longitude),
+        (err) => console.warn("Ошибка геолокации (интервал):", err),
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+      );
+    }, 120000); // 120 000 мс = 2 минуты
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+      clearInterval(intervalId);
+    };
   }, []);
 
   const navItems = [
@@ -39,12 +78,11 @@ export function CourierNav({ currentUserId }: { currentUserId: string }) {
         background: "rgba(255, 255, 255, 0.95)",
         backdropFilter: "blur(10px)",
         borderTop: "1px solid #e8e6df",
-        // 🔥 Высота = фиксированная часть + safe area (для iPhone с вырезом)
         height: `calc(${NAV_HEIGHT}px + env(safe-area-inset-bottom))`,
         paddingBottom: "env(safe-area-inset-bottom)",
         zIndex: 1000,
         boxShadow: "0 -2px 10px rgba(0,0,0,0.03)",
-        alignItems: "flex-start", // 🔥 Иконки прижаты к верху, safe-area снизу
+        alignItems: "flex-start", 
       }}>
         {navItems.map(item => {
           const isActive = pathname === item.href;

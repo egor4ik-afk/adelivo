@@ -19,7 +19,6 @@ interface DbCourier {
   locationUpdatedAt?: string | null;
 }
 
-// 🔥 Расширенный интерфейс для устранения ошибок TypeScript
 export interface DashboardOrder {
   id: string; crmId: string; externalId?: string | null; status: string;
   address?: string | null; lat?: number | null; lng?: number | null;
@@ -40,7 +39,6 @@ function loadYMaps(): Promise<void> {
     const s = document.createElement("script");
     const mapsKey = process.env.NEXT_PUBLIC_YANDEX_MAPS_KEY;
     const suggestKey = process.env.NEXT_PUBLIC_YANDEX_SUGGEST_KEY;
-    // 🔥 Теперь загружаем с правильными ключами для саджеста
     s.src = `https://api-maps.yandex.ru/2.1/?lang=ru_RU&apikey=${mapsKey}${suggestKey ? `&suggest_apikey=${suggestKey}` : ''}`;
     s.onload = () => window.ymaps.ready(resolve);
     s.onerror = reject;
@@ -74,6 +72,7 @@ export function DashboardClient({ user }: { user: User }) {
   const [showCourierNames, setShowCourierNames] = useState(true);
   const [showTime, setShowTime] = useState(true);
   const [showCouriers, setShowCouriers] = useState(false);
+  const [showHomes, setShowHomes] = useState(false); // 🔥 Новый чекбокс для Дома
 
   const [filterDate, setFilterDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }));
   const [orders, setOrders] = useState<DashboardOrder[]>([]);
@@ -222,7 +221,6 @@ export function DashboardClient({ user }: { user: User }) {
         if (String(o.courierId) !== filterCourier) return false;
       }
     }
-
     return true;
   });
 
@@ -230,11 +228,8 @@ export function DashboardClient({ user }: { user: User }) {
   const invalid = dateAndStatusOrders.filter(o => o.isInvalid);
   const filtered = selectedSlots.length === 0 ? dateAndStatusOrders : dateAndStatusOrders.filter(o => {
     if (!o.slotFrom) return false;
-    // Точное совпадение — приоритет
     const exact = SLOTS.find(s => s.from === o.slotFrom && s.to === o.slotTo);
     if (exact) return selectedSlots.includes(exact.label);
-    // Для нестандартных слотов — ищем по slotFrom: from <= slotFrom < to
-    // Граница (например 12:00) принадлежит слоту где она является концом (10-12)
     const match = SLOTS.find(s => o.slotFrom! > s.from && o.slotFrom! <= s.to);
     return match ? selectedSlots.includes(match.label) : false;
   });
@@ -349,7 +344,7 @@ export function DashboardClient({ user }: { user: User }) {
     });
   };
 
-  // Отрисовка точек на карте
+  // Отрисовка точек заказов на карте
   useEffect(() => {
     if (!mapReady) return;
     const clusterer = clustererRef.current;
@@ -424,27 +419,36 @@ export function DashboardClient({ user }: { user: User }) {
     if (placemarks.length > 0) clusterer.add(placemarks as any);
   }, [filteredForMap, selectedId, previewGeo, currentZoom, selectedSlots, isBulkMode, bulkSelectedIds, showTime, showCourierNames, isMobile, mapReady, routeTabMode]);
 
-  // Отрисовка курьеров
+  // 🔥 ОБНОВЛЕННАЯ Отрисовка курьеров и их домов
   useEffect(() => {
     if (!mapReady || !couriersGeoObjectsRef.current) return;
     const coll = couriersGeoObjectsRef.current;
     coll.removeAll();
-    if (!showCouriers || typeof window === "undefined" || !window.ymaps) return;
+    if (typeof window === "undefined" || !window.ymaps) return;
 
     dbCouriers.forEach(c => {
-      const lat = c.lat ?? c.homeLat;
-      const lng = c.lng ?? c.homeLng;
-      if (lat && lng) {
-        const ONLINE_THRESHOLD_MS = 5 * 60 * 1000;
-        const isLive = c.lat && c.lng && c.locationUpdatedAt && (Date.now() - new Date(c.locationUpdatedAt).getTime()) < ONLINE_THRESHOLD_MS;
-        const pm = new window.ymaps.Placemark([lat, lng], {
-          balloonContentHeader: c.fullName, balloonContentBody: isLive ? "Текущее местоположение" : "Домашний адрес",
-          hintContent: `${c.fullName} (${isLive ? "в сети" : "дома"})`, iconCaption: c.fullName,
-        }, { preset: isLive ? "islands#blueWalkingIcon" : "islands#grayHomeIcon" });
+      const ONLINE_THRESHOLD_MS = 5 * 60 * 1000;
+      const isLive = c.lat && c.lng && c.locationUpdatedAt && (Date.now() - new Date(c.locationUpdatedAt).getTime()) < ONLINE_THRESHOLD_MS;
+
+      // 1. Рисуем текущую локацию (только если чекбокс Курьеры включен)
+      if (showCouriers && c.lat && c.lng) {
+        const pm = new window.ymaps.Placemark([c.lat, c.lng], {
+          balloonContentHeader: c.fullName, balloonContentBody: isLive ? "Текущее местоположение" : "Был недавно",
+          hintContent: `${c.fullName} (${isLive ? "в сети" : "офлайн"})`, iconCaption: c.fullName,
+        }, { preset: isLive ? "islands#blueWalkingIcon" : "islands#grayWalkingIcon" });
+        coll.add(pm as any);
+      }
+
+      // 2. Рисуем Дом отдельным слоем (только если чекбокс Дом включен)
+      if (showHomes && c.homeLat && c.homeLng) {
+        const pm = new window.ymaps.Placemark([c.homeLat, c.homeLng], {
+          balloonContentHeader: c.fullName, balloonContentBody: "Домашний адрес",
+          hintContent: `${c.fullName} (Дом)`, iconCaption: c.fullName,
+        }, { preset: "islands#grayHomeIcon" });
         coll.add(pm as any);
       }
     });
-  }, [dbCouriers, showCouriers, mapReady]);
+  }, [dbCouriers, showCouriers, showHomes, mapReady]);
 
   const existingRoutes = useMemo(() => {
     const routesMap = new Map<string, any>();
@@ -510,49 +514,29 @@ export function DashboardClient({ user }: { user: User }) {
         referencePoints: points, params: { routingMode: routeType === 'mt' ? 'masstransit' : 'auto' }
       }, { boundsAutoApply: false });
 
-      // ═══════════════════════════════════════════════════════════════════════
-      // ЗАМЕНА в src/components/DashboardClient.tsx
-      // Найти блок: multiRoute.model.events.add('requestsuccess', () => {
-      // и заменить всё внутри на это:
-      // ═══════════════════════════════════════════════════════════════════════
-
       multiRoute.model.events.add('requestsuccess', () => {
         const activeRoute = multiRoute.getActiveRoute();
         if (!activeRoute) { setIsCalculatingRoute(false); return; }
 
         const cleanHtml = (str: string) => str ? str.replace(/&#160;/g, " ") : "";
 
-        // Итоговые время и расстояние всего маршрута
         setRouteTotals({
           time: cleanHtml(activeRoute.properties.get("duration")?.text || "—"),
           dist: cleanHtml(activeRoute.properties.get("distance")?.text || "—"),
         });
 
         const legsArr: string[] = [];
-
-        // ── НОВАЯ ЛОГИКА СОВЕТНИКА ────────────────────────────────────────────
-        // ymaps multiRouter возвращает время С УЧЁТОМ ПРОБОК (реальный трафик).
-        // Для каждой точки считаем: когда курьер туда приедет если выедет СЕЙЧАС.
-        // Если приедет позже слота — показываем предупреждение.
-        // Если раньше — показываем когда забрать (начало слота).
-        //
-        // Совет пишем для курьера: "Заберите заказы до HH:MM — иначе опоздаете на №X"
-        // ─────────────────────────────────────────────────────────────────────
-
         const nowMs = Date.now();
-        let cumulativeMs = 0; // накопленное время в пути от базы
-
-        // Будем искать самую раннюю точку, на которую курьер опоздает если выедет сейчас
+        let cumulativeMs = 0; 
         let earliestDeadline: { externalId: string; slotFrom: string; pickupDeadlineMs: number } | null = null;
 
         activeRoute.getPaths().each((path: any, idx: number) => {
-          const legSeconds = path.properties.get("duration")?.value || 0; // уже с пробками
+          const legSeconds = path.properties.get("duration")?.value || 0; 
           legsArr.push(cleanHtml(path.properties.get("duration")?.text || "—"));
 
-          // 🔥 Считаем дедлайн ТОЛЬКО для первой точки (idx === 0)
           if (idx === 0 && validOrders.length > 0) {
             const order = validOrders[0];
-            const legToFirstPointMs = (legSeconds + 5 * 60) * 1000; // Время до первой точки + 5 мин парковка
+            const legToFirstPointMs = (legSeconds + 5 * 60) * 1000; 
 
             if (order.slotFrom) {
               const [hh, mm] = order.slotFrom.split(":").map(Number);
@@ -569,7 +553,6 @@ export function DashboardClient({ user }: { user: User }) {
           }
         });
 
-        // Формируем текст совета
         if (earliestDeadline) {
           const ed = earliestDeadline as { externalId: string; slotFrom: string; pickupDeadlineMs: number };
           const deadlineDate = new Date(ed.pickupDeadlineMs);
@@ -579,10 +562,8 @@ export function DashboardClient({ user }: { user: User }) {
           const isAlreadyLate = ed.pickupDeadlineMs < nowMs;
 
           if (isAlreadyLate) {
-            // Курьер уже опаздывает даже если выедет немедленно
             setDepartureAdvice(`⚠️ Нужно выехать немедленно — к ${ed.slotFrom} на зак. ${ed.externalId} уже поздно!`);
           } else {
-            // Нормальный совет: забрать заказы до HH:MM
             setDepartureAdvice(`Забрать заказы до ${hh}:${mm} — первый заказ ${ed.slotFrom} на зак. ${ed.externalId}`);
           }
         } else {
@@ -817,6 +798,10 @@ export function DashboardClient({ user }: { user: User }) {
           <div style={{ display: 'flex', gap: 10, marginRight: 8, alignItems: 'center' }}>
             <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 4, cursor: 'pointer' }}>
               <input type="checkbox" checked={showCouriers} onChange={e => setShowCouriers(e.target.checked)} />Курьеры
+            </label>
+            {/* 🔥 Новый чекбокс "Дом" */}
+            <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 4, cursor: 'pointer' }}>
+              <input type="checkbox" checked={showHomes} onChange={e => setShowHomes(e.target.checked)} />Дом
             </label>
             <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 4, cursor: 'pointer' }}><input type="checkbox" checked={showCourierNames} onChange={e => setShowCourierNames(e.target.checked)} /> Имена</label>
             <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 4, cursor: 'pointer' }}><input type="checkbox" checked={showTime} onChange={e => setShowTime(e.target.checked)} /> Время</label>
