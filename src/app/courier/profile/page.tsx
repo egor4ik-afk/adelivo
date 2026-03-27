@@ -1,9 +1,8 @@
 // src/app/courier/profile/page.tsx
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { usePushNotifications } from "@/components/usePushNotifications";
 import { IMaskInput } from "react-imask";
-import { NAV_HEIGHT } from "@/components/CourierNav";
 
 interface Profile {
   id: string; 
@@ -11,7 +10,66 @@ interface Profile {
   firstName: string | null; 
   lastName: string | null; 
   phone: string | null;
-  homeAddress: string | null; // 🔥 Добавлено
+  homeAddress: string | null; 
+}
+
+function AddressSuggestInput({ value, onChange }: { value: string, onChange: (val: string) => void }) {
+  const onChangeRef = useRef(onChange);
+  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const inputId = "profile-home-address";
+
+    const init = () => {
+      (window as any).ymaps.ready(() => {
+        const input = document.getElementById(inputId);
+        if (!input || (input as any).isSuggestInitialized) return;
+        try {
+          const suggest = new (window as any).ymaps.SuggestView(inputId, { results: 5 });
+          suggest.events.add("select", (e: any) => {
+            onChangeRef.current(e.get("item").value);
+          });
+          (input as any).isSuggestInitialized = true;
+        } catch (err) {
+          console.warn("Suggest error:", err);
+        }
+      });
+    };
+
+    const waitAndInit = () => {
+      const interval = setInterval(() => {
+        if ((window as any).ymaps && typeof (window as any).ymaps.SuggestView === "function") {
+          clearInterval(interval);
+          init();
+        }
+      }, 200);
+      setTimeout(() => clearInterval(interval), 8000);
+    };
+
+    const existingScript = document.querySelector('script[src*="api-maps.yandex.ru"]');
+
+    if ((window as any).ymaps || existingScript) {
+      waitAndInit();
+    } else {
+      const script = document.createElement("script");
+      const mapsKey = process.env.NEXT_PUBLIC_YANDEX_MAPS_KEY || "";
+      const suggestKey = process.env.NEXT_PUBLIC_YANDEX_SUGGEST_KEY || mapsKey;
+      script.src = `https://api-maps.yandex.ru/2.1/?lang=ru_RU&apikey=${mapsKey}&suggest_apikey=${suggestKey}&load=package.full`;
+      script.onload = waitAndInit;
+      document.head.appendChild(script);
+    }
+  }, []);
+
+  return (
+    <input 
+      id="profile-home-address" 
+      value={value} 
+      onChange={e => onChangeRef.current(e.target.value)} 
+      placeholder="Москва, ул. Пушкина, д. 1" 
+      style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontSize: 14, boxSizing: "border-box", display: "block" }} 
+    />
+  );
 }
 
 export default function CourierProfilePage() {
@@ -21,7 +79,7 @@ export default function CourierProfilePage() {
   const [newPhone, setNewPhone] = useState("");
   const [newFirstName, setNewFirstName] = useState("");
   const [newLastName, setNewLastName] = useState("");
-  const [newHomeAddress, setNewHomeAddress] = useState(""); // 🔥 Добавлено
+  const [newHomeAddress, setNewHomeAddress] = useState(""); 
   
   const [saving, setSaving] = useState(false);
   const [myShifts, setMyShifts] = useState<string[]>([]);
@@ -49,7 +107,7 @@ export default function CourierProfilePage() {
       setNewPhone(data.phone || "");
       setNewFirstName(data.firstName || "");
       setNewLastName(data.lastName || "");
-      setNewHomeAddress(data.homeAddress || ""); // 🔥 Добавлено
+      setNewHomeAddress(data.homeAddress || "");
     });
 
     fetch("/api/courier/my-shifts").then(r => r.json()).then(data => {
@@ -66,35 +124,6 @@ export default function CourierProfilePage() {
     window.addEventListener("beforeinstallprompt", handleBeforeInstall);
     return () => window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
   }, []);
-
-  // 🔥 Подключение Яндекс Подсказок для адреса
-  useEffect(() => {
-    if (editingProfile && typeof window !== "undefined") {
-      const initSuggest = () => {
-        const ymaps = (window as any).ymaps;
-        if (!ymaps) return;
-        ymaps.ready(() => {
-          const input = document.getElementById("home-address-input");
-          if (input && !(input as any).isSuggestInitialized) {
-            const suggestView = new ymaps.SuggestView("home-address-input", { results: 5 });
-            suggestView.events.add("select", (e: any) => {
-              setNewHomeAddress(e.get("item").value);
-            });
-            (input as any).isSuggestInitialized = true;
-          }
-        });
-      };
-
-      if ((window as any).ymaps) {
-        initSuggest();
-      } else {
-        const script = document.createElement("script");
-        script.src = `https://api-maps.yandex.ru/2.1/?apikey=${process.env.NEXT_PUBLIC_YANDEX_MAPS_KEY}&suggest_apikey=${process.env.NEXT_PUBLIC_YANDEX_SUGGEST_KEY || process.env.NEXT_PUBLIC_YANDEX_MAPS_KEY}&lang=ru_RU`;
-        script.onload = initSuggest;
-        document.head.appendChild(script);
-      }
-    }
-  }, [editingProfile]);
 
   const toggleShift = async (date: string) => {
     const isWorking = !myShifts.includes(date);
@@ -119,7 +148,6 @@ export default function CourierProfilePage() {
     try {
       await fetch("/api/profile", {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        // 🔥 Добавили сохранение адреса
         body: JSON.stringify({ phone: cleanPhone, firstName: newFirstName, lastName: newLastName, homeAddress: newHomeAddress })
       });
       setProfile(p => p ? { ...p, phone: cleanPhone, firstName: newFirstName, lastName: newLastName, homeAddress: newHomeAddress } : null);
@@ -184,7 +212,6 @@ export default function CourierProfilePage() {
 
       <div style={{ padding: 16 }}>
 
-        {/* Блок Графика работы (7 дней) */}
         <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
           <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", margin: "0 0 12px 0", textTransform: "uppercase" }}>График (Ближайшие 7 дней)</h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6 }}>
@@ -252,12 +279,11 @@ export default function CourierProfilePage() {
           </div>
         )}
 
-        {/* Настройки и контакты */}
         <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
           <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", margin: "0 0 12px 0", textTransform: "uppercase" }}>Настройки</h2>
 
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "12px 0", borderBottom: "1px solid #f0efe9" }}>
-          <div style={{ flex: 1, paddingRight: 16 }}>              
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-start", padding: "12px 0", borderBottom: "1px solid #f0efe9" }}>
+            <div style={{ flex: "1 1 100%", paddingRight: 0, display: "flex", flexDirection: "column", width: "100%" }}>               
               {!editingProfile ? (
                 <>
                   <div style={{ fontSize: 13, color: "#a8a49c" }}>Личные данные</div>
@@ -267,53 +293,49 @@ export default function CourierProfilePage() {
                   <div style={{ fontSize: 15, fontWeight: 600, color: "#1a1a18", marginTop: 4 }}>
                     {profile.phone || "Телефон не указан"}
                   </div>
-                  {/* 🔥 Добавлено отображение адреса */}
-                  <div style={{ fontSize: 13, color: "#a8a49c", marginTop: 8 }}>Домашний адрес (для карты)</div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "#1a1a18", marginTop: 2 }}>
+                  
+                  <div style={{ fontSize: 13, color: "#a8a49c", marginTop: 12 }}>Домашний адрес (для карты)</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "#1a1a18", marginTop: 2, wordBreak: "break-word" }}>
                     {profile.homeAddress || "Не указан"}
                   </div>
                 </>
               ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
+                  <div style={{ width: "100%" }}>
                     <div style={{ fontSize: 12, color: "#a8a49c", marginBottom: 4 }}>Имя</div>
-                    <input value={newFirstName} onChange={e => setNewFirstName(e.target.value)} style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontSize: 14 }} />
+                    <input value={newFirstName} onChange={e => setNewFirstName(e.target.value)} style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontSize: 14, boxSizing: "border-box", display: "block" }} />
                   </div>
-                  <div>
+                  <div style={{ width: "100%" }}>
                     <div style={{ fontSize: 12, color: "#a8a49c", marginBottom: 4 }}>Фамилия</div>
-                    <input value={newLastName} onChange={e => setNewLastName(e.target.value)} style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontSize: 14 }} />
+                    <input value={newLastName} onChange={e => setNewLastName(e.target.value)} style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontSize: 14, boxSizing: "border-box", display: "block" }} />
                   </div>
-                  <div>
+                  <div style={{ width: "100%" }}>
                     <div style={{ fontSize: 12, color: "#a8a49c", marginBottom: 4 }}>Телефон</div>
                     <IMaskInput
                       mask="+7 (000) 000-00-00"
                       value={newPhone}
                       onAccept={(value: string) => setNewPhone(value)}
                       placeholder="+7 (___) ___-__-__"
-                      style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontSize: 14 }}
+                      style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontSize: 14, boxSizing: "border-box", display: "block" }}
                     />
                   </div>
-                  {/* 🔥 Добавлено поле ввода адреса */}
-                  <div>
+                  
+                  <div style={{ width: "100%" }}>
                     <div style={{ fontSize: 12, color: "#a8a49c", marginBottom: 4 }}>Домашний адрес (Город, Улица, Дом)</div>
-                    <input 
-                      id="home-address-input" 
-                      value={newHomeAddress} 
-                      onChange={e => setNewHomeAddress(e.target.value)} 
-                      placeholder="Москва, ул. Пушкина, д. 1" 
-                      style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontSize: 14 }} 
-                    />
+                    <AddressSuggestInput value={newHomeAddress} onChange={setNewHomeAddress} />
                   </div>
                 </div>
               )}
             </div>
             
             {!editingProfile ? (
-              <button onClick={() => setEditingProfile(true)} style={{ background: "none", border: "none", color: "#4a7aff", fontSize: 13, fontWeight: 600, padding: "10px 0", cursor: "pointer" }}>Изменить</button>
+              <button onClick={() => setEditingProfile(true)} style={{ background: "none", border: "none", color: "#4a7aff", fontSize: 13, fontWeight: 600, padding: "10px 0", cursor: "pointer", marginLeft: "auto", marginTop: 8 }}>Изменить</button>
             ) : (
-              <button onClick={handleSaveProfile} disabled={saving} style={{ background: "#4a7aff", border: "none", color: "#fff", padding: "8px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", marginTop: 18 }}>
-                {saving ? "..." : "Сохранить"}
-              </button>
+              <div style={{ width: "100%", display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+                <button onClick={handleSaveProfile} disabled={saving} style={{ background: "#4a7aff", border: "none", color: "#fff", padding: "10px 20px", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+                  {saving ? "Сохраняем..." : "Сохранить"}
+                </button>
+              </div>
             )}
           </div>
 

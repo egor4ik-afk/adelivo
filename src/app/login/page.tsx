@@ -1,6 +1,6 @@
 // src/app/login/page.tsx
 "use client";
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { IMaskInput } from "react-imask";
 
 export default function LoginPage() {
@@ -13,23 +13,15 @@ export default function LoginPage() {
   const [isOperator, setIsOperator] = useState(false);
   const [secretCode, setSecretCode] = useState("");
 
-  // Для Шага 3 (привязка курьера)
-  const [couriers, setCouriers] = useState<any[]>([]);
-  const [selectedCourierId, setSelectedCourierId] = useState("");
+  // Для Шага 3 (создание/привязка профиля курьера)
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
-  const [courierSearch, setCourierSearch] = useState("");
-
-  // Фильтрация курьеров по вводу
-  const filteredCouriers = useMemo(() => {
-    return couriers.filter(c => 
-      c.fullName.toLowerCase().includes(courierSearch.toLowerCase())
-    );
-  }, [couriers, courierSearch]);
 
   async function handleSendCode(e: React.FormEvent) {
     e.preventDefault();
     
-    // 🔥 НОВОЕ: Проверяем пароль до отправки email-кода
+    // Проверяем пароль до отправки email-кода
     if (isOperator && secretCode !== "0007") {
       setError("Неверный секретный пароль оператора!");
       return;
@@ -54,34 +46,18 @@ export default function LoginPage() {
     try {
       const res = await fetch("/api/auth/verify", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        // 🔥 ДОБАВЛЕНО: Явно передаем isOperator на сервер
         body: JSON.stringify({ email, code, isOperator, secretCode: isOperator ? secretCode : undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
+      // Если курьер и у него еще нет привязанного профиля БД — переходим на шаг 3
       if (data.role === "COURIER" && !data.linked) {
-        const cRes = await fetch("/api/couriers");
-        if (cRes.ok) {
-          const cData = await cRes.json();
-          const BAD_WORDS = ["сдэк", "яндекс", "доставк", "курьер", "тест", "пеший", "авто", "logisty", "dostavista"];
-
-          const validCouriers = cData.filter((c: any) => {
-            if (!c.isActive || c.email || !c.fullName) return false;
-            const lowerName = c.fullName.toLowerCase();
-            if (c.fullName.trim().length < 3) return false;
-            if (BAD_WORDS.some(word => lowerName.includes(word))) return false;
-            return true;
-          });
-
-          validCouriers.sort((a: any, b: any) => a.fullName.localeCompare(b.fullName));
-          setCouriers(validCouriers);
-        }
         setStep(3);
         return;
       }
 
-      if (data.role === "COURIER") window.location.href = "/courier/points";
+      if (data.role === "COURIER") window.location.href = "/courier/profile";
       else window.location.href = "/dashboard";
     } catch (err: any) { setError(err.message); }
     finally { setLoading(false); }
@@ -89,21 +65,26 @@ export default function LoginPage() {
 
   async function handleLinkCourier(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedCourierId) { setError("Выберите профиль курьера"); return; }
+    if (!firstName.trim() || !lastName.trim()) { 
+      setError("Пожалуйста, введите Имя и Фамилию"); 
+      return; 
+    }
+    
     setLoading(true); setError("");
 
     const cleanPhone = phone.replace(/[^\d+]/g, "");
 
     try {
+      // Отправляем Имя, Фамилию и Телефон на сервер
       const res = await fetch("/api/auth/link-courier", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ courierId: selectedCourierId, phone: cleanPhone })
+        body: JSON.stringify({ firstName: firstName.trim(), lastName: lastName.trim(), phone: cleanPhone })
       });
       if (!res.ok) {
         const d = await res.json();
-        throw new Error(d.error || "Ошибка привязки профиля");
+        throw new Error(d.error || "Ошибка создания/привязки профиля");
       }
-      window.location.href = "/courier/points";
+      window.location.href = "/courier/profile";
     } catch (err: any) { setError(err.message); }
     finally { setLoading(false); }
   }
@@ -157,52 +138,48 @@ export default function LoginPage() {
           <div style={{ display: "flex", flexDirection: "column" }}>
             <div style={s.sub}>
               <div style={{ fontSize: 14, color: "#1a1a18", fontWeight: 600, marginBottom: 4 }}>Добро пожаловать!</div>
-              Найдите и выберите свой профиль в списке.
+              Заполните данные профиля для начала работы.
             </div>
 
-            <label style={s.label}>Поиск профиля</label>
-            <input 
-              type="text" 
-              placeholder="Начните вводить имя..." 
-              value={courierSearch} 
-              onChange={e => setCourierSearch(e.target.value)} 
-              style={{ ...s.input, marginBottom: 8 }}
-            />
+            <form onSubmit={handleLinkCourier} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div>
+                <label style={s.label}>Имя</label>
+                <input 
+                  type="text" 
+                  required 
+                  value={firstName} 
+                  onChange={e => setFirstName(e.target.value)} 
+                  placeholder="Иван" 
+                  style={{...s.input, marginBottom: 0}} 
+                />
+              </div>
 
-            {/* Список курьеров с прокруткой */}
-            <div style={s.courierList}>
-              {filteredCouriers.length > 0 ? filteredCouriers.map(c => (
-                <div 
-                  key={c.id} 
-                  onClick={() => setSelectedCourierId(String(c.id))}
-                  style={{
-                    ...s.courierItem,
-                    borderColor: selectedCourierId === String(c.id) ? "#4a7aff" : "#e8e6df",
-                    background: selectedCourierId === String(c.id) ? "#f4f7ff" : "#fff",
-                  }}
-                >
-                  <div style={{ fontSize: 14, fontWeight: 600, color: selectedCourierId === String(c.id) ? "#4a7aff" : "#1a1a18" }}>
-                    {c.fullName}
-                  </div>
-                  {selectedCourierId === String(c.id) && <span style={{ color: "#4a7aff" }}>✓</span>}
-                </div>
-              )) : (
-                <div style={{ textAlign: "center", padding: 20, color: "#a8a49c", fontSize: 13 }}>Ничего не найдено</div>
-              )}
-            </div>
+              <div>
+                <label style={s.label}>Фамилия</label>
+                <input 
+                  type="text" 
+                  required 
+                  value={lastName} 
+                  onChange={e => setLastName(e.target.value)} 
+                  placeholder="Иванов" 
+                  style={{...s.input, marginBottom: 0}} 
+                />
+              </div>
 
-            <form onSubmit={handleLinkCourier} style={{ display: "flex", flexDirection: "column", marginTop: 16 }}>
-              <label style={s.label}>Ваш номер телефона</label>
-              <IMaskInput
-                mask="+7 (000) 000-00-00"
-                value={phone}
-                onAccept={(val: string) => setPhone(val)}
-                placeholder="+7 (___) ___-__-__"
-                style={s.input}
-              />
+              <div>
+                <label style={s.label}>Ваш номер телефона</label>
+                <IMaskInput
+                  mask="+7 (000) 000-00-00"
+                  value={phone}
+                  onAccept={(val: string) => setPhone(val)}
+                  placeholder="+7 (___) ___-__-__"
+                  style={{...s.input, marginBottom: 0}}
+                />
+              </div>
+
               <button 
-                disabled={loading || !selectedCourierId || phone.length < 18} 
-                style={{ ...s.btn, opacity: (selectedCourierId && phone.length >= 18 && !loading) ? 1 : 0.5 }}
+                disabled={loading || phone.length < 18 || !firstName || !lastName} 
+                style={{ ...s.btn, marginTop: 8, opacity: (phone.length >= 18 && firstName && lastName && !loading) ? 1 : 0.5 }}
               >
                 {loading ? "Сохранение..." : "Начать работу"}
               </button>
@@ -221,9 +198,7 @@ const s: Record<string, React.CSSProperties> = {
   logoText: { fontSize: 24, fontWeight: 700, color: "#1a1a18", margin: 0 },
   sub: { fontSize: 13, color: "#6b6860", marginBottom: 20, textAlign: "center", lineHeight: "1.4" },
   label: { display: "block", fontSize: 11, color: "#a8a49c", marginBottom: 6, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" },
-  input: { width: "100%", padding: "12px 16px", borderRadius: 12, border: "1px solid #e8e6df", background: "#fafaf8", color: "#1a1a18", fontSize: 16, outline: "none", boxSizing: "border-box", transition: "border-color 0.2s" },
-  courierList: { maxHeight: 200, overflowY: "auto", border: "1px solid #e8e6df", borderRadius: 12, background: "#fafaf8" },
-  courierItem: { padding: "12px 16px", borderBottom: "1px solid #e8e6df", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", transition: "all 0.2s" },
+  input: { width: "100%", padding: "12px 16px", borderRadius: 12, border: "1px solid #e8e6df", background: "#fafaf8", color: "#1a1a18", fontSize: 16, outline: "none", boxSizing: "border-box", transition: "border-color 0.2s", marginBottom: 12 },
   btn: { width: "100%", padding: "14px", borderRadius: 12, background: "#4a7aff", border: "none", color: "#fff", fontSize: 16, fontWeight: 700, cursor: "pointer", transition: "all 0.2s" },
   back: { background: "none", border: "none", color: "#4a7aff", fontSize: 14, fontWeight: 600, cursor: "pointer", marginTop: 12, width: "100%" },
   err: { color: "#d94040", fontSize: 13, marginBottom: 16, textAlign: "center", background: "#fff8f8", padding: "10px", borderRadius: 10, border: "1px solid rgba(217,64,64,0.2)" },
