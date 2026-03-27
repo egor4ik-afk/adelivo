@@ -43,22 +43,26 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
   const orderId = event.notification.data?.orderId;
+  
+  // 🔥 Собираем абсолютный URL. Это критично для PWA на мобилках!
+  const targetPath = orderId ? `/dashboard?orderId=${orderId}` : "/dashboard";
+  const targetUrl = new URL(targetPath, self.location.origin).href;
 
   event.waitUntil(
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then((clients) => {
-        // Если вкладка уже открыта — фокусируемся на ней и передаём orderId
+        // Ищем уже открытую вкладку или PWA
         for (const client of clients) {
-          if (client.url.includes("/dashboard")) {
-            client.focus();
+          if (client.url.includes("/dashboard") && "focus" in client) {
             client.postMessage({ type: "NOTIFICATION_CLICK", orderId });
-            return;
+            return client.focus();
           }
         }
-        // Иначе открываем новую вкладку
-        const url = orderId ? `/dashboard?orderId=${orderId}` : "/dashboard";
-        return self.clients.openWindow(url);
+        // Если не открыта — открываем новую (с абсолютным URL)
+        if (self.clients.openWindow) {
+          return self.clients.openWindow(targetUrl);
+        }
       })
   );
 });

@@ -1,6 +1,8 @@
 {
   "name": "EVENT WAVE",
   "short_name": "EVENT",
+  "start_url": "/",
+  "scope": "/",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",
