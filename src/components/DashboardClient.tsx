@@ -38,7 +38,10 @@ function loadYMaps(): Promise<void> {
   ymapsReady = new Promise((resolve, reject) => {
     if (typeof window !== "undefined" && window.ymaps) { window.ymaps.ready(resolve); return; }
     const s = document.createElement("script");
-    s.src = `https://api-maps.yandex.ru/2.1/?apikey=${process.env.NEXT_PUBLIC_YANDEX_MAPS_KEY}&lang=ru_RU`;
+    const mapsKey = process.env.NEXT_PUBLIC_YANDEX_MAPS_KEY;
+    const suggestKey = process.env.NEXT_PUBLIC_YANDEX_SUGGEST_KEY;
+    // 🔥 Теперь загружаем с правильными ключами для саджеста
+    s.src = `https://api-maps.yandex.ru/2.1/?lang=ru_RU&apikey=${mapsKey}${suggestKey ? `&suggest_apikey=${suggestKey}` : ''}`;
     s.onload = () => window.ymaps.ready(resolve);
     s.onerror = reject;
     document.head.appendChild(s);
@@ -546,27 +549,21 @@ export function DashboardClient({ user }: { user: User }) {
           const legSeconds = path.properties.get("duration")?.value || 0; // уже с пробками
           legsArr.push(cleanHtml(path.properties.get("duration")?.text || "—"));
 
-          if (idx < validOrders.length) {
-            cumulativeMs += (legSeconds + 5 * 60) * 1000; // +5 мин на остановку
-            const order = validOrders[idx];
+          // 🔥 Считаем дедлайн ТОЛЬКО для первой точки (idx === 0)
+          if (idx === 0 && validOrders.length > 0) {
+            const order = validOrders[0];
+            const legToFirstPointMs = (legSeconds + 5 * 60) * 1000; // Время до первой точки + 5 мин парковка
 
             if (order.slotFrom) {
               const [hh, mm] = order.slotFrom.split(":").map(Number);
               if (!isNaN(hh) && !isNaN(mm)) {
-                // Дедлайн этой точки — начало слота
                 const slotStartMs = new Date().setHours(hh, mm, 0, 0);
-                // Когда курьер туда приедет если выедет прямо сейчас
-                const arrivalIfLeaveNowMs = nowMs + cumulativeMs;
-                // Самое позднее когда нужно забрать заказы с базы чтобы успеть
-                const latestPickupMs = slotStartMs - cumulativeMs;
-
-                if (!earliestDeadline || latestPickupMs < earliestDeadline.pickupDeadlineMs) {
-                  earliestDeadline = {
-                    externalId: order.externalId ?? order.crmId,
-                    slotFrom: order.slotFrom,
-                    pickupDeadlineMs: latestPickupMs,
-                  };
-                }
+                
+                earliestDeadline = {
+                  externalId: order.externalId ?? order.crmId,
+                  slotFrom: order.slotFrom,
+                  pickupDeadlineMs: slotStartMs - legToFirstPointMs,
+                };
               }
             }
           }
@@ -645,7 +642,7 @@ export function DashboardClient({ user }: { user: User }) {
       setBulkCourier(""); setBulkSelectedIds([]); setEditingRouteId(null);
       await fetchData();
       alert(editingRouteId ? "✅ Изменения в маршруте сохранены!" : "✅ Маршрут создан!");
-      setRouteTabMode("current");
+      setRouteTabMode("new");
     } catch { alert("Произошла ошибка"); }
     finally { setBulkSaving(false); }
   }

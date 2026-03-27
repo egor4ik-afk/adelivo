@@ -15,10 +15,10 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "EwentWave",
+  title: "EventWave",
   description: "Dashboard",
   manifest: "/manifest.json",
-  appleWebApp: { capable: true, statusBarStyle: "default", title: "EwentWave" },
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "EventWave" },
   formatDetection: { telephone: false },
 };
 

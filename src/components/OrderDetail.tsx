@@ -128,36 +128,53 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
     };
   }, [selected?.id]);
 
-  // 🔥 Саджест адреса — твой рабочий паттерн из профиля
+  // 🔥 Простой и рабочий саджест из v2.1
   useEffect(() => {
     if (!selected) return;
     if (typeof window === "undefined") return;
-  
+
     const inputId = `order-address-${selected.id}`;
-  
+
     const initSuggest = () => {
       const ymaps = (window as any).ymaps;
       if (!ymaps) return;
       ymaps.ready(() => {
-        // 🔥 Даём React время отрендерить инпут
         setTimeout(() => {
           const input = document.getElementById(inputId);
+          // Инициализируем только если есть input и еще не инициализирован
           if (input && !(input as any).isSuggestInitialized) {
-            const suggestView = new ymaps.SuggestView(inputId, { results: 5 });
-            suggestView.events.add("select", (e: any) => {
-              setEditAddress(e.get("item").value);
-            });
-            (input as any).isSuggestInitialized = true;
+            try {
+              const suggestView = new ymaps.SuggestView(inputId, { results: 5 });
+              suggestView.events.add("select", (e: any) => {
+                const val = e.get("item").value;
+                setEditAddress(val);
+                
+                // 🔥 Сразу геокодируем выбранный адрес и ставим серый пин
+                ymaps.geocode(val, { results: 1 }).then((res: any) => {
+                  const obj = res.geoObjects.get(0);
+                  if (obj) {
+                    const coords = obj.geometry.getCoordinates();
+                    onPreviewGeo({ lat: coords[0], lng: coords[1] });
+                  }
+                }).catch((err: any) => console.warn("Ошибка геокодирования:", err));
+              });
+              (input as any).isSuggestInitialized = true;
+            } catch (err) {
+              console.warn("Suggest error:", err);
+            }
           }
         }, 100);
       });
     };
-  
+
     if ((window as any).ymaps) {
       initSuggest();
     } else {
       const script = document.createElement("script");
-      script.src = `https://api-maps.yandex.ru/2.1/?apikey=${process.env.NEXT_PUBLIC_YANDEX_MAPS_KEY}&suggest_apikey=${process.env.NEXT_PUBLIC_YANDEX_SUGGEST_KEY || process.env.NEXT_PUBLIC_YANDEX_MAPS_KEY}&lang=ru_RU`;
+      const mapsKey = process.env.NEXT_PUBLIC_YANDEX_MAPS_KEY;
+      const suggestKey = process.env.NEXT_PUBLIC_YANDEX_SUGGEST_KEY;
+      // Обязательно подставляем оба ключа!
+      script.src = `https://api-maps.yandex.ru/2.1/?lang=ru_RU&apikey=${mapsKey}${suggestKey ? `&suggest_apikey=${suggestKey}` : ''}`;
       script.onload = initSuggest;
       document.head.appendChild(script);
     }
@@ -255,13 +272,15 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
 
       <div style={{ marginBottom: 10 }}>
         <div style={lbl}>Адрес доставки</div>
-        {/* 🔥 id для саджеста — уникальный на каждый заказ */}
+        
+        {/* 🔥 Простой инпут с уникальным ID для саджеста */}
         <input
           id={`order-address-${selected.id}`}
           value={editAddress}
           onChange={e => setEditAddress(e.target.value)}
           style={{ ...ta, resize: undefined }}
         />
+        
         <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
           <button style={geoBtn} onClick={() => handleGeocode("manual")} disabled={fixingAI}>📍 На карте</button>
           <button style={aiBtn} onClick={() => handleGeocode("ai")} disabled={fixingAI}>

@@ -44,7 +44,7 @@ async function fetchOrderFromCrm(orderId: string, retryCount = 0): Promise<CrmOr
 
 export async function GET() {
   // RetailCRM пингует эндпоинт перед активацией
-  return NextResponse.json({ ok: true, service: "EwentWave webhook" });
+  return NextResponse.json({ ok: true, service: "EventWave webhook" });
 }
 
 export async function POST(req: Request) {

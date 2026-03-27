@@ -257,8 +257,7 @@ export default function CourierProfilePage() {
           <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", margin: "0 0 12px 0", textTransform: "uppercase" }}>Настройки</h2>
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "12px 0", borderBottom: "1px solid #f0efe9" }}>
-            <div style={{ flex: 1 }}>
-              
+          <div style={{ flex: 1, paddingRight: 16 }}>              
               {!editingProfile ? (
                 <>
                   <div style={{ fontSize: 13, color: "#a8a49c" }}>Личные данные</div>
