@@ -120,7 +120,7 @@ async function sendIndividualPushes(event: NotificationEvent) {
         }
         if (event.changes.opCommentChanged) {
           shouldSend = true;
-          bodyTexts.push(`Заметка: ${event.order.opComment || "—"}`);
+          bodyTexts.push(`Комментарий оператора: ${event.order.opComment || "—"}`);
         }
         if (event.changes.itemsChanged) {
           shouldSend = true;

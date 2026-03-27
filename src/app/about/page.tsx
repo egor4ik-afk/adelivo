@@ -719,20 +719,50 @@ const HTML_CONTENT = `
 </style>
 
 <div class="landing-body">
-  <header>
-    <div class="logo">
+  <header style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 2rem; background: var(--background); border-bottom: 1px solid var(--border);">
+    
+    {/* ЛОГОТИП */}
+    <div class="logo" style="display: flex; align-items: center; gap: 8px;">
       <img src="/favicon.svg" alt="Logo" style="width: 32px; height: 32px; filter: drop-shadow(0 0 10px rgba(56,189,248,0.5));" />
-      <div>Event<span>Wave</span></div>
+      <div style="font-weight: 700; font-size: 1.25rem;">Event<span style="color: var(--accent);">Wave</span></div>
     </div>
+    
+    {/* НАВИГАЦИЯ И КОНТАКТЫ */}
     <div style="display: flex; align-items: center; gap: 2rem;">
-      <nav>
-        <a href="#dashboard">Дашборд</a>
-        <a href="#map">Карта</a>
-        <a href="#routes">Маршруты</a>
-        <a href="#couriers">Для курьеров</a>
-        <a href="#integrations">Интеграции</a>
+      <nav style="display: flex; gap: 1.5rem;">
+        <a href="#dashboard" style="color: var(--foreground); text-decoration: none; font-weight: 500;">Дашборд</a>
+        <a href="#map" style="color: var(--foreground); text-decoration: none; font-weight: 500;">Карта</a>
+        <a href="#routes" style="color: var(--foreground); text-decoration: none; font-weight: 500;">Маршруты</a>
+        <a href="#couriers" style="color: var(--foreground); text-decoration: none; font-weight: 500;">Для курьеров</a>
+        <a href="#integrations" style="color: var(--foreground); text-decoration: none; font-weight: 500;">Интеграции</a>
       </nav>
-      <a href="/login" class="btn-login">Войти</a>
+
+      {/* 🟢 МИНИ-КОНТАКТЫ В ШАПКЕ 🟢 */}
+      <div style="display: flex; align-items: center; gap: 12px; border-left: 1px solid #e5e7eb; padding-left: 1.5rem; margin-left: -0.5rem;">
+        <a 
+          href="tel:+79035124241" 
+          title="Позвонить нам"
+          style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; background: #f3f4f6; color: #4b5563; border-radius: 50%; text-decoration: none; transition: all 0.2s; font-size: 16px;"
+          onMouseEnter={(e) => { e.currentTarget.style.background = "#e5e7eb"; e.currentTarget.style.transform = "scale(1.05)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "#f3f4f6"; e.currentTarget.style.transform = "scale(1)"; }}
+        >
+          📞
+        </a>
+        <a 
+          href="https://t.me/weareventwave" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          title="Написать в Telegram"
+          style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; background: #eff6ff; color: #3b82f6; border-radius: 50%; text-decoration: none; transition: all 0.2s; font-size: 18px;"
+          onMouseEnter={(e) => { e.currentTarget.style.background = "#dbeafe"; e.currentTarget.style.transform = "scale(1.05)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "#eff6ff"; e.currentTarget.style.transform = "scale(1)"; }}
+        >
+          ✈️
+        </a>
+      </div>
+      {/* 🔴 КОНЕЦ КОНТАКТОВ 🔴 */}
+
+      <a href="/login" class="btn-login" style="margin-left: 0.5rem;">Войти</a>
     </div>
   </header>
 
@@ -1404,18 +1434,71 @@ const HTML_CONTENT = `
   </section>
 
   <section class="cta-section">
-    <div class="section-inner" style="padding-top:2rem">
+    <div class="section-inner" style={{ paddingTop: '2rem' }}>
       <div class="cta-card">
         <h2>Готовы ускорить логистику?</h2>
         <p>EventWave берёт на себя рутину. Логисты работают в 3–4 раза быстрее, а курьеры получают маршруты моментально в удобном приложении без паролей.</p>
         <a href="/login" class="btn-primary">Войти в систему →</a>
       </div>
+      
+      {/* 🟢 БЛОК КОНТАКТОВ 🟢 */}
+      <div style={{ marginTop: "4rem", textAlign: "center", paddingBottom: "2rem" }}>
+        <p style={{ fontSize: "1.1rem", fontWeight: 600, color: "var(--foreground, #1a1a18)", marginBottom: "1.2rem" }}>
+          Остались вопросы? Напишите нам:
+        </p>
+        <div style={{ display: "flex", justifyContent: "center", gap: "16px", flexWrap: "wrap" }}>
+          <a 
+            href="https://t.me/weareventwave" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "12px 24px",
+              backgroundColor: "#eef3ff",
+              color: "#4a7aff",
+              borderRadius: "100px", // красивые круглые кнопки
+              textDecoration: "none",
+              fontWeight: 600,
+              fontSize: "15px",
+              transition: "transform 0.2s ease"
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.transform = "translateY(-2px)"}
+            onMouseLeave={(e) => e.currentTarget.style.transform = "translateY(0)"}
+          >
+            <span style={{ fontSize: "1.2rem" }}>✈️</span> @weareventwave
+          </a>
+          <a 
+            href="mailto:intoaivan@gmail.com" 
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "12px 24px",
+              backgroundColor: "#f5f4f0",
+              color: "#1a1a18",
+              borderRadius: "100px",
+              textDecoration: "none",
+              fontWeight: 600,
+              fontSize: "15px",
+              transition: "transform 0.2s ease"
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.transform = "translateY(-2px)"}
+            onMouseLeave={(e) => e.currentTarget.style.transform = "translateY(0)"}
+          >
+            <span style={{ fontSize: "1.2rem" }}>📧</span> intoaivan@gmail.com
+          </a>
+        </div>
+      </div>
+      {/* 🔴 КОНЕЦ БЛОКА КОНТАКТОВ 🔴 */}
+
     </div>
   </section>
 
   <footer>
-    <div style="margin-bottom: 8px;">EventWave © 2026 &nbsp;·&nbsp; Продвинутая система диспетчеризации и логистики</div>
-    <div style="font-size: 0.7rem; color: var(--muted);">Сайт сделан и размещен на <a href="https://relaxdev.ru" target="_blank" style="color: var(--accent); text-decoration: none; font-weight: 500;">relaxdev.ru</a></div>
+    <div style={{ marginBottom: "8px" }}>EventWave © 2026 &nbsp;·&nbsp; Продвинутая система диспетчеризации и логистики</div>
+    <div style={{ fontSize: "0.7rem", color: "var(--muted)" }}>Сайт сделан и размещен на <a href="https://relaxdev.ru" target="_blank" style={{ color: "var(--accent)", textDecoration: "none", fontWeight: 500 }}>relaxdev.ru</a></div>
   </footer>
 </div>
 `;
