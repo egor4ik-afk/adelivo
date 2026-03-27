@@ -41,17 +41,31 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         });
         updateData.courier   = dbCourier?.fullName ?? body.courier;
         updateData.courierId = dbCourier?.id ?? null;
-
-        // 🔥 Генерируем ссылку БАЗА → точка заказа
-        const lat = order.lat;
-        const lng = order.lng;
-        if (lat && lng) {
-          updateData.courierLink = `https://yandex.ru/maps/?rtext=${STORE_COORDS}~${lat},${lng}&rtt=auto`;
-        }
       } else {
-        // Снятие курьера — только courier/courierId, courierLink не трогаем
+        // Снятие курьера — очищаем и ссылку тоже
         updateData.courier   = null;
         updateData.courierId = null;
+        updateData.courierLink = null; 
+      }
+    }
+
+    // 🔥 ГЕНЕРАЦИЯ ССЫЛКИ (ТЕПЕРЬ РАБОТАЕТ ПРАВИЛЬНО!)
+    // Проверяем: есть ли вообще курьер на заказе (новый или уже был)
+    const finalCourier = updateData.courier !== undefined ? updateData.courier : order.courier;
+    
+    // Проверяем: поменялся ли адрес или координаты?
+    const isAddressChanged = body.address !== undefined || body.lat !== undefined || body.lng !== undefined;
+    // Проверяем: поменялся ли курьер?
+    const isCourierChanged = body.courier !== undefined && body.courier !== null;
+
+    // Если есть курьер, и при этом обновили либо курьера, либо адрес -> пересобираем чистую ссылку
+    if (finalCourier && (isCourierChanged || isAddressChanged)) {
+      // Если перед этим отработал запрос /fix, то order.lat уже содержит новые свежие координаты!
+      const finalLat = body.lat ?? order.lat;
+      const finalLng = body.lng ?? order.lng;
+
+      if (finalLat && finalLng) {
+        updateData.courierLink = `https://yandex.ru/maps/?mode=routes&rtext=${STORE_COORDS}~${finalLat},${finalLng}&rtt=auto`;
       }
     }
 

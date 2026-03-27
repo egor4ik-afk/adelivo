@@ -273,12 +273,17 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
       <div style={{ marginBottom: 10 }}>
         <div style={lbl}>Адрес доставки</div>
         
-        {/* 🔥 Простой инпут с уникальным ID для саджеста */}
-        <input
+        {/* 🔥 Textarea для саджеста, чтобы длинный адрес влазил */}
+        <textarea
           id={`order-address-${selected.id}`}
           value={editAddress}
           onChange={e => setEditAddress(e.target.value)}
-          style={{ ...ta, resize: undefined }}
+          rows={3} // 👈 Указываем высоту в строках (3 строки)
+          style={{ 
+            ...ta, 
+            resize: "vertical", // Позволяет пользователю растягивать поле по вертикали (если нужно)
+            minHeight: "60px"   // Минимальная высота
+          }}
         />
         
         <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
