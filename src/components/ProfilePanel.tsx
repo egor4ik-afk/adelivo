@@ -93,7 +93,7 @@ export function ProfilePanel({ onClose, onLogout }: { onClose: () => void; onLog
           <div style={s.name}>{fullName}</div>
           <div style={{ marginTop: 4, display: "flex", gap: 6, flexWrap: "wrap" as const }}>
             <span style={s.roleBadge}>{ROLE_LABELS[profile.role] ?? profile.role}</span>
-            {profile.role !== "COURIER" && <span style={s.futureBadge}>Курьер — скоро</span>}
+            
           </div>
         </div>
         <button style={s.closeBtn} onClick={onClose}>✕</button>

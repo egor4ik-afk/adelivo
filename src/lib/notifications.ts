@@ -152,29 +152,25 @@ async function sendIndividualPushes(event: NotificationEvent) {
 
     // ════════════════════════════════════════════════════════════
     // ── КУРЬЕРЫ ──
-    // Получают уведомления ТОЛЬКО по своим заказам, без выбора
-    // Клик всегда ведёт в /courier/routes
     // ════════════════════════════════════════════════════════════
     if (user.role === "COURIER") {
-      targetUrl = "/courier/routes"; // курьер всегда идёт в маршруты (/dashboard у курьера нет!)
+      targetUrl = "/courier/routes";
 
       if (event.type === "route.assigned" && event.userId === user.id) {
-        // Назначен новый маршрут
+        // 🔥 Красивый push о новом маршруте
         shouldSend = true;
-        title = `🗺 Новый маршрут назначен`;
-        bodyTexts.push(`Точек в маршруте: ${event.pointsCount}`);
-        bodyTexts.push(`Откройте раздел "Маршруты"`);
+        title = `🗺 Назначен маршрут: ${event.routeId}`;
+        bodyTexts.push(`📍 Точек в маршруте: ${event.pointsCount}`);
+        bodyTexts.push(`👉 Откройте раздел "Маршруты"`);
       }
 
       if (event.type === "order.updated" && event.changes) {
-        // Изменения в заказе курьера — матчим по courierId из БД
         const courierRecord = await prisma.courier.findFirst({
           where: { email: user.email ?? undefined },
         });
         const eventCourierId = (event.order as any).courierId;
 
         if (courierRecord && eventCourierId === courierRecord.id) {
-          // Это заказ данного курьера — отправляем ВСЕ изменения без фильтров
           if (event.changes.statusChanged) {
             shouldSend = true;
             const oldLabel = event.previousStatus ? statusLabel(event.previousStatus) : "—";
@@ -193,12 +189,19 @@ async function sendIndividualPushes(event: NotificationEvent) {
           }
           if (event.changes.commentChanged) {
             shouldSend = true;
-            bodyTexts.push(`Коммент: ${event.order.comment ?? "—"}`);
+            bodyTexts.push(`Коммент клиента: ${event.order.comment ?? "—"}`);
+          }
+          if (event.changes.opCommentChanged) { // 🔥 ДОБАВЛЕНО
+            shouldSend = true;
+            bodyTexts.push(`Коммент оператора: ${event.order.opComment ?? "—"}`);
+          }
+          if (event.changes.itemsChanged) { // 🔥 ДОБАВЛЕНО
+            shouldSend = true;
+            bodyTexts.push(`Состав заказа изменён`);
           }
           if (event.changes.courierChanged) {
-            // Курьер снят с заказа
             shouldSend = true;
-            bodyTexts.push(event.order.courier ? `Курьер изменён` : `Вы сняты с заказа`);
+            bodyTexts.push(`Вы назначены на этот заказ`);
           }
 
           if (shouldSend) {

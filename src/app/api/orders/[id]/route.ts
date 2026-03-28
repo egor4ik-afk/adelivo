@@ -26,6 +26,11 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     if (body.opComment      !== undefined) updateData.opComment      = body.opComment;
     if (body.address        !== undefined) updateData.address        = body.address;
     if (body.recipientPhone !== undefined) updateData.recipientPhone = body.recipientPhone;
+    
+    // 🔥 ДОБАВЛЕНО: обновляем время, комментарии и состав
+    if (body.slotRaw        !== undefined) updateData.slotRaw        = body.slotRaw;
+    if (body.comment        !== undefined) updateData.comment        = body.comment;
+    if (body.items          !== undefined) updateData.items          = body.items;
 
     if (body.routeId    !== undefined) updateData.routeId    = body.routeId;
     if (body.routeOrder !== undefined) updateData.routeOrder = body.routeOrder;
@@ -47,7 +52,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       }
     }
 
-    // ── Свежие координаты из БД (после возможного /fix) ──
+    // ── Свежие координаты из БД ──
     const freshCoords = await prisma.order.findUnique({
       where: { id },
       select: { lat: true, lng: true },
@@ -66,9 +71,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       }
     }
 
-    // ── Автосоздание маршрута при назначении курьера из OrderDetail ──
-    // Если назначается курьер, а у заказа нет routeId — создаём одиночный маршрут.
-    // Это нужно чтобы заказ отображался в /courier/routes и во вкладке Маршруты CouriersClient.
+    // ── Автосоздание маршрута ──
     const newCourierId = updateData.courierId as number | undefined;
     const courierIsBeingAssigned = newCourierId && !order.courierId;
     const orderHasNoRoute = !order.routeId && body.routeId === undefined;
@@ -78,7 +81,6 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         ? order.deliveryDate.toString().split("T")[0]
         : new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" });
 
-      // Генерируем имя маршрута по шаблону M-DD###
       const routeDay = orderDate.split("-")[2];
       const prefix = `M-${routeDay}`;
       const lastRoute = await prisma.route.findFirst({
@@ -108,12 +110,10 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       updateData.routeId    = newRoute.id;
       updateData.routeOrder = 1;
 
-      // NEW → ASSIGNED автоматически
       if (order.status === "NEW") {
         updateData.status = "ASSIGNED";
       }
 
-      // Push курьеру о новом маршруте
       const courierRec = await prisma.courier.findUnique({ where: { id: newCourierId } });
       if (courierRec?.email) {
         const courierUser = await prisma.user.findUnique({ where: { email: courierRec.email } });
@@ -128,7 +128,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       }
     }
 
-    // ── Снятие курьера: если последний заказ в маршруте — удаляем маршрут ──
+    // ── Снятие курьера ──
     const courierIsBeingRemoved = (body.courier === "" || body.courier === null) && order.courierId;
     if (courierIsBeingRemoved && order.routeId) {
       const siblingsCount = await prisma.order.count({
@@ -141,7 +141,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       updateData.routeOrder = null;
     }
 
-    // ── Автовыброс из маршрута при отмене/возврате/самовывозе ──
+    // ── Автовыброс из маршрута ──
     const newStatus  = body.status  || order.status;
     const newAddress = body.address || order.address;
     const isCancelledOrReturned = newStatus === "CANCELLED" || newStatus === "RETURNED";
@@ -161,15 +161,15 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       });
     }
 
-    // ── Push-уведомления о ручных изменениях ──
+    // 🔥 ДОБАВЛЕНО: Теперь честно отслеживаем изменения времени, комментариев и товаров
     const changes = {
       statusChanged:    body.status    !== undefined && order.status    !== (updateData.status ?? body.status),
       courierChanged:   body.courier   !== undefined && (order.courierId ?? 0) !== (updateData.courierId ?? 0),
       addressChanged:   body.address   !== undefined && (order.address   ?? "") !== (body.address ?? ""),
-      slotChanged:      false,
-      commentChanged:   false,
+      slotChanged:      body.slotRaw   !== undefined && (order.slotRaw   ?? "") !== (body.slotRaw ?? ""),
+      commentChanged:   body.comment   !== undefined && (order.comment   ?? "") !== (body.comment ?? ""),
       opCommentChanged: body.opComment !== undefined && (order.opComment ?? "") !== (body.opComment ?? ""),
-      itemsChanged:     false,
+      itemsChanged:     body.items     !== undefined && (order.items     ?? "") !== (body.items ?? ""),
     };
 
     if (Object.values(changes).some(Boolean)) {
