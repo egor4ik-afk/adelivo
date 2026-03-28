@@ -4,24 +4,22 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { geocodeAddress } from "@/lib/crm";
-import { findContractorByPhone } from "@/lib/konsol"; // 🔥 Импорт для Консоли
+import { findContractorByPhone, inviteContractor } from "@/lib/konsol";
 
 const updateSchema = z.object({
-  firstName: z.string().min(1).max(50).optional(),
-  lastName: z.string().max(50).optional(),
-  phone: z.string().max(20).optional(),
-  homeAddress: z.string().max(200).optional(), 
-  konsolPhone: z.string().optional(), // 🔥 Добавили валидацию для телефона СЗ
-
-  // Настройки уведомлений (ОСТАВЛЕНЫ БЕЗ ИЗМЕНЕНИЙ)
+  firstName:      z.string().min(1).max(50).optional(),
+  lastName:       z.string().max(50).optional(),
+  phone:          z.string().max(20).optional(),
+  homeAddress:    z.string().max(200).optional(),
+  konsolPhone:    z.string().optional(),
   notifyNewOrder: z.boolean().optional(),
-  notifyStatus: z.boolean().optional(),
-  notifyCourier: z.boolean().optional(),
-  notifyAddress: z.boolean().optional(),
-  notifyTime: z.boolean().optional(),
-  notifyComment: z.boolean().optional(),
-  notifyOpComment: z.boolean().optional(),
-  notifyItems: z.boolean().optional(),
+  notifyStatus:   z.boolean().optional(),
+  notifyCourier:  z.boolean().optional(),
+  notifyAddress:  z.boolean().optional(),
+  notifyTime:     z.boolean().optional(),
+  notifyComment:  z.boolean().optional(),
+  notifyOpComment:z.boolean().optional(),
+  notifyItems:    z.boolean().optional(),
 });
 
 // GET /api/profile
@@ -44,23 +42,25 @@ export async function GET(req: NextRequest) {
   if (!profile) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
   let homeAddress = "";
-  
+  let konsolPhone: string | null = null;
+  let isLinked = false;
+
   if (profile.email) {
     const courier = await prisma.courier.findFirst({ where: { email: profile.email } });
     if (courier) {
-      homeAddress = courier.homeAddress || "";
-      
-      // 🔥 ЕСЛИ ЭТО КУРЬЕР: берем личные данные из таблицы Courier, если в User пусто
+      homeAddress  = courier.homeAddress || "";
+      konsolPhone  = courier.konsolPhone || null;
+      isLinked     = !!courier.konsolContractorId;
+
       if (profile.role === "COURIER") {
         profile.firstName = profile.firstName || courier.firstName || null;
-        profile.lastName = profile.lastName || courier.lastName || null;
-        profile.phone = profile.phone || courier.phone || null;
+        profile.lastName  = profile.lastName  || courier.lastName  || null;
+        profile.phone     = profile.phone     || courier.phone     || null;
       }
     }
   }
 
-  // Склеиваем и отдаем на клиент
-  return NextResponse.json({ ...profile, homeAddress });
+  return NextResponse.json({ ...profile, homeAddress, konsolPhone, isLinked });
 }
 
 // PATCH /api/profile
@@ -70,11 +70,9 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const body = await req.json();
-
-    // 🔥 Отделяем homeAddress и konsolPhone от остальных данных
     const { homeAddress, konsolPhone, ...userData } = updateSchema.parse(body);
 
-    // 1. Обновляем таблицу User (едино для всех)
+    // 1. Обновляем User
     const updated = await prisma.user.update({
       where: { id: user.id },
       data: userData,
@@ -87,64 +85,97 @@ export async function PATCH(req: NextRequest) {
       },
     });
 
-    // 2. Обновляем таблицу Courier
+    // 2. Обновляем Courier
     if (user.email) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const courierData: any = {};
-      
+
       if (homeAddress !== undefined) courierData.homeAddress = homeAddress;
       if (userData.phone !== undefined) courierData.phone = userData.phone;
 
-      // 🔥 ЛОГИКА ПРИВЯЗКИ/ОТВЯЗКИ КОНСОЛЬ.ПРО
+      // 🔥 ЛОГИКА КОНСОЛИ
       if (konsolPhone !== undefined) {
         if (konsolPhone === "" || konsolPhone === null) {
           // Отвязка
           courierData.konsolPhone = null;
           courierData.konsolContractorId = null;
         } else {
-          // Привязка (ищем СЗ по номеру в Консоли)
+          // Ищем исполнителя по телефону
           const contractorId = await findContractorByPhone(konsolPhone);
-          if (!contractorId) {
-            return NextResponse.json({ error: "Самозанятый с таким номером не найден в Консоль.Про" }, { status: 400 });
+
+          if (contractorId) {
+            // ✅ Уже зарегистрирован — просто привязываем
+            courierData.konsolPhone = konsolPhone;
+            courierData.konsolContractorId = contractorId;
+
+            if (Object.keys(courierData).length > 0) {
+              await prisma.courier.updateMany({ where: { email: user.email }, data: courierData });
+            }
+            return NextResponse.json({ ...updated, homeAddress, linked: true });
+
+          } else {
+            // ❌ Не найден — отправляем приглашение
+            const courier = await prisma.courier.findFirst({ where: { email: user.email } });
+            const fullName = [courier?.lastName, courier?.firstName, courier?.patronymic]
+              .filter(Boolean).join(" ") || `${updated.firstName ?? ""} ${updated.lastName ?? ""}`.trim() || "Исполнитель";
+
+            const invite = await inviteContractor(fullName, konsolPhone);
+
+            if (!invite) {
+              return NextResponse.json(
+                { error: "Не удалось отправить приглашение в Консоль.Про. Проверьте номер телефона." },
+                { status: 400 }
+              );
+            }
+
+            // Сохраняем телефон, contractorId пока null — заполнится после регистрации
+            courierData.konsolPhone = konsolPhone;
+            courierData.konsolContractorId = null;
+
+            if (Object.keys(courierData).length > 0) {
+              await prisma.courier.updateMany({ where: { email: user.email }, data: courierData });
+            }
+
+            const onboardingUrl = invite.onboarding_url
+              ?? `https://app.konsol.pro/join/${process.env.KONSOL_SCENARIO_ID}`;
+
+            return NextResponse.json({
+              ...updated,
+              homeAddress,
+              invited: true,
+              onboarding_url: onboardingUrl,
+              message: "Приглашение отправлено! Проверьте СМС для регистрации.",
+            });
           }
-          courierData.konsolPhone = konsolPhone;
-          courierData.konsolContractorId = contractorId;
         }
       }
 
-      // 🔥 ЕСЛИ ЭТО КУРЬЕР: дополнительно обновляем имя, фамилию и склеиваем fullName
+      // Имя/фамилия для курьера
       if (user.role === "COURIER") {
         if (userData.firstName !== undefined) courierData.firstName = userData.firstName;
-        if (userData.lastName !== undefined) courierData.lastName = userData.lastName;
-        
-        // Чтобы в админке поиск по курьерам работал корректно
+        if (userData.lastName  !== undefined) courierData.lastName  = userData.lastName;
+
         if (userData.firstName !== undefined || userData.lastName !== undefined) {
           const existing = await prisma.courier.findFirst({ where: { email: user.email } });
-          const fn = userData.firstName !== undefined ? userData.firstName : (existing?.firstName || "");
-          const ln = userData.lastName !== undefined ? userData.lastName : (existing?.lastName || "");
+          const fn = userData.firstName ?? existing?.firstName ?? "";
+          const ln = userData.lastName  ?? existing?.lastName  ?? "";
           courierData.fullName = `${fn} ${ln}`.trim();
         }
       }
 
       if (Object.keys(courierData).length > 0) {
-        await prisma.courier.updateMany({
-          where: { email: user.email },
-          data: courierData
-        });
-        
-        // Геокодируем адрес, если он был передан
+        await prisma.courier.updateMany({ where: { email: user.email }, data: courierData });
+
         if (homeAddress) {
           try {
             const geo = await geocodeAddress(homeAddress);
             if (geo?.lat && geo?.lng) {
               await prisma.courier.updateMany({
                 where: { email: user.email },
-                data: { homeLat: geo.lat, homeLng: geo.lng }
+                data: { homeLat: geo.lat, homeLng: geo.lng },
               });
             }
-          } catch (_) {
-            // Геокодирование не критично — не блокируем ответ
-          }
+          } catch (_) { /* геокодирование не критично */ }
         }
       }
     }

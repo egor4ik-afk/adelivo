@@ -274,7 +274,7 @@ model GlobalMessage {
 // 🔥 НОВАЯ ТАБЛИЦА: Задания Консоль.Про
 model KonsolTask {
   id             String   @id @default(cuid())
-  courierId      Int
+  courierId      Int?
   konsolTaskId   String   
   konsolActId    String?  
   date           DateTime // Дата начала недели (Понедельник)
@@ -282,7 +282,6 @@ model KonsolTask {
   status         String   @default("DRAFT") // DRAFT, SIGNED_BY_US
   createdAt      DateTime @default(now())
   
-  courier        Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
-  
+courier        Courier? @relation(fields: [courierId], references: [id], onDelete: SetNull)  
   @@unique([courierId, date])
 }
