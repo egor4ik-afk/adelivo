@@ -184,18 +184,26 @@ export default function CourierProfilePage() {
   const handleKonsolAction = async (action: "link" | "unlink") => {
     setKonsolLoading(true);
     const phonePayload = action === "link" ? inputKonsolPhone.replace(/[^\d+]/g, "") : "";
-    
+  
     try {
       const res = await fetch("/api/profile", {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ konsolPhone: phonePayload })
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ konsolPhone: phonePayload }),
       });
       const data = await res.json();
+  
       if (data.error) {
         alert(data.error);
-      } else {
+      } else if (data.invited) {
+        // Новый исполнитель — показываем ссылку
         setKonsolModalOpen(false);
-        loadData(); // Обновляем статистику и статус
+        alert(`📲 Приглашение отправлено на ${inputKonsolPhone}!\n\nСсылка для регистрации:\n${data.onboarding_url}`);
+        loadData();
+      } else {
+        // Уже исполнитель — привязали успешно
+        setKonsolModalOpen(false);
+        loadData();
       }
     } catch (e) {
       alert("Ошибка сервера при сохранении СЗ");
