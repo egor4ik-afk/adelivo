@@ -199,10 +199,6 @@ async function sendIndividualPushes(event: NotificationEvent) {
             shouldSend = true;
             bodyTexts.push(`Состав заказа изменён`);
           }
-          if (event.changes.courierChanged) {
-            shouldSend = true;
-            bodyTexts.push(`Вы назначены на этот заказ`);
-          }
 
           if (shouldSend) {
             title = `⚠️ Изменения: заказ ${event.order.externalId ?? event.order.crmId}`;

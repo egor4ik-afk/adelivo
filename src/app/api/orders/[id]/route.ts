@@ -71,12 +71,22 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       }
     }
 
-    // ── Автосоздание маршрута ──
+    // ── Автосоздание маршрута при назначении или СМЕНЕ курьера ──
     const newCourierId = updateData.courierId as number | undefined;
-    const courierIsBeingAssigned = newCourierId && !order.courierId;
-    const orderHasNoRoute = !order.routeId && body.routeId === undefined;
+    const isCourierAssignedOrChanged = newCourierId && newCourierId !== order.courierId;
 
-    if (courierIsBeingAssigned && orderHasNoRoute) {
+    if (isCourierAssignedOrChanged) {
+      // 1. Если заказ был в другом маршруте, вытаскиваем его оттуда и удаляем пустой маршрут
+      if (order.routeId) {
+        const siblingsCount = await prisma.order.count({
+          where: { routeId: order.routeId, id: { not: id } },
+        });
+        if (siblingsCount === 0) {
+          await prisma.route.deleteMany({ where: { id: order.routeId } });
+        }
+      }
+
+      // 2. Создаем новый маршрут для нового курьера
       const orderDate = order.deliveryDate
         ? order.deliveryDate.toString().split("T")[0]
         : new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" });
@@ -114,6 +124,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         updateData.status = "ASSIGNED";
       }
 
+      // 3. Отправляем красивый Push новому курьеру
       const courierRec = await prisma.courier.findUnique({ where: { id: newCourierId } });
       if (courierRec?.email) {
         const courierUser = await prisma.user.findUnique({ where: { email: courierRec.email } });
@@ -128,8 +139,8 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       }
     }
 
-    // ── Снятие курьера ──
-    const courierIsBeingRemoved = (body.courier === "" || body.courier === null) && order.courierId;
+    // ── Снятие курьера (если просто очистили поле курьера) ──
+    const courierIsBeingRemoved = (body.courier === "" || body.courier === null) && order.courierId !== null;
     if (courierIsBeingRemoved && order.routeId) {
       const siblingsCount = await prisma.order.count({
         where: { routeId: order.routeId, id: { not: id } },

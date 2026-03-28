@@ -695,6 +695,9 @@ export default function AboutPage() {
             {" · "}
             © {new Date().getFullYear()} Event Wave
           </p>
+          <p style={{ fontSize: "0.75rem", color: C.muted, lineHeight: 2, marginTop: "1rem" }}>
+            Сделано и размещено на <a href="https://relaxdev.ru" target="_blank" rel="noopener noreferrer" style={{ color: C.accent }}>relaxdev.ru</a>
+          </p>
         </footer>
 
       </div>
