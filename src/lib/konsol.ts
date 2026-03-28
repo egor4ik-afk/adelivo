@@ -12,7 +12,6 @@ const api = axios.create({
   },
 });
 
-// 1. Поиск подрядчика (СЗ) по телефону
 export async function findContractorByPhone(phone: string) {
   try {
     const cleanPhone = phone.replace(/[^\d]/g, ""); 
@@ -25,22 +24,16 @@ export async function findContractorByPhone(phone: string) {
   }
 }
 
-// 2. Создание задания с БАЗОВОЙ услугой (500 руб + 6% = 530 руб)
 export async function createKonsolTask(contractorId: string, baseAmount: number, dateStart: string, dateEnd: string) {
   try {
     const res = await api.post(`/workflow/platform/tasks`, {
       title: `Курьерские услуги ${dateStart} - ${dateEnd}`,
-      since_date: dateStart.split('.').reverse().join('-'), // YYYY-MM-DD
+      since_date: dateStart.split('.').reverse().join('-'),
       upto_date: dateEnd.split('.').reverse().join('-'),
       contractor_ids: [contractorId],
-      transit_to_submitted_after_creation: true, // Сразу предлагаем курьеру
+      transit_to_submitted_after_creation: true,
       duties: [
-        {
-          title: "Базовая услуга (Выход)",
-          price: baseAmount,
-          quantity: 1,
-          measure: "шт"
-        }
+        { title: "Базовый выход", price: baseAmount, quantity: 1, measure: "шт" }
       ]
     });
     return res.data?.id || res.data?.data?.id; 
@@ -50,53 +43,56 @@ export async function createKonsolTask(contractorId: string, baseAmount: number,
   }
 }
 
-// 3. ДОБАВЛЕНИЕ дополнительных услуг (доставленных заказов) к заданию
+// 🔥 Получение задания (для проверки статуса)
+export async function getKonsolTask(taskId: string) {
+  try {
+    const res = await api.get(`/workflow/tasks/${taskId}`);
+    return res.data; 
+  } catch (e: any) {
+    console.error(`[Konsol] Ошибка получения задания ${taskId}:`, e.response?.data || e.message);
+    return null;
+  }
+}
+
 export async function addKonsolDuty(taskId: string, title: string, price: number, quantity: number) {
   try {
     await api.post(`/workflow/duties`, {
-      task_id: taskId,
-      title: title,
-      price: price,
-      quantity: quantity,
-      measure: "шт"
+      task_id: taskId, title, price, quantity, measure: "шт"
     });
     return true;
   } catch (e: any) {
-    console.error(`[Konsol] Ошибка добавления услуги к заданию ${taskId}:`, e.response?.data || e.message);
+    console.error(`[Konsol] Ошибка добавления услуги:`, e.response?.data || e.message);
     return false;
   }
 }
 
-// 4. Завершение задания со стороны компании (Выполнено / accepted)
 export async function acceptKonsolTask(taskId: string) {
   try {
     await api.post(`/workflow/tasks/accept`, { ids: [taskId] });
     return true;
   } catch (e: any) {
-    console.error(`[Konsol] Ошибка принятия задания ${taskId}:`, e.response?.data || e.message);
+    console.error(`[Konsol] Ошибка принятия задания:`, e.response?.data || e.message);
     return false; 
   }
 }
 
-// 5. Формирование акта из выполненного задания (finalize)
 export async function finalizeKonsolTask(taskId: string) {
   try {
     const res = await api.post(`/workflow/tasks/finalize`, { ids: [taskId] });
     const acts = res.data?.acts_ids || res.data?.data?.acts_ids || [];
     return acts.length > 0 ? acts[0] : null;
   } catch (e: any) {
-    console.error(`[Konsol] Ошибка формирования акта для ${taskId}:`, e.response?.data || e.message);
+    console.error(`[Konsol] Ошибка формирования акта:`, e.response?.data || e.message);
     return null;
   }
 }
 
-// 6. Подписание акта нашей компанией
 export async function signKonsolAct(actId: string) {
   try {
     await api.post(`/acts/sign`, { ids: [actId] });
     return true;
   } catch (e: any) {
-    console.error(`[Konsol] Ошибка подписания акта ${actId}:`, e.response?.data || e.message);
+    console.error(`[Konsol] Ошибка подписания акта:`, e.response?.data || e.message);
     return false;
   }
 }

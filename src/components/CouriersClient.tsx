@@ -23,12 +23,7 @@ interface Order {
   routeId: string | null; routeOrder: number | null;
   route?: { id: string; name: string; link: string | null; date: string } | null;
   isInvalid?: boolean; invalidReason?: string | null;
-  
-  lat?: number | null;
-  lng?: number | null;
-  courier?: string | null;
-  slotFrom?: string | null;
-  slotTo?: string | null;
+  lat?: number | null; lng?: number | null;
 }
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
@@ -54,7 +49,7 @@ export function CouriersClient({ user }: { user: any }) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   
-  const [activeTab, setActiveTab] = useState<"schedule" | "calc" | "routes">("routes");
+  const [activeTab, setActiveTab] = useState<"calc" | "schedule" | "routes">("calc");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   const scheduleDates = Array.from({ length: 7 }, (_, i) => {
@@ -70,13 +65,12 @@ export function CouriersClient({ user }: { user: any }) {
     const d = new Date(weekStart); d.setDate(d.getDate() + i); return d.toISOString().split("T")[0];
   });
   const [selectedPays, setSelectedPays] = useState<string[]>([]); 
-
   const [routesDate, setRoutesDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }));
   const [expandedCouriers, setExpandedCouriers] = useState<Record<number, boolean>>({});
 
-  // 🔥 Стейты для управления синхронизацией с Консолью
   const [konsolLoading, setKonsolLoading] = useState(false);
   const [konsolToast, setKonsolToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [konsolStatuses, setKonsolStatuses] = useState<Record<number, { label: string, color: string }>>({});
 
   useEffect(() => {
     const checkMob = () => setIsMobile(window.innerWidth < 768);
@@ -102,7 +96,6 @@ export function CouriersClient({ user }: { user: any }) {
       const firstPoint = routeOrders[0];
       if (firstPoint?.deliveryDate) return String(firstPoint.deliveryDate).split("T")[0];
     }
-    
     if (o.deliveryDate) return String(o.deliveryDate).split("T")[0];
     if (o.route?.date) return o.route.date;
     if (o.crmCreatedAt) return String(o.crmCreatedAt).split("T")[0];
@@ -117,29 +110,17 @@ export function CouriersClient({ user }: { user: any }) {
 
   const handleStatusChange = async (id: string, newStatus: string) => {
     setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o));
-    await fetch(`/api/orders/${id}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: newStatus })
-    });
+    await fetch(`/api/orders/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: newStatus }) });
     fetchAll(); 
   };
 
   const createRouteFromUnassigned = async (orderId: string, courierId: number) => {
-    await fetch("/api/routes/assign", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ orderIds: [orderId], courierId, routeDate: routesDate })
-    });
+    await fetch("/api/routes/assign", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderIds: [orderId], courierId, routeDate: routesDate }) });
     fetchAll();
   };
 
   const toggleShift = async (courierId: number, date: string, isWorking: boolean) => {
-    setCouriers(prev => prev.map(c => {
-      if (c.id === courierId) {
-        const newShifts = isWorking ? [...c.shifts, { id: "temp", date }] : c.shifts.filter(s => s.date !== date);
-        return { ...c, shifts: newShifts };
-      }
-      return c;
-    }));
+    setCouriers(prev => prev.map(c => c.id === courierId ? { ...c, shifts: isWorking ? [...c.shifts, { id: "temp", date }] : c.shifts.filter(s => s.date !== date) } : c));
     await fetch("/api/couriers/shifts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ courierId, date, isWorking }) });
   };
 
@@ -148,7 +129,7 @@ export function CouriersClient({ user }: { user: any }) {
     setSelectedPays(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
   };
 
-  const handlePay = async () => {
+  const handlePayLocal = async () => {
     setLoading(true);
     const payments = selectedPays.map(p => { const [cId, d] = p.split('_'); return { courierId: Number(cId), date: d }; });
     await fetch("/api/couriers/payments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ payments }) });
@@ -159,53 +140,111 @@ export function CouriersClient({ user }: { user: any }) {
   const toggleCourierWeek = (courierId: number) => {
     const availableKeys = calcDates.map(d => `${courierId}_${d}`).filter(key => {
       const d = key.split('_')[1];
-      const count = getCount(courierId, d, true);
-      const sum = getSum(courierId, d);
-      const isPaid = couriers.find(c => c.id === courierId)?.payments?.some(p => p.date === d);
-      return (count > 0 || sum > 0) && !isPaid;
+      return (getCount(courierId, d, true) > 0 || getSum(courierId, d) > 0) && !couriers.find(c => c.id === courierId)?.payments?.some(p => p.date === d);
     });
     if (availableKeys.length === 0) return;
     const allSelected = availableKeys.every(k => selectedPays.includes(k));
-    if (allSelected) {
-      setSelectedPays(prev => prev.filter(k => !availableKeys.includes(k)));
-    } else {
-      setSelectedPays(prev => Array.from(new Set([...prev, ...availableKeys])));
-    }
+    if (allSelected) setSelectedPays(prev => prev.filter(k => !availableKeys.includes(k)));
+    else setSelectedPays(prev => Array.from(new Set([...prev, ...availableKeys])));
   };
 
   const toggleDay = (date: string) => {
-    const availableKeys = calcSorted.map(c => `${c.id}_${date}`).filter(key => {
+    const availableKeys = couriers.map(c => `${c.id}_${date}`).filter(key => {
       const cId = Number(key.split('_')[0]);
-      const count = getCount(cId, date, true);
-      const sum = getSum(cId, date);
-      const isPaid = couriers.find(c => c.id === cId)?.payments?.some(p => p.date === date);
-      return (count > 0 || sum > 0) && !isPaid;
+      return (getCount(cId, date, true) > 0 || getSum(cId, date) > 0) && !couriers.find(c => c.id === cId)?.payments?.some(p => p.date === date);
     });
     if (availableKeys.length === 0) return;
     const allSelected = availableKeys.every(k => selectedPays.includes(k));
-    if (allSelected) {
-      setSelectedPays(prev => prev.filter(k => !availableKeys.includes(k)));
-    } else {
-      setSelectedPays(prev => Array.from(new Set([...prev, ...availableKeys])));
+    if (allSelected) setSelectedPays(prev => prev.filter(k => !availableKeys.includes(k)));
+    else setSelectedPays(prev => Array.from(new Set([...prev, ...availableKeys])));
+  };
+
+  const createSelectedTask = async () => {
+    if (selectedPays.length === 0) {
+      alert("Сначала выделите дни курьеров галочками!");
+      return;
+    }
+    if (!confirm(`Создать базовые задания в Консоль.Про для выбранных курьеров?`)) return;
+    
+    setKonsolLoading(true);
+    const payments = selectedPays.map(p => { 
+      const [cId, d] = p.split('_'); 
+      return { courierId: Number(cId), date: d }; 
+    });
+
+    try {
+      const res = await fetch("/api/konsol/create", {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ payments })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setKonsolToast({ message: `✅ Создано: ${data.processed}. Пропущено (уже есть): ${data.skipped}`, type: "success" });
+        setSelectedPays([]);
+        checkKonsolStatuses(); 
+      } else {
+        setKonsolToast({ message: `❌ Ошибка: ${data.error}`, type: "error" });
+      }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch(e: any) {
+      setKonsolToast({ message: `❌ Сетевая ошибка`, type: "error" });
+    } finally {
+      setKonsolLoading(false);
+      setTimeout(() => setKonsolToast(null), 5000);
     }
   };
 
-  const runKonsolSync = async () => {
-    if (!confirm("Запустить формирование актов Консоль.Про за текущую неделю?")) return;
+  const checkKonsolStatuses = async () => {
     setKonsolLoading(true);
-    setKonsolToast(null);
-
     try {
-      const res = await fetch("/api/cron/konsol/weekly");
+      const res = await fetch("/api/konsol/check-status", {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ weekStart: calcDates[0], weekEnd: calcDates[6] })
+      });
       const data = await res.json();
-      if (res.ok && data.success) {
-        setKonsolToast({ message: `✅ Успешно! Сформировано актов: ${data.processed} из ${data.total}`, type: "success" });
-      } else {
-        setKonsolToast({ message: `❌ Ошибка: ${data.error || "Неизвестная ошибка"}`, type: "error" });
+      if(data.success) {
+        setKonsolStatuses(data.statuses);
+        setKonsolToast({ message: "Статусы обновлены", type: "success" });
       }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (e: any) {
-      setKonsolToast({ message: `❌ Сетевая ошибка: ${e.message}`, type: "error" });
+    } catch(e: any) {
+      setKonsolToast({ message: "Ошибка проверки", type: "error" });
+    } finally {
+      setKonsolLoading(false);
+      setTimeout(() => setKonsolToast(null), 3000);
+    }
+  };
+
+  const finalizeSelected = async () => {
+    if (selectedPays.length === 0) {
+      alert("Сначала выделите дни курьеров галочками!");
+      return;
+    }
+    if (!confirm(`Финализировать выбранные смены (${selectedPays.length} шт.) в Консоль.Про?`)) return;
+    
+    setKonsolLoading(true);
+    const payments = selectedPays.map(p => { 
+      const [cId, d] = p.split('_'); 
+      return { courierId: Number(cId), date: d }; 
+    });
+
+    try {
+      const res = await fetch("/api/konsol/finalize", {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ payments })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setKonsolToast({ message: `✅ Успешно финализировано: ${data.processed} чел.`, type: "success" });
+        setSelectedPays([]);
+        fetchAll(); 
+        checkKonsolStatuses(); 
+      } else {
+        setKonsolToast({ message: `❌ Ошибка: ${data.error}`, type: "error" });
+      }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch(e: any) {
+      setKonsolToast({ message: `❌ Сетевая ошибка`, type: "error" });
     } finally {
       setKonsolLoading(false);
       setTimeout(() => setKonsolToast(null), 5000);
@@ -226,19 +265,16 @@ export function CouriersClient({ user }: { user: any }) {
     return a.fullName.localeCompare(b.fullName);
   });
 
-  const calcSorted = [...filtered].sort((a, b) => {
+  const calcSortedAndFiltered = [...filtered].filter(c => {
+    return calcDates.some(d => getCount(c.id, d, true) > 0 || getSum(c.id, d) > 0 || c.payments?.some(p => p.date === d));
+  }).sort((a, b) => {
     const aSum = calcDates.reduce((acc, d) => acc + getSum(a.id, d), 0);
     const bSum = calcDates.reduce((acc, d) => acc + getSum(b.id, d), 0);
     if (aSum !== bSum) return bSum - aSum;
     return a.fullName.localeCompare(b.fullName);
   });
 
-  const globalFreeOrders = orders.filter(o => 
-    !o.routeId && 
-    getODate(o) === routesDate && 
-    o.status !== "DELIVERED" && 
-    o.status !== "CANCELLED"
-  );
+  const globalFreeOrders = orders.filter(o => !o.routeId && getODate(o) === routesDate && o.status !== "DELIVERED" && o.status !== "CANCELLED");
 
   return (
     <div style={s.app}>
@@ -259,16 +295,16 @@ export function CouriersClient({ user }: { user: any }) {
           <div>
             <h1 style={s.title}>Курьеры</h1>
             <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch" }}>
-              <button style={activeTab === "routes" ? s.tabActive : s.tabInactive} onClick={() => setActiveTab("routes")}>🗺️ Маршруты</button>
-              <button style={activeTab === "schedule" ? s.tabActive : s.tabInactive} onClick={() => setActiveTab("schedule")}>📅 График</button>
               <button style={activeTab === "calc" ? s.tabActive : s.tabInactive} onClick={() => setActiveTab("calc")}>💰 ЗП</button>
+              <button style={activeTab === "schedule" ? s.tabActive : s.tabInactive} onClick={() => setActiveTab("schedule")}>📅 График</button>
+              <button style={activeTab === "routes" ? s.tabActive : s.tabInactive} onClick={() => setActiveTab("routes")}>🗺️ Маршруты</button>
             </div>
           </div>
           
           <div style={s.controls}>
             {activeTab === "calc" && (
-              <button style={{ ...s.syncBtn, background: selectedPays.length > 0 ? "#10b981" : "#e5e7eb", color: selectedPays.length > 0 ? "#fff" : "#9ca3af" }} disabled={selectedPays.length === 0} onClick={handlePay}>
-                ✅ Рассчитан ({selectedPays.length})
+              <button style={{ ...s.syncBtn, background: selectedPays.length > 0 ? "#10b981" : "#e5e7eb", color: selectedPays.length > 0 ? "#fff" : "#9ca3af" }} disabled={selectedPays.length === 0} onClick={handlePayLocal}>
+                ✅ Оплатить локально ({selectedPays.length})
               </button>
             )}
             <input type="text" placeholder="Поиск курьера..." value={search} onChange={e => setSearch(e.target.value)} style={{ ...s.input, width: isMobile ? "100%" : "auto" }} />
@@ -337,15 +373,30 @@ export function CouriersClient({ user }: { user: any }) {
                      {konsolToast.message}
                    </span>
                  )}
+                 <button onClick={checkKonsolStatuses} disabled={konsolLoading} style={{...s.navBtn, background: "#eef3ff", color: "#4a7aff", borderColor: "#4a7aff"}}>
+                   🔄 Статусы
+                 </button>
+                 
                  <button 
-                   onClick={runKonsolSync} 
-                   disabled={konsolLoading}
+                   onClick={createSelectedTask} 
+                   disabled={konsolLoading || selectedPays.length === 0}
                    style={{
-                     background: konsolLoading ? "#a8a49c" : "#1a1a18", color: "#fff", border: "none", padding: "8px 16px", 
-                     borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: konsolLoading ? "not-allowed" : "pointer"
+                     background: konsolLoading || selectedPays.length === 0 ? "#e5e7eb" : "#fff", color: konsolLoading || selectedPays.length === 0 ? "#9ca3af" : "#1a1a18", border: "1px solid #e8e6df", padding: "8px 16px", 
+                     borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: konsolLoading || selectedPays.length === 0 ? "not-allowed" : "pointer"
                    }}
                  >
-                   {konsolLoading ? "⏳ Финализация..." : "💼 Финализировать Консоль"}
+                   ➕ Создать задание
+                 </button>
+
+                 <button 
+                   onClick={finalizeSelected} 
+                   disabled={konsolLoading || selectedPays.length === 0}
+                   style={{
+                     background: konsolLoading || selectedPays.length === 0 ? "#a8a49c" : "#1a1a18", color: "#fff", border: "none", padding: "8px 16px", 
+                     borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: konsolLoading || selectedPays.length === 0 ? "not-allowed" : "pointer"
+                   }}
+                 >
+                   {konsolLoading ? "⏳ Загрузка..." : "💼 Финализировать (Акт)"}
                  </button>
                </div>
 
@@ -353,34 +404,56 @@ export function CouriersClient({ user }: { user: any }) {
              <table style={s.table}>
                <thead>
                  <tr>
-                   <th style={{ ...s.th, width: 220 }}>Курьер</th>
+                   <th style={{ ...s.th, width: 220, verticalAlign: "top" }}>Курьер</th>
                    {calcDates.map(d => {
-                     const availableDayKeys = calcSorted.map(c => `${c.id}_${d}`).filter(k => {
+                     const availableDayKeys = calcSortedAndFiltered.map(c => `${c.id}_${d}`).filter(k => {
                        const cId = Number(k.split('_')[0]);
                        return (getCount(cId, d, true) > 0 || getSum(cId, d) > 0) && !couriers.find(c => c.id === cId)?.payments?.some(p => p.date === d);
                      });
                      const isAllDaySelected = availableDayKeys.length > 0 && availableDayKeys.every(k => selectedPays.includes(k));
 
+                     // 🔥 Считаем сумму выбранных дней для этого столбца
+                     const daySelectedSum = selectedPays
+                       .filter(p => p.endsWith(`_${d}`))
+                       .reduce((acc, p) => acc + getSum(Number(p.split('_')[0]), d), 0);
+
                      return (
-                       <th key={d} style={{ ...s.th, textAlign: "center" }}>
+                       <th key={d} style={{ ...s.th, textAlign: "center", verticalAlign: "top" }}>
                          {formatDay(d)}<br/><span style={{ fontSize: 10 }}>{d.slice(5).replace("-", ".")}</span>
-                         <div style={{ marginTop: 6, display: "flex", justifyContent: "center" }}>
-                           <input 
-                             type="checkbox" 
-                             checked={isAllDaySelected}
-                             onChange={() => toggleDay(d)} 
-                             style={{...s.checkbox, width: 14, height: 14}} 
-                             title="Выбрать весь день"
-                           />
+                         <div style={{ marginTop: 6, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                           <input type="checkbox" checked={isAllDaySelected} onChange={() => toggleDay(d)} style={{...s.checkbox, width: 14, height: 14}} title="Выбрать весь день"/>
+                           {daySelectedSum > 0 && (
+                             <span style={{ fontSize: 10, color: "#4a7aff", fontWeight: 700 }}>{daySelectedSum} ₽</span>
+                           )}
                          </div>
                        </th>
                      )
                    })}
-                   <th style={{ ...s.th, textAlign: "right", color: "#10b981" }}>Итого</th>
+                   <th style={{ ...s.th, textAlign: "right", color: "#10b981", verticalAlign: "top" }}>
+                     Итого
+                     {/* 🔥 Общая сумма всех выбранных смен + налог */}
+                     {(() => {
+                       const grandTotal = selectedPays.reduce((acc, p) => {
+                         const [cId, d] = p.split('_');
+                         return acc + getSum(Number(cId), d);
+                       }, 0);
+                       if (grandTotal > 0) {
+                         return (
+                           <div style={{ marginTop: 6, display: "flex", flexDirection: "column", alignItems: "flex-end", fontSize: 11, fontWeight: 700 }}>
+                             <span>{grandTotal} ₽</span>
+                             <span style={{ fontSize: 9, opacity: 0.7 }}>x 1.06 = {Math.round(grandTotal * 1.06)} ₽</span>
+                           </div>
+                         );
+                       }
+                       return null;
+                     })()}
+                   </th>
                  </tr>
                </thead>
                <tbody>
-                 {loading ? <tr><td colSpan={9} style={{ padding: 20, textAlign: "center" }}>Загрузка...</td></tr> : calcSorted.map(c => {
+                 {loading ? <tr><td colSpan={9} style={{ padding: 20, textAlign: "center" }}>Загрузка...</td></tr> 
+                 : calcSortedAndFiltered.length === 0 ? <tr><td colSpan={9} style={{ padding: 40, textAlign: "center", color: "#a8a49c" }}>На этой неделе нет курьеров с заказами</td></tr> 
+                 : calcSortedAndFiltered.map(c => {
                    const weekTotal = calcDates.reduce((acc, d) => acc + getSum(c.id, d), 0);
                    const weekTotal106 = weekTotal * 1.06;
 
@@ -394,15 +467,14 @@ export function CouriersClient({ user }: { user: any }) {
                      <tr key={c.id} style={{ borderBottom: "1px solid #f0efe9", background: "#fff" }}>
                        <td style={{ ...s.td, fontWeight: 600 }}>
                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                           <input 
-                             type="checkbox" 
-                             checked={isAllWeekSelected}
-                             onChange={() => toggleCourierWeek(c.id)} 
-                             style={{...s.checkbox, width: 16, height: 16}} 
-                             title="Выбрать всю неделю"
-                           />
+                           <input type="checkbox" checked={isAllWeekSelected} onChange={() => toggleCourierWeek(c.id)} style={{...s.checkbox, width: 16, height: 16}} title="Выбрать всю неделю"/>
                            {c.fullName}
                          </div>
+                         {konsolStatuses[c.id] && (
+                           <div style={{ fontSize: 11, color: konsolStatuses[c.id].color, marginTop: 6, fontWeight: 700 }}>
+                             {konsolStatuses[c.id].label}
+                           </div>
+                         )}
                        </td>
                        {calcDates.map(d => {
                          const count = getCount(c.id, d, true); const sum = getSum(c.id, d);
