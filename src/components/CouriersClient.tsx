@@ -12,6 +12,7 @@ interface CourierPayment { id: string; date: string; }
 interface Courier {
   id: number; fullName: string; phone: string | null; description: string | null;
   isActive: boolean; shifts: CourierShift[]; payments: CourierPayment[];
+  konsolContractorId?: string | null; // 🔥 ДОБАВЛЕНО для индикатора Консоли
 }
 
 interface Order {
@@ -89,6 +90,14 @@ export function CouriersClient({ user }: { user: any }) {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  // 🔥 Автоматическая загрузка статусов Консоли при открытии вкладки ЗП или смене недели
+  useEffect(() => {
+    if (activeTab === "calc") {
+      checkKonsolStatuses(true); // true = тихая загрузка без всплывающих уведомлений
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, weekStart]);
+
   const getODate = (o: Order) => {
     if (o.routeId) {
       const routeOrders = orders.filter(ord => ord.routeId === o.routeId);
@@ -137,6 +146,46 @@ export function CouriersClient({ user }: { user: any }) {
     await fetchAll();
   };
 
+  const filtered = couriers.filter(c => {
+    if (!c.isActive) return false;
+    if (search && !c.fullName.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
+  const calcSortedAndFiltered = [...filtered].filter(c => {
+    return calcDates.some(d => getCount(c.id, d, true) > 0 || getSum(c.id, d) > 0 || c.payments?.some(p => p.date === d));
+  }).sort((a, b) => {
+    const aSum = calcDates.reduce((acc, d) => acc + getSum(a.id, d), 0);
+    const bSum = calcDates.reduce((acc, d) => acc + getSum(b.id, d), 0);
+    if (aSum !== bSum) return bSum - aSum;
+    return a.fullName.localeCompare(b.fullName);
+  });
+
+  // 🔥 Глобальная функция "Выбрать ВСЁ"
+  const toggleAllPays = () => {
+    const allAvailableKeys: string[] = [];
+    calcSortedAndFiltered.forEach(c => {
+      calcDates.forEach(d => {
+        const count = getCount(c.id, d, true);
+        const sum = getSum(c.id, d);
+        const isPaid = c.payments?.some(p => p.date === d);
+        if ((count > 0 || sum > 0) && !isPaid) {
+          allAvailableKeys.push(`${c.id}_${d}`);
+        }
+      });
+    });
+
+    if (allAvailableKeys.length === 0) return;
+    
+    // Если уже выбраны все доступные — снимаем выделение. Иначе выбираем все.
+    const isAllSelected = allAvailableKeys.every(k => selectedPays.includes(k));
+    if (isAllSelected) {
+      setSelectedPays([]);
+    } else {
+      setSelectedPays(allAvailableKeys);
+    }
+  };
+
   const toggleCourierWeek = (courierId: number) => {
     const availableKeys = calcDates.map(d => `${courierId}_${d}`).filter(key => {
       const d = key.split('_')[1];
@@ -181,11 +230,10 @@ export function CouriersClient({ user }: { user: any }) {
       if (data.success) {
         setKonsolToast({ message: `✅ Создано: ${data.processed}. Пропущено (уже есть): ${data.skipped}`, type: "success" });
         setSelectedPays([]);
-        checkKonsolStatuses(); 
+        checkKonsolStatuses(true); 
       } else {
         setKonsolToast({ message: `❌ Ошибка: ${data.error}`, type: "error" });
       }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch(e: any) {
       setKonsolToast({ message: `❌ Сетевая ошибка`, type: "error" });
     } finally {
@@ -194,8 +242,8 @@ export function CouriersClient({ user }: { user: any }) {
     }
   };
 
-  const checkKonsolStatuses = async () => {
-    setKonsolLoading(true);
+  const checkKonsolStatuses = async (silent = false) => {
+    if (!silent) setKonsolLoading(true);
     try {
       const res = await fetch("/api/konsol/check-status", {
         method: "POST", headers: {"Content-Type": "application/json"},
@@ -204,13 +252,12 @@ export function CouriersClient({ user }: { user: any }) {
       const data = await res.json();
       if(data.success) {
         setKonsolStatuses(data.statuses);
-        setKonsolToast({ message: "Статусы обновлены", type: "success" });
+        if (!silent) setKonsolToast({ message: "Статусы обновлены", type: "success" });
       }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch(e: any) {
-      setKonsolToast({ message: "Ошибка проверки", type: "error" });
+      if (!silent) setKonsolToast({ message: "Ошибка проверки", type: "error" });
     } finally {
-      setKonsolLoading(false);
+      if (!silent) setKonsolLoading(false);
       setTimeout(() => setKonsolToast(null), 3000);
     }
   };
@@ -220,7 +267,7 @@ export function CouriersClient({ user }: { user: any }) {
       alert("Сначала выделите дни курьеров галочками!");
       return;
     }
-    if (!confirm(`Финализировать выбранные смены (${selectedPays.length} шт.) в Консоль.Про?`)) return;
+    if (!confirm(`Финализировать и оплатить выбранные смены (${selectedPays.length} шт.) в Консоль.Про?`)) return;
     
     setKonsolLoading(true);
     const payments = selectedPays.map(p => { 
@@ -238,11 +285,10 @@ export function CouriersClient({ user }: { user: any }) {
         setKonsolToast({ message: `✅ Успешно финализировано: ${data.processed} чел.`, type: "success" });
         setSelectedPays([]);
         fetchAll(); 
-        checkKonsolStatuses(); 
+        checkKonsolStatuses(true); 
       } else {
         setKonsolToast({ message: `❌ Ошибка: ${data.error}`, type: "error" });
       }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch(e: any) {
       setKonsolToast({ message: `❌ Сетевая ошибка`, type: "error" });
     } finally {
@@ -250,12 +296,6 @@ export function CouriersClient({ user }: { user: any }) {
       setTimeout(() => setKonsolToast(null), 5000);
     }
   };
-
-  const filtered = couriers.filter(c => {
-    if (!c.isActive) return false;
-    if (search && !c.fullName.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
 
   const scheduleSorted = [...filtered].sort((a, b) => {
     const aCount = getCount(a.id, sortDate); const bCount = getCount(b.id, sortDate);
@@ -265,16 +305,14 @@ export function CouriersClient({ user }: { user: any }) {
     return a.fullName.localeCompare(b.fullName);
   });
 
-  const calcSortedAndFiltered = [...filtered].filter(c => {
-    return calcDates.some(d => getCount(c.id, d, true) > 0 || getSum(c.id, d) > 0 || c.payments?.some(p => p.date === d));
-  }).sort((a, b) => {
-    const aSum = calcDates.reduce((acc, d) => acc + getSum(a.id, d), 0);
-    const bSum = calcDates.reduce((acc, d) => acc + getSum(b.id, d), 0);
-    if (aSum !== bSum) return bSum - aSum;
-    return a.fullName.localeCompare(b.fullName);
-  });
-
   const globalFreeOrders = orders.filter(o => !o.routeId && getODate(o) === routesDate && o.status !== "DELIVERED" && o.status !== "CANCELLED");
+
+  // Подсчет доступных ключей для чекбокса "Выбрать всё"
+  const allAvailableKeys = calcSortedAndFiltered.flatMap(c => 
+    calcDates.filter(d => (getCount(c.id, d, true) > 0 || getSum(c.id, d) > 0) && !c.payments?.some(p => p.date === d))
+             .map(d => `${c.id}_${d}`)
+  );
+  const isAllGlobalSelected = allAvailableKeys.length > 0 && allAvailableKeys.every(k => selectedPays.includes(k));
 
   return (
     <div style={s.app}>
@@ -373,7 +411,7 @@ export function CouriersClient({ user }: { user: any }) {
                      {konsolToast.message}
                    </span>
                  )}
-                 <button onClick={checkKonsolStatuses} disabled={konsolLoading} style={{...s.navBtn, background: "#eef3ff", color: "#4a7aff", borderColor: "#4a7aff"}}>
+                 <button onClick={() => checkKonsolStatuses(false)} disabled={konsolLoading} style={{...s.navBtn, background: "#eef3ff", color: "#4a7aff", borderColor: "#4a7aff"}}>
                    🔄 Статусы
                  </button>
                  
@@ -404,7 +442,19 @@ export function CouriersClient({ user }: { user: any }) {
              <table style={s.table}>
                <thead>
                  <tr>
-                   <th style={{ ...s.th, width: 220, verticalAlign: "top" }}>Курьер</th>
+                   <th style={{ ...s.th, width: 220, verticalAlign: "top" }}>
+                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                       {/* 🔥 ГЛОБАЛЬНЫЙ ЧЕКБОКС "ВЫБРАТЬ ВСЕ" */}
+                       <input 
+                         type="checkbox" 
+                         checked={isAllGlobalSelected && allAvailableKeys.length > 0} 
+                         onChange={toggleAllPays} 
+                         style={{...s.checkbox, width: 14, height: 14}} 
+                         title="Выбрать вообще всё доступное"
+                       />
+                       Курьер
+                     </div>
+                   </th>
                    {calcDates.map(d => {
                      const availableDayKeys = calcSortedAndFiltered.map(c => `${c.id}_${d}`).filter(k => {
                        const cId = Number(k.split('_')[0]);
@@ -412,7 +462,6 @@ export function CouriersClient({ user }: { user: any }) {
                      });
                      const isAllDaySelected = availableDayKeys.length > 0 && availableDayKeys.every(k => selectedPays.includes(k));
 
-                     // 🔥 Считаем сумму выбранных дней для этого столбца
                      const daySelectedSum = selectedPays
                        .filter(p => p.endsWith(`_${d}`))
                        .reduce((acc, p) => acc + getSum(Number(p.split('_')[0]), d), 0);
@@ -431,7 +480,6 @@ export function CouriersClient({ user }: { user: any }) {
                    })}
                    <th style={{ ...s.th, textAlign: "right", color: "#10b981", verticalAlign: "top" }}>
                      Итого
-                     {/* 🔥 Общая сумма всех выбранных смен + налог */}
                      {(() => {
                        const grandTotal = selectedPays.reduce((acc, p) => {
                          const [cId, d] = p.split('_');
@@ -468,7 +516,16 @@ export function CouriersClient({ user }: { user: any }) {
                        <td style={{ ...s.td, fontWeight: 600 }}>
                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                            <input type="checkbox" checked={isAllWeekSelected} onChange={() => toggleCourierWeek(c.id)} style={{...s.checkbox, width: 16, height: 16}} title="Выбрать всю неделю"/>
-                           {c.fullName}
+                           
+                           {/* 🔥 ЗЕЛЕНАЯ ТОЧКА ЕСЛИ ПРИВЯЗАНА КОНСОЛЬ */}
+                           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                             {c.konsolContractorId ? (
+                               <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#10b981", display: "inline-block", flexShrink: 0 }} title="СЗ (Консоль) подключен" />
+                             ) : (
+                               <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#d1d5db", display: "inline-block", flexShrink: 0 }} title="Консоль не привязана" />
+                             )}
+                             {c.fullName}
+                           </div>
                          </div>
                          {konsolStatuses[c.id] && (
                            <div style={{ fontSize: 11, color: konsolStatuses[c.id].color, marginTop: 6, fontWeight: 700 }}>

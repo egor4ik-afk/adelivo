@@ -43,7 +43,6 @@ export async function createKonsolTask(contractorId: string, baseAmount: number,
   }
 }
 
-// 🔥 Получение задания (для проверки статуса)
 export async function getKonsolTask(taskId: string) {
   try {
     const res = await api.get(`/workflow/tasks/${taskId}`);
@@ -93,6 +92,17 @@ export async function signKonsolAct(actId: string) {
     return true;
   } catch (e: any) {
     console.error(`[Konsol] Ошибка подписания акта:`, e.response?.data || e.message);
+    return false;
+  }
+}
+
+// 🔥 НОВЫЙ МЕТОД: Автооплата акта (деньги уйдут курьеру сразу, как только он подпишет акт со своей стороны)
+export async function autopayKonsolAct(actId: string) {
+  try {
+    await api.post(`/acts/autopay`, { ids: [actId] });
+    return true;
+  } catch (e: any) {
+    console.error(`[Konsol] Ошибка постановки на автооплату акта ${actId}:`, e.response?.data || e.message);
     return false;
   }
 }

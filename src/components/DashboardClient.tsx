@@ -72,7 +72,7 @@ export function DashboardClient({ user }: { user: User }) {
   const [showCourierNames, setShowCourierNames] = useState(true);
   const [showTime, setShowTime] = useState(true);
   const [showCouriers, setShowCouriers] = useState(false);
-  const [showHomes, setShowHomes] = useState(false); // 🔥 Новый чекбокс для Дома
+  const [showHomes, setShowHomes] = useState(false); 
 
   const [filterDate, setFilterDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }));
   const [orders, setOrders] = useState<DashboardOrder[]>([]);
@@ -93,7 +93,6 @@ export function DashboardClient({ user }: { user: User }) {
   const [mapReady, setMapReady] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: string, dir: 'asc' | 'desc' }>({ key: 'changedAt', dir: 'desc' });
 
-  // Маршруты
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [routeTab, setRouteTab] = useState<"map" | "list">("map");
   const [bulkSelectedIds, setBulkSelectedIds] = useState<string[]>([]);
@@ -102,7 +101,6 @@ export function DashboardClient({ user }: { user: User }) {
   const [routeType, setRouteType] = useState<"auto" | "mt">("auto");
   const [returnToBase, setReturnToBase] = useState(true);
 
-  // Вкладки: Создание vs Текущие
   const [routeTabMode, setRouteTabMode] = useState<"new" | "current">("new");
   const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
 
@@ -225,7 +223,10 @@ export function DashboardClient({ user }: { user: User }) {
   });
 
   const selected = orders.find(o => o.id === selectedId) ?? null;
-  const invalid = dateAndStatusOrders.filter(o => o.isInvalid);
+  
+  // 🔥 ИСПРАВЛЕНИЕ: Жестко игнорируем "Самовывоз" для невалидных адресов
+  const invalid = dateAndStatusOrders.filter(o => o.isInvalid && !/самовывоз/i.test(o.address || ""));
+  
   const filtered = selectedSlots.length === 0 ? dateAndStatusOrders : dateAndStatusOrders.filter(o => {
     if (!o.slotFrom) return false;
     const exact = SLOTS.find(s => s.from === o.slotFrom && s.to === o.slotTo);
@@ -344,7 +345,6 @@ export function DashboardClient({ user }: { user: User }) {
     });
   };
 
-  // Отрисовка точек заказов на карте
   useEffect(() => {
     if (!mapReady) return;
     const clusterer = clustererRef.current;
@@ -419,7 +419,6 @@ export function DashboardClient({ user }: { user: User }) {
     if (placemarks.length > 0) clusterer.add(placemarks as any);
   }, [filteredForMap, selectedId, previewGeo, currentZoom, selectedSlots, isBulkMode, bulkSelectedIds, showTime, showCourierNames, isMobile, mapReady, routeTabMode]);
 
-  // 🔥 ОБНОВЛЕННАЯ Отрисовка курьеров и их домов
   useEffect(() => {
     if (!mapReady || !couriersGeoObjectsRef.current) return;
     const coll = couriersGeoObjectsRef.current;
@@ -430,7 +429,6 @@ export function DashboardClient({ user }: { user: User }) {
       const ONLINE_THRESHOLD_MS = 5 * 60 * 1000;
       const isLive = c.lat && c.lng && c.locationUpdatedAt && (Date.now() - new Date(c.locationUpdatedAt).getTime()) < ONLINE_THRESHOLD_MS;
 
-      // 1. Рисуем текущую локацию (только если чекбокс Курьеры включен)
       if (showCouriers && c.lat && c.lng) {
         const pm = new window.ymaps.Placemark([c.lat, c.lng], {
           balloonContentHeader: c.fullName, balloonContentBody: isLive ? "Текущее местоположение" : "Был недавно",
@@ -439,7 +437,6 @@ export function DashboardClient({ user }: { user: User }) {
         coll.add(pm as any);
       }
 
-      // 2. Рисуем Дом отдельным слоем (только если чекбокс Дом включен)
       if (showHomes && c.homeLat && c.homeLng) {
         const pm = new window.ymaps.Placemark([c.homeLat, c.homeLng], {
           balloonContentHeader: c.fullName, balloonContentBody: "Домашний адрес",
@@ -799,7 +796,6 @@ export function DashboardClient({ user }: { user: User }) {
             <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 4, cursor: 'pointer' }}>
               <input type="checkbox" checked={showCouriers} onChange={e => setShowCouriers(e.target.checked)} />Курьеры
             </label>
-            {/* 🔥 Новый чекбокс "Дом" */}
             <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 4, cursor: 'pointer' }}>
               <input type="checkbox" checked={showHomes} onChange={e => setShowHomes(e.target.checked)} />Дом
             </label>
@@ -992,7 +988,19 @@ export function DashboardClient({ user }: { user: User }) {
         </div>
       )}
 
-      {profileOpen && <div style={{ position: "fixed", top: 52, right: 8, zIndex: 200 }}><ProfilePanel onClose={() => setProfileOpen(false)} onLogout={() => router.push("/login")} /></div>}
+      {/* 🔥 ИСПРАВЛЕНИЕ: Жестко чистим куку перед логаутом */}
+      {profileOpen && (
+        <div style={{ position: "fixed", top: 52, right: 8, zIndex: 200 }}>
+          <ProfilePanel 
+            onClose={() => setProfileOpen(false)} 
+            onLogout={() => {
+              document.cookie = "flowerops_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+              window.location.href = "/login";
+            }} 
+          />
+        </div>
+      )}
+      
       {alertsOpen && invalid.length > 0 && (
         <div style={{ ...s.popup, right: 52 }} onClick={e => e.stopPropagation()}>
           <div style={s.alertTitle}>⚠ Проблемные адреса</div>

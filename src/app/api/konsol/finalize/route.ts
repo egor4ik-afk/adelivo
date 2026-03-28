@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { notify } from "@/lib/notifications";
 import { getSession } from "@/lib/auth";
-import { addKonsolDuty, acceptKonsolTask, finalizeKonsolTask, signKonsolAct, createKonsolTask } from "@/lib/konsol";
+import { addKonsolDuty, acceptKonsolTask, finalizeKonsolTask, signKonsolAct, createKonsolTask, autopayKonsolAct } from "@/lib/konsol";
 
 export async function POST(req: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -86,6 +86,7 @@ export async function POST(req: Request) {
 
       if (actId) {
         await signKonsolAct(actId);
+        await autopayKonsolAct(actId); // 🔥 ДОБАВЛЕНО: Ставим в очередь на автоматическую оплату!
         const newTotal = task.amount + deliveriesTotal;
         
         await prisma.konsolTask.update({

@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
     // мы отдаем только заказы за последние 10 дней, чтобы не перегружать память
     // и чтобы старые утренние заказы не вытесняли новые вечерние.
     const tenDaysAgo = new Date();
-    tenDaysAgo.setDate(tenDaysAgo.getDate() - 7);
+    tenDaysAgo.setDate(tenDaysAgo.getDate() - 8);
     
     where.OR = [
       { crmCreatedAt: { gte: tenDaysAgo } },
