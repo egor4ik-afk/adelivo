@@ -1,84 +1,88 @@
-import { NextResponse } from 'next/server';
+// src/app/api/konsol/create/route.ts
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/auth";
+import { createKonsolTask } from "@/lib/konsol";
 
-export async function POST(request: Request) {
+export async function POST(req: Request) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const session = await getSession(req as any);
+  if (session?.role !== "ADMIN" && session?.role !== "OPERATOR") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const data = await request.json();
+    const { payments } = await req.json();
+    if (!payments || payments.length === 0) {
+      return NextResponse.json({ error: "Нет выбранных смен" }, { status: 400 });
+    }
+
+    const grouped: Record<number, string[]> = {};
+    for (const p of payments) {
+      if (!grouped[p.courierId]) grouped[p.courierId] = [];
+      grouped[p.courierId].push(p.date);
+    }
+
+    let successCount = 0;
+    let skipCount = 0;
+
+    // 🔥 Дата начала (сегодня)
+    const today = new Date();
+    const ddStart = String(today.getDate()).padStart(2, '0');
+    const mmStart = String(today.getMonth() + 1).padStart(2, '0');
+    const yyyyStart = today.getFullYear();
+    const todayStr = `${ddStart}.${mmStart}.${yyyyStart}`;
+
+    // 🔥 Дата окончания (ближайшее воскресенье)
+    const endOfWeek = new Date(today);
+    const dayOfWeek = today.getDay(); // 0 = Воскресенье
+    const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+    endOfWeek.setDate(today.getDate() + daysUntilSunday);
     
-    // 1. Проверяем наличие необходимых данных от фронтенда
-    // Предполагаем, что с фронта приходит массив couriers и дата (date)
-    if (!data.couriers || !data.couriers.length || !data.date) {
-      return NextResponse.json(
-        { error: 'Не указаны курьеры или дата для создания задания' }, 
-        { status: 400 }
-      );
-    }
+    const ddEnd = String(endOfWeek.getDate()).padStart(2, '0');
+    const mmEnd = String(endOfWeek.getMonth() + 1).padStart(2, '0');
+    const yyyyEnd = endOfWeek.getFullYear();
+    const endOfWeekStr = `${ddEnd}.${mmEnd}.${yyyyEnd}`;
 
-    // Достаем ID курьеров в Консоли. Если у тебя они лежат в другом поле - поменяй konsolId на нужное.
-    const contractorIds = data.couriers
-      .map((c: any) => c.konsolId)
-      .filter(Boolean);
+    for (const [cIdStr, dates] of Object.entries(grouped)) {
+      const courierId = Number(cIdStr);
+      const courier = await prisma.courier.findUnique({ where: { id: courierId } });
+      
+      if (!courier || !courier.konsolContractorId) continue;
 
-    if (contractorIds.length === 0) {
-        return NextResponse.json(
-          { error: 'У выбранных курьеров нет ID в Консоли (konsolId)' }, 
-          { status: 400 }
-        );
-    }
+      const sortedDates = [...dates].sort();
+      const startDate = new Date(sortedDates[0]);
 
-    // 2. Формируем тело запроса строго по документации Konsol
-    const payload = {
-      title: "Оказание курьерских услуг", // Название задания
-      since_date: data.date,               // Формат YYYY-MM-DD
-      upto_date: data.date,                // Для задания на 1 день совпадают
-      remote_work: true,                   // Используем удаленную работу (без address_id)
-      contractor_ids: contractorIds,       // Массив ID исполнителей [123, 456]
-      duties: [
-        {
-          title: "Доставка заказов",
-          measure: "день",
-          quantity: 1,
-          price: data.price || 1500        // Передаем цену (или дефолтную)
+      const existingTask = await prisma.konsolTask.findFirst({
+        where: { courierId, status: "DRAFT" }
+      });
+
+      if (!existingTask) {
+        const baseAmount = 500; 
+        
+        // Передаем старт (сегодня) и конец (воскресенье)
+        const taskId = await createKonsolTask(courier.konsolContractorId, baseAmount, todayStr, endOfWeekStr);
+        
+        if (taskId) {
+          await prisma.konsolTask.create({
+            data: {
+              courierId,
+              konsolTaskId: String(taskId),
+              date: startDate,
+              amount: baseAmount,
+              status: "DRAFT"
+            }
+          });
+          successCount++;
         }
-      ]
-    };
-
-    // 3. Отправляем запрос в Консоль
-    const konsolUrl = `${process.env.KONSOL_API_URL || 'https://api.konsol.pro/bus/alpha'}/workflow/platform/tasks`;
-    
-    const response = await fetch(konsolUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.KONSOL_API_KEY}`
-      },
-      body: JSON.stringify(payload)
-    });
-
-    const result = await response.json();
-
-    // 4. Если Консоль вернула ошибку валидации (400, 422 и т.д.)
-    if (!response.ok) {
-      console.error('Ошибка создания задания в Консоли:', result);
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: result.message || JSON.stringify(result) 
-        }, 
-        { status: response.status }
-      );
+      } else {
+        skipCount++;
+      }
     }
 
-    // 5. Успех
-    return NextResponse.json({ 
-      success: true, 
-      data: result 
-    });
-
+    return NextResponse.json({ success: true, processed: successCount, skipped: skipCount });
   } catch (error: any) {
-    console.error('Сбой в api/konsol/create:', error);
-    return NextResponse.json(
-      { success: false, error: 'Внутренняя ошибка сервера: ' + error.message }, 
-      { status: 500 }
-    );
+    console.error("Сбой в api/konsol/create:", error);
+    return NextResponse.json({ error: error.message || String(error) }, { status: 500 });
   }
 }

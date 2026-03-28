@@ -40,38 +40,103 @@ export async function inviteContractor(name: string, phone: string): Promise<{ i
 }
 
 // ✅ Создание задания
-export async function createKonsolTask(contractorId: string, baseAmount: number, dateStart: string, dateEnd: string) {
+export async function createKonsolTask(contractorId: string | number, baseAmount: number, dateStart: string, dateEnd: string) {
+  const payload = {
+    title: `Курьерская доставка для цветочного магазина "Банч"`,
+    since_date: dateStart.split(".").reverse().join("-"),
+    upto_date: dateEnd.split(".").reverse().join("-"),
+    contractor_ids: [Number(contractorId)], 
+    transit_to_submitted_after_creation: true,
+    duties: [
+      { 
+        description: "Доставка цветов по городу Москве",
+        price: baseAmount, 
+        quantity: 1, 
+        measure: "шт" 
+      }
+    ],
+  };
+
   const res = await fetch(`${KONSOL_BUS}/workflow/platform/tasks`, {
     method: "POST",
     headers,
-    body: JSON.stringify({
-      title: `Курьерские услуги ${dateStart} - ${dateEnd}`,
-      since_date: dateStart.split(".").reverse().join("-"),
-      upto_date:  dateEnd.split(".").reverse().join("-"),
-      contractor_ids: [contractorId],
-      transit_to_submitted_after_creation: true,
-      duties: [{ title: "Базовый выход", price: baseAmount, quantity: 1, measure: "шт" }],
-    }),
+    body: JSON.stringify(payload),
   });
+
   const data = await res.json();
-  return data?.id ?? data?.data?.id ?? null;
+
+  if (!res.ok) {
+    console.error("[Konsol] Ошибка создания задания:", JSON.stringify(data, null, 2));
+    throw new Error(data.message || JSON.stringify(data));
+  }
+
+  // 🔥 ИСПРАВЛЕНИЕ ТУТ: Добавили data?.task_id
+  return data?.task_id ?? data?.id ?? data?.data?.id ?? null;
 }
 
 // ✅ Получение задания
 export async function getKonsolTask(taskId: string) {
-  const res = await fetch(`${KONSOL_BUS}/workflow/tasks/${taskId}`, { headers });
-  if (!res.ok) return null;
+  const res = await fetch(`${KONSOL_BUS}/workflow/tasks/${taskId}`, { 
+    headers,
+    cache: "no-store" // 🔥 Обязательно! Чтобы Next.js каждый раз реально ходил в Консоль
+  });
+  
+  if (!res.ok) {
+    console.error(`[Konsol] Ошибка получения задания ${taskId}:`, await res.text());
+    return null;
+  }
+  
   return res.json();
 }
 
-// ✅ Добавление услуги в задание
-export async function addKonsolDuty(taskId: string, title: string, price: number, quantity: number) {
-  const res = await fetch(`${KONSOL_BUS}/workflow/duties`, {
-    method: "POST",
+// ✅ Обновление задания (заменяем цену на итоговую и сдвигаем даты на сегодня)
+export async function updateKonsolTask(taskId: string, newPrice: number) {
+  // 1. Получаем задание, чтобы узнать внутренний ID самой услуги (duty)
+  const task = await getKonsolTask(taskId);
+  if (!task || !task.duties || task.duties.length === 0) {
+    throw new Error(`[updateTask] Не найдено задание или услуги для ${taskId}`);
+  }
+  const dutyId = task.duties[0].id;
+
+  // 2. Генерируем даты (сегодня и конец недели), чтобы Консоль не ругалась
+  const today = new Date();
+  const ddStart = String(today.getDate()).padStart(2, '0');
+  const mmStart = String(today.getMonth() + 1).padStart(2, '0');
+  const yyyyStart = today.getFullYear();
+  const todayStr = `${yyyyStart}-${mmStart}-${ddStart}`;
+
+  const endOfWeek = new Date(today);
+  const dayOfWeek = today.getDay();
+  const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+  endOfWeek.setDate(today.getDate() + daysUntilSunday);
+  
+  const ddEnd = String(endOfWeek.getDate()).padStart(2, '0');
+  const mmEnd = String(endOfWeek.getMonth() + 1).padStart(2, '0');
+  const yyyyEnd = endOfWeek.getFullYear();
+  const endOfWeekStr = `${yyyyEnd}-${mmEnd}-${ddEnd}`;
+
+  // 3. Отправляем PATCH-запрос: меняем дату и ставим НОВУЮ общую цену
+  const res = await fetch(`${KONSOL_BUS}/workflow/tasks/${taskId}`, {
+    method: "PATCH",
     headers,
-    body: JSON.stringify({ task_id: taskId, title, price, quantity, measure: "шт" }),
+    body: JSON.stringify({
+      since_date: todayStr,
+      upto_date: endOfWeekStr,
+      duties: [
+        {
+          id: dutyId,
+          price: newPrice,
+          quantity: 1
+        }
+      ]
+    }),
   });
-  return res.ok;
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(`[updateTask] ${data.message || JSON.stringify(data)}`);
+  }
+  return true;
 }
 
 // ✅ Принятие задания
@@ -81,7 +146,11 @@ export async function acceptKonsolTask(taskId: string) {
     headers,
     body: JSON.stringify({ ids: [taskId] }),
   });
-  return res.ok;
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(`[acceptTask] ${data.message || JSON.stringify(data)}`);
+  }
+  return true;
 }
 
 // ✅ Финализация задания (создание акта)
@@ -91,8 +160,10 @@ export async function finalizeKonsolTask(taskId: string): Promise<string | null>
     headers,
     body: JSON.stringify({ ids: [taskId] }),
   });
-  if (!res.ok) return null;
   const data = await res.json();
+  if (!res.ok) {
+    throw new Error(`[finalizeTask] ${data.message || JSON.stringify(data)}`);
+  }
   const acts = data?.acts_ids ?? data?.data?.acts_ids ?? [];
   return acts.length > 0 ? acts[0] : null;
 }
@@ -104,7 +175,11 @@ export async function signKonsolAct(actId: string) {
     headers,
     body: JSON.stringify({ ids: [actId] }),
   });
-  return res.ok;
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(`[signAct] ${data.message || JSON.stringify(data)}`);
+  }
+  return true;
 }
 
 // ✅ Автооплата акта
@@ -114,5 +189,9 @@ export async function autopayKonsolAct(actId: string) {
     headers,
     body: JSON.stringify({ ids: [actId] }),
   });
-  return res.ok;
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(`[autopayAct] ${data.message || JSON.stringify(data)}`);
+  }
+  return true;
 }

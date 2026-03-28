@@ -434,7 +434,7 @@ export function CouriersClient({ user }: { user: any }) {
                      borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: konsolLoading || selectedPays.length === 0 ? "not-allowed" : "pointer"
                    }}
                  >
-                   {konsolLoading ? "⏳ Загрузка..." : "💼 Финализировать (Акт)"}
+                   {konsolLoading ? "⏳ Загрузка..." : "💼 Провести оплату"}
                  </button>
                </div>
 

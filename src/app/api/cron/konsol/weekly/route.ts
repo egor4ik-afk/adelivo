@@ -3,15 +3,15 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { notify } from "@/lib/notifications";
 import { getSession } from "@/lib/auth";
-import { addKonsolDuty, acceptKonsolTask, finalizeKonsolTask, signKonsolAct } from "@/lib/konsol";
+import { updateKonsolTask, acceptKonsolTask, finalizeKonsolTask, signKonsolAct, autopayKonsolAct } from "@/lib/konsol";
 
-// Помощник для перевода Date в строку YYYY-MM-DD
+export const dynamic = "force-dynamic";
+
 function toYMD(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 export async function GET(req: Request) {
-  // Разрешаем доступ либо по CRON секрету, либо если это Админ/Оператор из браузера
   const authHeader = req.headers.get("authorization");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const session = await getSession(req as any);
@@ -32,85 +32,97 @@ export async function GET(req: Request) {
     sunday.setDate(monday.getDate() + 6);
     sunday.setHours(23, 59, 59, 999);
 
-    // 🔥 Строки для фильтрации таблицы Order (YYYY-MM-DD)
     const mondayStr = toYMD(monday);
     const sundayStr = toYMD(sunday);
 
+    // Ищем только подтвержденные курьером задания
     const tasks = await prisma.konsolTask.findMany({
-      where: { date: { gte: monday, lte: sunday }, status: "DRAFT" },
+      where: { date: { gte: monday, lte: sunday }, status: "CONFIRMED" },
       include: { courier: true }
     });
 
     let successCount = 0;
+    let errorCount = 0;
 
     for (const task of tasks) {
       if (!task.konsolTaskId) continue;
 
-      // 🔥 Используем строковые даты для поиска
-      const weeklyOrders = await prisma.order.findMany({
-        where: { 
-          courierId: task.courier.id, 
-          status: "DELIVERED", 
-          deliveryDate: { gte: mondayStr, lte: sundayStr } 
-        }
-      });
-
-      // Группируем заказы по цене (+6% налога)
-      const dutyGroups: Record<number, number> = {};
-      let deliveriesTotal = 0;
-
-      for (const o of weeklyOrders) {
-        const orderPrice = o.price || 0;
-        if (orderPrice > 0) {
-          const finalPrice = Math.round(orderPrice * 1.06);
-          dutyGroups[finalPrice] = (dutyGroups[finalPrice] || 0) + 1;
-          deliveriesTotal += finalPrice;
-        }
-      }
-
-      // 1. Добавляем сгруппированные услуги в Консоль
-      for (const [priceStr, qty] of Object.entries(dutyGroups)) {
-        const p = Number(priceStr);
-        await addKonsolDuty(task.konsolTaskId, `Услуги доставки`, p, qty);
-      }
-
-      // 2. Принимаем задание
-      await acceptKonsolTask(task.konsolTaskId);
-
-      // 3. Формируем Акт
-      const actId = await finalizeKonsolTask(task.konsolTaskId);
-
-      if (actId) {
-        // 4. Подписываем Акт
-        await signKonsolAct(actId);
-
-        // Обновляем БД (Базовая сумма + сумма всех доставок)
-        const newTotalAmount = task.amount + deliveriesTotal;
-        await prisma.konsolTask.update({
-          where: { id: task.id },
-          data: { amount: newTotalAmount, konsolActId: String(actId), status: "SIGNED_BY_US" }
+      try {
+        const weeklyOrders = await prisma.order.findMany({
+          where: { 
+            courierId: task.courier.id, 
+            status: "DELIVERED", 
+            deliveryDate: { gte: mondayStr, lte: sundayStr } 
+          }
         });
 
-        successCount++;
-
-        // 5. Пуш курьеру
-        const user = await prisma.user.findUnique({ where: { email: task.courier.email || "" } });
-        if (user) {
-          notify({
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            type: "custom" as any,
-            userId: user.id,
-            title: "💰 Акт сформирован!",
-            body: `Вам начислено ${newTotalAmount} ₽. Проверьте и подпишите акт в приложении Консоль.Про.`,
-            url: "https://konsol.pro/"
-          }).catch(console.error);
+        // Считаем сумму всех доставок за неделю
+        let deliveriesTotal = 0;
+        for (const o of weeklyOrders) {
+          if (o.price && o.price > 0) {
+            deliveriesTotal += Math.round(o.price * 1.06); 
+          }
         }
+
+        // 🔥 Итоговая сумма: базовая ставка (500) + все доставки
+        const newTotalAmount = deliveriesTotal > 0 ? deliveriesTotal : task.amount;
+        // 1. ЗАМЕНЯЕМ начальную цену в Консоли на итоговую!
+        console.log(`[FINALIZE] 1. Обновляем задание ${task.konsolTaskId} на сумму: ${newTotalAmount} ₽...`);
+        await updateKonsolTask(task.konsolTaskId, newTotalAmount);
+
+        // 2. Принимаем задание
+        console.log(`[FINALIZE] 2. Завершаем задание...`);
+        await acceptKonsolTask(task.konsolTaskId);
+
+        // 3. Формируем Акт
+        console.log(`[FINALIZE] 3. Формируем Акт...`);
+        const actId = await finalizeKonsolTask(task.konsolTaskId);
+
+        if (actId) {
+          // 4. Подписываем Акт
+          console.log(`[FINALIZE] 4. Подписываем Акт (${actId})...`);
+          await signKonsolAct(actId);
+          
+          console.log(`[FINALIZE] 5. Отправляем в оплату...`);
+          await autopayKonsolAct(actId);
+
+          // Сохраняем новую общую сумму в нашу БД
+          await prisma.konsolTask.update({
+            where: { id: task.id },
+            data: { amount: newTotalAmount, konsolActId: String(actId), status: "SIGNED_BY_US" }
+          });
+
+          successCount++;
+          
+          const user = await prisma.user.findUnique({ where: { email: task.courier.email || "" } });
+          if (user) {
+            notify({
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              type: "custom" as any,
+              userId: user.id,
+              title: "💰 Акт сформирован!",
+              body: `Вам начислено ${newTotalAmount} ₽. Проверьте и подпишите акт в приложении Консоль.Про.`,
+              url: "https://konsol.pro/"
+            }).catch(console.error);
+          }
+        } else {
+          errorCount++;
+        }
+
+      } catch (taskError: any) {
+        console.error(`❌ [FINALIZE] Ошибка при обработке задания ${task.konsolTaskId}:`, taskError.message || taskError);
+        errorCount++;
       }
     }
 
-    return NextResponse.json({ success: true, processed: successCount, total: tasks.length });
+    return NextResponse.json({ 
+      success: true, 
+      processed: successCount, 
+      errors: errorCount, 
+      total: tasks.length 
+    });
+
   } catch (error: any) {
-    console.error("[Konsol Sync Error]:", error);
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
