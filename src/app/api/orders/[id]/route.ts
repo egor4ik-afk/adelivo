@@ -148,40 +148,58 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         }
       }
     }
+// ── Снятие курьера (если просто очистили поле курьера) ──
+const courierIsBeingRemoved = (body.courier === "" || body.courier === null) && order.courierId !== null;
+    
+if (courierIsBeingRemoved) {
+  // 1. Откатываем статус на "Новый"
+  if (order.status === "ASSIGNED" && body.status === undefined) {
+    updateData.status = "NEW";
+  }
 
-    // ── Снятие курьера (если просто очистили поле курьера) ──
-    const courierIsBeingRemoved = (body.courier === "" || body.courier === null) && order.courierId !== null;
-    if (courierIsBeingRemoved && order.routeId) {
-      const siblingsCount = await prisma.order.count({
-        where: { routeId: order.routeId, id: { not: id } },
-      });
-      if (siblingsCount === 0) {
-        await prisma.route.deleteMany({ where: { id: order.routeId } });
-      }
-      updateData.routeId    = null;
-      updateData.routeOrder = null;
+  // 2. Убираем из маршрута и удаляем маршрут, если он стал пустым
+  if (order.routeId) {
+    const siblingsCount = await prisma.order.count({
+      where: { routeId: order.routeId, id: { not: id } },
+    });
+    if (siblingsCount === 0) {
+      await prisma.route.deleteMany({ where: { id: order.routeId } });
     }
+    updateData.routeId    = null;
+    updateData.routeOrder = null;
+  }
+}
 
-    // ── Автовыброс из маршрута ──
-    const newStatus  = body.status  || order.status;
-    const newAddress = body.address || order.address;
-    const isCancelledOrReturned = newStatus === "CANCELLED" || newStatus === "RETURNED";
-    const isPickup   = newAddress?.toLowerCase().includes("самовывоз");
+// ── Автовыброс из маршрута ──
+const newStatus  = body.status  || order.status;
+const newAddress = body.address || order.address;
+const isCancelledOrReturned = newStatus === "CANCELLED" || newStatus === "RETURNED";
+const isPickup   = newAddress?.toLowerCase().includes("самовывоз");
 
-    if (isCancelledOrReturned || isPickup) {
-      updateData.routeId    = null;
-      updateData.routeOrder = null;
+if (isCancelledOrReturned || isPickup) {
+  // Если заказ выкидывается из маршрута из-за отмены/самовывоза,
+  // также нужно проверить, не остался ли маршрут пустым!
+  if (order.routeId && updateData.routeId !== null) {
+    const siblingsCount = await prisma.order.count({
+      where: { routeId: order.routeId, id: { not: id } },
+    });
+    if (siblingsCount === 0) {
+      await prisma.route.deleteMany({ where: { id: order.routeId } });
     }
+  }
 
-    let updatedOrder = order;
-    if (Object.keys(updateData).length > 0) {
-      updatedOrder = await prisma.order.update({
-        where: { id },
-        data: updateData,
-        include: { route: true },
-      });
-    }
+  updateData.routeId    = null;
+  updateData.routeOrder = null;
+}
 
+let updatedOrder = order;
+if (Object.keys(updateData).length > 0) {
+  updatedOrder = await prisma.order.update({
+    where: { id },
+    data: updateData,
+    include: { route: true },
+  });
+}
     // 🔥 ДОБАВЛЕНО: Теперь честно отслеживаем изменения времени, комментариев и товаров
     const changes = {
       statusChanged:    body.status    !== undefined && order.status    !== (updateData.status ?? body.status),

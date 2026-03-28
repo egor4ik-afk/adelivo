@@ -226,6 +226,8 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     lat?: number | null; lng?: number | null;
     geocoded?: boolean; isInvalid?: boolean; invalidReason?: string | null;
     changedAt?: Date;
+    routeId?: string | null;    // 🔥 ДОБАВЛЕНО для управления маршрутом
+    routeOrder?: number | null; // 🔥 ДОБАВЛЕНО для управления маршрутом
   } = { ...data };
 
   if (existing) {
@@ -250,6 +252,46 @@ export async function upsertOrder(crmOrder: CrmOrder) {
   
     if (data.status === OrderStatus.NEW && existing.status !== OrderStatus.NEW) {
       updateFields.status = existing.status;
+    }
+
+    // ── 🔥 ДОБАВЛЕНО: Выброс из маршрута при СНЯТИИ ИЛИ СМЕНЕ курьера из CRM ──
+    const isCourierRemovedOrChanged = existing.courierId !== null && data.courierId !== existing.courierId;
+
+    if (isCourierRemovedOrChanged) {
+      // 1. Выкидываем из старого маршрута и удаляем его, если он пуст
+      if (existing.routeId) {
+        const siblingsCount = await prisma.order.count({
+          where: { routeId: existing.routeId, id: { not: existing.id } },
+        });
+        if (siblingsCount === 0) {
+          await prisma.route.deleteMany({ where: { id: existing.routeId } });
+        }
+        updateFields.routeId = null;
+        updateFields.routeOrder = null;
+      }
+      
+      // 2. Если курьера именно СНЯЛИ (пустое поле в CRM), откатываем статус
+      // (Проверяем data.status === ASSIGNED, чтобы не перебить статус, если CRM прислала, например, CANCELLED)
+      if (data.courierId === null && existing.status === OrderStatus.ASSIGNED && data.status === OrderStatus.ASSIGNED) {
+        updateFields.status = OrderStatus.NEW;
+      }
+    }
+
+    // ── 🔥 ДОБАВЛЕНО: Автовыброс из маршрута при отмене/самовывозе из CRM ──
+    const isCancelledOrReturned = updateFields.status === OrderStatus.CANCELLED || updateFields.status === OrderStatus.RETURNED;
+    const isPickup = updateFields.address?.toLowerCase().includes("самовывоз");
+
+    if (isCancelledOrReturned || isPickup) {
+      if (existing.routeId && updateFields.routeId !== null) {
+        const siblingsCount = await prisma.order.count({
+          where: { routeId: existing.routeId, id: { not: existing.id } },
+        });
+        if (siblingsCount === 0) {
+          await prisma.route.deleteMany({ where: { id: existing.routeId } });
+        }
+        updateFields.routeId = null;
+        updateFields.routeOrder = null;
+      }
     }
 
     const hasCoreChanges =
