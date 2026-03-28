@@ -324,6 +324,8 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       commentChanged:   (existing.comment   ?? "") !== (order.comment   ?? ""),
       opCommentChanged: (existing.opComment ?? "") !== (order.opComment ?? ""),
       itemsChanged:     (existing.items     ?? "") !== (order.items     ?? ""),
+      // 🔥 ДОБАВИЛИ
+      recipientPhoneChanged: (existing.recipientPhone ?? "") !== (order.recipientPhone ?? ""),
     };
 
     if (Object.values(changes).some(Boolean)) {

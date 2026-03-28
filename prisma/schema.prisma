@@ -1,3 +1,4 @@
+// prisma/schema.prisma
 
 generator client {
   provider = "prisma-client-js"
@@ -29,15 +30,14 @@ enum OrderStatus {
 model User {
   id                String             @id @default(cuid())
   email             String             @unique
-  role              Role               @default(COURIER) // Было OPERATOR  
+  role              Role               @default(COURIER)
   firstName         String?
   lastName          String?
-  phone             String?            // Сюда будем обязательно сохранять телефон при входе
+  phone             String?            
   lastLoginAt       DateTime?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
-  // Настройки уведомлений
   notifyNewOrder    Boolean            @default(true)
   notifyStatus      Boolean            @default(true)
   notifyCourier     Boolean            @default(true)
@@ -82,7 +82,6 @@ model AuthCode {
   @@index([code])
 }
 
-// Web Push подписки браузера
 model PushSubscription {
   id        String   @id @default(cuid())
   userId    String
@@ -98,39 +97,42 @@ model PushSubscription {
 }
 
 model Courier {
-  id                Int        @id // Внутренний ID курьера из CRM
+  id                Int        @id 
   firstName         String?
   lastName          String?
   patronymic        String?
-  fullName          String   // Склеенное ФИО для удобного поиска
+  fullName          String     
   phone             String?
   email             String?
-  description       String?  // Примечание из CRM
-  isActive          Boolean    @default(true) // Работает ли он вообще в компании
-  lat               Float?   // Текущая широта (с телефона курьера)
-  lng               Float?   // Текущая долгота
+  description       String?  
+  isActive          Boolean    @default(true) 
+  lat               Float?   
+  lng               Float?   
   locationUpdatedAt DateTime?
-  homeLat           Float?   // Домашняя широта
-  homeLng           Float?   // Домашняя долгота
-  homeAddress       String?  // 🔥 НОВОЕ: Домашний адрес текстом
+  homeLat           Float?   
+  homeLng           Float?   
+  homeAddress       String?  
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 
-  // Связи
+  // 🔥 ИНТЕГРАЦИЯ С КОНСОЛЬ.ПРО
+  konsolPhone        String?  
+  konsolContractorId String? 
+  isSelfEmployed     Boolean @default(false) 
+
   shifts      CourierShift[]
   payments    CourierPayment[]
-  routes      Route[] // 🔥 НОВОЕ: Маршруты курьера
+  routes      Route[] 
+  konsolTasks KonsolTask[] // 🔥 Связь с заданиями Консоли
 }
 
-// Таблица смен (график работы курьеров)
 model CourierShift {
   id        String   @id @default(cuid())
   courierId Int
-  date      String   // Строка в формате "YYYY-MM-DD"
+  date      String   
   
   courier   Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
 
-  // Один курьер не может иметь две разные смены в один и тот же день
   @@unique([courierId, date])
 }
 
@@ -173,13 +175,11 @@ model Order {
   changedAt     DateTime?
   courierManual Boolean     @default(false)
 
-  
-  // 🔥 НОВЫЕ ПОЛЯ:
-  recipientPhone String? // Телефон получателя
-  routeId        String? // Привязка к маршруту
+  recipientPhone String? 
+  routeId        String? 
   route          Route?  @relation(fields: [routeId], references: [id], onDelete: SetNull)
-  routeOrder     Int?    // Порядок в маршруте
-  courierLink    String? @db.Text  // 🔥 НОВОЕ: Ссылка база→точка при ручном назначении
+  routeOrder     Int?    
+  courierLink    String? @db.Text  
 
   @@index([createdAt])
   @@index([slotFrom, slotTo])
@@ -192,12 +192,11 @@ model SyncState {
   lastSyncAt DateTime @default(now())
 }
 
-// Лог уведомлений
 model NotificationLog {
   id        String   @id @default(cuid())
-  type      String   // "order.new" | "order.updated" | "address.invalid"
-  channel   String   // "push" | "email"
-  payload   String   // JSON строка
+  type      String   
+  channel   String   
+  payload   String   
   success   Boolean
   error     String?
   createdAt DateTime @default(now())
@@ -206,15 +205,14 @@ model NotificationLog {
   @@index([type])
 }
 
-// Модель Маршрута
 model Route {
-  id        String   @id @default(uuid())
-  name      String   // Например, "M-1234"
-  link      String?  @db.Text // Ссылка на Яндекс
-  date      String   // Дата "YYYY-MM-DD"
+  id              String   @id @default(uuid())
+  name            String   
+  link            String?  @db.Text 
+  date            String   
   departureAdvice String?
-  courierId Int
-  courier   Courier  @relation(fields: [courierId], references: [id])
+  courierId       Int
+  courier         Courier  @relation(fields: [courierId], references: [id])
   
   orders    Order[]
   
@@ -222,10 +220,8 @@ model Route {
   updatedAt DateTime @updatedAt
 }
 
-// Диалог между двумя пользователями
 model Conversation {
   id          String    @id @default(cuid())
-  
   user1Id     String
   user2Id     String
   user1       User      @relation("ConvUser1", fields: [user1Id], references: [id], onDelete: Cascade)
@@ -236,19 +232,16 @@ model Conversation {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  @@unique([user1Id, user2Id]) // Один диалог между парой
+  @@unique([user1Id, user2Id]) 
   @@index([user1Id])
   @@index([user2Id])
 }
 
-// Сообщение в диалоге
 model Message {
   id             String       @id @default(cuid())
   text           String?      @db.Text
-  
-  // Медиа (Yandex S3) — добавим позже
   mediaUrl       String?      @db.Text
-  mediaType      String?      // "image" | "audio"
+  mediaType      String?      
   
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -256,27 +249,40 @@ model Message {
   senderId       String
   sender         User         @relation("SentMessages", fields: [senderId], references: [id])
   
-  readAt         DateTime?    // null = непрочитано
-  
+  readAt         DateTime?    
   createdAt      DateTime     @default(now())
 
   @@index([conversationId, createdAt])
   @@index([senderId])
 }
 
-// Сообщение в Общем чате
 model GlobalMessage {
-  id             String       @id @default(cuid())
-  text           String?      @db.Text
+  id          String       @id @default(cuid())
+  text        String?      @db.Text
+  mediaUrl    String?      @db.Text
+  mediaType   String?      
   
-  mediaUrl       String?      @db.Text
-  mediaType      String?      // "image" | "audio" | "video" | "file"
+  senderId    String
+  sender      User         @relation("SentGlobalMessages", fields: [senderId], references: [id], onDelete: Cascade)
   
-  senderId       String
-  sender         User         @relation("SentGlobalMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  
-  createdAt      DateTime     @default(now())
+  createdAt   DateTime     @default(now())
 
   @@index([createdAt])
   @@index([senderId])
+}
+
+// 🔥 НОВАЯ ТАБЛИЦА: Задания Консоль.Про
+model KonsolTask {
+  id             String   @id @default(cuid())
+  courierId      Int
+  konsolTaskId   String   
+  konsolActId    String?  
+  date           DateTime // Дата начала недели (Понедельник)
+  amount         Float    // Текущая сумма в задании
+  status         String   @default("DRAFT") // DRAFT, SIGNED_BY_US
+  createdAt      DateTime @default(now())
+  
+  courier        Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  
+  @@unique([courierId, date])
 }

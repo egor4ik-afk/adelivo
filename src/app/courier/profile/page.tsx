@@ -13,6 +13,15 @@ interface Profile {
   homeAddress: string | null; 
 }
 
+interface Stats {
+  weekCount: number;
+  weekTotal: number;
+  allTimeCount: number;
+  allTimeTotal: number;
+  konsolPhone: string | null;
+  isLinked: boolean;
+}
+
 function AddressSuggestInput({ value, onChange }: { value: string, onChange: (val: string) => void }) {
   const onChangeRef = useRef(onChange);
   useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
@@ -74,6 +83,7 @@ function AddressSuggestInput({ value, onChange }: { value: string, onChange: (va
 
 export default function CourierProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
   
   const [newPhone, setNewPhone] = useState("");
@@ -81,6 +91,11 @@ export default function CourierProfilePage() {
   const [newLastName, setNewLastName] = useState("");
   const [newHomeAddress, setNewHomeAddress] = useState(""); 
   
+  // Консоль
+  const [konsolModalOpen, setKonsolModalOpen] = useState(false);
+  const [inputKonsolPhone, setInputKonsolPhone] = useState("");
+  const [konsolLoading, setKonsolLoading] = useState(false);
+
   const [saving, setSaving] = useState(false);
   const [myShifts, setMyShifts] = useState<string[]>([]);
 
@@ -101,7 +116,7 @@ export default function CourierProfilePage() {
     };
   });
 
-  useEffect(() => {
+  const loadData = () => {
     fetch("/api/profile").then(r => r.json()).then(data => {
       setProfile(data);
       setNewPhone(data.phone || "");
@@ -110,9 +125,17 @@ export default function CourierProfilePage() {
       setNewHomeAddress(data.homeAddress || "");
     });
 
+    fetch("/api/courier/my-stats").then(r => r.json()).then(data => {
+      setStats(data);
+    });
+
     fetch("/api/courier/my-shifts").then(r => r.json()).then(data => {
       if (Array.isArray(data)) setMyShifts(data);
     });
+  };
+
+  useEffect(() => {
+    loadData();
 
     const standalone = window.matchMedia('(display-mode: standalone)').matches || ('standalone' in window.navigator && (window.navigator as any).standalone);
     setIsStandalone(standalone);
@@ -131,8 +154,7 @@ export default function CourierProfilePage() {
 
     try {
       await fetch("/api/courier/my-shifts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date, isWorking })
       });
     } catch (e) {
@@ -150,12 +172,35 @@ export default function CourierProfilePage() {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: cleanPhone, firstName: newFirstName, lastName: newLastName, homeAddress: newHomeAddress })
       });
-      setProfile(p => p ? { ...p, phone: cleanPhone, firstName: newFirstName, lastName: newLastName, homeAddress: newHomeAddress } : null);
+      loadData();
       setEditingProfile(false);
     } catch (e) {
       alert("Не удалось сохранить данные");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleKonsolAction = async (action: "link" | "unlink") => {
+    setKonsolLoading(true);
+    const phonePayload = action === "link" ? inputKonsolPhone.replace(/[^\d+]/g, "") : "";
+    
+    try {
+      const res = await fetch("/api/profile", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ konsolPhone: phonePayload })
+      });
+      const data = await res.json();
+      if (data.error) {
+        alert(data.error);
+      } else {
+        setKonsolModalOpen(false);
+        loadData(); // Обновляем статистику и статус
+      }
+    } catch (e) {
+      alert("Ошибка сервера при сохранении СЗ");
+    } finally {
+      setKonsolLoading(false);
     }
   };
 
@@ -177,7 +222,6 @@ export default function CourierProfilePage() {
       await subscribe();
     } catch (error) {
       alert("Браузер заблокировал уведомления. Убедитесь, что вы разрешили их в настройках сайта.");
-      console.error("Push subscribe error:", error);
     }
   };
 
@@ -211,6 +255,44 @@ export default function CourierProfilePage() {
       </div>
 
       <div style={{ padding: 16 }}>
+
+        {/* 🔥 НОВЫЙ БЛОК: СТАТИСТИКА */}
+        {stats && (
+          <div style={{ background: "#fff", padding: 16, borderRadius: 12, marginBottom: 16, border: "1px solid #e8e6df", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
+            <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", margin: "0 0 12px 0", textTransform: "uppercase" }}>Статистика (СЗ +6%)</h2>
+            
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+              <div style={{ background: "#f0fdf4", padding: 12, borderRadius: 10 }}>
+                <div style={{ fontSize: 11, color: "#10b981", textTransform: "uppercase", fontWeight: 700 }}>Эта неделя</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: "#1a1a18", marginTop: 4 }}>{stats.weekTotal} ₽</div>
+                <div style={{ fontSize: 12, color: "#6b6860" }}>{stats.weekCount} заказов</div>
+              </div>
+              <div style={{ background: "#fafaf8", padding: 12, borderRadius: 10 }}>
+                <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", fontWeight: 700 }}>Всё время</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: "#1a1a18", marginTop: 4 }}>{stats.allTimeTotal} ₽</div>
+                <div style={{ fontSize: 12, color: "#6b6860" }}>{stats.allTimeCount} заказов</div>
+              </div>
+            </div>
+
+            {/* ИНТЕГРАЦИЯ С КОНСОЛЬЮ */}
+            <div style={{ padding: 12, background: stats.isLinked ? "#eef3ff" : "#fef2f2", borderRadius: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: stats.isLinked ? "#4a7aff" : "#d94040" }}>
+                  {stats.isLinked ? "✅ Консоль подключена" : "❌ Самозанятость не указана"}
+                </div>
+                <div style={{ fontSize: 11, color: "#6b6860", marginTop: 2 }}>
+                  {stats.isLinked ? `Выплаты на: ${stats.konsolPhone}` : "Налоги +6% не начисляются"}
+                </div>
+              </div>
+              <button 
+                onClick={() => stats.isLinked ? handleKonsolAction("unlink") : setKonsolModalOpen(true)}
+                style={{ background: stats.isLinked ? "transparent" : "#1a1a18", border: stats.isLinked ? "1px solid #4a7aff" : "none", color: stats.isLinked ? "#4a7aff" : "#fff", padding: "6px 12px", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+              >
+                {stats.isLinked ? "Отвязать" : "Привязать"}
+              </button>
+            </div>
+          </div>
+        )}
 
         <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
           <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", margin: "0 0 12px 0", textTransform: "uppercase" }}>График (Ближайшие 7 дней)</h2>
@@ -374,6 +456,32 @@ export default function CourierProfilePage() {
         </button>
 
       </div>
+
+      {/* Модалка Консоли */}
+      {konsolModalOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
+          <div style={{ background: "#fff", padding: 24, borderRadius: 20, width: "90%", maxWidth: 350 }}>
+            <h3 style={{ margin: "0 0 8px 0", fontSize: 18, color: "#1a1a18" }}>Привязка Консоль.Про</h3>
+            <p style={{ fontSize: 13, color: "#6b6860", margin: "0 0 16px 0", lineHeight: 1.4 }}>
+              Введите номер телефона, на который оформлен ваш статус самозанятого.
+            </p>
+            <IMaskInput
+              mask="+7 (000) 000-00-00"
+              value={inputKonsolPhone}
+              onAccept={(val) => setInputKonsolPhone(val as string)}
+              placeholder="+7 (___) ___-__-__"
+              style={{ width: "100%", padding: "12px", borderRadius: 8, border: "1px solid #4a7aff", outline: "none", fontSize: 16, boxSizing: "border-box", display: "block", marginBottom: 20 }}
+            />
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => setKonsolModalOpen(false)} style={{ flex: 1, padding: 12, background: "#f5f4f0", color: "#1a1a18", border: "none", borderRadius: 8, fontWeight: 600 }}>Отмена</button>
+              <button onClick={() => handleKonsolAction("link")} disabled={konsolLoading} style={{ flex: 1, padding: 12, background: "#4a7aff", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600 }}>
+                {konsolLoading ? "Проверка..." : "Привязать"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

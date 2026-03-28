@@ -45,6 +45,7 @@ function formatDay(dateStr: string) {
   return d.toLocaleDateString("ru", { weekday: "short", day: "2-digit", month: "2-digit" });
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function CouriersClient({ user }: { user: any }) {
   const router = useRouter();
   const [isMobile, setIsMobile] = useState(false);
@@ -73,6 +74,10 @@ export function CouriersClient({ user }: { user: any }) {
   const [routesDate, setRoutesDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }));
   const [expandedCouriers, setExpandedCouriers] = useState<Record<number, boolean>>({});
 
+  // 🔥 Стейты для управления синхронизацией с Консолью
+  const [konsolLoading, setKonsolLoading] = useState(false);
+  const [konsolToast, setKonsolToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
   useEffect(() => {
     const checkMob = () => setIsMobile(window.innerWidth < 768);
     checkMob(); window.addEventListener("resize", checkMob);
@@ -90,7 +95,6 @@ export function CouriersClient({ user }: { user: any }) {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // 🔥 ОБНОВЛЕНО: Получение даты заказа (приоритет - дата доставки ПЕРВОЙ точки маршрута)
   const getODate = (o: Order) => {
     if (o.routeId) {
       const routeOrders = orders.filter(ord => ord.routeId === o.routeId);
@@ -150,6 +154,62 @@ export function CouriersClient({ user }: { user: any }) {
     await fetch("/api/couriers/payments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ payments }) });
     setSelectedPays([]);
     await fetchAll();
+  };
+
+  const toggleCourierWeek = (courierId: number) => {
+    const availableKeys = calcDates.map(d => `${courierId}_${d}`).filter(key => {
+      const d = key.split('_')[1];
+      const count = getCount(courierId, d, true);
+      const sum = getSum(courierId, d);
+      const isPaid = couriers.find(c => c.id === courierId)?.payments?.some(p => p.date === d);
+      return (count > 0 || sum > 0) && !isPaid;
+    });
+    if (availableKeys.length === 0) return;
+    const allSelected = availableKeys.every(k => selectedPays.includes(k));
+    if (allSelected) {
+      setSelectedPays(prev => prev.filter(k => !availableKeys.includes(k)));
+    } else {
+      setSelectedPays(prev => Array.from(new Set([...prev, ...availableKeys])));
+    }
+  };
+
+  const toggleDay = (date: string) => {
+    const availableKeys = calcSorted.map(c => `${c.id}_${date}`).filter(key => {
+      const cId = Number(key.split('_')[0]);
+      const count = getCount(cId, date, true);
+      const sum = getSum(cId, date);
+      const isPaid = couriers.find(c => c.id === cId)?.payments?.some(p => p.date === date);
+      return (count > 0 || sum > 0) && !isPaid;
+    });
+    if (availableKeys.length === 0) return;
+    const allSelected = availableKeys.every(k => selectedPays.includes(k));
+    if (allSelected) {
+      setSelectedPays(prev => prev.filter(k => !availableKeys.includes(k)));
+    } else {
+      setSelectedPays(prev => Array.from(new Set([...prev, ...availableKeys])));
+    }
+  };
+
+  const runKonsolSync = async () => {
+    if (!confirm("Запустить формирование актов Консоль.Про за текущую неделю?")) return;
+    setKonsolLoading(true);
+    setKonsolToast(null);
+
+    try {
+      const res = await fetch("/api/cron/konsol/weekly");
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setKonsolToast({ message: `✅ Успешно! Сформировано актов: ${data.processed} из ${data.total}`, type: "success" });
+      } else {
+        setKonsolToast({ message: `❌ Ошибка: ${data.error || "Неизвестная ошибка"}`, type: "error" });
+      }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (e: any) {
+      setKonsolToast({ message: `❌ Сетевая ошибка: ${e.message}`, type: "error" });
+    } finally {
+      setKonsolLoading(false);
+      setTimeout(() => setKonsolToast(null), 5000);
+    }
   };
 
   const filtered = couriers.filter(c => {
@@ -262,6 +322,7 @@ export function CouriersClient({ user }: { user: any }) {
         {activeTab === "calc" && (
            <div style={s.tableWrap}>
              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "#fff", borderBottom: "1px solid #e8e6df", flexWrap: "wrap", gap: 10 }}>
+               
                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                  <button style={s.arrowBtn} onClick={() => setWeekStart(d => new Date(d.getTime() - 7 * 86400000))}>◀ Неделя</button>
                  <span style={{ fontWeight: 700, fontSize: 14, textTransform: "capitalize", color: "#1a1a18" }}>
@@ -269,12 +330,52 @@ export function CouriersClient({ user }: { user: any }) {
                  </span>
                  <button style={s.arrowBtn} onClick={() => setWeekStart(d => new Date(d.getTime() + 7 * 86400000))}>Неделя ▶</button>
                </div>
+
+               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                 {konsolToast && (
+                   <span style={{ fontSize: 13, fontWeight: 600, color: konsolToast.type === "success" ? "#10b981" : "#d94040", animation: "fadeIn 0.3s" }}>
+                     {konsolToast.message}
+                   </span>
+                 )}
+                 <button 
+                   onClick={runKonsolSync} 
+                   disabled={konsolLoading}
+                   style={{
+                     background: konsolLoading ? "#a8a49c" : "#1a1a18", color: "#fff", border: "none", padding: "8px 16px", 
+                     borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: konsolLoading ? "not-allowed" : "pointer"
+                   }}
+                 >
+                   {konsolLoading ? "⏳ Финализация..." : "💼 Финализировать Консоль"}
+                 </button>
+               </div>
+
              </div>
              <table style={s.table}>
                <thead>
                  <tr>
                    <th style={{ ...s.th, width: 220 }}>Курьер</th>
-                   {calcDates.map(d => <th key={d} style={{ ...s.th, textAlign: "center" }}>{formatDay(d)}<br/><span style={{ fontSize: 10 }}>{d.slice(5).replace("-", ".")}</span></th>)}
+                   {calcDates.map(d => {
+                     const availableDayKeys = calcSorted.map(c => `${c.id}_${d}`).filter(k => {
+                       const cId = Number(k.split('_')[0]);
+                       return (getCount(cId, d, true) > 0 || getSum(cId, d) > 0) && !couriers.find(c => c.id === cId)?.payments?.some(p => p.date === d);
+                     });
+                     const isAllDaySelected = availableDayKeys.length > 0 && availableDayKeys.every(k => selectedPays.includes(k));
+
+                     return (
+                       <th key={d} style={{ ...s.th, textAlign: "center" }}>
+                         {formatDay(d)}<br/><span style={{ fontSize: 10 }}>{d.slice(5).replace("-", ".")}</span>
+                         <div style={{ marginTop: 6, display: "flex", justifyContent: "center" }}>
+                           <input 
+                             type="checkbox" 
+                             checked={isAllDaySelected}
+                             onChange={() => toggleDay(d)} 
+                             style={{...s.checkbox, width: 14, height: 14}} 
+                             title="Выбрать весь день"
+                           />
+                         </div>
+                       </th>
+                     )
+                   })}
                    <th style={{ ...s.th, textAlign: "right", color: "#10b981" }}>Итого</th>
                  </tr>
                </thead>
@@ -282,9 +383,27 @@ export function CouriersClient({ user }: { user: any }) {
                  {loading ? <tr><td colSpan={9} style={{ padding: 20, textAlign: "center" }}>Загрузка...</td></tr> : calcSorted.map(c => {
                    const weekTotal = calcDates.reduce((acc, d) => acc + getSum(c.id, d), 0);
                    const weekTotal106 = weekTotal * 1.06;
+
+                   const availableWeekKeys = calcDates.map(d => `${c.id}_${d}`).filter(k => {
+                     const dStr = k.split('_')[1];
+                     return (getCount(c.id, dStr, true) > 0 || getSum(c.id, dStr) > 0) && !c.payments?.some(p => p.date === dStr);
+                   });
+                   const isAllWeekSelected = availableWeekKeys.length > 0 && availableWeekKeys.every(k => selectedPays.includes(k));
+
                    return (
                      <tr key={c.id} style={{ borderBottom: "1px solid #f0efe9", background: "#fff" }}>
-                       <td style={{ ...s.td, fontWeight: 600 }}>{c.fullName}</td>
+                       <td style={{ ...s.td, fontWeight: 600 }}>
+                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                           <input 
+                             type="checkbox" 
+                             checked={isAllWeekSelected}
+                             onChange={() => toggleCourierWeek(c.id)} 
+                             style={{...s.checkbox, width: 16, height: 16}} 
+                             title="Выбрать всю неделю"
+                           />
+                           {c.fullName}
+                         </div>
+                       </td>
                        {calcDates.map(d => {
                          const count = getCount(c.id, d, true); const sum = getSum(c.id, d);
                          const isPaid = c.payments?.some(p => p.date === d);
@@ -338,7 +457,6 @@ export function CouriersClient({ user }: { user: any }) {
               const courierUnassignedOrders = routeGroups["no_route"] || [];
               const isCExpanded = expandedCouriers[c.id] ?? true;
               
-              // 🔥 ОБНОВЛЕНО: Сортировка маршрутов тоже опирается на дату доставки первой точки
               const routeKeys = Object.keys(routeGroups)
               .filter(k => k !== "no_route")
               .sort((a, b) => {

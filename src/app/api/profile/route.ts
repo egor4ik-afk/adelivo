@@ -4,12 +4,14 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { geocodeAddress } from "@/lib/crm";
+import { findContractorByPhone } from "@/lib/konsol"; // 🔥 Импорт для Консоли
 
 const updateSchema = z.object({
   firstName: z.string().min(1).max(50).optional(),
   lastName: z.string().max(50).optional(),
   phone: z.string().max(20).optional(),
-  homeAddress: z.string().max(200).optional(), // 🔥 Добавили валидацию адреса
+  homeAddress: z.string().max(200).optional(), 
+  konsolPhone: z.string().optional(), // 🔥 Добавили валидацию для телефона СЗ
 
   // Настройки уведомлений (ОСТАВЛЕНЫ БЕЗ ИЗМЕНЕНИЙ)
   notifyNewOrder: z.boolean().optional(),
@@ -69,8 +71,8 @@ export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
 
-    // 🔥 Отделяем homeAddress от остальных данных
-    const { homeAddress, ...userData } = updateSchema.parse(body);
+    // 🔥 Отделяем homeAddress и konsolPhone от остальных данных
+    const { homeAddress, konsolPhone, ...userData } = updateSchema.parse(body);
 
     // 1. Обновляем таблицу User (едино для всех)
     const updated = await prisma.user.update({
@@ -87,12 +89,28 @@ export async function PATCH(req: NextRequest) {
 
     // 2. Обновляем таблицу Courier
     if (user.email) {
-      // Собираем данные для обновления курьера
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const courierData: any = {};
       
       if (homeAddress !== undefined) courierData.homeAddress = homeAddress;
       if (userData.phone !== undefined) courierData.phone = userData.phone;
+
+      // 🔥 ЛОГИКА ПРИВЯЗКИ/ОТВЯЗКИ КОНСОЛЬ.ПРО
+      if (konsolPhone !== undefined) {
+        if (konsolPhone === "" || konsolPhone === null) {
+          // Отвязка
+          courierData.konsolPhone = null;
+          courierData.konsolContractorId = null;
+        } else {
+          // Привязка (ищем СЗ по номеру в Консоли)
+          const contractorId = await findContractorByPhone(konsolPhone);
+          if (!contractorId) {
+            return NextResponse.json({ error: "Самозанятый с таким номером не найден в Консоль.Про" }, { status: 400 });
+          }
+          courierData.konsolPhone = konsolPhone;
+          courierData.konsolContractorId = contractorId;
+        }
+      }
 
       // 🔥 ЕСЛИ ЭТО КУРЬЕР: дополнительно обновляем имя, фамилию и склеиваем fullName
       if (user.role === "COURIER") {

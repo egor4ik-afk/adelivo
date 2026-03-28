@@ -5,9 +5,12 @@ import { sendNewOrderAlert, sendOrderUpdateAlert, sendInvalidAddressAlert } from
 
 export type NotificationEvent =
   | { type: "order.new"; order: OrderPayload }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   | { type: "order.updated"; order: OrderPayload; previousStatus?: string; changes?: any }
   | { type: "address.invalid"; orders: InvalidOrderPayload[] }
-  | { type: "route.assigned"; userId: string; routeId: string; pointsCount: number };
+  | { type: "route.assigned"; userId: string; routeId: string; pointsCount: number }
+  // 🔥 ДОБАВЛЕНО: Поддержка произвольных пуш-уведомлений (для Консоли и других системных алертов)
+  | { type: "custom"; userId: string; title: string; body: string; url?: string };
 
 interface OrderPayload {
   id: string;
@@ -21,6 +24,7 @@ interface OrderPayload {
   status: string;
   comment?: string | null;
   opComment?: string | null;
+  recipientPhone?: string | null; // 🔥 ДОБАВЛЕНО для уведомлений о смене номера
 }
 
 interface InvalidOrderPayload {
@@ -73,6 +77,39 @@ async function log(type: string, channel: string, payload: object, success: bool
 async function sendIndividualPushes(event: NotificationEvent) {
   if (!initWebPush()) return;
 
+  // 🔥 ОБРАБОТКА CUSTOM УВЕДОМЛЕНИЙ (например, от Консоли)
+  if (event.type === "custom") {
+    const user = await prisma.user.findUnique({
+      where: { id: event.userId },
+      include: { pushSubscriptions: true },
+    });
+    
+    if (!user || !user.pushSubscriptions.length) return;
+
+    const payload = JSON.stringify({
+      title: event.title,
+      body: event.body,
+      url: event.url || "/",
+      role: user.role,
+      timestamp: Date.now(),
+    });
+
+    const expiredEndpoints: string[] = [];
+    for (const sub of user.pushSubscriptions) {
+      try {
+        await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload);
+      } catch (e: any) {
+        if (e.statusCode === 410 || e.statusCode === 404) {
+          expiredEndpoints.push(sub.endpoint);
+        }
+      }
+    }
+    if (expiredEndpoints.length > 0) {
+      await prisma.pushSubscription.deleteMany({ where: { endpoint: { in: expiredEndpoints } } });
+    }
+    return; // Завершаем функцию, так как custom-пуш отправлен
+  }
+
   const users = await prisma.user.findMany({
     include: { pushSubscriptions: true },
   });
@@ -90,13 +127,11 @@ async function sendIndividualPushes(event: NotificationEvent) {
 
     // ════════════════════════════════════════════════════════════
     // ── ОПЕРАТОРЫ и АДМИНЫ ──
-    // Получают уведомления по всем заказам, настраиваемые по полям
     // ════════════════════════════════════════════════════════════
     if (user.role === "OPERATOR" || user.role === "ADMIN") {
       targetUrl = "/dashboard"; // оператор всегда идёт в дашборд
 
       if (event.type === "order.new") {
-        // Новый заказ — всегда уведомляем (если notifyNewOrder включено)
         if (user.notifyNewOrder) {
           shouldSend = true;
           title = `🌸 Новый заказ: ${event.order.externalId ?? event.order.crmId}`;
@@ -104,7 +139,6 @@ async function sendIndividualPushes(event: NotificationEvent) {
           targetUrl = `/dashboard?orderId=${event.order.id}`;
         }
       } else if (event.type === "order.updated" && event.changes) {
-        // Обновление заказа — по каждому полю своя настройка
         if (user.notifyStatus && event.changes.statusChanged) {
           const oldLabel = event.previousStatus ? statusLabel(event.previousStatus) : "—";
           const newLabel = statusLabel(event.order.status);
@@ -137,6 +171,11 @@ async function sendIndividualPushes(event: NotificationEvent) {
           shouldSend = true;
           bodyTexts.push(`Состав изменён`);
         }
+        // 🔥 ДОБАВЛЕНО: Уведомление о смене номера телефона получателя
+        if (event.changes.recipientPhoneChanged) {
+          shouldSend = true;
+          bodyTexts.push(`Телефон получателя изменен`);
+        }
 
         if (shouldSend) {
           title = `📦 Заказ ${event.order.externalId ?? event.order.crmId} обновлён`;
@@ -157,7 +196,6 @@ async function sendIndividualPushes(event: NotificationEvent) {
       targetUrl = "/courier/routes";
 
       if (event.type === "route.assigned" && event.userId === user.id) {
-        // 🔥 Красивый push о новом маршруте
         shouldSend = true;
         title = `🗺 Назначен маршрут: ${event.routeId}`;
         bodyTexts.push(`📍 Точек в маршруте: ${event.pointsCount}`);
@@ -168,6 +206,7 @@ async function sendIndividualPushes(event: NotificationEvent) {
         const courierRecord = await prisma.courier.findFirst({
           where: { email: user.email ?? undefined },
         });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const eventCourierId = (event.order as any).courierId;
 
         if (courierRecord && eventCourierId === courierRecord.id) {
@@ -191,13 +230,18 @@ async function sendIndividualPushes(event: NotificationEvent) {
             shouldSend = true;
             bodyTexts.push(`Коммент клиента: ${event.order.comment ?? "—"}`);
           }
-          if (event.changes.opCommentChanged) { // 🔥 ДОБАВЛЕНО
+          if (event.changes.opCommentChanged) {
             shouldSend = true;
             bodyTexts.push(`Коммент оператора: ${event.order.opComment ?? "—"}`);
           }
-          if (event.changes.itemsChanged) { // 🔥 ДОБАВЛЕНО
+          if (event.changes.itemsChanged) {
             shouldSend = true;
             bodyTexts.push(`Состав заказа изменён`);
+          }
+          // 🔥 ДОБАВЛЕНО: Уведомление о смене номера телефона получателя для курьера
+          if (event.changes.recipientPhoneChanged) {
+            shouldSend = true;
+            bodyTexts.push(`Новый телефон получателя: ${event.order.recipientPhone ?? "Удален"}`);
           }
 
           if (shouldSend) {
@@ -212,9 +256,10 @@ async function sendIndividualPushes(event: NotificationEvent) {
       const payload = JSON.stringify({
         title,
         body: bodyTexts.join("\n") || " ",
-        url: targetUrl,       // sw.js использует это для навигации
-        role,                 // sw.js использует это чтобы разрулить курьер/оператор
+        url: targetUrl,       
+        role,                 
         orderId: event.type !== "address.invalid" && event.type !== "route.assigned"
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ? (event as any).order?.id ?? null
           : null,
         timestamp: Date.now(),
@@ -226,6 +271,7 @@ async function sendIndividualPushes(event: NotificationEvent) {
             { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
             payload
           );
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (e: any) {
           if (e.statusCode === 410 || e.statusCode === 404) {
             expiredEndpoints.push(sub.endpoint);
@@ -254,7 +300,7 @@ export async function notify(event: NotificationEvent) {
     case "order.new": {
       const { order } = event;
       try {
-        await sendNewOrderAlert(order);
+        await sendNewOrderAlert(order as any); // Приведение типа для mailer'а
         await log("order.new", "email", order, true);
       } catch (e) {
         await log("order.new", "email", order, false, String(e));
@@ -265,7 +311,7 @@ export async function notify(event: NotificationEvent) {
       const { order, previousStatus, changes } = event;
       if (changes?.statusChanged && previousStatus && statusLabel(previousStatus) !== statusLabel(order.status)) {
         try {
-          await sendOrderUpdateAlert({ ...order, previousStatus });
+          await sendOrderUpdateAlert({ ...order, previousStatus } as any);
           await log("order.updated", "email", { order, previousStatus }, true);
         } catch (e) {
           await log("order.updated", "email", { order, previousStatus }, false, String(e));
@@ -277,7 +323,7 @@ export async function notify(event: NotificationEvent) {
       const { orders } = event;
       if (orders.length === 0) break;
       try {
-        await sendInvalidAddressAlert(orders);
+        await sendInvalidAddressAlert(orders as any);
         await log("address.invalid", "email", { count: orders.length }, true);
       } catch (e) {
         await log("address.invalid", "email", { count: orders.length }, false, String(e));

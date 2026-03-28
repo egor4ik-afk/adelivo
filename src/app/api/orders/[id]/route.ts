@@ -209,6 +209,8 @@ if (Object.keys(updateData).length > 0) {
       commentChanged:   body.comment   !== undefined && (order.comment   ?? "") !== (body.comment ?? ""),
       opCommentChanged: body.opComment !== undefined && (order.opComment ?? "") !== (body.opComment ?? ""),
       itemsChanged:     body.items     !== undefined && (order.items     ?? "") !== (body.items ?? ""),
+      // 🔥 ДОБАВИЛ
+      recipientPhoneChanged: body.recipientPhone !== undefined && (order.recipientPhone ?? "") !== (body.recipientPhone ?? ""),
     };
 
     if (Object.values(changes).some(Boolean)) {
