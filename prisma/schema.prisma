@@ -271,17 +271,17 @@ model GlobalMessage {
   @@index([senderId])
 }
 
-// 🔥 НОВАЯ ТАБЛИЦА: Задания Консоль.Про
 model KonsolTask {
   id             String   @id @default(cuid())
-  courierId      Int?
+  courierId      Int
   konsolTaskId   String   
   konsolActId    String?  
-  date           DateTime // Дата начала недели (Понедельник)
-  amount         Float    // Текущая сумма в задании
-  status         String   @default("DRAFT") // DRAFT, SIGNED_BY_US
+  date           DateTime
+  amount         Float    
+  status         String   @default("DRAFT")
   createdAt      DateTime @default(now())
   
-courier        Courier? @relation(fields: [courierId], references: [id], onDelete: SetNull)  
+  courier        Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  
   @@unique([courierId, date])
 }
