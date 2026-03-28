@@ -6,7 +6,7 @@ import { updateCrmOrder } from "@/lib/crm";
 import { notify } from "@/lib/notifications";
 import { OrderStatus } from "@prisma/client";
 
-const STORE_COORDS = "55.749511,37.596205"; // База
+const STORE_COORDS = "55.749511,37.596205";
 
 export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const user = await getSession(req);
@@ -27,13 +27,11 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     if (body.address        !== undefined) updateData.address        = body.address;
     if (body.recipientPhone !== undefined) updateData.recipientPhone = body.recipientPhone;
 
-    // Поддержка ручного назначения/удаления маршрута с фронтенда
     if (body.routeId    !== undefined) updateData.routeId    = body.routeId;
     if (body.routeOrder !== undefined) updateData.routeOrder = body.routeOrder;
 
     if (body.courier !== undefined) {
       if (body.courier) {
-        // Ищем по fullName ИЛИ по числовому id
         const numericId = Number(body.courier);
         const dbCourier = await prisma.courier.findFirst({
           where: isNaN(numericId)
@@ -43,38 +41,107 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         updateData.courier   = dbCourier?.fullName ?? body.courier;
         updateData.courierId = dbCourier?.id ?? null;
       } else {
-        // Снятие курьера
         updateData.courier     = null;
         updateData.courierId   = null;
         updateData.courierLink = null;
       }
     }
 
-    // Генерация ссылки для курьера
+    // ── Свежие координаты из БД (после возможного /fix) ──
+    const freshCoords = await prisma.order.findUnique({
+      where: { id },
+      select: { lat: true, lng: true },
+    });
+    const freshLat = freshCoords?.lat;
+    const freshLng = freshCoords?.lng;
+
+    // ── Генерация ссылки для курьера ──
     const finalCourier = updateData.courier !== undefined ? updateData.courier : order.courier;
     const isCourierChanged = body.courier !== undefined && body.courier !== null;
-    // Адрес мог обновиться через /fix до этого PATCH — перечитываем свежие координаты из БД
     const isAddressChanged = body.address !== undefined;
 
     if (finalCourier && (isCourierChanged || isAddressChanged)) {
-      // Всегда берём актуальные координаты из БД (не из body и не из старого snapshot)
-      // /fix уже мог записать новые lat/lng до того как пришёл этот PATCH
-      const freshOrder = await prisma.order.findUnique({
-        where: { id },
-        select: { lat: true, lng: true },
-      });
-      const finalLat = freshOrder?.lat;
-      const finalLng = freshOrder?.lng;
-      if (finalLat && finalLng) {
-        updateData.courierLink = `https://yandex.ru/maps/?mode=routes&rtext=${STORE_COORDS}~${finalLat},${finalLng}&rtt=auto`;
+      if (freshLat && freshLng) {
+        updateData.courierLink = `https://yandex.ru/maps/?mode=routes&rtext=${STORE_COORDS}~${freshLat},${freshLng}&rtt=auto`;
       }
     }
 
-    // Если назначили курьера, но координат ещё нет — всё равно пересчитаем ссылку
-    // когда геокодирование завершится (geocodeNewOrders обновит lat/lng, но ссылку не пересчитает)
-    // Поэтому если адрес есть, а координат нет — ссылку не пишем (лучше null чем старая)
+    // ── Автосоздание маршрута при назначении курьера из OrderDetail ──
+    // Если назначается курьер, а у заказа нет routeId — создаём одиночный маршрут.
+    // Это нужно чтобы заказ отображался в /courier/routes и во вкладке Маршруты CouriersClient.
+    const newCourierId = updateData.courierId as number | undefined;
+    const courierIsBeingAssigned = newCourierId && !order.courierId;
+    const orderHasNoRoute = !order.routeId && body.routeId === undefined;
 
-    // Автоматический выброс из маршрута при отмене/возврате/самовывозе
+    if (courierIsBeingAssigned && orderHasNoRoute) {
+      const orderDate = order.deliveryDate
+        ? order.deliveryDate.toString().split("T")[0]
+        : new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" });
+
+      // Генерируем имя маршрута по шаблону M-DD###
+      const routeDay = orderDate.split("-")[2];
+      const prefix = `M-${routeDay}`;
+      const lastRoute = await prisma.route.findFirst({
+        where: { name: { startsWith: prefix } },
+        orderBy: { name: "desc" },
+      });
+      let nextNum = 1;
+      if (lastRoute) {
+        const match = lastRoute.name.match(new RegExp(`${prefix}(\\d{3,})`));
+        if (match) nextNum = parseInt(match[1], 10) + 1;
+      }
+      const routeName = `${prefix}${nextNum.toString().padStart(3, "0")}`;
+
+      const routeLink = freshLat && freshLng
+        ? `https://yandex.ru/maps/?rtext=${STORE_COORDS}~${freshLat},${freshLng}&rtt=auto`
+        : null;
+
+      const newRoute = await prisma.route.create({
+        data: {
+          name:      routeName,
+          link:      routeLink,
+          date:      orderDate,
+          courierId: newCourierId,
+        },
+      });
+
+      updateData.routeId    = newRoute.id;
+      updateData.routeOrder = 1;
+
+      // NEW → ASSIGNED автоматически
+      if (order.status === "NEW") {
+        updateData.status = "ASSIGNED";
+      }
+
+      // Push курьеру о новом маршруте
+      const courierRec = await prisma.courier.findUnique({ where: { id: newCourierId } });
+      if (courierRec?.email) {
+        const courierUser = await prisma.user.findUnique({ where: { email: courierRec.email } });
+        if (courierUser) {
+          notify({
+            type: "route.assigned",
+            userId: courierUser.id,
+            routeId: routeName,
+            pointsCount: 1,
+          }).catch(console.error);
+        }
+      }
+    }
+
+    // ── Снятие курьера: если последний заказ в маршруте — удаляем маршрут ──
+    const courierIsBeingRemoved = (body.courier === "" || body.courier === null) && order.courierId;
+    if (courierIsBeingRemoved && order.routeId) {
+      const siblingsCount = await prisma.order.count({
+        where: { routeId: order.routeId, id: { not: id } },
+      });
+      if (siblingsCount === 0) {
+        await prisma.route.deleteMany({ where: { id: order.routeId } });
+      }
+      updateData.routeId    = null;
+      updateData.routeOrder = null;
+    }
+
+    // ── Автовыброс из маршрута при отмене/возврате/самовывозе ──
     const newStatus  = body.status  || order.status;
     const newAddress = body.address || order.address;
     const isCancelledOrReturned = newStatus === "CANCELLED" || newStatus === "RETURNED";
@@ -94,14 +161,14 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       });
     }
 
-    // ── Push-уведомления о ручных изменениях оператора ──
+    // ── Push-уведомления о ручных изменениях ──
     const changes = {
-      statusChanged:    body.status      !== undefined && order.status      !== body.status,
-      courierChanged:   body.courier     !== undefined && (order.courierId ?? 0) !== (updateData.courierId ?? 0),
-      addressChanged:   body.address     !== undefined && (order.address    ?? "") !== (body.address ?? ""),
-      slotChanged:      false, // слот меняется только через CRM
-      commentChanged:   false, // комментарий клиента не меняется отсюда
-      opCommentChanged: body.opComment   !== undefined && (order.opComment  ?? "") !== (body.opComment ?? ""),
+      statusChanged:    body.status    !== undefined && order.status    !== (updateData.status ?? body.status),
+      courierChanged:   body.courier   !== undefined && (order.courierId ?? 0) !== (updateData.courierId ?? 0),
+      addressChanged:   body.address   !== undefined && (order.address   ?? "") !== (body.address ?? ""),
+      slotChanged:      false,
+      commentChanged:   false,
+      opCommentChanged: body.opComment !== undefined && (order.opComment ?? "") !== (body.opComment ?? ""),
       itemsChanged:     false,
     };
 
@@ -109,25 +176,25 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       notify({
         type: "order.updated",
         order: {
-          id: updatedOrder.id,
-          crmId: updatedOrder.crmId,
+          id:         updatedOrder.id,
+          crmId:      updatedOrder.crmId,
           externalId: updatedOrder.externalId,
-          courierId: updatedOrder.courierId,      // ← курьер для матчинга в notifications.ts
-          address: updatedOrder.address,
-          slotRaw: updatedOrder.slotRaw,
-          courier: updatedOrder.courier,
-          items: updatedOrder.items,
-          status: updatedOrder.status,
-          comment: updatedOrder.comment,
-          opComment: updatedOrder.opComment,
+          courierId:  updatedOrder.courierId,
+          address:    updatedOrder.address,
+          slotRaw:    updatedOrder.slotRaw,
+          courier:    updatedOrder.courier,
+          items:      updatedOrder.items,
+          status:     updatedOrder.status,
+          comment:    updatedOrder.comment,
+          opComment:  updatedOrder.opComment,
         } as any,
         previousStatus: changes.statusChanged ? order.status : undefined,
         changes,
       }).catch(console.error);
     }
 
-    // CRM синхронизация (ASSIGNED не отправляем)
-    let crmStatus = body.status;
+    // ── CRM синхронизация ──
+    let crmStatus = body.status ?? updateData.status;
     if (crmStatus === "ASSIGNED") crmStatus = undefined;
 
     await updateCrmOrder(order.crmId, {

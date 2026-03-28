@@ -1,4 +1,3 @@
-// src/components/OrderDetail.tsx
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { IMaskInput } from "react-imask";
@@ -316,7 +315,7 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
             ))}
           </select>
         </div>
-        <div>
+        <div style={{ minWidth: 0 }}>
           <div style={lbl}>Курьер</div>
           <CourierSelect value={editCourier} onChange={setEditCourier} couriers={couriers} />
         </div>

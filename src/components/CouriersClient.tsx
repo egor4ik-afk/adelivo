@@ -90,8 +90,13 @@ export function CouriersClient({ user }: { user: any }) {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const getODate = (o: Order) => o.route?.date || (o.deliveryDate ? o.deliveryDate.split('T')[0] : null) || (o.crmCreatedAt ? o.crmCreatedAt.split('T')[0] : null);
-  const getCourierOrders = (courierId: number, date: string, requireDelivered = false) => {
+  const getODate = (o: Order) => {
+    if (o.route?.date) return o.route.date;
+    if (o.deliveryDate) return String(o.deliveryDate).split("T")[0];
+    if (o.crmCreatedAt) return String(o.crmCreatedAt).split("T")[0];
+    return null;
+  };
+    const getCourierOrders = (courierId: number, date: string, requireDelivered = false) => {
     return orders.filter(o => o.courierId === courierId && getODate(o) === date && (!requireDelivered || o.status === "DELIVERED"));
   };
   const getCount = (courierId: number, date: string, reqDeliv = false) => getCourierOrders(courierId, date, reqDeliv).length;
@@ -324,8 +329,14 @@ export function CouriersClient({ user }: { user: any }) {
 
               const courierUnassignedOrders = routeGroups["no_route"] || [];
               const isCExpanded = expandedCouriers[c.id] ?? true;
-              const routeKeys = Object.keys(routeGroups).filter(k => k !== "no_route").sort((a, b) => b.localeCompare(a));
-
+              const routeKeys = Object.keys(routeGroups)
+              .filter(k => k !== "no_route")
+              .sort((a, b) => {
+                // Сортируем по дате маршрута (route.date) — свежие сверху
+                const dateA = routeGroups[a].find(o => o.route?.date)?.route?.date ?? "";
+                const dateB = routeGroups[b].find(o => o.route?.date)?.route?.date ?? "";
+                return dateB.localeCompare(dateA);
+              });
               return (
                 <div key={c.id} style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
                   
