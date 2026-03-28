@@ -204,8 +204,9 @@ export default function CourierProfilePage() {
     }
   };
 
-  const handleLogout = () => {
-    document.cookie = "flowerops_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+  const handleLogout = async () => {
+    // 🔥 ИСПРАВЛЕНО: Делаем запрос на сервер для удаления HttpOnly куки
+    await fetch("/api/auth/logout", { method: "POST" });
     window.location.href = "/login";
   };
 

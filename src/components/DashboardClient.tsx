@@ -991,14 +991,15 @@ export function DashboardClient({ user }: { user: User }) {
       {/* 🔥 ИСПРАВЛЕНИЕ: Жестко чистим куку перед логаутом */}
       {profileOpen && (
         <div style={{ position: "fixed", top: 52, right: 8, zIndex: 200 }}>
-          <ProfilePanel 
-            onClose={() => setProfileOpen(false)} 
-            onLogout={() => {
-              document.cookie = "flowerops_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-              window.location.href = "/login";
-            }} 
-          />
-        </div>
+        <ProfilePanel 
+          onClose={() => setProfileOpen(false)} 
+          onLogout={async () => {
+            // 🔥 ИСПРАВЛЕНО: Делаем запрос на сервер для удаления HttpOnly куки
+            await fetch("/api/auth/logout", { method: "POST" });
+            window.location.href = "/login";
+          }} 
+        />
+      </div>
       )}
       
       {alertsOpen && invalid.length > 0 && (
