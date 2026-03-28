@@ -1,70 +1,84 @@
-// src/app/api/konsol/create/route.ts
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth";
-import { createKonsolTask } from "@/lib/konsol";
+import { NextResponse } from 'next/server';
 
-export async function POST(req: Request) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const session = await getSession(req as any);
-  if (session?.role !== "ADMIN" && session?.role !== "OPERATOR") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+export async function POST(request: Request) {
   try {
-    const { payments } = await req.json(); // [{courierId: 1, date: "YYYY-MM-DD"}]
-    if (!payments || payments.length === 0) return NextResponse.json({ error: "Нет выбранных смен" }, { status: 400 });
-
-    // Группируем выбранные даты по курьерам
-    const grouped: Record<number, string[]> = {};
-    for (const p of payments) {
-      if (!grouped[p.courierId]) grouped[p.courierId] = [];
-      grouped[p.courierId].push(p.date);
+    const data = await request.json();
+    
+    // 1. Проверяем наличие необходимых данных от фронтенда
+    // Предполагаем, что с фронта приходит массив couriers и дата (date)
+    if (!data.couriers || !data.couriers.length || !data.date) {
+      return NextResponse.json(
+        { error: 'Не указаны курьеры или дата для создания задания' }, 
+        { status: 400 }
+      );
     }
 
-    let successCount = 0;
-    let skipCount = 0;
+    // Достаем ID курьеров в Консоли. Если у тебя они лежат в другом поле - поменяй konsolId на нужное.
+    const contractorIds = data.couriers
+      .map((c: any) => c.konsolId)
+      .filter(Boolean);
 
-    for (const [cIdStr, dates] of Object.entries(grouped)) {
-      const courierId = Number(cIdStr);
-      const courier = await prisma.courier.findUnique({ where: { id: courierId } });
-      
-      if (!courier || !courier.konsolContractorId) continue;
+    if (contractorIds.length === 0) {
+        return NextResponse.json(
+          { error: 'У выбранных курьеров нет ID в Консоли (konsolId)' }, 
+          { status: 400 }
+        );
+    }
 
-      const sortedDates = [...dates].sort();
-      const startDate = new Date(sortedDates[0]);
-      // Форматируем даты для названия задания в Консоли (ДД.ММ.ГГГГ)
-      const startStr = sortedDates[0].split("-").reverse().join("."); 
-      const endStr = sortedDates[sortedDates.length - 1].split("-").reverse().join(".");
-
-      // Проверяем, есть ли у этого курьера уже открытое задание (Черновик)
-      const existingTask = await prisma.konsolTask.findFirst({
-        where: { courierId, status: "DRAFT" }
-      });
-
-      if (!existingTask) {
-        const baseAmount = Math.round(500 * 1.06); // 530 руб базовая услуга с налогом
-        const taskId = await createKonsolTask(courier.konsolContractorId, baseAmount, startStr, endStr);
-        
-        if (taskId) {
-          await prisma.konsolTask.create({
-            data: {
-              courierId,
-              konsolTaskId: String(taskId),
-              date: startDate,
-              amount: baseAmount,
-              status: "DRAFT"
-            }
-          });
-          successCount++;
+    // 2. Формируем тело запроса строго по документации Konsol
+    const payload = {
+      title: "Оказание курьерских услуг", // Название задания
+      since_date: data.date,               // Формат YYYY-MM-DD
+      upto_date: data.date,                // Для задания на 1 день совпадают
+      remote_work: true,                   // Используем удаленную работу (без address_id)
+      contractor_ids: contractorIds,       // Массив ID исполнителей [123, 456]
+      duties: [
+        {
+          title: "Доставка заказов",
+          measure: "день",
+          quantity: 1,
+          price: data.price || 1500        // Передаем цену (или дефолтную)
         }
-      } else {
-        skipCount++; // Задание уже было создано ранее
-      }
+      ]
+    };
+
+    // 3. Отправляем запрос в Консоль
+    const konsolUrl = `${process.env.KONSOL_API_URL || 'https://api.konsol.pro/bus/alpha'}/workflow/platform/tasks`;
+    
+    const response = await fetch(konsolUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.KONSOL_API_KEY}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const result = await response.json();
+
+    // 4. Если Консоль вернула ошибку валидации (400, 422 и т.д.)
+    if (!response.ok) {
+      console.error('Ошибка создания задания в Консоли:', result);
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: result.message || JSON.stringify(result) 
+        }, 
+        { status: response.status }
+      );
     }
 
-    return NextResponse.json({ success: true, processed: successCount, skipped: skipCount });
+    // 5. Успех
+    return NextResponse.json({ 
+      success: true, 
+      data: result 
+    });
+
   } catch (error: any) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    console.error('Сбой в api/konsol/create:', error);
+    return NextResponse.json(
+      { success: false, error: 'Внутренняя ошибка сервера: ' + error.message }, 
+      { status: 500 }
+    );
   }
 }
