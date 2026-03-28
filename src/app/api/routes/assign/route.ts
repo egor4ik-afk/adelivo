@@ -34,17 +34,31 @@ export async function POST(req: Request) {
 
     let finalRouteDate = routeDate || new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }); 
 
-    let routeName = existingRouteName;
+   let routeName = existingRouteName;
     if (!routeName) {
       const routeDay = finalRouteDate.split('-')[2];
       const prefix = `M-${routeDay}`;
-      const lastRoute = await prisma.route.findFirst({ where: { name: { startsWith: prefix } }, orderBy: { name: 'desc' } });
-      let nextNum = 1;
-      if (lastRoute) {
-        const match = lastRoute.name.match(new RegExp(`${prefix}(\\d{3,})`));
-        if (match) nextNum = parseInt(match[1], 10) + 1;
+
+      // Безопасный поиск максимального номера маршрута ИМЕННО ЗА ЭТОТ ДЕНЬ
+      const routes = await prisma.route.findMany({
+        where: { 
+          name: { startsWith: prefix },
+          date: finalRouteDate // 🔥 ДОБАВИТЬ ЭТУ СТРОКУ
+        },
+        select: { name: true }
+      });
+
+      let maxNum = 0;
+      for (const r of routes) {
+        // Ищем любые цифры после префикса (например M-28001 или M-281)
+        const match = r.name.match(new RegExp(`^${prefix}(\\d+)$`));
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNum) maxNum = num;
+        }
       }
-      routeName = `${prefix}${nextNum.toString().padStart(3, '0')}`;
+
+      routeName = `${prefix}${(maxNum + 1).toString().padStart(3, '0')}`;
     }
 
     const newRoute = await prisma.route.create({

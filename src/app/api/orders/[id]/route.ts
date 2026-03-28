@@ -93,16 +93,26 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 
       const routeDay = orderDate.split("-")[2];
       const prefix = `M-${routeDay}`;
-      const lastRoute = await prisma.route.findFirst({
-        where: { name: { startsWith: prefix } },
-        orderBy: { name: "desc" },
+
+      // 🔥 ДОБАВЛЕНО: Безопасный поиск максимального номера маршрута ЗА ЭТОТ ДЕНЬ
+      const routes = await prisma.route.findMany({
+        where: { 
+          name: { startsWith: prefix },
+          date: orderDate 
+        },
+        select: { name: true }
       });
-      let nextNum = 1;
-      if (lastRoute) {
-        const match = lastRoute.name.match(new RegExp(`${prefix}(\\d{3,})`));
-        if (match) nextNum = parseInt(match[1], 10) + 1;
+
+      let maxNum = 0;
+      for (const r of routes) {
+        const match = r.name.match(new RegExp(`^${prefix}(\\d+)$`));
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNum) maxNum = num;
+        }
       }
-      const routeName = `${prefix}${nextNum.toString().padStart(3, "0")}`;
+
+      const routeName = `${prefix}${(maxNum + 1).toString().padStart(3, "0")}`;
 
       const routeLink = freshLat && freshLng
         ? `https://yandex.ru/maps/?rtext=${STORE_COORDS}~${freshLat},${freshLng}&rtt=auto`
