@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { updateCrmOrder } from "@/lib/crm";
+import { notify } from "@/lib/notifications";
 import { OrderStatus } from "@prisma/client";
 
 const STORE_COORDS = "55.749511,37.596205"; // База
@@ -32,44 +33,48 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 
     if (body.courier !== undefined) {
       if (body.courier) {
-        // 🔥 Ищем по fullName ИЛИ по числовому id (защита если фронт прислал id вместо имени)
+        // Ищем по fullName ИЛИ по числовому id
         const numericId = Number(body.courier);
         const dbCourier = await prisma.courier.findFirst({
           where: isNaN(numericId)
-            ? { fullName: body.courier }  // прислали имя → ищем по имени
-            : { id: numericId },          // прислали id  → ищем по id
+            ? { fullName: body.courier }
+            : { id: numericId },
         });
         updateData.courier   = dbCourier?.fullName ?? body.courier;
         updateData.courierId = dbCourier?.id ?? null;
       } else {
-        // Снятие курьера — очищаем и ссылку тоже
-        updateData.courier   = null;
-        updateData.courierId = null;
-        updateData.courierLink = null; 
+        // Снятие курьера
+        updateData.courier     = null;
+        updateData.courierId   = null;
+        updateData.courierLink = null;
       }
     }
 
-    // 🔥 ГЕНЕРАЦИЯ ССЫЛКИ (ТЕПЕРЬ РАБОТАЕТ ПРАВИЛЬНО!)
-    // Проверяем: есть ли вообще курьер на заказе (новый или уже был)
+    // Генерация ссылки для курьера
     const finalCourier = updateData.courier !== undefined ? updateData.courier : order.courier;
-    
-    // Проверяем: поменялся ли адрес или координаты?
-    const isAddressChanged = body.address !== undefined || body.lat !== undefined || body.lng !== undefined;
-    // Проверяем: поменялся ли курьер?
     const isCourierChanged = body.courier !== undefined && body.courier !== null;
+    // Адрес мог обновиться через /fix до этого PATCH — перечитываем свежие координаты из БД
+    const isAddressChanged = body.address !== undefined;
 
-    // Если есть курьер, и при этом обновили либо курьера, либо адрес -> пересобираем чистую ссылку
     if (finalCourier && (isCourierChanged || isAddressChanged)) {
-      // Если перед этим отработал запрос /fix, то order.lat уже содержит новые свежие координаты!
-      const finalLat = body.lat ?? order.lat;
-      const finalLng = body.lng ?? order.lng;
-
+      // Всегда берём актуальные координаты из БД (не из body и не из старого snapshot)
+      // /fix уже мог записать новые lat/lng до того как пришёл этот PATCH
+      const freshOrder = await prisma.order.findUnique({
+        where: { id },
+        select: { lat: true, lng: true },
+      });
+      const finalLat = freshOrder?.lat;
+      const finalLng = freshOrder?.lng;
       if (finalLat && finalLng) {
         updateData.courierLink = `https://yandex.ru/maps/?mode=routes&rtext=${STORE_COORDS}~${finalLat},${finalLng}&rtt=auto`;
       }
     }
 
-    // АВТОМАТИЧЕСКИЙ ВЫБРОС ИЗ МАРШРУТА при отмене/возврате/самовывозе
+    // Если назначили курьера, но координат ещё нет — всё равно пересчитаем ссылку
+    // когда геокодирование завершится (geocodeNewOrders обновит lat/lng, но ссылку не пересчитает)
+    // Поэтому если адрес есть, а координат нет — ссылку не пишем (лучше null чем старая)
+
+    // Автоматический выброс из маршрута при отмене/возврате/самовывозе
     const newStatus  = body.status  || order.status;
     const newAddress = body.address || order.address;
     const isCancelledOrReturned = newStatus === "CANCELLED" || newStatus === "RETURNED";
@@ -89,7 +94,39 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       });
     }
 
-    // Фильтруем статусы перед отправкой в CRM (ASSIGNED не отправляем)
+    // ── Push-уведомления о ручных изменениях оператора ──
+    const changes = {
+      statusChanged:    body.status      !== undefined && order.status      !== body.status,
+      courierChanged:   body.courier     !== undefined && (order.courierId ?? 0) !== (updateData.courierId ?? 0),
+      addressChanged:   body.address     !== undefined && (order.address    ?? "") !== (body.address ?? ""),
+      slotChanged:      false, // слот меняется только через CRM
+      commentChanged:   false, // комментарий клиента не меняется отсюда
+      opCommentChanged: body.opComment   !== undefined && (order.opComment  ?? "") !== (body.opComment ?? ""),
+      itemsChanged:     false,
+    };
+
+    if (Object.values(changes).some(Boolean)) {
+      notify({
+        type: "order.updated",
+        order: {
+          id: updatedOrder.id,
+          crmId: updatedOrder.crmId,
+          externalId: updatedOrder.externalId,
+          courierId: updatedOrder.courierId,      // ← курьер для матчинга в notifications.ts
+          address: updatedOrder.address,
+          slotRaw: updatedOrder.slotRaw,
+          courier: updatedOrder.courier,
+          items: updatedOrder.items,
+          status: updatedOrder.status,
+          comment: updatedOrder.comment,
+          opComment: updatedOrder.opComment,
+        } as any,
+        previousStatus: changes.statusChanged ? order.status : undefined,
+        changes,
+      }).catch(console.error);
+    }
+
+    // CRM синхронизация (ASSIGNED не отправляем)
     let crmStatus = body.status;
     if (crmStatus === "ASSIGNED") crmStatus = undefined;
 

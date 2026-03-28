@@ -11,27 +11,30 @@ self.addEventListener("push", (event) => {
   const title = data.title ?? "EventWave";
   const options = {
     body: data.body ?? "",
-    icon: "/icon-192.png",
-    badge: "/icon-192.png",
-    data: data.data ?? {},
-    // Вибрация и звук (где поддерживается)
+    icon: "/web-app-manifest-192x192.png",
+    badge: "/web-app-manifest-192x192.png",
+    // Сохраняем ВСЁ нужное в data уведомления
+    data: {
+      url: data.url ?? null,       // целевой путь (передаём с сервера)
+      role: data.role ?? null,     // "COURIER" | "OPERATOR" | "ADMIN"
+      orderId: data.orderId ?? null,
+    },
     vibrate: [200, 100, 200],
     requireInteraction: false,
-    tag: data.data?.orderId ? `order-${data.data.orderId}` : "flowerops",
+    tag: data.orderId ? `order-${data.orderId}` : "eventwave",
     renotify: true,
   };
 
   event.waitUntil(
     Promise.all([
-      // Показываем уведомление
       self.registration.showNotification(title, options),
 
-      // Если вкладка открыта — шлём PUSH_RECEIVED чтобы она сразу обновила список
+      // Уведомляем открытые вкладки, чтобы они обновились
       self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
         for (const client of clients) {
           client.postMessage({
             type: "PUSH_RECEIVED",
-            orderId: data.data?.orderId ?? null,
+            orderId: data.orderId ?? null,
           });
         }
       }),
@@ -42,24 +45,42 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  const orderId = event.notification.data?.orderId;
-  
-  // 🔥 Собираем абсолютный URL. Это критично для PWA на мобилках!
-  const targetPath = orderId ? `/dashboard?orderId=${orderId}` : "/dashboard";
+  const { url, role, orderId } = event.notification.data ?? {};
+
+  // ── Определяем куда вести ──
+  // Курьер → всегда /courier/routes (его заказы там)
+  // Оператор/Админ → /dashboard с опциональным orderId
+  let targetPath;
+
+  if (role === "COURIER") {
+    // У курьера нет /dashboard — ведём на маршруты
+    targetPath = "/courier/routes";
+  } else if (url) {
+    // Сервер прислал конкретный url — используем его
+    targetPath = url;
+  } else {
+    // Фолбэк для оператора/админа
+    targetPath = orderId ? `/dashboard?orderId=${orderId}` : "/dashboard";
+  }
+
   const targetUrl = new URL(targetPath, self.location.origin).href;
 
   event.waitUntil(
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then((clients) => {
-        // Ищем уже открытую вкладку или PWA
-        for (const client of clients) {
-          if (client.url.includes("/dashboard") && "focus" in client) {
-            client.postMessage({ type: "NOTIFICATION_CLICK", orderId });
-            return client.focus();
-          }
+        // Ищем уже открытое окно/PWA с нашим origin
+        const existing = clients.find(
+          (c) => c.url.startsWith(self.location.origin) && "focus" in c
+        );
+
+        if (existing) {
+          // Сообщаем открытой вкладке о клике и навигируем
+          existing.postMessage({ type: "NOTIFICATION_CLICK", orderId, role });
+          return existing.focus().then((c) => c.navigate(targetUrl));
         }
-        // Если не открыта — открываем новую (с абсолютным URL)
+
+        // Открываем новое окно — если PWA установлена, откроется в ней
         if (self.clients.openWindow) {
           return self.clients.openWindow(targetUrl);
         }
@@ -67,12 +88,12 @@ self.addEventListener("notificationclick", (event) => {
   );
 });
 
-// Активация SW без ожидания
 self.addEventListener("install", () => self.skipWaiting());
+
 self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-self.addEventListener('fetch', (event) => {
-  // Пока оставляем пустым, мы не кэшируем запросы, но браузер будет доволен
+self.addEventListener("fetch", () => {
+  // Намеренно пусто — не кэшируем, но регистрация SW работает корректно
 });

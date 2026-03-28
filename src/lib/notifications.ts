@@ -13,6 +13,7 @@ interface OrderPayload {
   id: string;
   crmId: string;
   externalId: string | null;
+  courierId?: number | null;   // ← нужно чтобы матчить курьера
   address: string | null;
   slotRaw: string | null;
   courier: string | null;
@@ -29,11 +30,11 @@ interface InvalidOrderPayload {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  NEW: "Новый", 
+  NEW: "Новый",
   ASSIGNED: "Назначен",
-  IN_DELIVERY: "В пути", 
+  IN_DELIVERY: "В пути",
   DELIVERED: "Доставлен",
-  RETURNED: "Возврат", 
+  RETURNED: "Возврат",
   CANCELLED: "Отменён",
 };
 
@@ -68,7 +69,7 @@ async function log(type: string, channel: string, payload: object, success: bool
     .catch(() => {});
 }
 
-// ── ИНДИВИДУАЛЬНАЯ РАССЫЛКА PUSH ──
+// ── РАССЫЛКА PUSH ──
 async function sendIndividualPushes(event: NotificationEvent) {
   if (!initWebPush()) return;
 
@@ -84,109 +85,172 @@ async function sendIndividualPushes(event: NotificationEvent) {
     let shouldSend = false;
     let title = "";
     const bodyTexts: string[] = [];
+    let targetUrl: string | null = null;
+    const role = user.role; // "COURIER" | "OPERATOR" | "ADMIN"
 
-    // ── ЛОГИКА ДЛЯ ОПЕРАТОРОВ / АДМИНОВ (Исправлено: убраны несуществующие настройки) ──
+    // ════════════════════════════════════════════════════════════
+    // ── ОПЕРАТОРЫ и АДМИНЫ ──
+    // Получают уведомления по всем заказам, настраиваемые по полям
+    // ════════════════════════════════════════════════════════════
     if (user.role === "OPERATOR" || user.role === "ADMIN") {
+      targetUrl = "/dashboard"; // оператор всегда идёт в дашборд
+
       if (event.type === "order.new") {
-        shouldSend = true; 
-        title = `🌸 Новый заказ: ${event.order.externalId ?? event.order.crmId}`;
-        bodyTexts.push(event.order.address ?? "Без адреса");
-      } 
-      else if (event.type === "order.updated" && event.changes) {
-        
-        if (event.changes.statusChanged) {
+        // Новый заказ — всегда уведомляем (если notifyNewOrder включено)
+        if (user.notifyNewOrder) {
           shouldSend = true;
+          title = `🌸 Новый заказ: ${event.order.externalId ?? event.order.crmId}`;
+          bodyTexts.push(event.order.address ?? "Без адреса");
+          targetUrl = `/dashboard?orderId=${event.order.id}`;
+        }
+      } else if (event.type === "order.updated" && event.changes) {
+        // Обновление заказа — по каждому полю своя настройка
+        if (user.notifyStatus && event.changes.statusChanged) {
           const oldLabel = event.previousStatus ? statusLabel(event.previousStatus) : "—";
           const newLabel = statusLabel(event.order.status);
           if (oldLabel !== newLabel) {
+            shouldSend = true;
             bodyTexts.push(`Статус: ${oldLabel} ➔ ${newLabel}`);
           }
         }
-        if (event.changes.courierChanged) {
+        if (user.notifyCourier && event.changes.courierChanged) {
           shouldSend = true;
           bodyTexts.push(`Курьер: ${event.order.courier || "Снят"}`);
         }
-        if (event.changes.addressChanged) {
+        if (user.notifyAddress && event.changes.addressChanged) {
           shouldSend = true;
-          bodyTexts.push(`Адрес: ${event.order.address || "Удален"}`);
+          bodyTexts.push(`Адрес: ${event.order.address || "Удалён"}`);
         }
-        if (event.changes.slotChanged) {
+        if (user.notifyTime && event.changes.slotChanged) {
           shouldSend = true;
           bodyTexts.push(`Время: ${event.order.slotRaw || "—"}`);
         }
-        if (event.changes.commentChanged) {
+        if (user.notifyComment && event.changes.commentChanged) {
           shouldSend = true;
           bodyTexts.push(`Коммент: ${event.order.comment || "—"}`);
         }
-        if (event.changes.opCommentChanged) {
+        if (user.notifyOpComment && event.changes.opCommentChanged) {
           shouldSend = true;
-          bodyTexts.push(`Комментарий оператора: ${event.order.opComment || "—"}`);
+          bodyTexts.push(`Коммент оператора: ${event.order.opComment || "—"}`);
         }
-        if (event.changes.itemsChanged) {
+        if (user.notifyItems && event.changes.itemsChanged) {
           shouldSend = true;
-          bodyTexts.push(`Состав изменен`);
+          bodyTexts.push(`Состав изменён`);
         }
 
         if (shouldSend) {
           title = `📦 Заказ ${event.order.externalId ?? event.order.crmId} обновлён`;
+          targetUrl = `/dashboard?orderId=${event.order.id}`;
         }
-      } 
-      else if (event.type === "address.invalid") {
-        shouldSend = true; 
-        title = `⚠️ Ошибка геокодинга`; 
-        bodyTexts.push(`Не найдено адресов: ${event.orders.length}`);
+      } else if (event.type === "address.invalid") {
+        shouldSend = true;
+        title = `⚠️ Ошибка геокодинга`;
+        bodyTexts.push(`Адресов не найдено: ${event.orders.length}`);
+        targetUrl = "/dashboard";
       }
     }
 
-    // ── ЛОГИКА ДЛЯ КУРЬЕРОВ ──
+    // ════════════════════════════════════════════════════════════
+    // ── КУРЬЕРЫ ──
+    // Получают уведомления ТОЛЬКО по своим заказам, без выбора
+    // Клик всегда ведёт в /courier/routes
+    // ════════════════════════════════════════════════════════════
     if (user.role === "COURIER") {
-      if (event.type === "route.assigned" && event.userId === user.id) {
-        shouldSend = true;
-        title = `🗺 Новый маршрут ${event.routeId}`;
-        bodyTexts.push(`Вам назначено точек: ${event.pointsCount}`);
-        bodyTexts.push(`Зайдите в раздел "Маршруты"`);
-      }
-      
-      if (event.type === "order.updated" && event.changes) {
-        const courierDb = await prisma.courier.findFirst({ where: { email: user.email } });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const eventOrderCourierId = (event.order as any).courierId; 
+      targetUrl = "/courier/routes"; // курьер всегда идёт в маршруты (/dashboard у курьера нет!)
 
-        if (courierDb && eventOrderCourierId === courierDb.id) {
-          if (event.changes.addressChanged || event.changes.slotChanged || event.changes.commentChanged) {
+      if (event.type === "route.assigned" && event.userId === user.id) {
+        // Назначен новый маршрут
+        shouldSend = true;
+        title = `🗺 Новый маршрут назначен`;
+        bodyTexts.push(`Точек в маршруте: ${event.pointsCount}`);
+        bodyTexts.push(`Откройте раздел "Маршруты"`);
+      }
+
+      if (event.type === "order.updated" && event.changes) {
+        // Изменения в заказе курьера — матчим по courierId из БД
+        const courierRecord = await prisma.courier.findFirst({
+          where: { email: user.email ?? undefined },
+        });
+        const eventCourierId = (event.order as any).courierId;
+
+        if (courierRecord && eventCourierId === courierRecord.id) {
+          // Это заказ данного курьера — отправляем ВСЕ изменения без фильтров
+          if (event.changes.statusChanged) {
             shouldSend = true;
-            title = `⚠ Изменения в заказе ${event.order.externalId ?? "—"}`;
-            if (event.changes.addressChanged) bodyTexts.push(`Новый адрес: ${event.order.address}`);
-            if (event.changes.slotChanged) bodyTexts.push(`Новое время: ${event.order.slotRaw}`);
-            if (event.changes.commentChanged) bodyTexts.push(`Новый коммент: ${event.order.comment}`);
+            const oldLabel = event.previousStatus ? statusLabel(event.previousStatus) : "—";
+            const newLabel = statusLabel(event.order.status);
+            if (oldLabel !== newLabel) {
+              bodyTexts.push(`Статус: ${oldLabel} ➔ ${newLabel}`);
+            }
+          }
+          if (event.changes.addressChanged) {
+            shouldSend = true;
+            bodyTexts.push(`Новый адрес: ${event.order.address ?? "—"}`);
+          }
+          if (event.changes.slotChanged) {
+            shouldSend = true;
+            bodyTexts.push(`Новое время: ${event.order.slotRaw ?? "—"}`);
+          }
+          if (event.changes.commentChanged) {
+            shouldSend = true;
+            bodyTexts.push(`Коммент: ${event.order.comment ?? "—"}`);
+          }
+          if (event.changes.courierChanged) {
+            // Курьер снят с заказа
+            shouldSend = true;
+            bodyTexts.push(event.order.courier ? `Курьер изменён` : `Вы сняты с заказа`);
+          }
+
+          if (shouldSend) {
+            title = `⚠️ Изменения: заказ ${event.order.externalId ?? event.order.crmId}`;
           }
         }
       }
     }
 
+    // ── Отправляем push если есть что отправить ──
     if (shouldSend && title) {
       const payload = JSON.stringify({
-        title, body: bodyTexts.join("\n"), notifyTabs: true, timestamp: Date.now(),
+        title,
+        body: bodyTexts.join("\n") || " ",
+        url: targetUrl,       // sw.js использует это для навигации
+        role,                 // sw.js использует это чтобы разрулить курьер/оператор
+        orderId: event.type !== "address.invalid" && event.type !== "route.assigned"
+          ? (event as any).order?.id ?? null
+          : null,
+        timestamp: Date.now(),
       });
 
       for (const sub of user.pushSubscriptions) {
         try {
-          await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload);
+          await webpush.sendNotification(
+            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+            payload
+          );
         } catch (e: any) {
-          if (e.statusCode === 410 || e.statusCode === 404) expiredEndpoints.push(sub.endpoint);
+          if (e.statusCode === 410 || e.statusCode === 404) {
+            expiredEndpoints.push(sub.endpoint);
+          } else {
+            console.error(`[Push] sendNotification error for ${sub.endpoint}:`, e.statusCode, e.body);
+          }
         }
       }
     }
   }
 
+  // Чистим протухшие подписки
   if (expiredEndpoints.length > 0) {
-    await prisma.pushSubscription.deleteMany({ where: { endpoint: { in: expiredEndpoints } } });
+    await prisma.pushSubscription.deleteMany({
+      where: { endpoint: { in: expiredEndpoints } },
+    });
+    console.log(`[Push] Removed ${expiredEndpoints.length} expired subscriptions`);
   }
 }
 
 export async function notify(event: NotificationEvent) {
   await sendIndividualPushes(event).catch(console.error);
 
+  // Email-уведомления (без изменений)
   switch (event.type) {
     case "order.new": {
       const { order } = event;

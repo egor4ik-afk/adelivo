@@ -1,6 +1,7 @@
+// src/app/layout.tsx
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import Script from "next/script"; // 🔥 Импорт скрипта для Метрики
+import Script from "next/script";
 import "./globals.css";
 import "@/lib/cron";
 import { GlobalChatWrapper } from "@/components/GlobalChatWrapper";
@@ -8,7 +9,7 @@ import { GlobalChatWrapper } from "@/components/GlobalChatWrapper";
 const inter = Inter({ subsets: ["latin", "cyrillic"] });
 
 export const viewport: Viewport = {
-  themeColor: "#E86A1A",
+  themeColor: "#38BDF8",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -21,29 +22,31 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
 
   title: {
-    default: "Event Wave — Логистика и диспетчеризация курьеров",
+    default: "Event Wave — Система диспетчеризации и управления курьерами",
     template: "%s | Event Wave",
   },
 
-  // 🔥 Расширил описание для лучшего сниппета в поисковиках
   description:
-    "Продвинутая система логистики и диспетчеризации курьеров Event Wave. Умная маршрутизация, контроль заказов и доставки в реальном времени. Интеграция с любой CRM.",
+    "Event Wave — профессиональная система диспетчеризации и логистики для любого курьерного бизнеса. Умная маршрутизация, контроль заказов в реальном времени, PWA для курьеров, интеграция с любой CRM через Webhook. До 1000 заказов в день.",
 
-  // 🔥 Добавил ключевые слова для поисковиков
   keywords: [
-    "логистика",
-    "диспетчеризация",
+    "система диспетчеризации курьеров",
     "управление курьерами",
-    "маршрутизация",
-    "программа для логистов",
+    "логистика доставки",
+    "программа для диспетчера",
+    "маршрутизация курьеров",
     "crm для доставки",
-    "доставка",
-    "маршрутный лист",
+    "контроль доставки в реальном времени",
+    "приложение для курьера",
+    "маршрутный лист онлайн",
+    "диспетчеризация заказов",
+    "webhook crm интеграция",
+    "retailcrm логистика",
     "Event Wave",
   ],
 
   applicationName: "Event Wave",
-  authors: [{ name: "Event Wave" }],
+  authors: [{ name: "Event Wave", url: SITE_URL }],
   creator: "Event Wave",
   publisher: "Event Wave",
 
@@ -52,17 +55,17 @@ export const metadata: Metadata = {
   },
 
   openGraph: {
-    title: "Event Wave — Логистика в реальном времени",
+    title: "Event Wave — Диспетчеризация и управление курьерами",
     description:
-      "Контролируйте курьеров, маршруты и заказы в одной системе. Полная диспетчеризация доставки.",
+      "Контролируйте курьеров, маршруты и заказы в одной системе. Интеграция с любой CRM, PWA для курьеров, Push-уведомления. До 1000 заказов в день.",
     url: SITE_URL,
     siteName: "Event Wave",
     images: [
       {
-        url: "/og-image.jpg", // ← твоя картинка
+        url: "/og-image.jpg",
         width: 1200,
         height: 630,
-        alt: "Event Wave — система логистики",
+        alt: "Event Wave — Система диспетчеризации и логистики",
       },
     ],
     locale: "ru_RU",
@@ -71,9 +74,9 @@ export const metadata: Metadata = {
 
   twitter: {
     card: "summary_large_image",
-    title: "Event Wave — Логистика и диспетчеризация",
+    title: "Event Wave — Диспетчеризация курьеров",
     description:
-      "Система управления курьерами и доставкой в реальном времени.",
+      "Система управления курьерами и доставкой в реальном времени. Интеграция с любой CRM.",
     images: ["/og-image.jpg"],
   },
 
@@ -115,11 +118,10 @@ export default function RootLayout({
   return (
     <html lang="ru">
       <body className={inter.className}>
-        
         {children}
         <GlobalChatWrapper />
 
-        {/* 🟢 ЯНДЕКС МЕТРИКА (Оптимизировано для Next.js) 🟢 */}
+        {/* Яндекс Метрика */}
         <Script id="yandex-metrika" strategy="afterInteractive">
           {`
             (function(m,e,t,r,i,k,a){
@@ -128,16 +130,10 @@ export default function RootLayout({
                 for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
                 k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
             })(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=108276874', 'ym');
-
             ym(108276874, 'init', {
-              ssr:true, 
-              webvisor:true, 
-              clickmap:true, 
-              ecommerce:"dataLayer", 
-              referrer: document.referrer, 
-              url: location.href, 
-              accurateTrackBounce:true, 
-              trackLinks:true
+              ssr:true, webvisor:true, clickmap:true,
+              ecommerce:"dataLayer", referrer: document.referrer,
+              url: location.href, accurateTrackBounce:true, trackLinks:true
             });
           `}
         </Script>
@@ -146,9 +142,8 @@ export default function RootLayout({
             <img src="https://mc.yandex.ru/watch/108276874" style={{ position: "absolute", left: "-9999px" }} alt="" />
           </div>
         </noscript>
-        {/* 🔴 КОНЕЦ ЯНДЕКС МЕТРИКИ 🔴 */}
 
-        {/* 🟢 Микроразметка Schema.org для SEO 🟢 */}
+        {/* Schema.org */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
@@ -157,20 +152,11 @@ export default function RootLayout({
               "@type": "SoftwareApplication",
               name: "Event Wave",
               applicationCategory: "BusinessApplication",
-              operatingSystem: "Web, iOS, Android", // Подчеркиваем PWA-сущность
+              operatingSystem: "Web, iOS, Android",
               url: SITE_URL,
-              description:
-                "Система логистики и диспетчеризации курьеров в реальном времени",
-              provider: {
-                "@type": "Organization",
-                name: "Event Wave",
-                url: SITE_URL
-              },
-              offers: {
-                "@type": "Offer",
-                price: "0", // Заглушка, чтобы Google Search Console не ругался на отсутствие цены в SoftwareApplication
-                priceCurrency: "RUB"
-              }
+              description: "Профессиональная система диспетчеризации и управления курьерами. До 1000 заказов в день, интеграция с любой CRM.",
+              provider: { "@type": "Organization", name: "Event Wave", url: SITE_URL },
+              offers: { "@type": "Offer", price: "0", priceCurrency: "RUB" },
             }),
           }}
         />
