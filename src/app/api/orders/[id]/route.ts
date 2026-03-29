@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { updateCrmOrder } from "@/lib/crm";
+import { updateCrmOrder, updateCrmOrderDeliveryPrice } from "@/lib/crm"; // 🔥 Импортировали отправку цены
 import { notify } from "@/lib/notifications";
 import { OrderStatus } from "@prisma/client";
 
@@ -35,6 +35,8 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     if (body.routeId    !== undefined) updateData.routeId    = body.routeId;
     if (body.routeOrder !== undefined) updateData.routeOrder = body.routeOrder;
 
+    let finalPrice: number | undefined;
+
     if (body.courier !== undefined) {
       if (body.courier) {
         const numericId = Number(body.courier);
@@ -45,10 +47,37 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         });
         updateData.courier   = dbCourier?.fullName ?? body.courier;
         updateData.courierId = dbCourier?.id ?? null;
+
+        // 🔥 ЛОГИКА АВТО-КУРЬЕРА (+100 руб) с защитой от дублирования
+        if (dbCourier && dbCourier.id !== order.courierId) {
+          let basePrice = order.price && order.price > 0 ? order.price : 500;
+          
+          // Если прошлый курьер уже был АВТО, отнимаем его 100р, чтобы получить чистую базу
+          if (order.courierId) {
+             const oldCourier = await prisma.courier.findUnique({ where: { id: order.courierId } });
+             if (oldCourier?.isAuto && basePrice >= 600) {
+                 basePrice -= 100;
+             }
+          }
+
+          const autoSurcharge = dbCourier.isAuto ? 100 : 0;
+          finalPrice = basePrice + autoSurcharge;
+          updateData.price = finalPrice;
+        }
+
       } else {
         updateData.courier     = null;
         updateData.courierId   = null;
         updateData.courierLink = null;
+        
+        // Если курьера снимают, откатываем цену (отнимаем надбавку авто, если она была)
+        if (order.courierId) {
+           const oldCourier = await prisma.courier.findUnique({ where: { id: order.courierId } });
+           if (oldCourier?.isAuto && order.price && order.price >= 600) {
+               finalPrice = order.price - 100;
+               updateData.price = finalPrice;
+           }
+        }
       }
     }
 
@@ -94,7 +123,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       const routeDay = orderDate.split("-")[2];
       const prefix = `M-${routeDay}`;
 
-      // 🔥 ДОБАВЛЕНО: Безопасный поиск максимального номера маршрута ЗА ЭТОТ ДЕНЬ
+      // 🔥 Безопасный поиск максимального номера маршрута ЗА ЭТОТ ДЕНЬ
       const routes = await prisma.route.findMany({
         where: { 
           name: { startsWith: prefix },
@@ -148,58 +177,60 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         }
       }
     }
-// ── Снятие курьера (если просто очистили поле курьера) ──
-const courierIsBeingRemoved = (body.courier === "" || body.courier === null) && order.courierId !== null;
-    
-if (courierIsBeingRemoved) {
-  // 1. Откатываем статус на "Новый"
-  if (order.status === "ASSIGNED" && body.status === undefined) {
-    updateData.status = "NEW";
-  }
 
-  // 2. Убираем из маршрута и удаляем маршрут, если он стал пустым
-  if (order.routeId) {
-    const siblingsCount = await prisma.order.count({
-      where: { routeId: order.routeId, id: { not: id } },
-    });
-    if (siblingsCount === 0) {
-      await prisma.route.deleteMany({ where: { id: order.routeId } });
+    // ── Снятие курьера (если просто очистили поле курьера) ──
+    const courierIsBeingRemoved = (body.courier === "" || body.courier === null) && order.courierId !== null;
+        
+    if (courierIsBeingRemoved) {
+      // 1. Откатываем статус на "Новый"
+      if (order.status === "ASSIGNED" && body.status === undefined) {
+        updateData.status = "NEW";
+      }
+
+      // 2. Убираем из маршрута и удаляем маршрут, если он стал пустым
+      if (order.routeId) {
+        const siblingsCount = await prisma.order.count({
+          where: { routeId: order.routeId, id: { not: id } },
+        });
+        if (siblingsCount === 0) {
+          await prisma.route.deleteMany({ where: { id: order.routeId } });
+        }
+        updateData.routeId    = null;
+        updateData.routeOrder = null;
+      }
     }
-    updateData.routeId    = null;
-    updateData.routeOrder = null;
-  }
-}
 
-// ── Автовыброс из маршрута ──
-const newStatus  = body.status  || order.status;
-const newAddress = body.address || order.address;
-const isCancelledOrReturned = newStatus === "CANCELLED" || newStatus === "RETURNED";
-const isPickup   = newAddress?.toLowerCase().includes("самовывоз");
+    // ── Автовыброс из маршрута ──
+    const newStatus  = body.status  || order.status;
+    const newAddress = body.address || order.address;
+    const isCancelledOrReturned = newStatus === "CANCELLED" || newStatus === "RETURNED";
+    const isPickup   = newAddress?.toLowerCase().includes("самовывоз");
 
-if (isCancelledOrReturned || isPickup) {
-  // Если заказ выкидывается из маршрута из-за отмены/самовывоза,
-  // также нужно проверить, не остался ли маршрут пустым!
-  if (order.routeId && updateData.routeId !== null) {
-    const siblingsCount = await prisma.order.count({
-      where: { routeId: order.routeId, id: { not: id } },
-    });
-    if (siblingsCount === 0) {
-      await prisma.route.deleteMany({ where: { id: order.routeId } });
+    if (isCancelledOrReturned || isPickup) {
+      // Если заказ выкидывается из маршрута из-за отмены/самовывоза,
+      // также нужно проверить, не остался ли маршрут пустым
+      if (order.routeId && updateData.routeId !== null) {
+        const siblingsCount = await prisma.order.count({
+          where: { routeId: order.routeId, id: { not: id } },
+        });
+        if (siblingsCount === 0) {
+          await prisma.route.deleteMany({ where: { id: order.routeId } });
+        }
+      }
+
+      updateData.routeId    = null;
+      updateData.routeOrder = null;
     }
-  }
 
-  updateData.routeId    = null;
-  updateData.routeOrder = null;
-}
+    let updatedOrder = order;
+    if (Object.keys(updateData).length > 0) {
+      updatedOrder = await prisma.order.update({
+        where: { id },
+        data: updateData,
+        include: { route: true },
+      });
+    }
 
-let updatedOrder = order;
-if (Object.keys(updateData).length > 0) {
-  updatedOrder = await prisma.order.update({
-    where: { id },
-    data: updateData,
-    include: { route: true },
-  });
-}
     // 🔥 ДОБАВЛЕНО: Теперь честно отслеживаем изменения времени, комментариев и товаров
     const changes = {
       statusChanged:    body.status    !== undefined && order.status    !== (updateData.status ?? body.status),
@@ -209,7 +240,6 @@ if (Object.keys(updateData).length > 0) {
       commentChanged:   body.comment   !== undefined && (order.comment   ?? "") !== (body.comment ?? ""),
       opCommentChanged: body.opComment !== undefined && (order.opComment ?? "") !== (body.opComment ?? ""),
       itemsChanged:     body.items     !== undefined && (order.items     ?? "") !== (body.items ?? ""),
-      // 🔥 ДОБАВИЛ
       recipientPhoneChanged: body.recipientPhone !== undefined && (order.recipientPhone ?? "") !== (body.recipientPhone ?? ""),
     };
 
@@ -245,6 +275,11 @@ if (Object.keys(updateData).length > 0) {
       address:        body.address,
       recipientPhone: body.recipientPhone,
     });
+
+    // 🔥 Отправляем обновленную цену в CRM (если менялся курьер и была пересчитана цена)
+    if (finalPrice !== undefined && order.crmId) {
+      await updateCrmOrderDeliveryPrice(order.crmId, finalPrice);
+    }
 
     return NextResponse.json(updatedOrder);
   } catch (e) {

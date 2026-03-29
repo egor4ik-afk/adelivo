@@ -13,6 +13,7 @@ interface Courier {
   id: number; fullName: string; phone: string | null; description: string | null;
   isActive: boolean; shifts: CourierShift[]; payments: CourierPayment[];
   konsolContractorId?: string | null; // 🔥 ДОБАВЛЕНО для индикатора Консоли
+  isAuto?: boolean; // 🔥 ДОБАВЛЕНО для авто-курьеров
 }
 
 interface Order {
@@ -131,6 +132,26 @@ export function CouriersClient({ user }: { user: any }) {
   const toggleShift = async (courierId: number, date: string, isWorking: boolean) => {
     setCouriers(prev => prev.map(c => c.id === courierId ? { ...c, shifts: isWorking ? [...c.shifts, { id: "temp", date }] : c.shifts.filter(s => s.date !== date) } : c));
     await fetch("/api/couriers/shifts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ courierId, date, isWorking }) });
+  };
+  // 🔥 Функция переключения Авто-курьера
+  const toggleAuto = async (courierId: number, currentStatus: boolean) => {
+    try {
+      // Оптимистичное обновление (чтобы UI реагировал мгновенно)
+      setCouriers(prev => prev.map(c => c.id === courierId ? { ...c, isAuto: !currentStatus } : c));
+
+      const res = await fetch(`/api/couriers/${courierId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isAuto: !currentStatus })
+      });
+
+      if (!res.ok) throw new Error("Ошибка сервера");
+    } catch (error) {
+      console.error(error);
+      alert("Не удалось обновить статус авто-курьера");
+      // Откатываем назад при ошибке
+      setCouriers(prev => prev.map(c => c.id === courierId ? { ...c, isAuto: currentStatus } : c));
+    }
   };
 
   const togglePaySelect = (courierId: number, date: string) => {

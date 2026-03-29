@@ -123,6 +123,7 @@ model Courier {
   shifts      CourierShift[]
   payments    CourierPayment[]
   routes      Route[] 
+  isAuto             Boolean   @default(false) // 🔥 Наш новый признак авто-курьера
   konsolTasks KonsolTask[] // 🔥 Связь с заданиями Консоли
 }
 
