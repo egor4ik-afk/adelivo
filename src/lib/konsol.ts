@@ -49,10 +49,12 @@ export async function createKonsolTask(contractorId: string | number, baseAmount
     transit_to_submitted_after_creation: true,
     duties: [
       { 
+        template_id: 89135, // 🔥 Используем твой шаблон услуги
+        category_id: 1,     // 🔥 Категория из твоего справочника
         description: "Доставка цветов по городу Москве",
         price: baseAmount, 
-        quantity: 1, 
-        measure: "шт" 
+        quantity: 1
+        // measure передавать не нужно, так как он зашит в template_id
       }
     ],
   };
@@ -70,7 +72,6 @@ export async function createKonsolTask(contractorId: string | number, baseAmount
     throw new Error(data.message || JSON.stringify(data));
   }
 
-  // 🔥 ИСПРАВЛЕНИЕ ТУТ: Добавили data?.task_id
   return data?.task_id ?? data?.id ?? data?.data?.id ?? null;
 }
 
@@ -89,53 +90,63 @@ export async function getKonsolTask(taskId: string) {
   return res.json();
 }
 
-// ✅ Обновление задания (заменяем цену на итоговую и сдвигаем даты на сегодня)
-export async function updateKonsolTask(taskId: string, newPrice: number) {
-  // 1. Получаем задание, чтобы узнать внутренний ID самой услуги (duty)
-  const task = await getKonsolTask(taskId);
-  if (!task || !task.duties || task.duties.length === 0) {
-    throw new Error(`[updateTask] Не найдено задание или услуги для ${taskId}`);
+// ✅ Обновление задания (добавляем новые услуги по шаблонам, удаляем старые)
+export async function updateKonsolTask(taskId: string | number, newDuties: any[]) {
+  const task = await getKonsolTask(String(taskId));
+  if (!task) throw new Error(`[updateTask] Задание ${taskId} не найдено`);
+
+  const oldDuties = task.duties || task.data?.duties || [];
+
+  // 1. ДОБАВЛЯЕМ НОВЫЕ УСЛУГИ (Обязательно передаем measure: "Штука")
+  let addedCount = 0;
+  for (const duty of newDuties) {
+    const resAdd = await fetch(`${KONSOL_BUS}/workflow/duties`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        task_id: Number(taskId),
+        template_id: duty.template_id, // ID шаблона из справочника
+        measure: "Штука",              // 🔥 Секретный ключ к успеху
+        price: duty.price,             // Цена с налогом
+        quantity: duty.quantity        // Количество
+      }),
+    });
+    
+    if (!resAdd.ok) {
+      const err = await resAdd.json().catch(() => ({}));
+      throw new Error(`[updateTask ADD] ${JSON.stringify(err)}`);
+    }
+    addedCount++;
   }
-  const dutyId = task.duties[0].id;
 
-  // 2. Генерируем даты (сегодня и конец недели), чтобы Консоль не ругалась
+  // 2. УДАЛЯЕМ СТАРЫЕ УСЛУГИ (Только если новые успешно добавились)
+  if (addedCount > 0) {
+    for (const old of oldDuties) {
+      if (old.id) {
+        await fetch(`${KONSOL_BUS}/workflow/duties/${old.id}`, {
+          method: "DELETE",
+          headers
+        });
+      }
+    }
+  }
+
+  // 3. ОБНОВЛЯЕМ ДАТЫ ЗАДАНИЯ
   const today = new Date();
-  const ddStart = String(today.getDate()).padStart(2, '0');
-  const mmStart = String(today.getMonth() + 1).padStart(2, '0');
-  const yyyyStart = today.getFullYear();
-  const todayStr = `${yyyyStart}-${mmStart}-${ddStart}`;
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  const todayStr = `${yyyy}-${mm}-${dd}`;
 
-  const endOfWeek = new Date(today);
-  const dayOfWeek = today.getDay();
-  const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
-  endOfWeek.setDate(today.getDate() + daysUntilSunday);
-  
-  const ddEnd = String(endOfWeek.getDate()).padStart(2, '0');
-  const mmEnd = String(endOfWeek.getMonth() + 1).padStart(2, '0');
-  const yyyyEnd = endOfWeek.getFullYear();
-  const endOfWeekStr = `${yyyyEnd}-${mmEnd}-${ddEnd}`;
-
-  // 3. Отправляем PATCH-запрос: меняем дату и ставим НОВУЮ общую цену
-  const res = await fetch(`${KONSOL_BUS}/workflow/tasks/${taskId}`, {
+  await fetch(`${KONSOL_BUS}/workflow/tasks/${taskId}`, {
     method: "PATCH",
     headers,
     body: JSON.stringify({
       since_date: todayStr,
-      upto_date: endOfWeekStr,
-      duties: [
-        {
-          id: dutyId,
-          price: newPrice,
-          quantity: 1
-        }
-      ]
+      upto_date: todayStr
     }),
   });
 
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(`[updateTask] ${data.message || JSON.stringify(data)}`);
-  }
   return true;
 }
 
@@ -154,44 +165,50 @@ export async function acceptKonsolTask(taskId: string) {
 }
 
 // ✅ Финализация задания (создание акта)
-export async function finalizeKonsolTask(taskId: string): Promise<string | null> {
+export async function finalizeKonsolTask(taskId: string | number): Promise<string | null> {
+  // Явно указываем сегодняшнюю дату
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  const todayYMD = `${yyyy}-${mm}-${dd}`;
+
   const res = await fetch(`${KONSOL_BUS}/workflow/tasks/finalize`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ ids: [taskId] }),
+    body: JSON.stringify({ 
+      ids: [Number(taskId)],
+      date: todayYMD
+    }),
   });
+  
   const data = await res.json();
-  if (!res.ok) {
-    throw new Error(`[finalizeTask] ${data.message || JSON.stringify(data)}`);
-  }
+  if (!res.ok) throw new Error(`[finalizeTask] ${data.message || JSON.stringify(data)}`);
+  
   const acts = data?.acts_ids ?? data?.data?.acts_ids ?? [];
-  return acts.length > 0 ? acts[0] : null;
+  return acts.length > 0 ? String(acts[0]) : null;
 }
 
-// ✅ Подписание акта
-export async function signKonsolAct(actId: string) {
-  const res = await fetch(`${KONSOL_BUS}/acts/sign`, {
+// ✅ Подписание акта (Внимание: тут KONSOL_V2)
+export async function signKonsolAct(actId: string | number) {
+  const res = await fetch(`${KONSOL_V2}/acts/sign`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ ids: [actId] }),
+    body: JSON.stringify({ ids: [Number(actId)] }),
   });
   const data = await res.json();
-  if (!res.ok) {
-    throw new Error(`[signAct] ${data.message || JSON.stringify(data)}`);
-  }
+  if (!res.ok) throw new Error(`[signAct] ${data.message || JSON.stringify(data)}`);
   return true;
 }
 
-// ✅ Автооплата акта
-export async function autopayKonsolAct(actId: string) {
-  const res = await fetch(`${KONSOL_BUS}/acts/autopay`, {
+// ✅ Автооплата акта (Внимание: тут KONSOL_V2)
+export async function autopayKonsolAct(actId: string | number) {
+  const res = await fetch(`${KONSOL_V2}/acts/autopay`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ ids: [actId] }),
+    body: JSON.stringify({ ids: [Number(actId)] }),
   });
   const data = await res.json();
-  if (!res.ok) {
-    throw new Error(`[autopayAct] ${data.message || JSON.stringify(data)}`);
-  }
+  if (!res.ok) throw new Error(`[autopayAct] ${data.message || JSON.stringify(data)}`);
   return true;
 }
