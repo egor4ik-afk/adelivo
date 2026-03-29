@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { updateCrmOrder, updateCrmOrderDeliveryPrice } from "@/lib/crm"; // 🔥 Импортировали отправку цены
+import { updateCrmOrder, updateCrmOrderDeliveryPrice } from "@/lib/crm"; // 🔥 ДОБАВИЛИ updateCrmOrderDeliveryPrice
 import { notify } from "@/lib/notifications";
 import { OrderStatus } from "@prisma/client";
 
@@ -35,7 +35,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     if (body.routeId    !== undefined) updateData.routeId    = body.routeId;
     if (body.routeOrder !== undefined) updateData.routeOrder = body.routeOrder;
 
-    let finalPrice: number | undefined;
+    let finalPrice: number | undefined; // 🔥 Переменная для отслеживания изменения цены
 
     if (body.courier !== undefined) {
       if (body.courier) {
@@ -48,11 +48,11 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         updateData.courier   = dbCourier?.fullName ?? body.courier;
         updateData.courierId = dbCourier?.id ?? null;
 
-        // 🔥 ЛОГИКА АВТО-КУРЬЕРА (+100 руб) с защитой от дублирования
+        // 🔥 ЛОГИКА АВТО-КУРЬЕРА: пересчет цены (+100 руб)
         if (dbCourier && dbCourier.id !== order.courierId) {
           let basePrice = order.price && order.price > 0 ? order.price : 500;
           
-          // Если прошлый курьер уже был АВТО, отнимаем его 100р, чтобы получить чистую базу
+          // Если прошлый курьер УЖЕ был авто, отнимаем его 100р, чтобы получить "чистую" базу
           if (order.courierId) {
              const oldCourier = await prisma.courier.findUnique({ where: { id: order.courierId } });
              if (oldCourier?.isAuto && basePrice >= 600) {
@@ -60,17 +60,17 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
              }
           }
 
+          // Накидываем 100р, если новый курьер на авто
           const autoSurcharge = dbCourier.isAuto ? 100 : 0;
           finalPrice = basePrice + autoSurcharge;
           updateData.price = finalPrice;
         }
-
       } else {
         updateData.courier     = null;
         updateData.courierId   = null;
         updateData.courierLink = null;
-        
-        // Если курьера снимают, откатываем цену (отнимаем надбавку авто, если она была)
+
+        // 🔥 Если курьера сняли, откатываем цену (убираем надбавку авто)
         if (order.courierId) {
            const oldCourier = await prisma.courier.findUnique({ where: { id: order.courierId } });
            if (oldCourier?.isAuto && order.price && order.price >= 600) {
@@ -123,7 +123,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       const routeDay = orderDate.split("-")[2];
       const prefix = `M-${routeDay}`;
 
-      // 🔥 Безопасный поиск максимального номера маршрута ЗА ЭТОТ ДЕНЬ
+      // 🔥 ДОБАВЛЕНО: Безопасный поиск максимального номера маршрута ЗА ЭТОТ ДЕНЬ
       const routes = await prisma.route.findMany({
         where: { 
           name: { startsWith: prefix },
@@ -208,7 +208,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 
     if (isCancelledOrReturned || isPickup) {
       // Если заказ выкидывается из маршрута из-за отмены/самовывоза,
-      // также нужно проверить, не остался ли маршрут пустым
+      // также нужно проверить, не остался ли маршрут пустым!
       if (order.routeId && updateData.routeId !== null) {
         const siblingsCount = await prisma.order.count({
           where: { routeId: order.routeId, id: { not: id } },
@@ -240,6 +240,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       commentChanged:   body.comment   !== undefined && (order.comment   ?? "") !== (body.comment ?? ""),
       opCommentChanged: body.opComment !== undefined && (order.opComment ?? "") !== (body.opComment ?? ""),
       itemsChanged:     body.items     !== undefined && (order.items     ?? "") !== (body.items ?? ""),
+      // 🔥 ДОБАВИЛ
       recipientPhoneChanged: body.recipientPhone !== undefined && (order.recipientPhone ?? "") !== (body.recipientPhone ?? ""),
     };
 
@@ -276,7 +277,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       recipientPhone: body.recipientPhone,
     });
 
-    // 🔥 Отправляем обновленную цену в CRM (если менялся курьер и была пересчитана цена)
+    // 🔥 Отправляем обновленную цену в CRM, если она изменилась из-за авто-курьера
     if (finalPrice !== undefined && order.crmId) {
       await updateCrmOrderDeliveryPrice(order.crmId, finalPrice);
     }

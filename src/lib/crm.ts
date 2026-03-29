@@ -17,7 +17,7 @@ async function resolveCourierId(name: string): Promise<number | null> {
 }
 
 export function parseSlot(raw: unknown) {
-  console.log("[parseSlot] raw =", JSON.stringify(raw)); // ← добавь
+  console.log("[parseSlot] raw =", JSON.stringify(raw)); 
   if (!raw) return { from: null, to: null, text: null };
   if (typeof raw === "object" && raw !== null) {
     const r = raw as Record<string, string>;
@@ -104,7 +104,6 @@ export async function mapCrmOrder(order: CrmOrder) {
   const slot = parseSlot(order.delivery?.time);
   const items = order.items?.map(i => {
     const name = i.offer?.displayName ?? i.offer?.name ?? i.productName ?? "?";
-    // 🔥 ИЗМЕНЕНО: Оставляем только название и количество, убираем цену
     return `${name} — ${i.quantity ?? 1} шт`;
   }).join("; ");
 
@@ -226,8 +225,8 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     lat?: number | null; lng?: number | null;
     geocoded?: boolean; isInvalid?: boolean; invalidReason?: string | null;
     changedAt?: Date;
-    routeId?: string | null;    // 🔥 ДОБАВЛЕНО для управления маршрутом
-    routeOrder?: number | null; // 🔥 ДОБАВЛЕНО для управления маршрутом
+    routeId?: string | null;    
+    routeOrder?: number | null; 
   } = { ...data };
 
   if (existing) {
@@ -254,11 +253,9 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       updateFields.status = existing.status;
     }
 
-    // ── 🔥 ДОБАВЛЕНО: Выброс из маршрута при СНЯТИИ ИЛИ СМЕНЕ курьера из CRM ──
     const isCourierRemovedOrChanged = existing.courierId !== null && data.courierId !== existing.courierId;
 
     if (isCourierRemovedOrChanged) {
-      // 1. Выкидываем из старого маршрута и удаляем его, если он пуст
       if (existing.routeId) {
         const siblingsCount = await prisma.order.count({
           where: { routeId: existing.routeId, id: { not: existing.id } },
@@ -270,14 +267,11 @@ export async function upsertOrder(crmOrder: CrmOrder) {
         updateFields.routeOrder = null;
       }
       
-      // 2. Если курьера именно СНЯЛИ (пустое поле в CRM), откатываем статус
-      // (Проверяем data.status === ASSIGNED, чтобы не перебить статус, если CRM прислала, например, CANCELLED)
       if (data.courierId === null && existing.status === OrderStatus.ASSIGNED && data.status === OrderStatus.ASSIGNED) {
         updateFields.status = OrderStatus.NEW;
       }
     }
 
-    // ── 🔥 ДОБАВЛЕНО: Автовыброс из маршрута при отмене/самовывозе из CRM ──
     const isCancelledOrReturned = updateFields.status === OrderStatus.CANCELLED || updateFields.status === OrderStatus.RETURNED;
     const isPickup = updateFields.address?.toLowerCase().includes("самовывоз");
 
@@ -324,7 +318,6 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       commentChanged:   (existing.comment   ?? "") !== (order.comment   ?? ""),
       opCommentChanged: (existing.opComment ?? "") !== (order.opComment ?? ""),
       itemsChanged:     (existing.items     ?? "") !== (order.items     ?? ""),
-      // 🔥 ДОБАВИЛИ
       recipientPhoneChanged: (existing.recipientPhone ?? "") !== (order.recipientPhone ?? ""),
     };
 
@@ -386,7 +379,7 @@ export async function updateCrmOrder(
     opComment?: string; 
     address?: string; 
     deliveryType?: string | null;
-    recipientPhone?: string; // 🔥 Добавили поле
+    recipientPhone?: string;
   }
 ) {
   if (!CRM_URL || !CRM_KEY) return;
@@ -401,14 +394,12 @@ export async function updateCrmOrder(
     orderPayload.delivery.address = { text: data.address };
   }
 
-  // 🔥 ДОБАВЛЯЕМ ОБРАБОТКУ ТЕЛЕФОНА
   if (data.recipientPhone !== undefined) {
-    // Очищаем маску: "+7 (999) 123-45-67" превратится в "+79991234567"
     orderPayload.phone = data.recipientPhone.replace(/[^\d+]/g, "");
   }
 
   if (data.courier !== undefined) {
-    const courierName = data.courier.trim();
+    const courierName = data.courier?.trim() || "";
     orderPayload.delivery = orderPayload.delivery ?? {};
     orderPayload.delivery.code = "logisty";
 
@@ -419,7 +410,6 @@ export async function updateCrmOrder(
       }
       orderPayload.customFields = { courier: courierName, kurier: courierName };
     } else {
-      // Шаг 1: сброс на self-delivery чтобы снять locked
       const resetParams = new URLSearchParams();
       resetParams.append("apiKey", CRM_KEY);
       resetParams.append("order", JSON.stringify({ delivery: { code: "self-delivery" } }));
@@ -430,13 +420,10 @@ export async function updateCrmOrder(
         { headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 5000 }
       ).catch(() => {});
 
-      // Шаг 2: возвращаем logisty без курьера
       orderPayload.delivery = { code: "logisty", typeId: 5 };
       orderPayload.customFields = { courier: null, kurier: null };
     }
   }
-
-  
 
   if (Object.keys(orderPayload).length === 0) return;
 
@@ -454,6 +441,32 @@ export async function updateCrmOrder(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
     console.error(`[CRM] Ошибка обновления заказа ${crmId}:`, err?.response?.data ?? err.message);
+  }
+}
+
+// 🔥 ДОБАВЛЕНА НОВАЯ ФУНКЦИЯ: Обновление стоимости доставки в CRM
+export async function updateCrmOrderDeliveryPrice(crmId: string, newPrice: number) {
+  if (!CRM_URL || !CRM_KEY) return;
+
+  const orderPayload = {
+    delivery: { cost: newPrice }
+  };
+
+  const params = new URLSearchParams();
+  params.append("apiKey", CRM_KEY);
+  params.append("order", JSON.stringify(orderPayload));
+  params.append("by", "id");
+
+  try {
+    await axios.post(
+      `${CRM_URL}/api/v5/orders/${crmId}/edit`,
+      params.toString(),
+      { headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 5000 }
+    );
+    console.log(`[CRM] Стоимость доставки заказа ${crmId} успешно обновлена на ${newPrice} ₽`);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (err: any) {
+    console.error(`[CRM] Ошибка обновления стоимости доставки заказа ${crmId}:`, err?.response?.data ?? err.message);
   }
 }
 

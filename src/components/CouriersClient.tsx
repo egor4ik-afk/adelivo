@@ -418,8 +418,26 @@ export function CouriersClient({ user }: { user: any }) {
                   const isSortDayWorking = c.shifts.some(s => s.date === sortDate);
                   return (
                     <tr key={c.id} style={{ background: isSortDayWorking ? "#fcfcfc" : "#fff", borderBottom: "1px solid #f0efe9" }}>
-                      <td style={{ ...s.td, fontWeight: 600 }}>{c.fullName}</td>
-                      <td style={{ ...s.td, color: "#6b6860", fontSize: 12 }}>{c.phone || "—"}</td>
+                      <td style={{ ...s.td, fontWeight: 600 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', maxWidth: '190px' }}>
+                          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {c.fullName}
+                          </span>
+                          
+                          {/* 🔥 Красивый ползунок переключатель АВТО */}
+                          <div 
+                            style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '4px' }} 
+                            onClick={(e) => { e.stopPropagation(); toggleAuto(c.id, c.isAuto || false); }}
+                            title="Сделать авто-курьером"
+                          >
+                            <span style={{ fontSize: 9, color: c.isAuto ? '#10b981' : '#a8a49c', fontWeight: 800 }}>АВТО</span>
+                            <div style={{ position: 'relative', width: 28, height: 16, background: c.isAuto ? '#10b981' : '#e5e7eb', borderRadius: 20, transition: '0.2s', flexShrink: 0 }}>
+                              <div style={{ position: 'absolute', top: 2, left: c.isAuto ? 14 : 2, width: 12, height: 12, background: '#fff', borderRadius: '50%', transition: '0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }} />
+                            </div>
+                          </div>
+
+                        </div>
+                      </td>                 <td style={{ ...s.td, color: "#6b6860", fontSize: 12 }}>{c.phone || "—"}</td>
                       {scheduleDates.map(date => {
                         const isWorking = c.shifts.some(s => s.date === date);
                         const orderCount = getCount(c.id, date);
@@ -577,19 +595,26 @@ export function CouriersClient({ user }: { user: any }) {
                       return (
                         <tr key={c.id} style={{ borderBottom: "1px solid #f0efe9", background: "#fff" }}>
                           <td style={{ ...s.td, fontWeight: 600 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                              <input type="checkbox" checked={isAllWeekSelected} onChange={() => toggleCourierWeek(c.id)} style={{ ...s.checkbox, width: 16, height: 16 }} title="Выбрать всю неделю" />
-
-                              {/* 🔥 ЗЕЛЕНАЯ ТОЧКА ЕСЛИ ПРИВЯЗАНА КОНСОЛЬ */}
-                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                 {c.konsolContractorId ? (
                                   <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#10b981", display: "inline-block", flexShrink: 0 }} title="СЗ (Консоль) подключен" />
                                 ) : (
                                   <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#d1d5db", display: "inline-block", flexShrink: 0 }} title="Консоль не привязана" />
                                 )}
-                                {c.fullName}
-                              </div>
+                                <span style={{ whiteSpace: 'nowrap' }}>{c.fullName}</span>
+                                
+                                {/* 🔥 Ползунок во вкладке ЗП */}
+                                <div 
+                            style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '4px' }} 
+                            onClick={(e) => { e.stopPropagation(); toggleAuto(c.id, c.isAuto || false); }}
+                            title="Сделать авто-курьером"
+                          >
+                            <span style={{ fontSize: 9, color: c.isAuto ? '#10b981' : '#a8a49c', fontWeight: 800 }}>АВТО</span>
+                            <div style={{ position: 'relative', width: 28, height: 16, background: c.isAuto ? '#10b981' : '#e5e7eb', borderRadius: 20, transition: '0.2s', flexShrink: 0 }}>
+                              <div style={{ position: 'absolute', top: 2, left: c.isAuto ? 14 : 2, width: 12, height: 12, background: '#fff', borderRadius: '50%', transition: '0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }} />
                             </div>
+                          </div>
+                              </div>
                             {konsolStatuses[c.id] && konsolStatuses[c.id].map((st, i) => (
                               <div key={i} style={{ fontSize: 11, color: st.color, marginTop: 4, fontWeight: 700 }}>
                                 {st.label}
