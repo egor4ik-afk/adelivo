@@ -282,7 +282,35 @@ export function CouriersClient({ user }: { user: any }) {
       setTimeout(() => setKonsolToast(null), 3000);
     }
   };
+// 🔥 Новая кнопка "Пересчитать" (Только обновляет услуги в Консоли по выделенным дням)
+const handleRecalculate = async () => {
+  if (selectedPays.length === 0) return alert("Выберите смены");
 
+  const payments = selectedPays.map(p => {
+    const [cId, d] = p.split('_');
+    return { courierId: Number(cId), date: d };
+  });
+
+  setLoading(true);
+  try {
+    const res = await fetch("/api/konsol/recalculate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payments })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      alert(`✅ Успешно! Задания пересчитаны: ${data.processed}. Можете проверить услуги в Консоли перед финализацией.`);
+      // Намеренно не очищаем галочки setSelectedPays([]), чтобы после проверки можно было сразу нажать "Финализировать"
+    } else {
+      alert(`❌ Ошибка: ${data.error}`);
+    }
+  } catch (e: any) {
+    alert(`❌ Ошибка: ${e.message}`);
+  } finally {
+    setLoading(false);
+  }
+};
   // 1. Кнопка "Финализировать" (Считает сумму, переводит в Выполнено и создает Акт)
   const handleFinalize = async () => {
     if (selectedPays.length === 0) return alert("Выберите смены");
@@ -491,7 +519,18 @@ export function CouriersClient({ user }: { user: any }) {
                 >
                   ➕ Создать задание
                 </button>
-
+                <button
+                  onClick={handleRecalculate}
+                  disabled={loading || selectedPays.length === 0}
+                  style={{
+                    background: loading || selectedPays.length === 0 ? "#e5e7eb" : "#4a7aff",
+                    color: loading || selectedPays.length === 0 ? "#9ca3af" : "#fff",
+                    border: "none", padding: "10px 16px", borderRadius: 8,
+                    fontSize: 14, fontWeight: 600, cursor: loading || selectedPays.length === 0 ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {loading ? "⏳ Загрузка..." : "🔄 Пересчитать"}
+                </button>
                 <button
                   onClick={handleFinalize}
                   disabled={loading || selectedPays.length === 0}
@@ -502,7 +541,7 @@ export function CouriersClient({ user }: { user: any }) {
                     fontSize: 14, fontWeight: 600, cursor: loading || selectedPays.length === 0 ? "not-allowed" : "pointer",
                   }}
                 >
-                  {loading ? "⏳ Загрузка..." : "📝 Финализировать (Акт)"}
+                  {loading ? "⏳ Загрузка..." : "📝Закрыть и Акт"}
                 </button>
 
                 <button
