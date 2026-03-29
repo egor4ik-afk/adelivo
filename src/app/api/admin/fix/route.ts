@@ -1,99 +1,89 @@
-// src/app/api/admin/clean-couriers/route.ts
+// src/app/api/admin/fetch-konsol-phones/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import axios from "axios";
 
 export async function GET() {
-  const crmUrl = process.env.RETAILCRM_API_URL;
-  const crmKey = process.env.RETAILCRM_API_KEY;
-  const logs: string[] = [];
-
-  if (!crmUrl || !crmKey) {
-    return NextResponse.json({ error: "Нет ключей CRM в .env" }, { status: 500 });
+  const KONSOL_API_KEY = process.env.KONSOL_API_KEY;
+  
+  if (!KONSOL_API_KEY) {
+    return NextResponse.json({ error: "Нет ключа KONSOL_API_KEY в .env" }, { status: 500 });
   }
 
   try {
-    // 1. Получаем всех курьеров из CRM
-    const crmRes = await fetch(`${crmUrl}/api/v5/reference/couriers?apiKey=${crmKey}&limit=100`);
-    const crmData = await crmRes.json();
-    const crmCouriers = crmData.couriers || [];
+    const logs: string[] = [];
 
-    // 2. Получаем всех курьеров из нашей локальной БД (без проблемного include!)
-    const localCouriers = await prisma.courier.findMany();
+    // 1. Ищем курьеров, которым нужен телефон Консоли
+    const couriersToFix = await prisma.courier.findMany({
+      where: {
+        konsolContractorId: { not: null },
+        OR: [
+          { konsolPhone: null },
+          { konsolPhone: "" }
+        ]
+      }
+    });
 
-    let cleanedCrmCount = 0;
-    let cleanedLocalCount = 0;
+    if (couriersToFix.length === 0) {
+       return NextResponse.json({ success: true, logs: ["✅ Нет курьеров для исправления."] });
+    }
 
-    // 🔥 Функция определения "мусорного" имени
-    const isJunkName = (name: string | null) => {
-      if (!name) return true;
-      const trimmed = name.trim();
-      
-      // Если состоит только из цифр (например "1", "15", "30")
-      if (/^\d+$/.test(trimmed)) return true;
-      
-      // Если состоит из 1 или 2 символов
-      if (trimmed.length <= 2) return true;
-      
-      return false;
-    };
+    logs.push(`🔍 Нужно найти телефоны для: ${couriersToFix.length} курьеров.`);
+    
+    // 2. Скачиваем список ВСЕХ исполнителей из Консоли (проходим по страницам)
+    let allContractors: any[] = [];
+    
+    try {
+      logs.push(`⏳ Скачиваем базу исполнителей из Консоль.Про...`);
+      // Пробегаем до 5 страниц (если у тебя много исполнителей, можно увеличить до 10)
+      for (let page = 1; page <= 5; page++) {
+        const res = await axios.get(`https://api.konsol.pro/v2/contractors?page=${page}&limit=100`, {
+          headers: { 
+            "Authorization": `Bearer ${KONSOL_API_KEY}`,
+            "Content-Type": "application/json"
+          }
+        });
 
-    logs.push("🧹 НАЧИНАЕМ ОЧИСТКУ RETAILCRM...");
-
-    // Очистка в CRM
-    for (const crmC of crmCouriers) {
-      const justFirstName = (crmC.firstName || "").trim();
-      
-      if (isJunkName(justFirstName)) {
-        logs.push(`CRM ➡️ Скрываем мусорного курьера: ID ${crmC.id} [${justFirstName}]`);
+        // В Консоли данные обычно лежат в data или contractors
+        const list = res.data?.data || res.data?.contractors || (Array.isArray(res.data) ? res.data : []);
         
-        // Отправляем active: false, чтобы он пропал из интерфейса CRM
-        const formData = new URLSearchParams();
-        formData.append("apiKey", crmKey);
-        formData.append("courier", JSON.stringify({ active: false }));
+        if (!list || list.length === 0) break; // Страницы кончились
+        
+        allContractors = [...allContractors, ...list];
+      }
+      logs.push(`📦 Всего загружено исполнителей из Консоли: ${allContractors.length}`);
+    } catch (err: any) {
+      logs.push(`❌ Ошибка загрузки списка: ${err?.response?.data?.message || err.message}`);
+      return NextResponse.json({ success: false, logs }, { status: 500 });
+    }
 
-        await fetch(`${crmUrl}/api/v5/reference/couriers/${crmC.id}/edit`, {
-          method: "POST",
-          body: formData,
-          headers: { "Content-Type": "application/x-www-form-urlencoded" }
+    // 3. Сопоставляем и сохраняем
+    let fixedCount = 0;
+
+    for (const courier of couriersToFix) {
+      // Ищем исполнителя в загруженном массиве по ID (приводим к строке для надежности)
+      const contractor = allContractors.find(c => String(c.id) === String(courier.konsolContractorId));
+
+      if (contractor && contractor.phone) {
+        // Нашли! Сохраняем телефон в нашу БД
+        await prisma.courier.update({
+          where: { id: courier.id },
+          data: { konsolPhone: contractor.phone }
         });
         
-        cleanedCrmCount++;
+        logs.push(`✅ ${courier.fullName}: найден телефон ➡️ ${contractor.phone}`);
+        fixedCount++;
+      } else {
+        logs.push(`⚠️ ${courier.fullName}: ID ${courier.konsolContractorId} не найден в общем списке Консоли или там не указан телефон.`);
       }
     }
 
-    logs.push("==============================");
-    logs.push("🧹 НАЧИНАЕМ ОЧИСТКУ ЛОКАЛЬНОЙ БД...");
-
-    // Очистка в локальной базе
-    for (const localC of localCouriers) {
-      if (isJunkName(localC.fullName)) {
-        
-        // 🔥 Считаем заказы явным безопасным запросом!
-        const ordersCount = await prisma.order.count({
-          where: { courierId: localC.id }
-        });
-
-        if (ordersCount === 0) {
-          // Если заказов на нем нет — удаляем с корнями
-          await prisma.courier.delete({ where: { id: localC.id } });
-          logs.push(`БД ➡️ 🗑 Удалили навсегда: ID ${localC.id} [${localC.fullName}]`);
-        } else {
-          // Если заказы есть (история), просто деактивируем, чтобы не сломать базу
-          await prisma.courier.update({ where: { id: localC.id }, data: { isActive: false } });
-          logs.push(`БД ➡️ ⏸ Деактивировали (есть заказы): ID ${localC.id} [${localC.fullName}]`);
-        }
-        
-        cleanedLocalCount++;
-      }
-    }
-
-    logs.push("==============================");
-    logs.push(`✅ ГОТОВО! Скрыто в CRM: ${cleanedCrmCount}. Убрано локально: ${cleanedLocalCount}.`);
+    logs.push(`=============================`);
+    logs.push(`🎯 ГОТОВО! Успешно привязано телефонов: ${fixedCount} из ${couriersToFix.length}`);
 
     return NextResponse.json({ success: true, logs });
-
   } catch (error: any) {
-    console.error("Clean Couriers Error:", error);
+    console.error("Fetch Konsol Phones Error:", error);
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }

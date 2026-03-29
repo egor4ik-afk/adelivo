@@ -556,13 +556,8 @@ export function DashboardClient({ user }: { user: User }) {
           const hh = String(deadlineDate.getHours()).padStart(2, "0");
           const mm = String(deadlineDate.getMinutes()).padStart(2, "0");
 
-          const isAlreadyLate = ed.pickupDeadlineMs < nowMs;
-
-          if (isAlreadyLate) {
-            setDepartureAdvice(`⚠️ Нужно выехать немедленно — к ${ed.slotFrom} на зак. ${ed.externalId} уже поздно!`);
-          } else {
-            setDepartureAdvice(`Забрать заказы до ${hh}:${mm} — первый заказ ${ed.slotFrom} на зак. ${ed.externalId}`);
-          }
+          // Никаких предупреждений, просто пишем ко скольки нужно выехать
+          setDepartureAdvice(`Выехать до ${hh}:${mm} — первый заказ к ${ed.slotFrom} (зак. ${ed.externalId})`);
         } else {
           setDepartureAdvice("Слоты не строгие — выезд в любое время");
         }

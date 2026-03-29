@@ -445,11 +445,27 @@ export async function updateCrmOrder(
 }
 
 // 🔥 ДОБАВЛЕНА НОВАЯ ФУНКЦИЯ: Обновление стоимости доставки в CRM
-export async function updateCrmOrderDeliveryPrice(crmId: string, newPrice: number) {
+// src/lib/crm.ts
+export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: number) {
   if (!CRM_URL || !CRM_KEY) return;
 
+  const NET_COST_MAP: Record<number, number> = {
+    500: 732,
+    600: 838,
+    900: 1157,
+    1000: 1264,
+    1300: 1583,
+    1400: 1689,
+  };
+
+  // Берем себестоимость по таблице, если нет - передаем саму цену
+  const calculatedNetCost = NET_COST_MAP[basePrice] || basePrice;
+
+  // Отправляем ТОЛЬКО себестоимость!
   const orderPayload = {
-    delivery: { cost: newPrice }
+    delivery: { 
+      netCost: calculatedNetCost 
+    }
   };
 
   const params = new URLSearchParams();
@@ -463,10 +479,9 @@ export async function updateCrmOrderDeliveryPrice(crmId: string, newPrice: numbe
       params.toString(),
       { headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 5000 }
     );
-    console.log(`[CRM] Стоимость доставки заказа ${crmId} успешно обновлена на ${newPrice} ₽`);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    console.log(`[CRM] Себестоимость заказа ${crmId} обновлена на ${calculatedNetCost} ₽ (наша цена: ${basePrice})`);
   } catch (err: any) {
-    console.error(`[CRM] Ошибка обновления стоимости доставки заказа ${crmId}:`, err?.response?.data ?? err.message);
+    console.error(`[CRM] Ошибка обновления себестоимости:`, err?.response?.data ?? err.message);
   }
 }
 

@@ -20,9 +20,10 @@ export async function POST(req: Request) {
     if (!orderIds?.length) return NextResponse.json({ success: true, deleted: true });
     if (!courierId) return NextResponse.json({ error: "Неверные данные" }, { status: 400 });
 
+    // 🔥 ДОБАВЛЕНО: выбираем price и courierId, чтобы пересчитать цену!
     const orders = await prisma.order.findMany({
       where: { id: { in: orderIds } },
-      select: { id: true, lat: true, lng: true, crmId: true, deliveryDate: true, crmCreatedAt: true, status: true, opComment: true }
+      select: { id: true, lat: true, lng: true, crmId: true, deliveryDate: true, crmCreatedAt: true, status: true, opComment: true, price: true, courierId: true }
     });
 
     const sortedOrders = orderIds.map((id: string) => orders.find((o) => o.id === id)).filter(Boolean);
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
 
     let finalRouteDate = routeDate || new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }); 
 
-   let routeName = existingRouteName;
+    let routeName = existingRouteName;
     if (!routeName) {
       const routeDay = finalRouteDate.split('-')[2];
       const prefix = `M-${routeDay}`;
@@ -77,16 +78,55 @@ export async function POST(req: Request) {
         newOpComment = `💡 ${departureAdvice}\n${newOpComment}`.trim();
       }
 
+      // ==========================================
+      // 🔥 ЛОГИКА АВТО-КУРЬЕРА: ПЕРЕСЧЕТ ЦЕНЫ (РАБОТАЕТ ВСЕГДА, ДАЖЕ ПРИ ПЕРЕСОХРАНЕНИИ)
+      // Базовые цены: 500, 900, 1300
+      // Авто-надбавка: +100 → итого 600, 1000, 1400
+      // ==========================================
+      let currentPrice = orderToUpdate.price && orderToUpdate.price > 0 ? orderToUpdate.price : 500;
+      let finalPrice = currentPrice;
+
+      if (courierDb) {
+        let basePrice = currentPrice;
+        
+        // 1. Узнаем, был ли прошлый курьер на авто (чтобы вычленить чистую базовую цену)
+        let oldCourierIsAuto = false;
+        if (orderToUpdate.courierId) {
+           if (orderToUpdate.courierId === courierDb.id) {
+               oldCourierIsAuto = courierDb.isAuto; // Это тот же самый курьер
+           } else {
+               const oldCourier = await prisma.courier.findUnique({ where: { id: orderToUpdate.courierId } });
+               oldCourierIsAuto = !!oldCourier?.isAuto; // Это другой курьер
+           }
+        }
+
+        // 2. Если заказ уже числился за авто-курьером, отнимаем 100 руб, чтобы получить базу.
+        // Снимаем надбавку только если цена стоит на "авто-уровне" (600, 1000, 1400),
+        // чтобы не уйти ниже базовых значений (500, 900, 1300).
+        const AUTO_PRICES = [600, 1000, 1400]; // базовые + 100
+        if (oldCourierIsAuto && AUTO_PRICES.includes(basePrice)) {
+            basePrice -= 100;
+        }
+
+        // 3. Накидываем 100 руб, если текущий (сохраняемый) курьер на авто
+        const autoSurcharge = courierDb.isAuto ? 100 : 0;
+        finalPrice = basePrice + autoSurcharge;
+      }
+      // ==========================================
+
       await prisma.order.update({
         where: { id: orderIds[i] },
         data: { 
           courierId: Number(courierId), courier: courierFullName,
           routeId: newRoute.id, routeOrder: i + 1,
           status: orderToUpdate.status === "NEW" ? "ASSIGNED" : undefined,
-          opComment: newOpComment
+          opComment: newOpComment,
+          price: finalPrice // 🔥 СОХРАНЯЕМ ИЗМЕНЕННУЮ ЦЕНУ ТОЛЬКО В НАШУ БД
         }
       });
+      
       if (courierFullName && orderToUpdate?.crmId) {
+        // В CRM отправляем только курьера, без цены
         await updateCrmOrder(orderToUpdate.crmId, { courier: courierFullName }).catch(() => {});
       }
     }
