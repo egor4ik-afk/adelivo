@@ -10,6 +10,17 @@ const headers = {
   "Content-Type": "application/json",
 };
 
+// 🔥 ЕДИНАЯ ФУНКЦИЯ ДЛЯ МОСКОВСКОГО ВРЕМЕНИ
+// Всегда возвращает YYYY-MM-DD по Москве, независимо от времени сервера
+function getMoscowDateStr(): string {
+  const moscowDate = new Date().toLocaleString("en-US", { timeZone: "Europe/Moscow" });
+  const d = new Date(moscowDate);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 // ✅ Поиск исполнителя по телефону
 export async function findContractorByPhone(phone: string): Promise<string | null> {
   const cleanPhone = "+" + phone.replace(/[^\d]/g, "");
@@ -41,6 +52,7 @@ export async function inviteContractor(name: string, phone: string): Promise<{ i
 
 // ✅ Создание задания
 export async function createKonsolTask(contractorId: string | number, baseAmount: number, dateStart: string, dateEnd: string) {
+  // dateStart и dateEnd обычно приходят в DD.MM.YYYY, переворачиваем в YYYY-MM-DD
   const payload = {
     title: `Курьерская доставка для цветочного магазина "Банч"`,
     since_date: dateStart.split(".").reverse().join("-"),
@@ -54,7 +66,6 @@ export async function createKonsolTask(contractorId: string | number, baseAmount
         description: "Доставка цветов по городу Москве",
         price: baseAmount, 
         quantity: 1
-        // measure передавать не нужно, так как он зашит в template_id
       }
     ],
   };
@@ -79,7 +90,7 @@ export async function createKonsolTask(contractorId: string | number, baseAmount
 export async function getKonsolTask(taskId: string) {
   const res = await fetch(`${KONSOL_BUS}/workflow/tasks/${taskId}`, { 
     headers,
-    cache: "no-store" // 🔥 Обязательно! Чтобы Next.js каждый раз реально ходил в Консоль
+    cache: "no-store" 
   });
   
   if (!res.ok) {
@@ -97,7 +108,7 @@ export async function updateKonsolTask(taskId: string | number, newDuties: any[]
 
   const oldDuties = task.duties || task.data?.duties || [];
 
-  // 1. ДОБАВЛЯЕМ НОВЫЕ УСЛУГИ (Обязательно передаем measure: "Штука")
+  // 1. ДОБАВЛЯЕМ НОВЫЕ УСЛУГИ
   let addedCount = 0;
   for (const duty of newDuties) {
     const resAdd = await fetch(`${KONSOL_BUS}/workflow/duties`, {
@@ -105,10 +116,10 @@ export async function updateKonsolTask(taskId: string | number, newDuties: any[]
       headers,
       body: JSON.stringify({
         task_id: Number(taskId),
-        template_id: duty.template_id, // ID шаблона из справочника
-        measure: "Штука",              // 🔥 Секретный ключ к успеху
-        price: duty.price,             // Цена с налогом
-        quantity: duty.quantity        // Количество
+        template_id: duty.template_id, 
+        measure: "Штука",              
+        price: duty.price,            
+        quantity: duty.quantity        
       }),
     });
     
@@ -119,7 +130,7 @@ export async function updateKonsolTask(taskId: string | number, newDuties: any[]
     addedCount++;
   }
 
-  // 2. УДАЛЯЕМ СТАРЫЕ УСЛУГИ (Только если новые успешно добавились)
+  // 2. УДАЛЯЕМ СТАРЫЕ УСЛУГИ
   if (addedCount > 0) {
     for (const old of oldDuties) {
       if (old.id) {
@@ -131,19 +142,15 @@ export async function updateKonsolTask(taskId: string | number, newDuties: any[]
     }
   }
 
-  // 3. ОБНОВЛЯЕМ ДАТЫ ЗАДАНИЯ
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, '0');
-  const dd = String(today.getDate()).padStart(2, '0');
-  const todayStr = `${yyyy}-${mm}-${dd}`;
+  // 3. ОБНОВЛЯЕМ ДАТЫ ЗАДАНИЯ ПО МОСКВЕ
+  const moscowYMD = getMoscowDateStr();
 
   await fetch(`${KONSOL_BUS}/workflow/tasks/${taskId}`, {
     method: "PATCH",
     headers,
     body: JSON.stringify({
-      since_date: todayStr,
-      upto_date: todayStr
+      since_date: moscowYMD,
+      upto_date: moscowYMD
     }),
   });
 
@@ -166,19 +173,15 @@ export async function acceptKonsolTask(taskId: string) {
 
 // ✅ Финализация задания (создание акта)
 export async function finalizeKonsolTask(taskId: string | number): Promise<string | null> {
-  // Явно указываем сегодняшнюю дату
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, '0');
-  const dd = String(today.getDate()).padStart(2, '0');
-  const todayYMD = `${yyyy}-${mm}-${dd}`;
+  // Строго по Москве!
+  const moscowYMD = getMoscowDateStr();
 
   const res = await fetch(`${KONSOL_BUS}/workflow/tasks/finalize`, {
     method: "POST",
     headers,
     body: JSON.stringify({ 
       ids: [Number(taskId)],
-      date: todayYMD
+      date: moscowYMD
     }),
   });
   
@@ -189,7 +192,7 @@ export async function finalizeKonsolTask(taskId: string | number): Promise<strin
   return acts.length > 0 ? String(acts[0]) : null;
 }
 
-// ✅ Подписание акта (Внимание: тут KONSOL_V2)
+// ✅ Подписание акта 
 export async function signKonsolAct(actId: string | number) {
   const res = await fetch(`${KONSOL_V2}/acts/sign`, {
     method: "POST",
@@ -201,7 +204,7 @@ export async function signKonsolAct(actId: string | number) {
   return true;
 }
 
-// ✅ Автооплата акта (Внимание: тут KONSOL_V2)
+// ✅ Автооплата акта
 export async function autopayKonsolAct(actId: string | number) {
   const res = await fetch(`${KONSOL_V2}/acts/autopay`, {
     method: "POST",
