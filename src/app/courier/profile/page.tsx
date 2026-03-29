@@ -288,7 +288,7 @@ export default function CourierProfilePage() {
         <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18" }}>Тип курьера</div>
-            <div style={{ fontSize: 12, color: "#6b6860", marginTop: 2 }}>{isAuto ? "Автомобиль (+100₽ к доставке)" : "Пеший / Самокат"}</div>
+            <div style={{ fontSize: 12, color: "#6b6860", marginTop: 2 }}>{isAuto ? "Автомобиль (+100₽ к доставке)" : "Пеший / Авто"}</div>
           </div>
           <div style={{ display: "flex", alignItems: "center", background: "#f5f4f0", borderRadius: 8, padding: 4 }}>
             <button 

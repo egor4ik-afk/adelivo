@@ -16,33 +16,38 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Заполните все поля" }, { status: 400 });
     }
 
-    // Собираем полное имя для поиска
-    const fullName = `${firstName.trim()} ${lastName.trim()}`;
+    const cleanFirstName = firstName.trim();
+    const cleanLastName = lastName.trim();
 
-    // 1. Ищем существующего курьера с таким именем локально
+    // 🔥 1. СТАНДАРТ: Всегда формируем полное имя как "Фамилия Имя"
+    const standardFullName = `${cleanLastName} ${cleanFirstName}`;
+
+    // 🔥 2. УМНЫЙ ПОИСК: Ищем курьера по частям имени (в любом порядке)
+    const nameParts = [cleanFirstName, cleanLastName].filter(Boolean);
+    
     let courier = await prisma.courier.findFirst({
       where: {
-        fullName: {
-          equals: fullName,
-          mode: 'insensitive' 
-        }
+        AND: nameParts.map(part => ({
+          fullName: { contains: part, mode: 'insensitive' }
+        }))
       }
     });
 
     if (courier) {
-      // Если курьер найден в БД, просто обновляем его данные
+      // Если курьер найден в БД, обновляем его данные и приводим fullName к стандарту
       courier = await prisma.courier.update({
         where: { id: courier.id },
         data: {
           phone: phone,
           email: user.email, 
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
+          firstName: cleanFirstName,
+          lastName: cleanLastName,
+          fullName: standardFullName, // Перезаписываем в правильном порядке
           isActive: true
         }
       });
     } else {
-      // 2. Если курьера нет локально — создаем его СНАЧАЛА в RetailCRM
+      // 3. Если курьера нет локально — создаем его СНАЧАЛА в RetailCRM
       const crmUrl = process.env.RETAILCRM_API_URL;
       const crmKey = process.env.RETAILCRM_API_KEY;
       
@@ -50,10 +55,10 @@ export async function POST(request: Request) {
         throw new Error("Не настроены ключи RetailCRM (RETAILCRM_API_URL, RETAILCRM_API_KEY)");
       }
 
-      // Собираем объект курьера в формате, который ждет CRM
+      // Собираем объект курьера в формате, который ждет CRM (отдельно Имя и Фамилия)
       const courierPayload = {
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
+        firstName: cleanFirstName,
+        lastName: cleanLastName,
         active: true,
         email: user.email ? user.email : undefined,
         phone: {
@@ -87,13 +92,13 @@ export async function POST(request: Request) {
       // Берем ID прямо из ответа RetailCRM
       const crmCourierId = crmData.id;
 
-      // 3. Создаем в нашей локальной БД с ID из CRM
+      // 4. Создаем в нашей локальной БД с ID из CRM
       courier = await prisma.courier.create({
         data: {
           id: crmCourierId, 
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          fullName: fullName,
+          firstName: cleanFirstName,
+          lastName: cleanLastName,
+          fullName: standardFullName, // Сразу сохраняем по стандарту "Фамилия Имя"
           phone: phone,
           email: user.email,
           isActive: true,
