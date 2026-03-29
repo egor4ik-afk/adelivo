@@ -34,11 +34,11 @@ if (!initialized && process.env.NODE_ENV !== "test") {
     await callInternalCron("/api/cron/konsol/daily", "Ежедневная проверка (18:00 MSK)");
   });
 
-  // 3. Еженедельная ФИНАЛИЗАЦИЯ (Воскресенье 20:00 UTC = 23:00 МСК)
-  cron.schedule("0 20 * * 0", async () => {
-    await callInternalCron("/api/cron/konsol/weekly", "Воскресная финализация актов (23:00 MSK)");
-  });
-
+//   // 3. Еженедельная ФИНАЛИЗАЦИЯ (Воскресенье 20:00 UTC = 23:00 МСК)
+//   cron.schedule("0 20 * * 0", async () => {
+//     await callInternalCron("/api/cron/konsol/weekly", "Воскресная финализация актов (23:00 MSK)");
+//   });
+// // 
   // 4. Еженедельная ОПЛАТА (Вторник 17:00 UTC = 20:00 МСК)
   // ПОКА ЗАКОММЕНТИРОВАНО
   /*
