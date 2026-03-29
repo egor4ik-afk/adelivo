@@ -173,19 +173,40 @@ export async function acceptKonsolTask(taskId: string) {
 
 // ✅ Финализация задания (создание акта)
 export async function finalizeKonsolTask(taskId: string | number): Promise<string | null> {
-  // Строго по Москве!
   const moscowYMD = getMoscowDateStr();
 
-  const res = await fetch(`${KONSOL_BUS}/workflow/tasks/finalize`, {
+  let res = await fetch(`${KONSOL_BUS}/workflow/tasks/finalize`, {
     method: "POST",
     headers,
     body: JSON.stringify({ 
       ids: [Number(taskId)],
+      act_date: moscowYMD,
       date: moscowYMD
     }),
   });
   
-  const data = await res.json();
+  let data = await res.json();
+
+  // 🔥 УМНЫЙ ОБХОД: Если Консоль живет по UTC и считает нашу московскую полночь "будущим"
+  if (!res.ok && JSON.stringify(data).includes("в будущем")) {
+    console.log(`[Konsol] Московская дата (${moscowYMD}) для Консоли оказалась в будущем. Откатываемся на UTC...`);
+    
+    // Берем серверную дату (UTC), которая для Консоли сейчас является "сегодня"
+    const utcYMD = new Date().toISOString().split('T')[0];
+    
+    res = await fetch(`${KONSOL_BUS}/workflow/tasks/finalize`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ 
+        ids: [Number(taskId)],
+        act_date: utcYMD,
+        date: utcYMD
+      }),
+    });
+    
+    data = await res.json();
+  }
+
   if (!res.ok) throw new Error(`[finalizeTask] ${data.message || JSON.stringify(data)}`);
   
   const acts = data?.acts_ids ?? data?.data?.acts_ids ?? [];
