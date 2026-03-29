@@ -1,7 +1,7 @@
 // src/app/api/cron/konsol/daily/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { createKonsolTask } from "@/lib/konsol";
+import { createKonsolTask, getKonsolTask } from "@/lib/konsol";
 
 export const dynamic = "force-dynamic";
 
@@ -46,25 +46,38 @@ export async function GET(req: Request) {
     let createdCount = 0;
 
     for (const courier of couriers) {
-      // 1. Был ли назначен хоть один заказ на курьера СЕГОДНЯ?
-      // 🔥 СТАТУС БОЛЬШЕ НЕ ВАЖЕН! Убрали status: "DELIVERED"
+      // 1. Был ли назначен заказ СЕГОДНЯ?
       const workedToday = await prisma.order.findFirst({
-        where: { 
-          courierId: courier.id, 
-          deliveryDate: todayYMD 
-        }
+        where: { courierId: courier.id, deliveryDate: todayYMD }
       });
 
       if (!workedToday) continue;
 
-      // 2. Ищем, есть ли уже открытое задание на ЭТОЙ НЕДЕЛЕ (с ПН по ВС)
-      const existingTask = await prisma.konsolTask.findFirst({
-        where: { courierId: courier.id, date: { gte: monday, lte: sunday } }
+      // 2. Ищем все задания на этой неделе
+      const existingTasks = await prisma.konsolTask.findMany({
+        where: { courierId: courier.id, date: { gte: monday, lte: sunday } },
+        orderBy: { id: "desc" }
       });
 
-      // 3. Если задания нет — создаем новое!
-      if (!existingTask) {
-        const baseAmount = 530; // Базовая ставка с учетом налога
+      let hasActiveTask = false;
+
+      // 🔥 Проверяем фактический статус заданий в Консоли
+      for (const task of existingTasks) {
+        if (task.konsolActId) continue;
+
+        const remoteTask = await getKonsolTask(task.konsolTaskId);
+        if (remoteTask?.state?.code) {
+          const code = remoteTask.state.code;
+          if (!["accepted", "declined", "rejected", "revoked"].includes(code)) {
+            hasActiveTask = true;
+            break;
+          }
+        }
+      }
+
+      // 3. Если активного/редактируемого задания нет — создаем новое!
+      if (!hasActiveTask) {
+        const baseAmount = 530; 
         
         console.log(`[Daily Cron] Создаю задание для курьера ${courier.id}...`);
         
