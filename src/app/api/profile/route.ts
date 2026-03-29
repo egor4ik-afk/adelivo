@@ -6,12 +6,14 @@ import { z } from "zod";
 import { geocodeAddress } from "@/lib/crm";
 import { findContractorByPhone, inviteContractor } from "@/lib/konsol";
 
+// 🔥 ДОБАВЛЕНО: разрешаем isAuto в схеме валидации Zod
 const updateSchema = z.object({
   firstName:      z.string().min(1).max(50).optional(),
   lastName:       z.string().max(50).optional(),
   phone:          z.string().max(20).optional(),
   homeAddress:    z.string().max(200).optional(),
   konsolPhone:    z.string().optional(),
+  isAuto:         z.boolean().optional(), // <--- ДОБАВИЛИ СЮДА
   notifyNewOrder: z.boolean().optional(),
   notifyStatus:   z.boolean().optional(),
   notifyCourier:  z.boolean().optional(),
@@ -44,6 +46,7 @@ export async function GET(req: NextRequest) {
   let homeAddress = "";
   let konsolPhone: string | null = null;
   let isLinked = false;
+  let isAuto = false; // 🔥 ДОБАВЛЕНО
 
   if (profile.email) {
     const courier = await prisma.courier.findFirst({ where: { email: profile.email } });
@@ -51,6 +54,7 @@ export async function GET(req: NextRequest) {
       homeAddress  = courier.homeAddress || "";
       konsolPhone  = courier.konsolPhone || null;
       isLinked     = !!courier.konsolContractorId;
+      isAuto       = courier.isAuto || false; // 🔥 ЧИТАЕМ ИЗ БД
 
       if (profile.role === "COURIER") {
         profile.firstName = profile.firstName || courier.firstName || null;
@@ -60,7 +64,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ...profile, homeAddress, konsolPhone, isLinked });
+  return NextResponse.json({ ...profile, homeAddress, konsolPhone, isLinked, isAuto }); // 🔥 ОТДАЕМ НА ФРОНТ
 }
 
 // PATCH /api/profile
@@ -70,7 +74,8 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { homeAddress, konsolPhone, ...userData } = updateSchema.parse(body);
+    // Извлекаем isAuto вместе с остальными
+    const { homeAddress, konsolPhone, isAuto, ...userData } = updateSchema.parse(body);
 
     // 1. Обновляем User
     const updated = await prisma.user.update({
@@ -92,6 +97,9 @@ export async function PATCH(req: NextRequest) {
 
       if (homeAddress !== undefined) courierData.homeAddress = homeAddress;
       if (userData.phone !== undefined) courierData.phone = userData.phone;
+      
+      // 🔥 ПРАВИЛЬНОЕ СОХРАНЕНИЕ isAuto В courierData
+      if (isAuto !== undefined) courierData.isAuto = isAuto; 
 
       // 🔥 ЛОГИКА КОНСОЛИ
       if (konsolPhone !== undefined) {
@@ -111,7 +119,7 @@ export async function PATCH(req: NextRequest) {
             if (Object.keys(courierData).length > 0) {
               await prisma.courier.updateMany({ where: { email: user.email }, data: courierData });
             }
-            return NextResponse.json({ ...updated, homeAddress, linked: true });
+            return NextResponse.json({ ...updated, homeAddress, isAuto, linked: true });
 
           } else {
             // ❌ Не найден — отправляем приглашение
@@ -142,6 +150,7 @@ export async function PATCH(req: NextRequest) {
             return NextResponse.json({
               ...updated,
               homeAddress,
+              isAuto,
               invited: true,
               onboarding_url: onboardingUrl,
               message: "Приглашение отправлено! Проверьте СМС для регистрации.",
@@ -180,7 +189,7 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ...updated, homeAddress });
+    return NextResponse.json({ ...updated, homeAddress, isAuto });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 400 });
   }

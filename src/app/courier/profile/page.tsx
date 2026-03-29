@@ -11,6 +11,7 @@ interface Profile {
   lastName: string | null; 
   phone: string | null;
   homeAddress: string | null; 
+  isAuto: boolean; // 🔥 ДОБАВЛЕНО
 }
 
 interface Stats {
@@ -90,6 +91,7 @@ export default function CourierProfilePage() {
   const [newFirstName, setNewFirstName] = useState("");
   const [newLastName, setNewLastName] = useState("");
   const [newHomeAddress, setNewHomeAddress] = useState(""); 
+  const [isAuto, setIsAuto] = useState(false); // 🔥 ДОБАВЛЕНО Состояние для авто
   
   // Консоль
   const [konsolModalOpen, setKonsolModalOpen] = useState(false);
@@ -123,6 +125,7 @@ export default function CourierProfilePage() {
       setNewFirstName(data.firstName || "");
       setNewLastName(data.lastName || "");
       setNewHomeAddress(data.homeAddress || "");
+      setIsAuto(data.isAuto || false); // 🔥 ЗАГРУЖАЕМ статус авто
     });
 
     fetch("/api/courier/my-stats").then(r => r.json()).then(data => {
@@ -170,7 +173,8 @@ export default function CourierProfilePage() {
     try {
       await fetch("/api/profile", {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: cleanPhone, firstName: newFirstName, lastName: newLastName, homeAddress: newHomeAddress })
+        // 🔥 ОТПРАВЛЯЕМ isAuto
+        body: JSON.stringify({ phone: cleanPhone, firstName: newFirstName, lastName: newLastName, homeAddress: newHomeAddress, isAuto })
       });
       loadData();
       setEditingProfile(false);
@@ -178,6 +182,24 @@ export default function CourierProfilePage() {
       alert("Не удалось сохранить данные");
     } finally {
       setSaving(false);
+    }
+  };
+
+  // 🔥 Функция для мгновенного сохранения статуса Авто без кнопки "Сохранить"
+  const toggleAutoStatus = async () => {
+    const newStatus = !isAuto;
+    setIsAuto(newStatus);
+    setProfile(prev => prev ? { ...prev, isAuto: newStatus } : null);
+
+    try {
+      await fetch("/api/profile", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isAuto: newStatus })
+      });
+    } catch (e) {
+      alert("Не удалось обновить статус Авто");
+      setIsAuto(!newStatus);
+      setProfile(prev => prev ? { ...prev, isAuto: !newStatus } : null);
     }
   };
 
@@ -196,12 +218,10 @@ export default function CourierProfilePage() {
       if (data.error) {
         alert(data.error);
       } else if (data.invited) {
-        // Новый исполнитель — показываем ссылку
         setKonsolModalOpen(false);
         alert(`📲 Приглашение отправлено на ${inputKonsolPhone}!\n\nСсылка для регистрации:\n${data.onboarding_url}`);
         loadData();
       } else {
-        // Уже исполнитель — привязали успешно
         setKonsolModalOpen(false);
         loadData();
       }
@@ -213,7 +233,6 @@ export default function CourierProfilePage() {
   };
 
   const handleLogout = async () => {
-    // 🔥 ИСПРАВЛЕНО: Делаем запрос на сервер для удаления HttpOnly куки
     await fetch("/api/auth/logout", { method: "POST" });
     window.location.href = "/login";
   };
@@ -265,7 +284,28 @@ export default function CourierProfilePage() {
 
       <div style={{ padding: 16 }}>
 
-        {/* 🔥 НОВЫЙ БЛОК: СТАТИСТИКА */}
+        {/* 🔥 НОВЫЙ ПЕРЕКЛЮЧАТЕЛЬ АВТО/ПЕШИЙ */}
+        <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18" }}>Тип курьера</div>
+            <div style={{ fontSize: 12, color: "#6b6860", marginTop: 2 }}>{isAuto ? "Автомобиль (+100₽ к доставке)" : "Пеший / Самокат"}</div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", background: "#f5f4f0", borderRadius: 8, padding: 4 }}>
+            <button 
+              onClick={toggleAutoStatus} 
+              style={{ padding: "6px 12px", borderRadius: 6, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: !isAuto ? "#fff" : "transparent", color: !isAuto ? "#1a1a18" : "#a8a49c", boxShadow: !isAuto ? "0 1px 3px rgba(0,0,0,0.1)" : "none", transition: "all 0.2s" }}
+            >
+              🚶 Пеший
+            </button>
+            <button 
+              onClick={toggleAutoStatus} 
+              style={{ padding: "6px 12px", borderRadius: 6, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: isAuto ? "#10b981" : "transparent", color: isAuto ? "#fff" : "#a8a49c", boxShadow: isAuto ? "0 1px 3px rgba(0,0,0,0.1)" : "none", transition: "all 0.2s" }}
+            >
+              🚗 Авто
+            </button>
+          </div>
+        </div>
+
         {stats && (
           <div style={{ background: "#fff", padding: 16, borderRadius: 12, marginBottom: 16, border: "1px solid #e8e6df", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
             <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", margin: "0 0 12px 0", textTransform: "uppercase" }}>Статистика (СЗ +6%)</h2>
@@ -374,7 +414,7 @@ export default function CourierProfilePage() {
           <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", margin: "0 0 12px 0", textTransform: "uppercase" }}>Настройки</h2>
 
           <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-start", padding: "12px 0", borderBottom: "1px solid #f0efe9" }}>
-            <div style={{ flex: "1 1 100%", paddingRight: 0, display: "flex", flexDirection: "column", width: "100%" }}>               
+            <div style={{ flex: "1 1 100%", paddingRight: 0, display: "flex", flexDirection: "column", width: "100%" }}>              
               {!editingProfile ? (
                 <>
                   <div style={{ fontSize: 13, color: "#a8a49c" }}>Личные данные</div>
