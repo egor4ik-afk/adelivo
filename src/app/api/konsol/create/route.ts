@@ -58,7 +58,7 @@ export async function POST(req: Request) {
       });
 
       if (!existingTask) {
-        const baseAmount = 500; 
+        const baseAmount = 530; 
         
         // Передаем старт (сегодня) и конец (воскресенье)
         const taskId = await createKonsolTask(courier.konsolContractorId, baseAmount, todayStr, endOfWeekStr);

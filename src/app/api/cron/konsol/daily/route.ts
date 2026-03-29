@@ -5,7 +5,6 @@ import { createKonsolTask } from "@/lib/konsol";
 
 export const dynamic = "force-dynamic";
 
-// Помощник для перевода Date в строку YYYY-MM-DD
 function toYMD(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
@@ -20,7 +19,6 @@ export async function GET(req: Request) {
     const today = new Date();
     const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
     
-    // Высчитываем понедельник и воскресенье для поиска в нашей БД
     const monday = new Date(today);
     monday.setDate(today.getDate() - dayOfWeek + 1);
     monday.setHours(0, 0, 0, 0);
@@ -29,11 +27,8 @@ export async function GET(req: Request) {
     sunday.setDate(monday.getDate() + 6);
     sunday.setHours(23, 59, 59, 999);
 
-    // Строка на СЕГОДНЯ для проверки заказов (YYYY-MM-DD)
     const todayYMD = toYMD(today);
 
-    // 🔥 Строки для Консоли (ДД.ММ.ГГГГ)
-    // В Консоль ВСЕГДА отправляем стартовой датой СЕГОДНЯ, чтобы не было ошибки дат
     const ddToday = String(today.getDate()).padStart(2, '0');
     const mmToday = String(today.getMonth() + 1).padStart(2, '0');
     const yyyyToday = today.getFullYear();
@@ -51,12 +46,12 @@ export async function GET(req: Request) {
     let createdCount = 0;
 
     for (const courier of couriers) {
-      // 1. Был ли хоть один доставленный заказ СЕГОДНЯ?
+      // 1. Был ли назначен хоть один заказ на курьера СЕГОДНЯ?
+      // 🔥 СТАТУС БОЛЬШЕ НЕ ВАЖЕН! Убрали status: "DELIVERED"
       const workedToday = await prisma.order.findFirst({
         where: { 
           courierId: courier.id, 
-          status: "DELIVERED", 
-          deliveryDate: todayYMD // Ищем заказы конкретно за сегодня
+          deliveryDate: todayYMD 
         }
       });
 
@@ -69,11 +64,10 @@ export async function GET(req: Request) {
 
       // 3. Если задания нет — создаем новое!
       if (!existingTask) {
-        const baseAmount = 500; // Базовая ставка (без налога, как мы решили)
+        const baseAmount = 530; // Базовая ставка с учетом налога
         
         console.log(`[Daily Cron] Создаю задание для курьера ${courier.id}...`);
         
-        // Создаем с СЕГОДНЯ по ВОСКРЕСЕНЬЕ
         const taskId = await createKonsolTask(courier.konsolContractorId!, baseAmount, todayKonsolStr, sundayKonsolStr);
         
         if (taskId) {
@@ -81,7 +75,7 @@ export async function GET(req: Request) {
             data: {
               courierId: courier.id,
               konsolTaskId: String(taskId),
-              date: today, // В базу пишем сегодняшнюю дату
+              date: today,
               amount: baseAmount,
               status: "DRAFT"
             }
