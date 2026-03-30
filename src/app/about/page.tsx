@@ -702,7 +702,7 @@ export default function AboutPage() {
                 <div className="price-card featured">
                   <div className="price-name">Только платформа</div>
                   <div>
-                    <div className="price-amount">20</div>
+                    <div className="price-amount">от 10</div>
                     <div className="price-unit">₽ за заказ</div>
                   </div>
                   <div className="price-desc">Свои операторы, логисты и курьеры. Вам нужна только платформа и инструменты.</div>
@@ -720,7 +720,7 @@ export default function AboutPage() {
                 <div className="price-card">
                   <div className="price-name">Есть логисты</div>
                   <div>
-                    <div className="price-amount">50</div>
+                    <div className="price-amount">от 50</div>
                     <div className="price-unit">₽ за заказ</div>
                   </div>
                   <div className="price-desc">Есть логисты и операторы — нужны курьеры и бухгалтерия по СЗ/ИП/ГПХ.</div>
@@ -737,7 +737,7 @@ export default function AboutPage() {
                 <div className="price-card">
                   <div className="price-name">Есть курьеры</div>
                   <div>
-                    <div className="price-amount">100</div>
+                    <div className="price-amount">от 100</div>
                     <div className="price-unit">₽ за заказ</div>
                   </div>
                   <div className="price-desc">Есть курьеры — нужны логисты, операторы и платформа для управления.</div>

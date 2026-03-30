@@ -18,13 +18,10 @@ export async function POST(request: Request) {
 
     const cleanFirstName = firstName.trim();
     const cleanLastName = lastName.trim();
-
-    // 🔥 1. СТАНДАРТ: Всегда формируем полное имя как "Фамилия Имя"
     const standardFullName = `${cleanLastName} ${cleanFirstName}`;
 
-    // 🔥 2. УМНЫЙ ПОИСК: Ищем курьера по частям имени (в любом порядке)
     const nameParts = [cleanFirstName, cleanLastName].filter(Boolean);
-    
+
     let courier = await prisma.courier.findFirst({
       where: {
         AND: nameParts.map(part => ({
@@ -33,90 +30,85 @@ export async function POST(request: Request) {
       }
     });
 
+    // 🔥 Флаг — найден профиль или создан новый
+    const profileFound = !!courier;
+
     if (courier) {
-      // Если курьер найден в БД, обновляем его данные и приводим fullName к стандарту
+      // Профиль найден в БД — обновляем
       courier = await prisma.courier.update({
         where: { id: courier.id },
         data: {
-          phone: phone,
-          email: user.email, 
+          phone,
+          email: user.email,
           firstName: cleanFirstName,
           lastName: cleanLastName,
-          fullName: standardFullName, // Перезаписываем в правильном порядке
-          isActive: true
+          fullName: standardFullName,
+          isActive: true,
         }
       });
+
+      console.log(`[LinkCourier] Профиль найден и обновлён: ${standardFullName} (ID ${courier.id})`);
     } else {
-      // 3. Если курьера нет локально — создаем его СНАЧАЛА в RetailCRM
+      // Профиль не найден — создаём в CRM и у нас
       const crmUrl = process.env.RETAILCRM_API_URL;
       const crmKey = process.env.RETAILCRM_API_KEY;
-      
+
       if (!crmUrl || !crmKey) {
-        throw new Error("Не настроены ключи RetailCRM (RETAILCRM_API_URL, RETAILCRM_API_KEY)");
+        throw new Error("Не настроены ключи RetailCRM");
       }
 
-      // Собираем объект курьера в формате, который ждет CRM (отдельно Имя и Фамилия)
       const courierPayload = {
         firstName: cleanFirstName,
         lastName: cleanLastName,
         active: true,
         email: user.email ? user.email : undefined,
-        phone: {
-          number: phone.replace(/[^\d+]/g, "") // Оставляем только цифры и плюс
-        }
+        phone: { number: phone.replace(/[^\d+]/g, "") },
       };
 
-      // Упаковываем в URLSearchParams (ключ + сериализованный JSON)
       const formData = new URLSearchParams();
       formData.append("apiKey", crmKey);
       formData.append("courier", JSON.stringify(courierPayload));
 
-      // Отправляем запрос
       const crmRes = await fetch(`${crmUrl}/api/v5/reference/couriers/create`, {
         method: "POST",
         body: formData,
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
       });
 
       const crmData = await crmRes.json();
-      
-      // Логируем ответ для контроля
-      console.log("ОТВЕТ ОТ RETAILCRM (КУРЬЕРЫ):", JSON.stringify(crmData, null, 2));
+      console.log("[LinkCourier] CRM ответ:", JSON.stringify(crmData, null, 2));
 
       if (!crmData.success) {
         throw new Error(`Ошибка CRM: ${crmData.errorMsg} ` + JSON.stringify(crmData.errors || {}));
       }
 
-      // Берем ID прямо из ответа RetailCRM
-      const crmCourierId = crmData.id;
-
-      // 4. Создаем в нашей локальной БД с ID из CRM
       courier = await prisma.courier.create({
         data: {
-          id: crmCourierId, 
+          id: crmData.id,
           firstName: cleanFirstName,
           lastName: cleanLastName,
-          fullName: standardFullName, // Сразу сохраняем по стандарту "Фамилия Имя"
-          phone: phone,
+          fullName: standardFullName,
+          phone,
           email: user.email,
           isActive: true,
         }
       });
+
+      console.log(`[LinkCourier] Новый профиль создан: ${standardFullName} (ID ${courier.id})`);
     }
 
-    // 🔥 Уведомление в Telegram о новом курьере
+    // Telegram уведомление
     const tgToken = process.env.TELEGRAM_BOT_TOKEN;
     const tgChat  = process.env.TELEGRAM_CHAT_ID;
     if (tgToken && tgChat) {
       const msg = [
-        `🚴 *Новый курьер зарегистрировался*`,
+        `🚴 *${profileFound ? "Курьер авторизовался" : "Новый курьер зарегистрировался"}*`,
         ``,
         `👤 *Имя:* ${standardFullName}`,
         `📞 *Телефон:* ${phone}`,
         `📧 *Email:* ${user.email ?? "—"}`,
         `🆔 *ID:* ${courier.id}`,
+        `🔍 *Профиль:* ${profileFound ? "найден в базе" : "создан новый"}`,
         `📅 *Дата:* ${new Date().toLocaleString("ru", { timeZone: "Europe/Moscow" })}`,
       ].join("\n");
 
@@ -124,11 +116,19 @@ export async function POST(request: Request) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ chat_id: tgChat, text: msg, parse_mode: "Markdown" }),
-      }).catch(e => console.error("[TG] Ошибка уведомления о курьере:", e));
+      }).catch(e => console.error("[TG] Ошибка уведомления:", e));
     }
 
-    return NextResponse.json({ success: true, courierId: courier.id });
-    
+    return NextResponse.json({
+      success: true,
+      courierId: courier.id,
+      // 🔥 Возвращаем клиенту — найден профиль или создан новый
+      profileFound,
+      message: profileFound
+        ? `Профиль найден: ${standardFullName}`
+        : `Новый профиль создан: ${standardFullName}`,
+    });
+
   } catch (error: any) {
     console.error("Link courier error:", error);
     return NextResponse.json({ error: error.message || "Internal error" }, { status: 500 });

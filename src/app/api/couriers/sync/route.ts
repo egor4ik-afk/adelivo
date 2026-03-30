@@ -6,7 +6,6 @@ import axios from "axios";
 const CRM_URL = process.env.RETAILCRM_API_URL;
 const CRM_KEY = process.env.RETAILCRM_API_KEY;
 
-// 🔥 Фильтр мусорных имен из CRM
 const BAD_WORDS = ["сдэк", "яндекс", "доставк", "курьер", "тест", "пеший", "авто", "logisty", "dostavista"];
 
 export async function GET() {
@@ -22,58 +21,90 @@ export async function GET() {
     const couriersObj = res.data?.couriers || {};
     const couriers = Array.isArray(couriersObj) ? couriersObj : Object.values(couriersObj);
 
-    let synced = 0;
-    
+    // 🔥 Только активные из CRM
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    for (const c of couriers as any[]) {
-      // Собираем полное имя
+    const activeCrmCouriers = (couriers as any[]).filter(c => c.active !== false);
+    const activeCrmIds = new Set(activeCrmCouriers.map((c: any) => c.id));
+
+    let synced = 0;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const c of activeCrmCouriers as any[]) {
       const fullNameParts = [c.firstName, c.patronymic, c.lastName].filter(Boolean);
       const fullName = fullNameParts.length > 0 ? fullNameParts.join(" ") : "";
-      
-      // 1. ОТСЕВ: Если имени нет или оно короче 3 символов — пропускаем
+
       if (!fullName || fullName.trim().length < 3) continue;
 
-      // 2. ОТСЕВ: Если имя содержит мусорное слово — пропускаем
       const lowerName = fullName.toLowerCase();
       if (BAD_WORDS.some(word => lowerName.includes(word))) continue;
 
       const crmPhone = c.phone?.number || null;
-
-      // Проверяем, есть ли уже этот курьер в нашей базе
       const existing = await prisma.courier.findUnique({ where: { id: c.id } });
 
       await prisma.courier.upsert({
         where: { id: c.id },
-        update: { 
+        update: {
           firstName: c.firstName || null,
           lastName: c.lastName || null,
           patronymic: c.patronymic || null,
-          fullName, 
+          fullName,
           description: c.description || null,
-          isActive: c.active !== false,
-          // 🔥 ВАЖНО: Обновляем почту и телефон из CRM ТОЛЬКО если у нас в базе они пустые. 
-          // Если курьер уже ввел свой реальный номер при регистрации - не затираем его!
+          isActive: true, // всегда активен — мы уже отфильтровали неактивных выше
           ...(existing?.email ? {} : { email: c.email || null }),
           ...(existing?.phone ? {} : { phone: crmPhone }),
         },
-        create: { 
-          id: c.id, 
+        create: {
+          id: c.id,
           firstName: c.firstName || null,
           lastName: c.lastName || null,
           patronymic: c.patronymic || null,
-          fullName, 
+          fullName,
           phone: crmPhone,
           email: c.email || null,
           description: c.description || null,
-          isActive: c.active !== false
+          isActive: true,
         },
       });
-      
+
       synced++;
     }
 
-    return NextResponse.json({ ok: true, synced, message: `Успешно загружено ${synced} реальных курьеров` });
-    
+    // 🔥 Деактивируем/удаляем тех кого нет среди активных в CRM
+    const dbCouriers = await prisma.courier.findMany({
+      where: { isActive: true },
+      select: { id: true, fullName: true },
+    });
+
+    let deactivated = 0;
+    let deleted = 0;
+
+    for (const dbC of dbCouriers) {
+      if (activeCrmIds.has(dbC.id)) continue; // есть в CRM — не трогаем
+
+      const [ordersCount, tasksCount] = await Promise.all([
+        prisma.order.count({ where: { courierId: dbC.id } }),
+        prisma.konsolTask.count({ where: { courierId: dbC.id } }),
+      ]);
+
+      if (ordersCount > 0 || tasksCount > 0) {
+        await prisma.courier.update({ where: { id: dbC.id }, data: { isActive: false } });
+        console.log(`[Sync] Деактивирован: ${dbC.fullName} (ID ${dbC.id})`);
+        deactivated++;
+      } else {
+        await prisma.courier.delete({ where: { id: dbC.id } });
+        console.log(`[Sync] Удалён: ${dbC.fullName} (ID ${dbC.id})`);
+        deleted++;
+      }
+    }
+
+    return NextResponse.json({
+      ok: true,
+      synced,
+      deactivated,
+      deleted,
+      message: `Синхронизировано: ${synced}, деактивировано: ${deactivated}, удалено: ${deleted}`,
+    });
+
   } catch (e) {
     console.error("Courier sync error:", String(e));
     return NextResponse.json({ error: String(e) }, { status: 500 });
