@@ -172,6 +172,7 @@ export async function acceptKonsolTask(taskId: string) {
 }
 
 // ✅ Финализация задания (создание акта)
+// ✅ Финализация задания (создание акта)
 export async function finalizeKonsolTask(taskId: string | number): Promise<string | null> {
   const moscowYMD = getMoscowDateStr();
 
@@ -187,9 +188,16 @@ export async function finalizeKonsolTask(taskId: string | number): Promise<strin
   
   let data = await res.json();
 
-  // 🔥 УМНЫЙ ОБХОД: Если Консоль живет по UTC и считает нашу московскую полночь "будущим"
-  if (!res.ok && JSON.stringify(data).includes("в будущем")) {
-    console.log(`[Konsol] Московская дата (${moscowYMD}) для Консоли оказалась в будущем. Откатываемся на UTC...`);
+  const errStr = JSON.stringify(data);
+
+  // 🔥 УМНЫЙ ОБХОД: Ловим ВСЕ вариации ошибок из-за часовых поясов!
+  const isTimezoneError = 
+    errStr.includes("в будущем") || 
+    errStr.includes("текущей датой") || 
+    errStr.includes("Дата акта должна быть");
+
+  if (!res.ok && isTimezoneError) {
+    console.log(`[Konsol] Консоль ругается на даты: ${errStr}. Откатываемся на UTC...`);
     
     // Берем серверную дату (UTC), которая для Консоли сейчас является "сегодня"
     const utcYMD = new Date().toISOString().split('T')[0];

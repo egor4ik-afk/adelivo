@@ -1,89 +1,100 @@
-// src/app/api/admin/fetch-konsol-phones/route.ts
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+// src/app/api/admin/fix/route.ts
+import { NextRequest, NextResponse } from "next/server";
 import axios from "axios";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const KONSOL_API_KEY = process.env.KONSOL_API_KEY;
-  
+  const KONSOL_BUS = "https://api.konsol.pro/bus/alpha";
+
   if (!KONSOL_API_KEY) {
-    return NextResponse.json({ error: "Нет ключа KONSOL_API_KEY в .env" }, { status: 500 });
+    return NextResponse.json({ error: "Нет ключа API KONSOL_API_KEY" }, { status: 500 });
   }
 
   try {
-    const logs: string[] = [];
+    // 1. Строго и надежно получаем ID из параметра ?id=...
+    let taskId = req.nextUrl.searchParams.get("id");
+    
+    // Очищаем от мусора (оставляем только цифры)
+    if (taskId) {
+      taskId = taskId.replace(/\D/g, "");
+    }
 
-    // 1. Ищем курьеров, которым нужен телефон Консоли
-    const couriersToFix = await prisma.courier.findMany({
-      where: {
-        konsolContractorId: { not: null },
-        OR: [
-          { konsolPhone: null },
-          { konsolPhone: "" }
-        ]
-      }
+    if (!taskId) {
+      return NextResponse.json({ 
+        error: "Укажите ID задания через параметр id",
+        example: "https://твой-домен/api/admin/fix?id=4768627" 
+      }, { status: 400 });
+    }
+
+    const headers = {
+      "Authorization": `Bearer ${KONSOL_API_KEY}`,
+      "Content-Type": "application/json"
+    };
+
+    // 2. Получаем инфу о задании
+    const taskRes = await axios.get(`${KONSOL_BUS}/workflow/tasks/${taskId}`, { headers });
+    const taskData = taskRes.data?.data || taskRes.data;
+
+    // 3. Вытаскиваем все возможные даты (по документации Консоли)
+    const sinceDate = taskData.since_date; // "2025-02-15"
+    const uptoDate = taskData.upto_date;   // "2025-02-15"
+    const createdAt = taskData.created_at; // "2025-02-14T09:00:00.000+00:00"
+    const acceptedAt = taskData.accepted_at; // "15.02.2025" (бывает и в таком формате)
+    const submittedAt = taskData.submitted_at; 
+
+    // 4. Логика подбора Идеальной Даты для Акта
+    let targetActDate = new Date().toISOString().split('T')[0]; // сегодня по UTC
+
+    if (submittedAt) {
+      targetActDate = submittedAt.split('T')[0];
+    } else if (uptoDate) {
+      targetActDate = uptoDate.split('T')[0];
+    } else if (sinceDate) {
+      targetActDate = sinceDate.split('T')[0];
+    }
+
+    // 5. Пробуем пробить финализацию с ИХ же датой
+    let finalizeResult = null;
+    let finalizeError = null;
+
+    try {
+      const finRes = await axios.post(`${KONSOL_BUS}/workflow/tasks/finalize`, {
+        ids: [Number(taskId)],
+        act_date: targetActDate,
+        date: targetActDate
+      }, { headers });
+      
+      finalizeResult = finRes.data;
+    } catch (err: any) {
+      finalizeError = err.response?.data || err.message;
+    }
+
+    // 6. Выводим красивый отчет
+    return NextResponse.json({
+      status: finalizeError ? "❌ ОШИБКА ФИНАЛИЗАЦИИ" : "✅ УСПЕШНО ФИНАЛИЗИРОВАНО",
+      used_taskId: taskId,
+      used_act_date: targetActDate,
+      extracted_dates: {
+        since_date: sinceDate,
+        upto_date: uptoDate,
+        created_at: createdAt,
+        accepted_at: acceptedAt,
+        submitted_at: submittedAt,
+      },
+      task_info: {
+        id: taskData.id,
+        state: taskData.state?.code || taskData.status, // статус задания
+        act_id: taskData.act_id || finalizeResult?.acts_ids?.[0] || "Акта нет",
+      },
+      finalize_response: finalizeResult,
+      finalize_error: finalizeError,
+      raw_task_data: taskData // сырые данные
     });
 
-    if (couriersToFix.length === 0) {
-       return NextResponse.json({ success: true, logs: ["✅ Нет курьеров для исправления."] });
-    }
-
-    logs.push(`🔍 Нужно найти телефоны для: ${couriersToFix.length} курьеров.`);
-    
-    // 2. Скачиваем список ВСЕХ исполнителей из Консоли (проходим по страницам)
-    let allContractors: any[] = [];
-    
-    try {
-      logs.push(`⏳ Скачиваем базу исполнителей из Консоль.Про...`);
-      // Пробегаем до 5 страниц (если у тебя много исполнителей, можно увеличить до 10)
-      for (let page = 1; page <= 5; page++) {
-        const res = await axios.get(`https://api.konsol.pro/v2/contractors?page=${page}&limit=100`, {
-          headers: { 
-            "Authorization": `Bearer ${KONSOL_API_KEY}`,
-            "Content-Type": "application/json"
-          }
-        });
-
-        // В Консоли данные обычно лежат в data или contractors
-        const list = res.data?.data || res.data?.contractors || (Array.isArray(res.data) ? res.data : []);
-        
-        if (!list || list.length === 0) break; // Страницы кончились
-        
-        allContractors = [...allContractors, ...list];
-      }
-      logs.push(`📦 Всего загружено исполнителей из Консоли: ${allContractors.length}`);
-    } catch (err: any) {
-      logs.push(`❌ Ошибка загрузки списка: ${err?.response?.data?.message || err.message}`);
-      return NextResponse.json({ success: false, logs }, { status: 500 });
-    }
-
-    // 3. Сопоставляем и сохраняем
-    let fixedCount = 0;
-
-    for (const courier of couriersToFix) {
-      // Ищем исполнителя в загруженном массиве по ID (приводим к строке для надежности)
-      const contractor = allContractors.find(c => String(c.id) === String(courier.konsolContractorId));
-
-      if (contractor && contractor.phone) {
-        // Нашли! Сохраняем телефон в нашу БД
-        await prisma.courier.update({
-          where: { id: courier.id },
-          data: { konsolPhone: contractor.phone }
-        });
-        
-        logs.push(`✅ ${courier.fullName}: найден телефон ➡️ ${contractor.phone}`);
-        fixedCount++;
-      } else {
-        logs.push(`⚠️ ${courier.fullName}: ID ${courier.konsolContractorId} не найден в общем списке Консоли или там не указан телефон.`);
-      }
-    }
-
-    logs.push(`=============================`);
-    logs.push(`🎯 ГОТОВО! Успешно привязано телефонов: ${fixedCount} из ${couriersToFix.length}`);
-
-    return NextResponse.json({ success: true, logs });
-  } catch (error: any) {
-    console.error("Fetch Konsol Phones Error:", error);
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+  } catch (e: any) {
+    return NextResponse.json({ 
+      error: "Не удалось получить задание из Консоли", 
+      details: e.response?.data || e.message 
+    }, { status: 500 });
   }
 }

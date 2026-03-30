@@ -51,7 +51,7 @@ export function CouriersClient({ user }: { user: any }) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
-  const [activeTab, setActiveTab] = useState<"calc" | "schedule" | "routes">("calc");
+  const [activeTab, setActiveTab] = useState<"calc" | "schedule" | "routes" | "tasks">("calc");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   const scheduleDates = Array.from({ length: 7 }, (_, i) => {
@@ -73,7 +73,12 @@ export function CouriersClient({ user }: { user: any }) {
   const [konsolLoading, setKonsolLoading] = useState(false);
   const [konsolToast, setKonsolToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [konsolStatuses, setKonsolStatuses] = useState<Record<number, { label: string, color: string }[]>>({});
-
+  // 📋 Задания Консоли
+  const [konsolTasks, setKonsolTasks] = useState<any[]>([]);
+  const [konsolTasksLoading, setKonsolTasksLoading] = useState(false);
+  const [expandedKonsolTask, setExpandedKonsolTask] = useState<string | null>(null);
+  const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
+  const [taskRemoteData, setTaskRemoteData] = useState<Record<string, { state?: { code: string; title: string } | null; duties?: any[] } | null>>({});
   useEffect(() => {
     const checkMob = () => setIsMobile(window.innerWidth < 768);
     checkMob(); window.addEventListener("resize", checkMob);
@@ -94,7 +99,10 @@ export function CouriersClient({ user }: { user: any }) {
   // 🔥 Автоматическая загрузка статусов Консоли при открытии вкладки ЗП или смене недели
   useEffect(() => {
     if (activeTab === "calc") {
-      checkKonsolStatuses(true); // true = тихая загрузка без всплывающих уведомлений
+      checkKonsolStatuses(true);
+    }
+    if (activeTab === "tasks") {
+      loadKonsolTasks();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, weekStart]);
@@ -262,7 +270,52 @@ export function CouriersClient({ user }: { user: any }) {
       setTimeout(() => setKonsolToast(null), 5000);
     }
   };
+  const loadKonsolTasks = async () => {
+    setKonsolTasksLoading(true);
+    try {
+      const res = await fetch("/api/konsol/tasks");
+      if (res.ok) setKonsolTasks(await res.json());
+    } catch (e) { console.error(e); }
+    finally { setKonsolTasksLoading(false); }
+  };
 
+  const loadTaskRemote = async (konsolTaskId: string, taskDbId: string) => {
+    if (taskRemoteData[taskDbId] !== undefined) return;
+    setTaskRemoteData(prev => ({ ...prev, [taskDbId]: null }));
+    try {
+      const res = await fetch(`/api/konsol/task-detail?taskId=${konsolTaskId}`);
+      const data = await res.json();
+      setTaskRemoteData(prev => ({ ...prev, [taskDbId]: { state: data.state, duties: data.duties } }));
+    } catch {
+      setTaskRemoteData(prev => ({ ...prev, [taskDbId]: { state: null, duties: [] } }));
+    }
+  };
+
+  const handleTasksAction = async (action: "recalculate" | "finalize" | "pay") => {
+    const sel = konsolTasks.filter(t => selectedTasks.has(t.id));
+    const targets = action === "pay"
+      ? sel.filter(t => t.status === "CONFIRMED")
+      : sel.filter(t => t.status !== "SIGNED_BY_US");
+    if (!targets.length) {
+      setKonsolToast({ message: action === "pay" ? "⚠️ Нет заданий «Акт готов»" : "⚠️ Ничего не выбрано", type: "error" });
+      setTimeout(() => setKonsolToast(null), 3000);
+      return;
+    }
+    setKonsolTasksLoading(true);
+    const url = action === "recalculate" ? "/api/konsol/recalculate" : action === "finalize" ? "/api/konsol/finalize" : "/api/konsol/pay";
+    try {
+      const payments = targets.map((t: any) => ({ courierId: t.courierId, date: t.date.split("T")[0] }));
+      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ payments }) });
+      const data = await res.json();
+      if (data.success) {
+        const label = action === "recalculate" ? "Пересчитано" : action === "finalize" ? "Финализировано" : "Оплачено";
+        setKonsolToast({ message: `✅ ${label}: ${data.processed}`, type: "success" });
+        setSelectedTasks(new Set());
+        await loadKonsolTasks();
+      } else setKonsolToast({ message: `❌ ${data.error}`, type: "error" });
+    } catch { setKonsolToast({ message: "❌ Ошибка", type: "error" }); }
+    finally { setKonsolTasksLoading(false); setTimeout(() => setKonsolToast(null), 4000); }
+  };
   const checkKonsolStatuses = async (silent = false) => {
     if (!silent) setKonsolLoading(true);
     try {
@@ -410,8 +463,10 @@ const handleRecalculate = async () => {
             <h1 style={s.title}>Курьеры</h1>
             <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch" }}>
               <button style={activeTab === "calc" ? s.tabActive : s.tabInactive} onClick={() => setActiveTab("calc")}>💰 ЗП</button>
+              <button style={activeTab === "tasks" ? s.tabActive : s.tabInactive} onClick={() => setActiveTab("tasks")}>📋 Задания</button>
               <button style={activeTab === "schedule" ? s.tabActive : s.tabInactive} onClick={() => setActiveTab("schedule")}>📅 График</button>
               <button style={activeTab === "routes" ? s.tabActive : s.tabInactive} onClick={() => setActiveTab("routes")}>🗺️ Маршруты</button>
+              
             </div>
           </div>
 
@@ -634,8 +689,17 @@ const handleRecalculate = async () => {
                       return (
                         <tr key={c.id} style={{ borderBottom: "1px solid #f0efe9", background: "#fff" }}>
                           <td style={{ ...s.td, fontWeight: 600 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                {c.konsolContractorId ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {/* 🔥 Чекбокс выделения всей недели курьера */}
+                <input
+                  type="checkbox"
+                  checked={isAllWeekSelected}
+                  onChange={() => toggleCourierWeek(c.id)}
+                  disabled={availableWeekKeys.length === 0}
+                  style={{ ...s.checkbox, width: 14, height: 14, flexShrink: 0 }}
+                  title="Выбрать всю неделю"
+                />
+                {c.konsolContractorId ? (
                                   <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#10b981", display: "inline-block", flexShrink: 0 }} title="СЗ (Консоль) подключен" />
                                 ) : (
                                   <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#d1d5db", display: "inline-block", flexShrink: 0 }} title="Консоль не привязана" />
@@ -806,7 +870,211 @@ const handleRecalculate = async () => {
         )}
 
       </div>
+{/* --- 📋 ЗАДАНИЯ КОНСОЛИ --- */}
+{activeTab === "tasks" && (() => {
+          const DB_ST: Record<string, { label: string; color: string; bg: string }> = {
+            DRAFT:        { label: "⏳ Черновик",  color: "#6b6860", bg: "#f5f4f0" },
+            CONFIRMED:    { label: "📄 Акт готов", color: "#4a7aff", bg: "#eef3ff" },
+            SIGNED_BY_US: { label: "✅ Оплачено",  color: "#10b981", bg: "#f0fdf4" },
+          };
+          const REMOTE_ST: Record<string, { label: string; color: string }> = {
+            submitted: { label: "🟡 Ожидает курьера", color: "#f59e0b" },
+            confirmed:  { label: "🔵 В работе",       color: "#4a7aff" },
+            accepted:   { label: "🟢 Выполнено",      color: "#10b981" },
+            finalized:  { label: "📝 Финализировано", color: "#8b5cf6" },
+            revoked:    { label: "❌ Отозвано",        color: "#d94040" },
+            declined:   { label: "❌ Отклонено",       color: "#d94040" },
+          };
 
+          // Группировка по курьеру
+          const byCourier: Record<number, any[]> = {};
+          konsolTasks.forEach((t: any) => {
+            if (!byCourier[t.courierId]) byCourier[t.courierId] = [];
+            byCourier[t.courierId].push(t);
+          });
+
+          const allSelectableIds = konsolTasks.filter((t: any) => t.status !== "SIGNED_BY_US").map((t: any) => t.id);
+          const isAllTasksSelected = allSelectableIds.length > 0 && allSelectableIds.every((id: string) => selectedTasks.has(id));
+          const selArr = konsolTasks.filter((t: any) => selectedTasks.has(t.id));
+          const selCanPay = selArr.filter((t: any) => t.status === "CONFIRMED").length;
+          const selCanFinalize = selArr.filter((t: any) => t.status !== "SIGNED_BY_US").length;
+
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+              {/* Тулбар */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: "#fff", borderRadius: 10, border: "1px solid #e8e6df", flexWrap: "wrap" }}>
+                <input
+                  type="checkbox"
+                  checked={isAllTasksSelected}
+                  onChange={() => setSelectedTasks(isAllTasksSelected ? new Set() : new Set(allSelectableIds))}
+                  style={{ ...s.checkbox, width: 15, height: 15 }}
+                  title="Выбрать все"
+                />
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#1a1a18" }}>
+                  Задания Консоль.Про {konsolTasks.length > 0 && `(${konsolTasks.length})`}
+                </span>
+                {konsolToast && (
+                  <span style={{ fontSize: 12, fontWeight: 600, color: konsolToast.type === "success" ? "#10b981" : "#d94040" }}>
+                    {konsolToast.message}
+                  </span>
+                )}
+                <div style={{ flex: 1 }} />
+                <button onClick={loadKonsolTasks} disabled={konsolTasksLoading} style={s.navBtn}>🔄</button>
+                {selectedTasks.size > 0 && <>
+                  <span style={{ fontSize: 12, color: "#6b6860" }}>Выбрано: <b>{selectedTasks.size}</b></span>
+                  <button onClick={() => handleTasksAction("recalculate")} disabled={konsolTasksLoading} style={{ ...s.navBtn, background: "#f5f3ff", color: "#8b5cf6", borderColor: "#8b5cf6" }}>🔁 Пересчитать</button>
+                  {selCanFinalize > 0 && <button onClick={() => handleTasksAction("finalize")} disabled={konsolTasksLoading} style={{ ...s.navBtn, background: "#eef3ff", color: "#4a7aff", borderColor: "#4a7aff" }}>📄 Финализировать ({selCanFinalize})</button>}
+                  {selCanPay > 0 && <button onClick={() => handleTasksAction("pay")} disabled={konsolTasksLoading} style={{ background: "#10b981", color: "#fff", border: "none", padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>💳 Оплатить ({selCanPay})</button>}
+                </>}
+              </div>
+
+              {/* Контент */}
+              {konsolTasksLoading && konsolTasks.length === 0 ? (
+                <div style={{ padding: 60, textAlign: "center", color: "#a8a49c" }}>Загрузка...</div>
+              ) : konsolTasks.length === 0 ? (
+                <div style={{ padding: 60, textAlign: "center", color: "#a8a49c" }}>Нет заданий. Нажмите 🔄</div>
+              ) : Object.entries(byCourier).map(([cidStr, cTasks]) => {
+                const cour = (cTasks as any[])[0].courier;
+                const courierId = Number(cidStr);
+                const selectableIds = (cTasks as any[]).filter(t => t.status !== "SIGNED_BY_US").map(t => t.id);
+                const allCSelected = selectableIds.length > 0 && selectableIds.every((id: string) => selectedTasks.has(id));
+                const courierTotal = (cTasks as any[]).reduce((acc, t) => acc + t.amount, 0);
+
+                return (
+                  <div key={courierId} style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "hidden" }}>
+                    {/* Шапка курьера */}
+                    <div style={{ padding: "10px 14px", background: "#fafaf8", borderBottom: "1px solid #e8e6df", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                      <input
+                        type="checkbox"
+                        checked={allCSelected}
+                        onChange={() => {
+                          setSelectedTasks(prev => {
+                            const next = new Set(prev);
+                            const allSel = selectableIds.every((id: string) => next.has(id));
+                            selectableIds.forEach((id: string) => allSel ? next.delete(id) : next.add(id));
+                            return next;
+                          });
+                        }}
+                        disabled={selectableIds.length === 0}
+                        style={{ ...s.checkbox, width: 15, height: 15 }}
+                      />
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: cour?.konsolContractorId ? "#10b981" : "#d1d5db", display: "inline-block" }} />
+                      <span style={{ fontWeight: 700, fontSize: 14, color: "#1a1a18" }}>{cour?.fullName ?? `#${courierId}`}</span>
+                      <span style={{ fontSize: 12, color: "#6b6860" }}>{(cTasks as any[]).length} задан. · {courierTotal.toFixed(0)} ₽</span>
+                      {(cTasks as any[]).filter(t => t.status === "SIGNED_BY_US").length > 0 && (
+                        <span style={{ fontSize: 11, background: "#f0fdf4", color: "#10b981", padding: "2px 8px", borderRadius: 20, fontWeight: 700 }}>✅ Оплачено: {(cTasks as any[]).filter(t => t.status === "SIGNED_BY_US").length}</span>
+                      )}
+                    </div>
+
+                    {/* Строки заданий */}
+                    {(cTasks as any[]).map((task: any, idx: number) => {
+                      const dbSt = DB_ST[task.status] || DB_ST.DRAFT;
+                      const isSelected = selectedTasks.has(task.id);
+                      const isExpanded = expandedKonsolTask === task.id;
+                      const isPaid = task.status === "SIGNED_BY_US";
+                      const remote = taskRemoteData[task.id];
+                      const remoteSt = remote?.state ? (REMOTE_ST[remote.state.code] || { label: remote.state.title, color: "#6b6860" }) : null;
+
+                      return (
+                        <div key={task.id}>
+                          <div
+                            style={{
+                              display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
+                              background: isSelected ? "#eef3ff" : isPaid ? "#f0fdf4" : idx % 2 === 1 ? "#fafaf8" : "#fff",
+                              borderBottom: "1px solid #f0efe9", cursor: "pointer", flexWrap: "wrap",
+                            }}
+                            onClick={() => {
+                              if (!isExpanded) loadTaskRemote(task.konsolTaskId, task.id);
+                              setExpandedKonsolTask(isExpanded ? null : task.id);
+                            }}
+                          >
+                            <div onClick={e => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => setSelectedTasks(prev => { const n = new Set(prev); n.has(task.id) ? n.delete(task.id) : n.add(task.id); return n; })}
+                                disabled={isPaid}
+                                style={{ ...s.checkbox, width: 14, height: 14 }}
+                              />
+                            </div>
+                            <span style={{ fontWeight: 600, fontSize: 13, minWidth: 70 }}>
+                              {new Date(task.date).toLocaleDateString("ru", { day: "2-digit", month: "2-digit", year: "2-digit" })}
+                            </span>
+                            <a href={`https://konsol.pro/tasks/${task.konsolTaskId}`} target="_blank" rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              style={{ fontFamily: "monospace", fontSize: 11, color: "#4a7aff", textDecoration: "none" }}>
+                              #{task.konsolTaskId}
+                            </a>
+                            <span style={{ fontSize: 11, background: dbSt.bg, color: dbSt.color, padding: "2px 8px", borderRadius: 20, fontWeight: 700 }}>{dbSt.label}</span>
+                            {remoteSt && <span style={{ fontSize: 11, color: remoteSt.color, fontWeight: 700 }}>{remoteSt.label}</span>}
+                            {remote === null && !remoteSt && isExpanded && <span style={{ fontSize: 11, color: "#a8a49c" }}>⏳ загрузка...</span>}
+                            <div style={{ flex: 1 }} />
+                            <span style={{ fontWeight: 700, fontSize: 13, color: isPaid ? "#10b981" : "#1a1a18" }}>{task.amount.toFixed(0)} ₽</span>
+                            <div onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 4 }}>
+                              {!isPaid && task.status !== "CONFIRMED" && (
+                                <button
+                                  onClick={async () => { setSelectedTasks(new Set([task.id])); await handleTasksAction("finalize"); }}
+                                  disabled={konsolTasksLoading}
+                                  style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #4a7aff", background: "#eef3ff", color: "#4a7aff", fontSize: 12, cursor: "pointer" }}
+                                  title="Финализировать"
+                                >📄</button>
+                              )}
+                              {task.status === "CONFIRMED" && (
+                                <button
+                                  onClick={async () => { setSelectedTasks(new Set([task.id])); await handleTasksAction("pay"); }}
+                                  disabled={konsolTasksLoading}
+                                  style={{ padding: "4px 8px", borderRadius: 6, border: "none", background: "#10b981", color: "#fff", fontSize: 12, cursor: "pointer" }}
+                                  title="Оплатить"
+                                >💳</button>
+                              )}
+                            </div>
+                            <span style={{ fontSize: 10, color: "#a8a49c", transform: isExpanded ? "rotate(180deg)" : "rotate(0)", display: "inline-block", transition: "0.2s" }}>▼</span>
+                          </div>
+
+                          {isExpanded && (
+                            <div style={{ padding: "12px 20px 12px 48px", background: "#f8f7ff", borderBottom: "1px solid #e8e6df" }}>
+                              {remote === null ? (
+                                <div style={{ color: "#a8a49c", fontSize: 12 }}>Загрузка данных...</div>
+                              ) : remote?.duties && remote.duties.length > 0 ? (
+                                <table style={{ fontSize: 12, borderCollapse: "collapse", width: "100%", maxWidth: 500 }}>
+                                  <thead>
+                                    <tr>{["Услуга", "Кол-во", "Цена", "Итого"].map(h => (
+                                      <th key={h} style={{ padding: "4px 10px", textAlign: "left", color: "#a8a49c", fontWeight: 600, borderBottom: "1px solid #e8e6df" }}>{h}</th>
+                                    ))}</tr>
+                                  </thead>
+                                  <tbody>
+                                    {remote.duties.map((d: any) => (
+                                      <tr key={d.id}>
+                                        <td style={{ padding: "4px 10px" }}>{d.title}</td>
+                                        <td style={{ padding: "4px 10px" }}>{d.quantity}</td>
+                                        <td style={{ padding: "4px 10px" }}>{d.price} ₽</td>
+                                        <td style={{ padding: "4px 10px", fontWeight: 700 }}>{d.cost} ₽</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                  <tfoot>
+                                    <tr>
+                                      <td colSpan={3} style={{ padding: "6px 10px", textAlign: "right", fontWeight: 700, borderTop: "1px solid #e8e6df" }}>Итого:</td>
+                                      <td style={{ padding: "6px 10px", fontWeight: 700, color: "#10b981", borderTop: "1px solid #e8e6df" }}>{remote.duties.reduce((a: number, d: any) => a + d.cost, 0)} ₽</td>
+                                    </tr>
+                                  </tfoot>
+                                </table>
+                              ) : (
+                                <div style={{ color: "#a8a49c", fontSize: 12 }}>Услуги не найдены</div>
+                              )}
+                              {task.konsolActId && <div style={{ marginTop: 8, fontSize: 11, color: "#6b6860" }}>Акт #{task.konsolActId}</div>}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
       {selectedOrder && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 9999, display: "flex", justifyContent: "flex-end" }}>
           <div style={{ width: 450, maxWidth: "100%", background: "#fff", height: "100%", display: "flex", flexDirection: "column", boxShadow: "-4px 0 24px rgba(0,0,0,0.15)" }}>
