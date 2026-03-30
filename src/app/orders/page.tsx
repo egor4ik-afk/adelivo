@@ -47,6 +47,10 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
 
+  // Состояния для себестоимости
+  const [costLoaders, setCostLoaders] = useState<Record<string, boolean>>({});
+  const [localCosts, setLocalCosts] = useState<Record<string, number>>({});
+
   const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
   const [fStatus, setFStatus] = useState("ALL");
   const [fCourier, setFCourier] = useState("ALL");
@@ -72,6 +76,23 @@ export default function OrdersPage() {
     finally { setSyncing(false); }
   };
 
+  const handleUpdateCost = async (orderId: string) => {
+    setCostLoaders(prev => ({ ...prev, [orderId]: true }));
+    try {
+      const res = await fetch(`/api/orders/${orderId}/cost`, { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        setLocalCosts(prev => ({ ...prev, [orderId]: data.costPrice }));
+      } else {
+        alert(`Ошибка: ${data.error}`);
+      }
+    } catch (e) {
+      alert("Ошибка запроса при расчете себестоимости.");
+    } finally {
+      setCostLoaders(prev => ({ ...prev, [orderId]: false }));
+    }
+  };
+
   const dateOrders = orders.filter(o => {
     const oDate = o.deliveryDate || (o.crmCreatedAt ? o.crmCreatedAt.split('T')[0] : null);
     return oDate === filterDate;
@@ -95,34 +116,25 @@ export default function OrdersPage() {
         }
         return true;
       })
-      // Сортировка по updatedAt DESC (последние изменения сверху)
       .sort((a, b) => new Date(b.changedAt || b.updatedAt || "").getTime() - new Date(a.changedAt || a.updatedAt || "").getTime());
   }, [dateOrders, fStatus, fCourier, fSearch]);
 
   return (
     <div style={{ fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", minHeight: "100vh" }}>
-      
-      {/* 🔥 ОБНОВЛЕННАЯ ШАПКА В ЕДИНОМ СТИЛЕ */}
       <div style={{ background: "#fff", borderBottom: "1px solid #e8e6df", padding: "0 24px", height: 56, display: "flex", alignItems: "center", gap: 16, overflowX: "auto" }}>
-        
         <Link href="/dashboard" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 7, color: "#1a1a18", fontWeight: 600, fontSize: 15, flexShrink: 0 }}>
           <img src="/favicon.svg" alt="Logo" style={{ width: 22, height: 22 }} />
           EventWave
         </Link>
-        
         <div style={{ width: 1, height: 20, background: "#e8e6df" }} />
-        
         <Link href="/dashboard" style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#1a1a18", textDecoration: "none", whiteSpace: "nowrap" }}>
           🗺️ Дашборд
         </Link>
         <Link href="/couriers" style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#1a1a18", textDecoration: "none", whiteSpace: "nowrap" }}>
           🚚 Курьеры
         </Link>
-
         <span style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", marginLeft: 8, whiteSpace: "nowrap" }}>Все заказы</span>
-        
         <div style={{ flex: 1 }} />
-        
         <button
           onClick={handleSync} disabled={syncing}
           style={{ padding: "6px 14px", background: syncing ? "#e8e6df" : "#1a1a18", color: syncing ? "#a8a49c" : "#fff", border: "none", borderRadius: 7, cursor: syncing ? "wait" : "pointer", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", transition: "all 0.2s" }}
@@ -131,16 +143,9 @@ export default function OrdersPage() {
         </button>
       </div>
 
-      {/* Фильтры */}
       <div style={{ padding: "16px 24px", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-        <input
-          type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)}
-          style={inputStyle}
-        />
-        <input
-          placeholder="Поиск по ID, адресу, курьеру..." value={fSearch} onChange={e => setFSearch(e.target.value)}
-          style={{ ...inputStyle, flex: 1, minWidth: 220 }}
-        />
+        <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={inputStyle} />
+        <input placeholder="Поиск по ID, адресу, курьеру..." value={fSearch} onChange={e => setFSearch(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 220 }} />
         <select value={fStatus} onChange={e => setFStatus(e.target.value)} style={inputStyle}>
           <option value="ALL">Все статусы</option>
           {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -153,14 +158,13 @@ export default function OrdersPage() {
         <span style={{ fontSize: 12, color: "#a8a49c", whiteSpace: "nowrap" }}>{filtered.length} заказов</span>
       </div>
 
-      {/* Таблица */}
       <div style={{ padding: "0 24px 24px" }}>
         <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e8e6df", overflow: "hidden" }}>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
                 <tr style={{ background: "#fafaf8", borderBottom: "1px solid #e8e6df" }}>
-                  {["ID", "Статус", "Курьер", "Адрес", "Слот", "Сумма", "Изменён", "Карта"].map(h => (
+                  {["ID", "Статус", "Курьер", "Адрес", "Слот", "Себ-ть", "Сумма", "Изменён", "Карта"].map(h => (
                     <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 10, fontWeight: 700, color: "#a8a49c", textTransform: "uppercase", letterSpacing: ".4px", whiteSpace: "nowrap" }}>
                       {h}{h === "Изменён" && <span style={{ marginLeft: 4, color: "#4a7aff" }}>↓</span>}
                     </th>
@@ -169,9 +173,9 @@ export default function OrdersPage() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={8} style={{ padding: 32, textAlign: "center", color: "#a8a49c" }}>Загрузка...</td></tr>
+                  <tr><td colSpan={9} style={{ padding: 32, textAlign: "center", color: "#a8a49c" }}>Загрузка...</td></tr>
                 ) : filtered.length === 0 ? (
-                  <tr><td colSpan={8} style={{ padding: 32, textAlign: "center", color: "#a8a49c" }}>На {filterDate} заказов не найдено</td></tr>
+                  <tr><td colSpan={9} style={{ padding: 32, textAlign: "center", color: "#a8a49c" }}>На {filterDate} заказов не найдено</td></tr>
                 ) : filtered.map((o, i) => {
                   const statusColor = STATUS_COLORS[o.status] ?? "#a8a49c";
                   return (
@@ -195,12 +199,31 @@ export default function OrdersPage() {
                         </div>
                       </td>
                       <td style={{ padding: "10px 14px", whiteSpace: "nowrap", color: "#6b6860" }}>{o.slotRaw || "—"}</td>
+                      
+                      {/* КОЛОНКА СЕБЕСТОИМОСТИ */}
+                      <td style={{ padding: "10px 14px", whiteSpace: "nowrap" }}>
+                        {localCosts[o.id] ? (
+                          <span style={{ color: "#1a9e5c", fontWeight: 700 }}>{localCosts[o.id]} ₽</span>
+                        ) : (
+                          <button
+                            onClick={() => handleUpdateCost(o.id)}
+                            disabled={costLoaders[o.id] || !o.price}
+                            style={{ 
+                              padding: "4px 8px", fontSize: 10, borderRadius: 5, border: "1px solid #e8e6df", 
+                              background: costLoaders[o.id] ? "#f5f4f0" : "#fff", color: costLoaders[o.id] || !o.price ? "#a8a49c" : "#1a1a18", 
+                              cursor: costLoaders[o.id] || !o.price ? "not-allowed" : "pointer", fontWeight: 600
+                            }}
+                            title={!o.price ? "У заказа нет цены" : "Рассчитать и отправить в CRM"}
+                          >
+                            {costLoaders[o.id] ? "..." : "Считать"}
+                          </button>
+                        )}
+                      </td>
+
                       <td style={{ padding: "10px 14px", whiteSpace: "nowrap", color: "#1a1a18" }}>{o.price ? `${o.price} ₽` : "—"}</td>
                       <td style={{ padding: "10px 14px", whiteSpace: "nowrap", fontSize: 11 }}>
                         {o.changedAt ? (
-                          <span style={{ color: "#1a1a18", fontWeight: 500 }}>
-                            {fmt(o.changedAt)}
-                          </span>
+                          <span style={{ color: "#1a1a18", fontWeight: 500 }}>{fmt(o.changedAt)}</span>
                         ) : (
                           <span style={{ color: "#a8a49c" }}>—</span>
                         )}
@@ -226,13 +249,5 @@ export default function OrdersPage() {
 }
 
 const inputStyle: React.CSSProperties = {
-  padding: "7px 10px",
-  borderRadius: 7,
-  border: "1px solid #e0dfd7",
-  fontSize: 12,
-  outline: "none",
-  color: "#1a1a18",
-  background: "#fff",
-  fontFamily: "inherit",
-  maxWidth: 160, 
+  padding: "7px 10px", borderRadius: 7, border: "1px solid #e0dfd7", fontSize: 12, outline: "none", color: "#1a1a18", background: "#fff", fontFamily: "inherit", maxWidth: 160, 
 };

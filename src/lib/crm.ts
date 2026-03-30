@@ -252,36 +252,18 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     if (data.status === OrderStatus.NEW && existing.status !== OrderStatus.NEW) {
       updateFields.status = existing.status;
     }
+
     // 🔥 ЗАЩИТА ЦЕНЫ АВТО-КУРЬЕРА:
-    // Если у заказа уже есть курьер-авто — цена из CRM всегда будет "старой" (без надбавки).
-    // Не перезаписываем её, чтобы не сбить +100 ₽ которые были добавлены при назначении.
-    if (existing.courierId && existing.price !== null && data.price !== null) {
+    // Убрали проверку data.price !== null. Теперь, если курьер авто и в базе уже есть цена, 
+    // мы жестко блокируем любые изменения цены из CRM, даже если оттуда пришел null.
+    if (existing.courierId && existing.price) {
       const assignedCourier = await prisma.courier.findUnique({
         where: { id: existing.courierId },
         select: { isAuto: true },
       });
       if (assignedCourier?.isAuto) {
-        // Курьер авто — сохраняем нашу цену, игнорируем CRM
+        // Курьер авто — сохраняем нашу цену, полностью игнорируем CRM
         updateFields.price = existing.price;
-      }
-    }
-
-    const isCourierRemovedOrChanged = existing.courierId !== null && data.courierId !== existing.courierId;
-
-    if (isCourierRemovedOrChanged) {
-      if (existing.routeId) {
-        const siblingsCount = await prisma.order.count({
-          where: { routeId: existing.routeId, id: { not: existing.id } },
-        });
-        if (siblingsCount === 0) {
-          await prisma.route.deleteMany({ where: { id: existing.routeId } });
-        }
-        updateFields.routeId = null;
-        updateFields.routeOrder = null;
-      }
-      
-      if (data.courierId === null && existing.status === OrderStatus.ASSIGNED && data.status === OrderStatus.ASSIGNED) {
-        updateFields.status = OrderStatus.NEW;
       }
     }
 
