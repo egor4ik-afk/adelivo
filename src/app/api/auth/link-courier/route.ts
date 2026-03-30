@@ -106,6 +106,27 @@ export async function POST(request: Request) {
       });
     }
 
+    // 🔥 Уведомление в Telegram о новом курьере
+    const tgToken = process.env.TELEGRAM_BOT_TOKEN;
+    const tgChat  = process.env.TELEGRAM_CHAT_ID;
+    if (tgToken && tgChat) {
+      const msg = [
+        `🚴 *Новый курьер зарегистрировался*`,
+        ``,
+        `👤 *Имя:* ${standardFullName}`,
+        `📞 *Телефон:* ${phone}`,
+        `📧 *Email:* ${user.email ?? "—"}`,
+        `🆔 *ID:* ${courier.id}`,
+        `📅 *Дата:* ${new Date().toLocaleString("ru", { timeZone: "Europe/Moscow" })}`,
+      ].join("\n");
+
+      fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: tgChat, text: msg, parse_mode: "Markdown" }),
+      }).catch(e => console.error("[TG] Ошибка уведомления о курьере:", e));
+    }
+
     return NextResponse.json({ success: true, courierId: courier.id });
     
   } catch (error: any) {
