@@ -294,7 +294,7 @@ export function CouriersClient({ user }: { user: any }) {
   const handleTasksAction = async (action: "recalculate" | "finalize" | "pay") => {
     const sel = konsolTasks.filter(t => selectedTasks.has(t.id));
     const targets = action === "pay"
-      ? sel.filter(t => t.status === "CONFIRMED")
+          ? sel.filter(t => t.status === "CONFIRMED" || t.status === "PENDING_PAYMENT")
       : sel.filter(t => t.status !== "SIGNED_BY_US");
     if (!targets.length) {
       setKonsolToast({ message: action === "pay" ? "⚠️ Нет заданий «Акт готов»" : "⚠️ Ничего не выбрано", type: "error" });
@@ -333,6 +333,10 @@ export function CouriersClient({ user }: { user: any }) {
     } finally {
       if (!silent) setKonsolLoading(false);
       setTimeout(() => setKonsolToast(null), 3000);
+    }
+    // 🔥 Если открыта вкладка задания — обновляем и её
+    if (activeTab === "tasks") {
+      await loadKonsolTasks();
     }
   };
   // 🔥 Новая кнопка "Пересчитать" (Только обновляет услуги в Консоли по выделенным дням)
@@ -876,8 +880,8 @@ export function CouriersClient({ user }: { user: any }) {
           DRAFT: { label: "⏳ Черновик", color: "#6b6860", bg: "#f5f4f0" },
           CONFIRMED: { label: "🔵 Принято", color: "#4a7aff", bg: "#eef3ff" },
           CONFIRMED_ACT: { label: "📄 Акт готов", color: "#8b5cf6", bg: "#f5f3ff" },
-          SIGNED_BY_US: { label: "✅ Оплачено", color: "#10b981", bg: "#f0fdf4" },
-        };
+          SIGNED_BY_US:    { label: "✅ Оплачено",    color: "#10b981", bg: "#f0fdf4" },
+          PENDING_PAYMENT: { label: "💳 Нет денег",   color: "#d94040", bg: "#fef2f2" },        };
         const REMOTE_ST: Record<string, { label: string; color: string }> = {
           submitted: { label: "🟡 Ожидает курьера", color: "#f59e0b" },
           confirmed: { label: "🔵 В работе", color: "#4a7aff" },
@@ -1024,9 +1028,9 @@ export function CouriersClient({ user }: { user: any }) {
                                 title="Финализировать"
                               >📄</button>
                             )}
-                            {task.status === "CONFIRMED" && (
-                              <button
-                                onClick={async () => { setSelectedTasks(new Set([task.id])); await handleTasksAction("pay"); }}
+                            {(task.status === "CONFIRMED" || task.status === "PENDING_PAYMENT") && (
+                                <button
+                                  onClick={async () => { setSelectedTasks(new Set([task.id])); await handleTasksAction("pay"); }}
                                 disabled={konsolTasksLoading}
                                 style={{ padding: "4px 8px", borderRadius: 6, border: "none", background: "#10b981", color: "#fff", fontSize: 12, cursor: "pointer" }}
                                 title="Оплатить"

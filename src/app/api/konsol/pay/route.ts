@@ -71,20 +71,23 @@ export async function POST(req: Request) {
           continue;
         }
 
-        // ── Шаг 3: автооплата ─────────────────────────────────────────────
-        try {
-          await autopayKonsolAct(actId);
-          console.log(`[Pay] Акт ${actId} отправлен в автооплату`);
-        } catch (payErr: any) {
-          // Автооплата упала — но акт уже подписан, сохраняем как SIGNED_BY_US всё равно
-          console.error(`[Pay] Ошибка автооплаты акта ${actId} (сохраняем как оплачено):`, payErr.message);
-        }
+       // ── Шаг 3: автооплата ─────────────────────────────────────────────
+       let autopayOk = false;
+       try {
+         await autopayKonsolAct(actId);
+         autopayOk = true;
+         console.log(`[Pay] Акт ${actId} отправлен в автооплату`);
+       } catch (payErr: any) {
+         console.error(`[Pay] Ошибка автооплаты акта ${actId}:`, payErr.message);
+       }
 
-        // ── Шаг 4: сохраняем статус SIGNED_BY_US в любом случае ──────────
-        await prisma.konsolTask.update({
-          where: { id: task.id },
-          data: { status: "SIGNED_BY_US" },
-        });
+       // ── Шаг 4: статус зависит от результата autopay ───────────────────
+       // SIGNED_BY_US = акт подписан И оплачен
+       // PENDING_PAYMENT = акт подписан НО оплата не прошла (нет денег и т.д.)
+       await prisma.konsolTask.update({
+         where: { id: task.id },
+         data: { status: autopayOk ? "SIGNED_BY_US" : "PENDING_PAYMENT" },
+       });
 
         // Зелёные кружки в таблице ЗП
         const courierDates = payments
