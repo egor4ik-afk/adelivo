@@ -274,7 +274,27 @@ export function CouriersClient({ user }: { user: any }) {
     setKonsolTasksLoading(true);
     try {
       const res = await fetch("/api/konsol/tasks");
-      if (res.ok) setKonsolTasks(await res.json());
+      if (!res.ok) return;
+      const tasks = await res.json();
+      setKonsolTasks(tasks);
+
+      // 🔥 Сразу подтягиваем реальные статусы из Консоли для незакрытых заданий
+      const toEnrich = tasks.filter((t: any) => t.status !== "SIGNED_BY_US");
+      if (toEnrich.length === 0) return;
+
+      const enriched: Record<string, { state?: { code: string; title: string } | null; duties?: any[] }> = {};
+      await Promise.all(
+        toEnrich.map(async (t: any) => {
+          try {
+            const r = await fetch(`/api/konsol/task-detail?taskId=${t.konsolTaskId}`);
+            if (r.ok) {
+              const d = await r.json();
+              enriched[t.id] = { state: d.state ?? null, duties: d.duties ?? [] };
+            }
+          } catch {}
+        })
+      );
+      setTaskRemoteData(prev => ({ ...prev, ...enriched }));
     } catch (e) { console.error(e); }
     finally { setKonsolTasksLoading(false); }
   };
@@ -294,7 +314,7 @@ export function CouriersClient({ user }: { user: any }) {
   const handleTasksAction = async (action: "recalculate" | "finalize" | "pay") => {
     const sel = konsolTasks.filter(t => selectedTasks.has(t.id));
     const targets = action === "pay"
-          ? sel.filter(t => t.status === "CONFIRMED" || t.status === "PENDING_PAYMENT")
+          ? sel.filter(t => t.status === "CONFIRMED")
       : sel.filter(t => t.status !== "SIGNED_BY_US");
     if (!targets.length) {
       setKonsolToast({ message: action === "pay" ? "⚠️ Нет заданий «Акт готов»" : "⚠️ Ничего не выбрано", type: "error" });
@@ -308,8 +328,12 @@ export function CouriersClient({ user }: { user: any }) {
       const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ payments }) });
       const data = await res.json();
       if (data.success) {
-        const label = action === "recalculate" ? "Пересчитано" : action === "finalize" ? "Финализировано" : "Оплачено";
-        setKonsolToast({ message: `✅ ${label}: ${data.processed}`, type: "success" });
+        const label = action === "recalculate" ? "Пересчитано" : action === "finalize" ? "Финализировано" : "Подписано";
+        let msg = `✅ ${label}: ${data.processed}`;
+        if (data.warnings?.length) {
+          msg += ` ⚠️ ${data.warnings[0]}`;
+        }
+        setKonsolToast({ message: msg, type: data.warnings?.length ? "error" : "success" });
         setSelectedTasks(new Set());
         await loadKonsolTasks();
       } else setKonsolToast({ message: `❌ ${data.error}`, type: "error" });
@@ -880,8 +904,7 @@ export function CouriersClient({ user }: { user: any }) {
           DRAFT: { label: "⏳ Черновик", color: "#6b6860", bg: "#f5f4f0" },
           CONFIRMED: { label: "🔵 Принято", color: "#4a7aff", bg: "#eef3ff" },
           CONFIRMED_ACT: { label: "📄 Акт готов", color: "#8b5cf6", bg: "#f5f3ff" },
-          SIGNED_BY_US:    { label: "✅ Оплачено",    color: "#10b981", bg: "#f0fdf4" },
-          PENDING_PAYMENT: { label: "💳 Нет денег",   color: "#d94040", bg: "#fef2f2" },        };
+          SIGNED_BY_US: { label: "✅ Подписано", color: "#10b981", bg: "#f0fdf4" },       };
         const REMOTE_ST: Record<string, { label: string; color: string }> = {
           submitted: { label: "🟡 Ожидает курьера", color: "#f59e0b" },
           confirmed: { label: "🔵 В работе", color: "#4a7aff" },
@@ -925,7 +948,35 @@ export function CouriersClient({ user }: { user: any }) {
                 </span>
               )}
               <div style={{ flex: 1 }} />
-              <button onClick={loadKonsolTasks} disabled={konsolTasksLoading} style={s.navBtn}>🔄</button>
+              <button
+                  onClick={async () => {
+                    await loadKonsolTasks();
+                    setKonsolToast({ message: `✅ Задания обновлены`, type: "success" });
+                    setTimeout(() => setKonsolToast(null), 3000);
+                  }}
+                  disabled={konsolTasksLoading}
+                  style={{
+                    ...s.navBtn,
+                    display: "flex", alignItems: "center", gap: 6,
+                    background: konsolTasksLoading ? "#f5f4f0" : "#fff",
+                    minWidth: 120,
+                  }}
+                >
+                  {konsolTasksLoading ? (
+                    <>
+                      <span style={{
+                        width: 14, height: 14, border: "2px solid #e8e6df",
+                        borderTopColor: "#4a7aff", borderRadius: "50%",
+                        display: "inline-block",
+                        animation: "spin 0.7s linear infinite",
+                        flexShrink: 0,
+                      }} />
+                      Загрузка...
+                    </>
+                  ) : (
+                    <>🔄 Обновить статусы</>
+                  )}
+                </button>
               {selectedTasks.size > 0 && <>
                 <span style={{ fontSize: 12, color: "#6b6860" }}>Выбрано: <b>{selectedTasks.size}</b></span>
                 <button onClick={() => handleTasksAction("recalculate")} disabled={konsolTasksLoading} style={{ ...s.navBtn, background: "#f5f3ff", color: "#8b5cf6", borderColor: "#8b5cf6" }}>🔁 Пересчитать</button>
@@ -968,7 +1019,7 @@ export function CouriersClient({ user }: { user: any }) {
                     <span style={{ fontWeight: 700, fontSize: 14, color: "#1a1a18" }}>{cour?.fullName ?? `#${courierId}`}</span>
                     <span style={{ fontSize: 12, color: "#6b6860" }}>{(cTasks as any[]).length} задан. · {courierTotal.toFixed(0)} ₽</span>
                     {(cTasks as any[]).filter(t => t.status === "SIGNED_BY_US").length > 0 && (
-                      <span style={{ fontSize: 11, background: "#f0fdf4", color: "#10b981", padding: "2px 8px", borderRadius: 20, fontWeight: 700 }}>✅ Оплачено: {(cTasks as any[]).filter(t => t.status === "SIGNED_BY_US").length}</span>
+                      <span style={{ fontSize: 11, background: "#f0fdf4", color: "#10b981", padding: "2px 8px", borderRadius: 20, fontWeight: 700 }}>✅ В оплату: {(cTasks as any[]).filter(t => t.status === "SIGNED_BY_US").length}</span>
                     )}
                   </div>
 
@@ -1014,9 +1065,14 @@ export function CouriersClient({ user }: { user: any }) {
                             style={{ fontFamily: "monospace", fontSize: 11, color: "#4a7aff", textDecoration: "none" }}>
                             #{task.konsolTaskId}
                           </a>
-                          <span style={{ fontSize: 11, background: dbSt.bg, color: dbSt.color, padding: "2px 8px", borderRadius: 20, fontWeight: 700 }}>{dbSt.label}</span>
-                          {remoteSt && <span style={{ fontSize: 11, color: remoteSt.color, fontWeight: 700 }}>{remoteSt.label}</span>}
-                          {remote === null && !remoteSt && isExpanded && <span style={{ fontSize: 11, color: "#a8a49c" }}>⏳ загрузка...</span>}
+                          {/* Показываем реальный статус Консоли если загружен, иначе БД-статус */}
+                          {remoteSt ? (
+                              <span style={{ fontSize: 11, background: `${remoteSt.color}18`, color: remoteSt.color, padding: "2px 8px", borderRadius: 20, fontWeight: 700 }}>{remoteSt.label}</span>
+                            ) : remote === null ? (
+                              <span style={{ fontSize: 11, background: "#f5f4f0", color: "#a8a49c", padding: "2px 8px", borderRadius: 20, fontWeight: 700 }}>⏳ загрузка...</span>
+                            ) : (
+                              <span style={{ fontSize: 11, background: dbSt.bg, color: dbSt.color, padding: "2px 8px", borderRadius: 20, fontWeight: 700 }}>{dbSt.label}</span>
+                            )}
                           <div style={{ flex: 1 }} />
                           <span style={{ fontWeight: 700, fontSize: 13, color: isPaid ? "#10b981" : "#1a1a18" }}>{task.amount.toFixed(0)} ₽</span>
                           <div onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 4 }}>
@@ -1028,7 +1084,7 @@ export function CouriersClient({ user }: { user: any }) {
                                 title="Финализировать"
                               >📄</button>
                             )}
-                            {(task.status === "CONFIRMED" || task.status === "PENDING_PAYMENT") && (
+                            {task.status === "CONFIRMED" && (
                                 <button
                                   onClick={async () => { setSelectedTasks(new Set([task.id])); await handleTasksAction("pay"); }}
                                 disabled={konsolTasksLoading}
@@ -1098,6 +1154,10 @@ export function CouriersClient({ user }: { user: any }) {
           </div>
         </div>
       )}
+    <style dangerouslySetInnerHTML={{__html: `
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}} />
     </div>
   );
 }

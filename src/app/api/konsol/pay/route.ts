@@ -20,17 +20,17 @@ export async function POST(req: Request) {
     const couriersIds = [...new Set(payments.map((p: any) => p.courierId))] as number[];
     let successCount = 0;
     let errorCount = 0;
+    const warnings: string[] = [];
 
     for (const courierId of couriersIds) {
       try {
-        // Ищем любое незакрытое задание курьера
         const task = await prisma.konsolTask.findFirst({
           where: { courierId, status: { in: ["CONFIRMED", "DRAFT"] } },
           orderBy: { date: "desc" },
         });
 
         if (!task) {
-          console.log(`[Pay] Нет задания для курьера ${courierId}, пропускаем`);
+          console.log(`[Pay] Нет задания для курьера ${courierId}`);
           continue;
         }
 
@@ -38,10 +38,8 @@ export async function POST(req: Request) {
 
         // ── Шаг 1: если акта нет — финализируем на лету ──────────────────
         if (!actId) {
-          console.log(`[Pay] Акт не найден для ${task.konsolTaskId}, финализируем...`);
-          try {
-            await acceptKonsolTask(task.konsolTaskId);
-          } catch {
+          console.log(`[Pay] Финализируем задание ${task.konsolTaskId}...`);
+          try { await acceptKonsolTask(task.konsolTaskId); } catch {
             console.log(`[Pay] Задание ${task.konsolTaskId} уже принято`);
           }
 
@@ -57,43 +55,28 @@ export async function POST(req: Request) {
             data: { konsolActId: String(newActId), status: "CONFIRMED" },
           });
           actId = String(newActId);
-          console.log(`[Pay] Акт ${actId} создан`);
         }
 
         // ── Шаг 2: подписываем акт ────────────────────────────────────────
         try {
           await signKonsolAct(actId);
-          console.log(`[Pay] Акт ${actId} подписан`);
+          console.log(`[Pay] Акт ${actId} подписан ✅`);
         } catch (signErr: any) {
           console.error(`[Pay] Ошибка подписания акта ${actId}:`, signErr.message);
-          // Подписание не прошло — не продолжаем, но не падаем на весь цикл
           errorCount++;
           continue;
         }
 
-       // ── Шаг 3: автооплата ─────────────────────────────────────────────
-       let autopayOk = false;
-       try {
-         await autopayKonsolAct(actId);
-         autopayOk = true;
-         console.log(`[Pay] Акт ${actId} отправлен в автооплату`);
-       } catch (payErr: any) {
-         console.error(`[Pay] Ошибка автооплаты акта ${actId}:`, payErr.message);
-       }
-
-       // ── Шаг 4: статус зависит от результата autopay ───────────────────
-       // SIGNED_BY_US = акт подписан И оплачен
-       // PENDING_PAYMENT = акт подписан НО оплата не прошла (нет денег и т.д.)
-       await prisma.konsolTask.update({
-         where: { id: task.id },
-         data: { status: autopayOk ? "SIGNED_BY_US" : "PENDING_PAYMENT" },
-       });
+        // ── Шаг 3: сохраняем SIGNED_BY_US сразу после подписания ─────────
+        await prisma.konsolTask.update({
+          where: { id: task.id },
+          data: { status: "SIGNED_BY_US" },
+        });
 
         // Зелёные кружки в таблице ЗП
         const courierDates = payments
           .filter((p: any) => p.courierId === courierId)
           .map((p: any) => p.date);
-
         for (const d of courierDates) {
           const existing = await prisma.courierPayment.findUnique({
             where: { courierId_date: { courierId, date: d } },
@@ -101,6 +84,18 @@ export async function POST(req: Request) {
           if (!existing) {
             await prisma.courierPayment.create({ data: { courierId, date: d } });
           }
+        }
+
+        // ── Шаг 4: автооплата (не блокирует — предупреждение если упала) ──
+        try {
+          await autopayKonsolAct(actId);
+          console.log(`[Pay] Акт ${actId} отправлен в автооплату ✅`);
+        } catch (payErr: any) {
+          console.error(`[Pay] Autopay акта ${actId}:`, payErr.message);
+          // Извлекаем человекочитаемое сообщение из ответа Консоли
+          const match = payErr.message.match(/"message":"([^"]+)"/);
+          const humanMsg = match ? match[1] : payErr.message;
+          warnings.push(`Акт ${actId}: ${humanMsg}`);
         }
 
         successCount++;
@@ -113,8 +108,8 @@ export async function POST(req: Request) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             type: "custom" as any,
             userId: user.id,
-            title: "💰 Вам переведены деньги!",
-            body: `Акт на сумму ${task.amount} ₽ подписан и отправлен в оплату. Деньги скоро поступят на карту!`,
+            title: "📝 Акт подписан",
+            body: `Акт на сумму ${task.amount} ₽ подписан. Оплата поступит в ближайшее время.`,
             url: "https://app.konsol.pro/",
           }).catch(() => {});
         }
@@ -124,7 +119,13 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.json({ success: true, processed: successCount, errors: errorCount });
+    return NextResponse.json({
+      success: true,
+      processed: successCount,
+      errors: errorCount,
+      // Предупреждения об autopay — показываем юзеру отдельно
+      warnings: warnings.length > 0 ? warnings : undefined,
+    });
   } catch (error: any) {
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
