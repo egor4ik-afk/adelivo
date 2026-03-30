@@ -156,6 +156,7 @@ model Order {
   lat           Float?
   lng           Float?
   price         Float?
+  costPrice      Int?      // 🔥 НОВОЕ ПОЛЕ: Наша себестоимость доставки
   courierId     Int?        
   courier       String?
   comment       String?

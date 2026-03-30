@@ -1,56 +1,73 @@
-// check-order-cost.js
-const axios = require('axios');
-require('dotenv').config();
+// fix-auto-prices.js
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 
-const CRM_URL = process.env.RETAILCRM_API_URL;
-const CRM_KEY = process.env.RETAILCRM_API_KEY;
-const ORDER_ID = '20750'; // ID заказа для проверки
+// Надбавка для авто-курьера
+const AUTO_SURCHARGE = 100;
 
-async function checkOrder() {
-  if (!CRM_URL || !CRM_KEY) {
-    console.error("❌ Ошибка: Не настроены переменные окружения RETAILCRM_API_URL или RETAILCRM_API_KEY");
-    return;
-  }
+async function fixAutoPrices() {
+  console.log("🔍 Ищем заказы с назначенными авто-курьерами...");
 
-  console.log(`--- Проверка заказа ${ORDER_ID} в RetailCRM ---`);
-  
   try {
-    const response = await axios.get(`${CRM_URL}/api/v5/orders/${ORDER_ID}`, {
-      params: {
-        apiKey: CRM_KEY,
-        by: 'id'
+    // 1. Находим всех авто-курьеров
+    const autoCouriers = await prisma.courier.findMany({
+      where: { isAuto: true },
+      select: { id: true, fullName: true }
+    });
+    
+    const autoCourierIds = autoCouriers.map(c => c.id);
+    if (autoCourierIds.length === 0) {
+      console.log("🤷‍♂️ В базе нет авто-курьеров.");
+      return;
+    }
+
+    // 2. Ищем сегодняшние заказы (или недавние), назначенные на авто-курьеров
+    // Берем за последние 2-3 дня, чтобы точно зацепить все сбитые
+    const dateLimit = new Date();
+    dateLimit.setDate(dateLimit.getDate() - 3);
+
+    const orders = await prisma.order.findMany({
+      where: {
+        courierId: { in: autoCourierIds },
+        createdAt: { gte: dateLimit },
+        price: { not: null }
       }
     });
 
-    if (response.data && response.data.success) {
-      const order = response.data.order;
-      const customFields = order.customFields || {};
-      
-      console.log("✅ Заказ найден!");
-      console.log(`Внешний номер: ${order.number}`);
-      console.log(`Статус: ${order.status}`);
-      console.log("------------------------------------------");
-      console.log("Кастомные поля (customFields):");
-      console.log(JSON.stringify(customFields, null, 2));
-      console.log("------------------------------------------");
+    let fixedCount = 0;
 
-      if (customFields.sebestoimost !== undefined) {
-        console.log(`💰 ПОЛЕ НАЙДЕНО! Себестоимость: ${customFields.sebestoimost} ₽`);
-      } else {
-        console.warn("⚠️ Поле 'sebestoimost' не найдено в этом заказе.");
+    for (const order of orders) {
+      const currentPrice = order.price;
+
+      // Простейшая логика: если цена кратна 100, но не имеет надбавки (например 500, 900, 1300)
+      // В RetailCRM базовые цены обычно: 500, 600, 900, 1000, 1300, 1400.
+      // Если у заказа цена 500, а курьер авто — значит надо сделать 600.
+      // Если 900 -> 1000. 
+      // Если она УЖЕ 600 (500+100) или 1000 (900+100) — не трогаем.
+
+      // Массив "базовых" цен, которые 100% потеряли надбавку
+      const basePricesThatNeedFix = [500, 900, 1300, 1400]; // Добавь сюда свои, если есть другие
+      
+      if (basePricesThatNeedFix.includes(currentPrice)) {
+        const fixedPrice = currentPrice + AUTO_SURCHARGE;
+        
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { price: fixedPrice }
+        });
+        
+        console.log(`✅ Починили заказ CRM ID: ${order.crmId}. Цена: ${currentPrice} -> ${fixedPrice}`);
+        fixedCount++;
       }
-    } else {
-      console.error("❌ CRM ответила ошибкой:", response.data);
     }
+
+    console.log(`\n🎉 Готово! Исправлено цен: ${fixedCount}`);
+
   } catch (error) {
-    console.error("❌ Ошибка при запросе к API:");
-    if (error.response) {
-      console.error(`Статус: ${error.response.status}`);
-      console.error("Данные:", error.response.data);
-    } else {
-      console.error(error.message);
-    }
+    console.error("❌ Ошибка при починке:", error);
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
-checkOrder();
+fixAutoPrices();

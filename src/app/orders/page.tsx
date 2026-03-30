@@ -11,6 +11,7 @@ interface Order {
   lat: number | null;
   lng: number | null;
   price: number | null;
+  costPrice: number | null; // 🔥 Добавили поле себестоимости из базы
   courier: string | null;
   comment: string | null;
   opComment: string | null;
@@ -47,9 +48,10 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
 
-  // Состояния для себестоимости
   const [costLoaders, setCostLoaders] = useState<Record<string, boolean>>({});
   const [localCosts, setLocalCosts] = useState<Record<string, number>>({});
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [massUpdating, setMassUpdating] = useState(false);
 
   const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
   const [fStatus, setFStatus] = useState("ALL");
@@ -60,7 +62,10 @@ export default function OrdersPage() {
     setLoading(true);
     try {
       const res = await fetch("/api/orders");
-      if (res.ok) setOrders(await res.json());
+      if (res.ok) {
+        setOrders(await res.json());
+        setSelectedIds(new Set());
+      }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
@@ -76,6 +81,7 @@ export default function OrdersPage() {
     finally { setSyncing(false); }
   };
 
+  // Одиночное обновление себестоимости
   const handleUpdateCost = async (orderId: string) => {
     setCostLoaders(prev => ({ ...prev, [orderId]: true }));
     try {
@@ -87,9 +93,32 @@ export default function OrdersPage() {
         alert(`Ошибка: ${data.error}`);
       }
     } catch (e) {
-      alert("Ошибка запроса при расчете себестоимости.");
+      alert("Ошибка запроса.");
     } finally {
       setCostLoaders(prev => ({ ...prev, [orderId]: false }));
+    }
+  };
+
+  // 🔥 МАССОВОЕ обновление себестоимости
+  const handleMassUpdateCost = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Рассчитать себестоимость для ${selectedIds.size} заказов?`)) return;
+
+    setMassUpdating(true);
+    try {
+      const res = await fetch("/api/orders/bulk-cost", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
+      const data = await res.json();
+      alert(`Готово! Успешно: ${data.success}, Ошибок: ${data.failed}`);
+      await fetchOrders(); // Перезагружаем список, чтобы увидеть costPrice из базы
+    } catch (e) {
+      alert("Ошибка при массовом обновлении");
+    } finally {
+      setMassUpdating(false);
+      setSelectedIds(new Set());
     }
   };
 
@@ -119,33 +148,43 @@ export default function OrdersPage() {
       .sort((a, b) => new Date(b.changedAt || b.updatedAt || "").getTime() - new Date(a.changedAt || a.updatedAt || "").getTime());
   }, [dateOrders, fStatus, fCourier, fSearch]);
 
+  const toggleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) setSelectedIds(new Set(filtered.map(o => o.id)));
+    else setSelectedIds(new Set());
+  };
+
+  const toggleSelectOne = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
+  };
+
+  const isAllSelected = filtered.length > 0 && selectedIds.size === filtered.length;
+
   return (
-    <div style={{ fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", minHeight: "100vh" }}>
+    <div style={{ fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", minHeight: "100vh", paddingBottom: selectedIds.size > 0 ? 80 : 0 }}>
+      
+      {/* Шапка */}
       <div style={{ background: "#fff", borderBottom: "1px solid #e8e6df", padding: "0 24px", height: 56, display: "flex", alignItems: "center", gap: 16, overflowX: "auto" }}>
         <Link href="/dashboard" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 7, color: "#1a1a18", fontWeight: 600, fontSize: 15, flexShrink: 0 }}>
           <img src="/favicon.svg" alt="Logo" style={{ width: 22, height: 22 }} />
           EventWave
         </Link>
         <div style={{ width: 1, height: 20, background: "#e8e6df" }} />
-        <Link href="/dashboard" style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#1a1a18", textDecoration: "none", whiteSpace: "nowrap" }}>
-          🗺️ Дашборд
-        </Link>
-        <Link href="/couriers" style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#1a1a18", textDecoration: "none", whiteSpace: "nowrap" }}>
-          🚚 Курьеры
-        </Link>
+        <Link href="/dashboard" style={navBtn}>🗺️ Дашборд</Link>
+        <Link href="/couriers" style={navBtn}>🚚 Курьеры</Link>
         <span style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", marginLeft: 8, whiteSpace: "nowrap" }}>Все заказы</span>
         <div style={{ flex: 1 }} />
-        <button
-          onClick={handleSync} disabled={syncing}
-          style={{ padding: "6px 14px", background: syncing ? "#e8e6df" : "#1a1a18", color: syncing ? "#a8a49c" : "#fff", border: "none", borderRadius: 7, cursor: syncing ? "wait" : "pointer", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", transition: "all 0.2s" }}
-        >
+        <button onClick={handleSync} disabled={syncing} style={{ ...syncBtn, background: syncing ? "#e8e6df" : "#1a1a18" }}>
           {syncing ? "Синхронизация..." : "↻ Обновить из CRM"}
         </button>
       </div>
 
+      {/* Фильтры */}
       <div style={{ padding: "16px 24px", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={inputStyle} />
-        <input placeholder="Поиск по ID, адресу, курьеру..." value={fSearch} onChange={e => setFSearch(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 220 }} />
+        <input placeholder="Поиск по ID, адресу..." value={fSearch} onChange={e => setFSearch(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 220 }} />
         <select value={fStatus} onChange={e => setFStatus(e.target.value)} style={inputStyle}>
           <option value="ALL">Все статусы</option>
           {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -155,86 +194,65 @@ export default function OrdersPage() {
           <option value="UNASSIGNED">Не назначен</option>
           {couriers.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
-        <span style={{ fontSize: 12, color: "#a8a49c", whiteSpace: "nowrap" }}>{filtered.length} заказов</span>
       </div>
 
+      {/* Таблица */}
       <div style={{ padding: "0 24px 24px" }}>
         <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e8e6df", overflow: "hidden" }}>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
                 <tr style={{ background: "#fafaf8", borderBottom: "1px solid #e8e6df" }}>
+                  <th style={{ padding: "10px 14px", textAlign: "left", width: 40 }}>
+                    <input type="checkbox" checked={isAllSelected} onChange={toggleSelectAll} style={{ cursor: "pointer" }} />
+                  </th>
                   {["ID", "Статус", "Курьер", "Адрес", "Слот", "Себ-ть", "Сумма", "Изменён", "Карта"].map(h => (
-                    <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 10, fontWeight: 700, color: "#a8a49c", textTransform: "uppercase", letterSpacing: ".4px", whiteSpace: "nowrap" }}>
-                      {h}{h === "Изменён" && <span style={{ marginLeft: 4, color: "#4a7aff" }}>↓</span>}
-                    </th>
+                    <th key={h} style={thStyle}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={9} style={{ padding: 32, textAlign: "center", color: "#a8a49c" }}>Загрузка...</td></tr>
-                ) : filtered.length === 0 ? (
-                  <tr><td colSpan={9} style={{ padding: 32, textAlign: "center", color: "#a8a49c" }}>На {filterDate} заказов не найдено</td></tr>
+                  <tr><td colSpan={10} style={{ padding: 32, textAlign: "center", color: "#a8a49c" }}>Загрузка...</td></tr>
                 ) : filtered.map((o, i) => {
                   const statusColor = STATUS_COLORS[o.status] ?? "#a8a49c";
+                  const isSelected = selectedIds.has(o.id);
+                  const displayCost = o.costPrice || localCosts[o.id]; // 🔥 Вывод из базы ИЛИ локальный
+                  
                   return (
-                    <tr key={o.id} style={{ borderBottom: "1px solid #f5f4f0", background: i % 2 === 0 ? "#fff" : "#fafaf8" }}>
-                      <td style={{ padding: "10px 14px", fontFamily: "monospace", fontSize: 11, color: "#6b6860", whiteSpace: "nowrap" }}>
-                        {o.externalId ?? o.crmId}
+                    <tr key={o.id} style={{ borderBottom: "1px solid #f5f4f0", background: isSelected ? "#f4f7ff" : (i % 2 === 0 ? "#fff" : "#fafaf8") }}>
+                      <td style={{ padding: "10px 14px" }}>
+                        <input type="checkbox" checked={isSelected} onChange={() => toggleSelectOne(o.id)} style={{ cursor: "pointer" }} />
                       </td>
-                      <td style={{ padding: "10px 14px", whiteSpace: "nowrap" }}>
+                      <td style={{ padding: "10px 14px", fontFamily: "monospace", color: "#6b6860" }}>{o.externalId ?? o.crmId}</td>
+                      <td style={{ padding: "10px 14px" }}>
                         <span style={{ padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 600, background: `${statusColor}18`, color: statusColor }}>
                           {STATUS_LABELS[o.status] || o.status}
                         </span>
                       </td>
-                      <td style={{ padding: "10px 14px", color: o.courier ? "#1a1a18" : "#d94040", fontSize: 12, whiteSpace: "nowrap" }}>
-                        {o.courier || "—"}
-                      </td>
-                      <td style={{ padding: "10px 14px", maxWidth: 260, color: "#1a1a18" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                          {!o.isInvalid && o.lat && o.lng && <span style={{ color: "#1a9e5c", flexShrink: 0 }} title="Геокодирован">✓</span>}
-                          {o.isInvalid && <span style={{ color: "#d94040", flexShrink: 0 }} title={o.invalidReason || "Ошибка"}>⚠</span>}
-                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.address || "—"}</span>
-                        </div>
-                      </td>
-                      <td style={{ padding: "10px 14px", whiteSpace: "nowrap", color: "#6b6860" }}>{o.slotRaw || "—"}</td>
+                      <td style={{ padding: "10px 14px", color: o.courier ? "#1a1a18" : "#d94040" }}>{o.courier || "—"}</td>
+                      <td style={{ padding: "10px 14px", maxWidth: 260 }}>{o.address || "—"}</td>
+                      <td style={{ padding: "10px 14px", color: "#6b6860" }}>{o.slotRaw || "—"}</td>
                       
-                      {/* КОЛОНКА СЕБЕСТОИМОСТИ */}
-                      <td style={{ padding: "10px 14px", whiteSpace: "nowrap" }}>
-                        {localCosts[o.id] ? (
-                          <span style={{ color: "#1a9e5c", fontWeight: 700 }}>{localCosts[o.id]} ₽</span>
+                      {/* 🔥 ЯЧЕЙКА СЕБЕСТОИМОСТИ */}
+                      <td style={{ padding: "10px 14px" }}>
+                        {displayCost ? (
+                          <span style={{ color: "#1a9e5c", fontWeight: 700 }}>{displayCost} ₽</span>
                         ) : (
                           <button
                             onClick={() => handleUpdateCost(o.id)}
                             disabled={costLoaders[o.id] || !o.price}
-                            style={{ 
-                              padding: "4px 8px", fontSize: 10, borderRadius: 5, border: "1px solid #e8e6df", 
-                              background: costLoaders[o.id] ? "#f5f4f0" : "#fff", color: costLoaders[o.id] || !o.price ? "#a8a49c" : "#1a1a18", 
-                              cursor: costLoaders[o.id] || !o.price ? "not-allowed" : "pointer", fontWeight: 600
-                            }}
-                            title={!o.price ? "У заказа нет цены" : "Рассчитать и отправить в CRM"}
+                            style={calcBtnStyle(costLoaders[o.id] || !o.price)}
                           >
                             {costLoaders[o.id] ? "..." : "Считать"}
                           </button>
                         )}
                       </td>
 
-                      <td style={{ padding: "10px 14px", whiteSpace: "nowrap", color: "#1a1a18" }}>{o.price ? `${o.price} ₽` : "—"}</td>
-                      <td style={{ padding: "10px 14px", whiteSpace: "nowrap", fontSize: 11 }}>
-                        {o.changedAt ? (
-                          <span style={{ color: "#1a1a18", fontWeight: 500 }}>{fmt(o.changedAt)}</span>
-                        ) : (
-                          <span style={{ color: "#a8a49c" }}>—</span>
-                        )}
-                      </td>
+                      <td style={{ padding: "10px 14px", fontWeight: 600 }}>{o.price ? `${o.price} ₽` : "—"}</td>
+                      <td style={{ padding: "10px 14px", fontSize: 11 }}>{o.changedAt ? fmt(o.changedAt) : "—"}</td>
                       <td style={{ padding: "10px 14px" }}>
-                        <Link
-                          href={`/dashboard?orderId=${o.id}`}
-                          style={{ color: "#1a1a18", textDecoration: "none", fontSize: 11, fontWeight: 600, background: "#f5f4f0", border: "1px solid #e8e6df", padding: "4px 8px", borderRadius: 6, whiteSpace: "nowrap", transition: "all 0.2s" }}
-                        >
-                          📍 Открыть
-                        </Link>
+                        <Link href={`/dashboard?orderId=${o.id}`} style={openBtnStyle}>📍 Открыть</Link>
                       </td>
                     </tr>
                   );
@@ -244,10 +262,32 @@ export default function OrdersPage() {
           </div>
         </div>
       </div>
+
+      {/* 🔥 ПАНЕЛЬ МАССОВЫХ ДЕЙСТВИЙ */}
+      {selectedIds.size > 0 && (
+        <div style={floatingPanelStyle}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Выбрано: {selectedIds.size}</div>
+          <div style={{ width: 1, height: 24, background: "#404040" }} />
+          <button 
+            onClick={handleMassUpdateCost}
+            disabled={massUpdating}
+            style={{ ...actionBtnStyle, background: massUpdating ? "#404040" : "#4a7aff", cursor: massUpdating ? "wait" : "pointer" }}
+          >
+            {massUpdating ? "⚡ Обработка..." : "🪄 Рассчитать себестоимость"}
+          </button>
+          <button onClick={() => setSelectedIds(new Set())} style={{ background: "none", border: "none", color: "#a8a49c", fontSize: 12, cursor: "pointer" }}>✕</button>
+        </div>
+      )}
     </div>
   );
 }
 
-const inputStyle: React.CSSProperties = {
-  padding: "7px 10px", borderRadius: 7, border: "1px solid #e0dfd7", fontSize: 12, outline: "none", color: "#1a1a18", background: "#fff", fontFamily: "inherit", maxWidth: 160, 
-};
+// Стили
+const navBtn = { padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, color: "#1a1a18", textDecoration: "none" };
+const syncBtn = { padding: "6px 14px", color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer" };
+const inputStyle = { padding: "7px 10px", borderRadius: 7, border: "1px solid #e0dfd7", fontSize: 12, outline: "none", color: "#1a1a18", background: "#fff", maxWidth: 160 };
+const thStyle = { padding: "10px 14px", textAlign: "left" as const, fontSize: 10, fontWeight: 700, color: "#a8a49c", textTransform: "uppercase" as const, letterSpacing: ".4px" };
+const openBtnStyle = { color: "#1a1a18", textDecoration: "none", fontSize: 11, fontWeight: 600, background: "#f5f4f0", border: "1px solid #e8e6df", padding: "4px 8px", borderRadius: 6 };
+const calcBtnStyle = (disabled: boolean) => ({ padding: "4px 8px", fontSize: 10, borderRadius: 5, border: "1px solid #e8e6df", background: "#fff", cursor: disabled ? "not-allowed" : "pointer", fontWeight: 600, color: disabled ? "#a8a49c" : "#1a1a18" });
+const floatingPanelStyle = { position: "fixed" as const, bottom: 24, left: "50%", transform: "translateX(-50%)", background: "#1a1a18", padding: "12px 24px", borderRadius: 12, display: "flex", alignItems: "center", gap: 20, zIndex: 100, color: "#fff", boxShadow: "0 8px 32px rgba(0,0,0,0.3)" };
+const actionBtnStyle = { color: "#fff", border: "none", padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600 };
