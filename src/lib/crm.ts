@@ -219,6 +219,23 @@ export async function geocodeAddress(address: string) {
 
 export async function upsertOrder(crmOrder: CrmOrder) {
   const data = await mapCrmOrder(crmOrder);
+
+  // 🔥 ПЕРЕХВАТ НА ЛЕТУ: Накидываем 100₽ для авто-курьеров ДО сохранения в базу.
+  // Если CRM пришлет пустоту (null) — этот блок просто не сработает, и в базу запишется null.
+  if (data.courierId && data.price) {
+    const assignedCourier = await prisma.courier.findUnique({
+      where: { id: data.courierId },
+      select: { isAuto: true },
+    });
+    
+    if (assignedCourier?.isAuto) {
+      const basePrices = [500, 900, 1300, 1400]; // Базовые цены, которые присылает CRM
+      if (basePrices.includes(data.price)) {
+        data.price += 100; // Превращаем 500->600, 900->1000, 1300->1400
+      }
+    }
+  }
+
   const existing = await prisma.order.findUnique({ where: { crmId: data.crmId } });
 
   const updateFields: typeof data & {
@@ -251,20 +268,6 @@ export async function upsertOrder(crmOrder: CrmOrder) {
   
     if (data.status === OrderStatus.NEW && existing.status !== OrderStatus.NEW) {
       updateFields.status = existing.status;
-    }
-
-    // 🔥 ЗАЩИТА ЦЕНЫ АВТО-КУРЬЕРА:
-    // Убрали проверку data.price !== null. Теперь, если курьер авто и в базе уже есть цена, 
-    // мы жестко блокируем любые изменения цены из CRM, даже если оттуда пришел null.
-    if (existing.courierId && existing.price) {
-      const assignedCourier = await prisma.courier.findUnique({
-        where: { id: existing.courierId },
-        select: { isAuto: true },
-      });
-      if (assignedCourier?.isAuto) {
-        // Курьер авто — сохраняем нашу цену, полностью игнорируем CRM
-        updateFields.price = existing.price;
-      }
     }
 
     const isCancelledOrReturned = updateFields.status === OrderStatus.CANCELLED || updateFields.status === OrderStatus.RETURNED;
