@@ -7,7 +7,6 @@ import axios from "axios";
 const CRM_URL = process.env.RETAILCRM_API_URL;
 const CRM_KEY = process.env.RETAILCRM_API_KEY;
 
-// Таблица: цена доставки → себестоимость
 const COST_MAP: Record<number, number> = {
   500:  732,
   600:  838,
@@ -18,9 +17,7 @@ const COST_MAP: Record<number, number> = {
 };
 
 function calcCostPrice(price: number): number | null {
-  // Точное совпадение
   if (COST_MAP[price] !== undefined) return COST_MAP[price];
-  // Авто-надбавка (+100) — пробуем базовую цену
   if (COST_MAP[price - 100] !== undefined) return COST_MAP[price - 100];
   return null;
 }
@@ -38,13 +35,14 @@ export async function POST(
   try {
     const { id } = await context.params;
     const order = await prisma.order.findUnique({ where: { id } });
+    
     if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
     if (!order.price) return NextResponse.json({ error: "У заказа нет цены" }, { status: 400 });
 
     const costPrice = calcCostPrice(order.price);
     if (costPrice === null) {
       return NextResponse.json({
-        error: `Нет себестоимости для цены ${order.price} ₽. Добавьте в таблицу.`
+        error: `Нет себестоимости для цены ${order.price} ₽.`
       }, { status: 400 });
     }
 
@@ -52,10 +50,10 @@ export async function POST(
       return NextResponse.json({ error: "CRM не настроена" }, { status: 500 });
     }
 
-    // Отправляем в кастомное поле CRM "sebestoimost" (или "cost_price" — уточни код поля)
+    // 🔥 ИСПРАВЛЕНИЕ ЗДЕСЬ: Передаем в стандартное поле delivery.netCost
     const orderPayload = {
-      customFields: {
-        sebestoimost: costPrice,  // 🔥 замени на реальный код поля из CRM
+      delivery: {
+        netCost: costPrice 
       }
     };
 
