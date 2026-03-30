@@ -221,26 +221,41 @@ export async function finalizeKonsolTask(taskId: string | number): Promise<strin
   return acts.length > 0 ? String(acts[0]) : null;
 }
 
-// ✅ Подписание акта 
 export async function signKonsolAct(actId: string | number) {
+  console.log(`[signAct] Вызов для акта ${actId}, тип: ${typeof actId}`);
+  console.log(`[signAct] Payload:`, JSON.stringify({ ids: [Number(actId)] }));
+ 
   const res = await fetch(`${KONSOL_V2}/acts/sign`, {
     method: "POST",
     headers,
     body: JSON.stringify({ ids: [Number(actId)] }),
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(`[signAct] ${data.message || JSON.stringify(data)}`);
+ 
+  const text = await res.text();
+  console.log(`[signAct] Статус: ${res.status}`);
+  console.log(`[signAct] Тело ответа: ${text}`);
+ 
+  if (!res.ok) {
+    let msg = text;
+    try { msg = JSON.parse(text)?.message || text; } catch {}
+    throw new Error(`[signAct] ${res.status}: ${msg}`);
+  }
   return true;
 }
-
-// ✅ Автооплата акта
+ 
+// ✅ Автооплата акта (Внимание: тут KONSOL_V2)
 export async function autopayKonsolAct(actId: string | number) {
   const res = await fetch(`${KONSOL_V2}/acts/autopay`, {
     method: "POST",
     headers,
     body: JSON.stringify({ ids: [Number(actId)] }),
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(`[autopayAct] ${data.message || JSON.stringify(data)}`);
+ 
+  const text = await res.text();
+  if (!res.ok) {
+    let msg = text;
+    try { msg = JSON.parse(text)?.message || text; } catch {}
+    throw new Error(`[autopayAct] ${res.status}: ${msg}`);
+  }
   return true;
 }

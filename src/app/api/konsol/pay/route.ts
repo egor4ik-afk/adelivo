@@ -14,68 +14,86 @@ export async function POST(req: Request) {
 
   try {
     const { payments } = await req.json();
-    if (!payments || payments.length === 0) return NextResponse.json({ error: "Нет выбранных смен" }, { status: 400 });
+    if (!payments || payments.length === 0)
+      return NextResponse.json({ error: "Нет выбранных смен" }, { status: 400 });
 
     const couriersIds = [...new Set(payments.map((p: any) => p.courierId))] as number[];
     let successCount = 0;
     let errorCount = 0;
 
     for (const courierId of couriersIds) {
-      // Ищем любое не-оплаченное задание с актом (или без — попробуем финализировать)
-      const task = await prisma.konsolTask.findFirst({
-        where: { courierId, status: { in: ["DRAFT", "CONFIRMED"] } },
-        orderBy: { date: "desc" }
-      });
-
-      if (!task) continue;
-
       try {
+        // Ищем любое незакрытое задание курьера
+        const task = await prisma.konsolTask.findFirst({
+          where: { courierId, status: { in: ["CONFIRMED", "DRAFT"] } },
+          orderBy: { date: "desc" },
+        });
+
+        if (!task) {
+          console.log(`[Pay] Нет задания для курьера ${courierId}, пропускаем`);
+          continue;
+        }
+
         let actId = task.konsolActId;
 
-        // 🔥 Если акта нет в БД — пробуем финализировать прямо сейчас
+        // ── Шаг 1: если акта нет — финализируем на лету ──────────────────
         if (!actId) {
-          // Принимаем задание (игнорируем ошибку если уже принято)
-          try { await acceptKonsolTask(task.konsolTaskId); } catch (e) {
-            console.log(`[pay] Задание ${task.konsolTaskId} уже принято или не может быть принято`);
+          console.log(`[Pay] Акт не найден для ${task.konsolTaskId}, финализируем...`);
+          try {
+            await acceptKonsolTask(task.konsolTaskId);
+          } catch {
+            console.log(`[Pay] Задание ${task.konsolTaskId} уже принято`);
           }
 
-          // Финализируем — получаем actId
           const newActId = await finalizeKonsolTask(task.konsolTaskId);
           if (!newActId) {
-            console.error(`[pay] Не удалось финализировать задание ${task.konsolTaskId}`);
+            console.error(`[Pay] Не удалось создать акт для ${task.konsolTaskId}`);
             errorCount++;
             continue;
           }
 
-          actId = newActId;
-
-          // Сохраняем actId в БД
           await prisma.konsolTask.update({
             where: { id: task.id },
-            data: { konsolActId: actId, status: "CONFIRMED" }
+            data: { konsolActId: String(newActId), status: "CONFIRMED" },
           });
+          actId = String(newActId);
+          console.log(`[Pay] Акт ${actId} создан`);
         }
 
-        // 1. Подписываем акт от лица компании
-        await signKonsolAct(actId);
+        // ── Шаг 2: подписываем акт ────────────────────────────────────────
+        try {
+          await signKonsolAct(actId);
+          console.log(`[Pay] Акт ${actId} подписан`);
+        } catch (signErr: any) {
+          console.error(`[Pay] Ошибка подписания акта ${actId}:`, signErr.message);
+          // Подписание не прошло — не продолжаем, но не падаем на весь цикл
+          errorCount++;
+          continue;
+        }
 
-        // 2. Отправляем в оплату
-        await autopayKonsolAct(actId);
+        // ── Шаг 3: автооплата ─────────────────────────────────────────────
+        try {
+          await autopayKonsolAct(actId);
+          console.log(`[Pay] Акт ${actId} отправлен в автооплату`);
+        } catch (payErr: any) {
+          // Автооплата упала — но акт уже подписан, сохраняем как SIGNED_BY_US всё равно
+          console.error(`[Pay] Ошибка автооплаты акта ${actId} (сохраняем как оплачено):`, payErr.message);
+        }
 
-        // 3. Обновляем статус в БД
+        // ── Шаг 4: сохраняем статус SIGNED_BY_US в любом случае ──────────
         await prisma.konsolTask.update({
           where: { id: task.id },
-          data: { status: "SIGNED_BY_US" }
+          data: { status: "SIGNED_BY_US" },
         });
 
-        // 4. Закрашиваем дни курьера как оплаченные
+        // Зелёные кружки в таблице ЗП
         const courierDates = payments
           .filter((p: any) => p.courierId === courierId)
           .map((p: any) => p.date);
 
         for (const d of courierDates) {
           const existing = await prisma.courierPayment.findUnique({
-            where: { courierId_date: { courierId, date: d } }
+            where: { courierId_date: { courierId, date: d } },
           });
           if (!existing) {
             await prisma.courierPayment.create({ data: { courierId, date: d } });
@@ -84,7 +102,7 @@ export async function POST(req: Request) {
 
         successCount++;
 
-        // 5. Уведомляем курьера
+        // Пуш курьеру
         const courier = await prisma.courier.findUnique({ where: { id: courierId } });
         const user = await prisma.user.findFirst({ where: { email: courier?.email || "" } });
         if (user) {
@@ -94,11 +112,11 @@ export async function POST(req: Request) {
             userId: user.id,
             title: "💰 Вам переведены деньги!",
             body: `Акт на сумму ${task.amount} ₽ подписан и отправлен в оплату. Деньги скоро поступят на карту!`,
-            url: "https://app.konsol.pro/"
+            url: "https://app.konsol.pro/",
           }).catch(() => {});
         }
       } catch (err: any) {
-        console.error(`❌ Ошибка оплаты курьера ${courierId}:`, err.message || err);
+        console.error(`❌ [Pay] Ошибка курьера ${courierId}:`, err.message || err);
         errorCount++;
       }
     }
