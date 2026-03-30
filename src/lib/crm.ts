@@ -252,6 +252,19 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     if (data.status === OrderStatus.NEW && existing.status !== OrderStatus.NEW) {
       updateFields.status = existing.status;
     }
+    // 🔥 ЗАЩИТА ЦЕНЫ АВТО-КУРЬЕРА:
+    // Если у заказа уже есть курьер-авто — цена из CRM всегда будет "старой" (без надбавки).
+    // Не перезаписываем её, чтобы не сбить +100 ₽ которые были добавлены при назначении.
+    if (existing.courierId && existing.price !== null && data.price !== null) {
+      const assignedCourier = await prisma.courier.findUnique({
+        where: { id: existing.courierId },
+        select: { isAuto: true },
+      });
+      if (assignedCourier?.isAuto) {
+        // Курьер авто — сохраняем нашу цену, игнорируем CRM
+        updateFields.price = existing.price;
+      }
+    }
 
     const isCourierRemovedOrChanged = existing.courierId !== null && data.courierId !== existing.courierId;
 
