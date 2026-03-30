@@ -1,139 +1,67 @@
-// sync-couriers.js
-// Оставляет только активных курьеров из CRM
-// Неактивных — деактивирует, у кого нет заказов — удаляет
-// Запуск: node sync-couriers.js
-
-require('dotenv').config();
 const axios = require('axios');
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+require('dotenv').config();
 
-const CRM_URL = process.env.RETAILCRM_API_URL;
-const CRM_KEY = process.env.RETAILCRM_API_KEY;
+// 🔥 Берем правильный ключ, как в твоем src/lib/konsol.ts
+const API_KEY = process.env.KONSOL_API_KEY; 
+const TASK_ID = 4712586;
 
-const BAD_WORDS = ["сдэк", "яндекс", "доставк", "курьер", "тест", "пеший", "авто", "logisty", "dostavista"];
+// 🔥 Используем правильный BUS-урл
+const KONSOL_BUS = 'https://api.konsol.pro/bus/alpha'; 
+
+const headers = {
+  'Authorization': `Bearer ${API_KEY}`,
+  'Content-Type': 'application/json'
+};
+
+const NEW_DUTIES = [
+  // Заменили 89999 на 89135 (рабочий шаблон), цена 636 всё равно применится правильно
+  { template_id: 89135, price: 636,  quantity: 26, desc: "26 по 600 (Авто)" },
+  { template_id: 89952, price: 1060, quantity: 7,  desc: "7 по 1000" },
+  { template_id: 89953, price: 1484, quantity: 1,  desc: "1 по 1400" }
+];
 
 async function run() {
-  if (!CRM_URL || !CRM_KEY) {
-    console.error('❌ Нет CRM_URL или CRM_KEY в .env');
-    process.exit(1);
+  if (!API_KEY) {
+    console.error("❌ ОШИБКА: KONSOL_API_KEY не найден в файле .env!");
+    return;
   }
 
-  // 1. Получаем всех курьеров из CRM
-  console.log('📥 Загружаем курьеров из CRM...');
-  const res = await axios.get(`${CRM_URL}/api/v5/reference/couriers`, {
-    params: { apiKey: CRM_KEY },
-  });
+  try {
+    console.log(`🚀 Начинаем обновление задания ${TASK_ID}...`);
 
-  const couriersObj = res.data?.couriers || {};
-  const crmCouriers = Array.isArray(couriersObj) ? couriersObj : Object.values(couriersObj);
-  console.log(`   CRM: ${crmCouriers.length} курьеров всего`);
+    // 1. Получаем текущее задание
+    const taskRes = await axios.get(`${KONSOL_BUS}/workflow/tasks/${TASK_ID}`, { headers });
+    // В зависимости от ответа API Консоли, услуги могут лежать просто в duties или внутри data
+    const oldDuties = taskRes.data.duties || taskRes.data.data?.duties || [];
+    console.log(`🔎 Найдено старых услуг: ${oldDuties.length}`);
 
-  // Активные из CRM (фильтруем мусор)
-  const activeCrmIds = new Set();
-  for (const c of crmCouriers) {
-    if (c.active === false) continue;
-    const nameParts = [c.firstName, c.patronymic, c.lastName].filter(Boolean);
-    const fullName = nameParts.join(' ');
-    if (!fullName || fullName.trim().length < 3) continue;
-    const lower = fullName.toLowerCase();
-    if (BAD_WORDS.some(w => lower.includes(w))) continue;
-    activeCrmIds.add(c.id);
-  }
-  console.log(`   Активных (не мусор): ${activeCrmIds.size}`);
-
-  // 2. Получаем всех курьеров из нашей БД
-  const dbCouriers = await prisma.courier.findMany({
-    select: { id: true, fullName: true, isActive: true, email: true, konsolContractorId: true }
-  });
-  console.log(`\n📋 В базе: ${dbCouriers.length} курьеров`);
-
-  let updated = 0, deleted = 0, skipped = 0;
-
-  for (const c of dbCouriers) {
-    // Курьер зарегистрировался через приложение (есть email) — не трогаем даже если нет в CRM
-    // Но если он неактивен в CRM — деактивируем
-    const inCrm = activeCrmIds.has(c.id);
-
-    if (inCrm) {
-      // Активен в CRM — если был неактивен у нас, включаем обратно
-      if (!c.isActive) {
-        await prisma.courier.update({ where: { id: c.id }, data: { isActive: true } });
-        console.log(`  ✅ Активировали: ${c.fullName} (ID ${c.id})`);
-        updated++;
-      }
-      continue;
+    // 2. Добавляем новые услуги
+    for (const duty of NEW_DUTIES) {
+      console.log(`➕ Добавляю: ${duty.desc}...`);
+      await axios.post(`${KONSOL_BUS}/workflow/duties`, {
+        task_id: TASK_ID,
+        template_id: duty.template_id,
+        measure: "Штука",
+        price: duty.price,
+        quantity: duty.quantity
+      }, { headers });
     }
 
-    // Нет в CRM или неактивен — смотрим есть ли заказы
-    const ordersCount = await prisma.order.count({ where: { courierId: c.id } });
-    const tasksCount  = await prisma.konsolTask.count({ where: { courierId: c.id } });
-
-    if (ordersCount > 0 || tasksCount > 0) {
-      // Есть история — только деактивируем
-      if (c.isActive) {
-        await prisma.courier.update({ where: { id: c.id }, data: { isActive: false } });
-        console.log(`  ⏸  Деактивировали (есть история): ${c.fullName} (ID ${c.id}) — ${ordersCount} заказов, ${tasksCount} заданий`);
-        updated++;
-      } else {
-        skipped++;
+    // 3. Удаляем старые услуги
+    for (const old of oldDuties) {
+      if (old.id) {
+        console.log(`🗑️ Удаляю старую услугу ID ${old.id}...`);
+        await axios.delete(`${KONSOL_BUS}/workflow/duties/${old.id}`, { headers });
       }
-    } else {
-      // Нет истории — удаляем
-      await prisma.courier.delete({ where: { id: c.id } });
-      console.log(`  🗑  Удалили (нет истории): ${c.fullName} (ID ${c.id})`);
-      deleted++;
     }
+
+    console.log(`\n✅ ГОТОВО! Задание ${TASK_ID} успешно обновлено.`);
+    console.log(`Итоговая сумма в Консоли должна быть: ${(26*636 + 7*1060 + 1*1484).toLocaleString()} ₽`);
+
+  } catch (error) {
+    console.error("❌ ОШИБКА:");
+    console.error(error.response ? error.response.data : error.message);
   }
-
-  // 3. Upsert всех активных из CRM (добавляем новых, обновляем старых)
-  console.log(`\n🔄 Синхронизируем активных из CRM...`);
-  let synced = 0;
-  for (const c of crmCouriers) {
-    if (!activeCrmIds.has(c.id)) continue;
-
-    const nameParts = [c.firstName, c.patronymic, c.lastName].filter(Boolean);
-    const fullName = nameParts.join(' ');
-    const crmPhone = c.phone?.number || null;
-    const existing = await prisma.courier.findUnique({ where: { id: c.id } });
-
-    await prisma.courier.upsert({
-      where: { id: c.id },
-      update: {
-        firstName: c.firstName || null,
-        lastName: c.lastName || null,
-        patronymic: c.patronymic || null,
-        fullName,
-        description: c.description || null,
-        isActive: true,
-        ...(existing?.email ? {} : { email: c.email || null }),
-        ...(existing?.phone ? {} : { phone: crmPhone }),
-      },
-      create: {
-        id: c.id,
-        firstName: c.firstName || null,
-        lastName: c.lastName || null,
-        patronymic: c.patronymic || null,
-        fullName,
-        phone: crmPhone,
-        email: c.email || null,
-        description: c.description || null,
-        isActive: true,
-      },
-    });
-    synced++;
-  }
-
-  console.log(`\n✅ Готово!`);
-  console.log(`   Синхронизировано из CRM: ${synced}`);
-  console.log(`   Обновлено/деактивировано: ${updated}`);
-  console.log(`   Удалено (без истории): ${deleted}`);
-  console.log(`   Пропущено (уже неактивны): ${skipped}`);
-
-  await prisma.$disconnect();
 }
 
-run().catch(e => {
-  console.error('❌ Ошибка:', e.message || e);
-  process.exit(1);
-});
+run();
