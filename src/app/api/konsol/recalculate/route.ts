@@ -49,9 +49,10 @@ export async function POST(req: Request) {
         // 🔥 Справочник шаблонов
         const TEMPLATES: Record<number, number> = {
           500: 89135,
-          600: 89999, // Если создал шаблон для Авто-курьеров
+          600: 89999, // Авто-курьеры
           900: 89952,
-          1300: 89953
+          1300: 89953,
+          1400: 89953 
         };
 
         let deliveriesTotal = 0;
@@ -67,8 +68,23 @@ export async function POST(req: Request) {
         const courier = await prisma.courier.findUnique({ where: { id: courierId } });
         if (!courier || !courier.konsolContractorId) continue;
 
+        // 🔥 ЛОГИКА ОТСЕЧЕНИЯ НОВЫХ ЗАДАНИЙ (созданных после завершения смен)
+        // 1. Берем самую позднюю дату из выбранных смен
+        const maxDateStr = [...dates].sort().reverse()[0]; 
+        const cutoffDate = new Date(maxDateStr);
+        // 2. Сдвигаем на 1 день вперед
+        cutoffDate.setDate(cutoffDate.getDate() + 1);
+        // 3. Устанавливаем границу в 05:00 UTC (08:00 МСК), чтобы задания, 
+        // созданные утром понедельника (например в 08:15 UTC), не попали под выборку.
+        cutoffDate.setUTCHours(5, 0, 0, 0);
+
         let task = await prisma.konsolTask.findFirst({
-          where: { courierId, status: { in: ["DRAFT", "CONFIRMED"] } },
+          where: { 
+            courierId, 
+            status: { in: ["DRAFT", "CONFIRMED"] },
+            // 🔥 Ищем последнее задание, созданное строго ДО этой границы
+            createdAt: { lt: cutoffDate }
+          },
           orderBy: { id: "desc" }
         });
 
