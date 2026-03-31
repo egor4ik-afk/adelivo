@@ -162,7 +162,7 @@ export async function acceptKonsolTask(taskId: string) {
   const res = await fetch(`${KONSOL_BUS}/workflow/tasks/accept`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ ids: [taskId] }),
+    body: JSON.stringify({ ids: [Number(taskId)] }), // 🔥 Number()
   });
   const data = await res.json();
   if (!res.ok) {
