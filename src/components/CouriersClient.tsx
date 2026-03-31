@@ -132,13 +132,20 @@ export function CouriersClient({ user }: { user: any }) {
   const getSum = (courierId: number, date: string) => getCourierOrders(courierId, date, true).reduce((acc, o) => acc + (o.price || 0), 0);
 
   const getCourierDefaultCounts = (courierId: number) => {
+    const courier = couriers.find(c => c.id === courierId);
     const dates = calcDates.filter(d => selectedPays.includes(`${courierId}_${d}`));
     const counts: Record<number, number> = {};
+    
     orders.filter(o => o.courierId === courierId && o.status === "DELIVERED" && dates.includes(getODate(o) as string))
           .forEach(o => {
-              const p = o.price || 0;
-              if (p > 0) counts[p] = (counts[p] || 0) + 1;
+            const p = o.price || 0;
+            if (p > 0) counts[p] = (counts[p] || 0) + 1;
           });
+  
+    // 🔥 Только 3 поля по типу курьера
+    const prices = courier?.isAuto ? [600, 1000, 1400] : [500, 900, 1300];
+    prices.forEach(p => { if (counts[p] === undefined) counts[p] = 0; });
+  
     return counts;
   };
 
@@ -1194,37 +1201,54 @@ export function CouriersClient({ user }: { user: any }) {
         );
       })()}
 
-      {editingCountsCourier && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ background: '#fff', borderRadius: 12, padding: 20, width: 320, boxShadow: '0 4px 24px rgba(0,0,0,0.2)' }}>
-                <h3 style={{ margin: '0 0 16px 0', fontSize: 16 }}>Редактировать услуги</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
-                    {[500, 600, 900, 1000, 1300, 1400].map(price => {
-                        if (tempCounts[price] === undefined) return null;
-                        return (
-                            <div key={price} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <span style={{ fontSize: 14 }}>Доставка за {price} ₽:</span>
-                                <input 
-                                    type="number" 
-                                    min="0" 
-                                    value={tempCounts[price]} 
-                                    onChange={e => setTempCounts({...tempCounts, [price]: Number(e.target.value)})}
-                                    style={{ width: 60, padding: '4px 8px', border: '1px solid #e8e6df', borderRadius: 6, textAlign: 'center' }}
-                                />
-                            </div>
-                        )
-                    })}
-                </div>
-                <div style={{ display: 'flex', gap: 10 }}>
-                    <button onClick={() => setEditingCountsCourier(null)} style={{ flex: 1, padding: '8px', border: '1px solid #e8e6df', background: '#fafaf8', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Отмена</button>
-                    <button onClick={() => {
-                        setCountOverrides({...countOverrides, [editingCountsCourier]: tempCounts});
-                        setEditingCountsCourier(null);
-                    }} style={{ flex: 1, padding: '8px', border: 'none', background: '#4a7aff', color: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Сохранить</button>
-                </div>
+{editingCountsCourier && (() => {
+  const courier = couriers.find(c => c.id === editingCountsCourier);
+  const prices = courier?.isAuto ? [600, 1000, 1400] : [500, 900, 1300];
+  const label = courier?.isAuto ? '🚗 Авто' : '🚶 Пеший';
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#fff', borderRadius: 12, padding: 20, width: 320, boxShadow: '0 4px 24px rgba(0,0,0,0.2)' }}>
+        <h3 style={{ margin: '0 0 4px 0', fontSize: 16 }}>Редактировать услуги</h3>
+        <p style={{ margin: '0 0 16px 0', fontSize: 12, color: '#a8a49c' }}>{label} · {courier?.fullName}</p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+          {prices.map(price => (
+            <div key={price} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 13 }}>{price} ₽ → <b>{Math.round(price * 1.06)} ₽</b></span>
+              <input
+                type="number" min="0"
+                value={tempCounts[price] ?? 0}
+                onChange={e => setTempCounts({ ...tempCounts, [price]: Number(e.target.value) })}
+                style={{ width: 60, padding: '4px 8px', border: '1px solid #e8e6df', borderRadius: 6, textAlign: 'center' }}
+              />
             </div>
+          ))}
         </div>
-      )}
+
+        <div style={{ marginBottom: 16, padding: '8px 12px', background: '#f5f4f0', borderRadius: 8, fontSize: 13 }}>
+          Итого: <b style={{ color: '#10b981' }}>
+            {prices.reduce((acc, p) => acc + Math.round(p * 1.06) * (tempCounts[p] ?? 0), 0)} ₽
+          </b>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={() => setEditingCountsCourier(null)}
+            style={{ flex: 1, padding: '8px', border: '1px solid #e8e6df', background: '#fafaf8', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>
+            Отмена
+          </button>
+          <button onClick={() => {
+            setCountOverrides({ ...countOverrides, [editingCountsCourier]: tempCounts });
+            setEditingCountsCourier(null);
+          }}
+            style={{ flex: 1, padding: '8px', border: 'none', background: '#4a7aff', color: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>
+            Сохранить
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+})()}
 
       {selectedOrder && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 9999, display: "flex", justifyContent: "flex-end" }}>
