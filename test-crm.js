@@ -3,7 +3,7 @@ require('dotenv').config();
 
 // 🔥 Берем правильный ключ, как в твоем src/lib/konsol.ts
 const API_KEY = process.env.KONSOL_API_KEY; 
-const TASK_ID = 4712586;
+const TASK_ID = 4751002;
 
 // 🔥 Используем правильный BUS-урл
 const KONSOL_BUS = 'https://api.konsol.pro/bus/alpha'; 
@@ -14,10 +14,14 @@ const headers = {
 };
 
 const NEW_DUTIES = [
-  // Заменили 89999 на 89135 (рабочий шаблон), цена 636 всё равно применится правильно
-  { template_id: 89135, price: 636,  quantity: 26, desc: "26 по 600 (Авто)" },
-  { template_id: 89952, price: 1060, quantity: 7,  desc: "7 по 1000" },
-  { template_id: 89953, price: 1484, quantity: 1,  desc: "1 по 1400" }
+  //Авто  Заменили 89999 на 89135 (рабочий шаблон), цена 636 всё равно применится правильно
+  { template_id: 89135, price: 636,  quantity: 62, desc: "26 по 600 (Авто)" },
+  { template_id: 89952, price: 1060, quantity: 16,  desc: "7 по 1000" },
+  { template_id: 89953, price: 1484, quantity: 7,  desc: "1 по 1400" }
+// Пеший
+// { template_id: 89135, price: 530,  quantity: 10, desc: "26 по 600 (Авто)" },
+// { template_id: 89952, price: 954, quantity: 2,  desc: "7 по 1000" },
+// { template_id: 89953, price: 1484, quantity: 1,  desc: "1 по 1400" }
 ];
 
 async function run() {

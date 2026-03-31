@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { acceptKonsolTask, finalizeKonsolTask, getKonsolTask } from "@/lib/konsol"; // Добавили getKonsolTask
+import { acceptKonsolTask, finalizeKonsolTask, getKonsolTask } from "@/lib/konsol";
 
 export async function POST(req: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -22,51 +22,57 @@ export async function POST(req: Request) {
 
     for (const courierId of couriersIds) {
       try {
+        // 🔥 Добавили ACCEPTED в поиск, чтобы можно было "дожать" создание акта,
+        // если в прошлый раз задание принялось, но акт отвалился.
         const task = await prisma.konsolTask.findFirst({
-          where: { courierId, status: { in: ["DRAFT", "CONFIRMED"] } },
+          where: { courierId, status: { in: ["DRAFT", "CONFIRMED", "ACCEPTED"] } },
           orderBy: { id: "desc" }
         });
 
         // Пропускаем, если задания нет или Акт уже сформирован НАМИ
         if (!task || task.konsolActId) continue; 
 
-        // 1. Принимаем задание
+        // 1. Принимаем задание (переводим в статус ACCEPTED / Выполнено)
         try {
           await acceptKonsolTask(task.konsolTaskId);
         } catch (e) {
           console.log(`Задание ${task.konsolTaskId} уже было принято (это нормально).`);
         }
 
-        // 2. Пробуем Финализировать
+        // 2. Пробуем Финализировать (создать сам Акт)
         let actId: string | null = null;
         try {
           actId = await finalizeKonsolTask(task.konsolTaskId);
         } catch (e: any) {
-          // Если Консоль ругается, что "Задание не может быть финализировано"
-          // Это часто значит, что оно УЖЕ финализировано. Проверим это!
           console.log(`⚠️ Не удалось финализировать стандартным путем. Проверяем статус задания ${task.konsolTaskId}...`);
           
           const remoteTask = await getKonsolTask(task.konsolTaskId);
           const remoteData = remoteTask?.data || remoteTask;
           
-          // Если акт уже привязан к этому заданию (например, кроном)
           if (remoteData?.act_id) {
             console.log(`✅ Нашли существующий Акт ${remoteData.act_id} для задания ${task.konsolTaskId}`);
             actId = String(remoteData.act_id);
           } else {
-             // Если акта нет, и финализировать нельзя - значит реальная ошибка
-             throw e;
+             console.error(`❌ Акт для ${task.konsolTaskId} не создался в Консоли.`);
           }
         }
 
         // 3. Сохраняем в базу
+        // 🔥 СОХРАНЯЕМ В БД СТАТУС ACCEPTED В ЛЮБОМ СЛУЧАЕ, 
+        // чтобы заблокировать пересчет услуг (т.к. задание уже Выполнено)
+        await prisma.konsolTask.update({
+          where: { id: task.id },
+          data: { 
+            status: "ACCEPTED", 
+            ...(actId ? { konsolActId: String(actId) } : {}) 
+          }
+        });
+
         if (actId) {
-          await prisma.konsolTask.update({
-            where: { id: task.id },
-            data: { konsolActId: String(actId), status: "CONFIRMED" }
-          });
           successCount++;
         } else {
+          // Если мы перевели в ACCEPTED, но акт почему-то не отдался, запишем в ошибки,
+          // чтобы вы видели, что нужно нажать "Финализировать" еще раз для создания акта
           errorCount++;
         }
       } catch (err: any) {

@@ -54,6 +54,11 @@ export function CouriersClient({ user }: { user: any }) {
   const [activeTab, setActiveTab] = useState<"calc" | "schedule" | "routes" | "tasks">("calc");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
+  // Для переопределения количества услуг перед пересчетом
+  const [countOverrides, setCountOverrides] = useState<Record<number, Record<number, number>>>({});
+  const [editingCountsCourier, setEditingCountsCourier] = useState<number | null>(null);
+  const [tempCounts, setTempCounts] = useState<Record<number, number>>({});
+
   const scheduleDates = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(); d.setDate(d.getDate() + i); return d.toISOString().split("T")[0];
   });
@@ -125,6 +130,17 @@ export function CouriersClient({ user }: { user: any }) {
   };
   const getCount = (courierId: number, date: string, reqDeliv = false) => getCourierOrders(courierId, date, reqDeliv).length;
   const getSum = (courierId: number, date: string) => getCourierOrders(courierId, date, true).reduce((acc, o) => acc + (o.price || 0), 0);
+
+  const getCourierDefaultCounts = (courierId: number) => {
+    const dates = calcDates.filter(d => selectedPays.includes(`${courierId}_${d}`));
+    const counts: Record<number, number> = {};
+    orders.filter(o => o.courierId === courierId && o.status === "DELIVERED" && dates.includes(getODate(o) as string))
+          .forEach(o => {
+              const p = o.price || 0;
+              if (p > 0) counts[p] = (counts[p] || 0) + 1;
+          });
+    return counts;
+  };
 
   const handleStatusChange = async (id: string, newStatus: string) => {
     setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o));
@@ -313,9 +329,18 @@ export function CouriersClient({ user }: { user: any }) {
 
   const handleTasksAction = async (action: "recalculate" | "finalize" | "pay") => {
     const sel = konsolTasks.filter(t => selectedTasks.has(t.id));
-    const targets = action === "pay"
-          ? sel.filter(t => t.status === "CONFIRMED")
-      : sel.filter(t => t.status !== "SIGNED_BY_US");
+    
+    // 🔥 Точечно фильтруем, какие задания подходят под действие
+    let targets = [];
+    if (action === "pay") {
+      targets = sel.filter(t => t.status === "CONFIRMED" || t.status === "ACCEPTED");
+    } else if (action === "recalculate") {
+      // ❌ Пересчитывать можно ТОЛЬКО черновики и в работе! ACCEPTED нельзя.
+      targets = sel.filter(t => t.status === "DRAFT" || t.status === "CONFIRMED"); 
+    } else if (action === "finalize") {
+      // 📄 Финализировать можно всё, что еще не оплачено
+      targets = sel.filter(t => t.status !== "SIGNED_BY_US");
+    }
     if (!targets.length) {
       setKonsolToast({ message: action === "pay" ? "⚠️ Нет заданий «Акт готов»" : "⚠️ Ничего не выбрано", type: "error" });
       setTimeout(() => setKonsolToast(null), 3000);
@@ -363,7 +388,7 @@ export function CouriersClient({ user }: { user: any }) {
       await loadKonsolTasks();
     }
   };
-  // 🔥 Новая кнопка "Пересчитать" (Только обновляет услуги в Консоли по выделенным дням)
+  // 🔥 Обновляет услуги в Консоли по выделенным дням с учетом ручных корректировок
   const handleRecalculate = async () => {
     if (selectedPays.length === 0) return alert("Выберите смены");
 
@@ -377,14 +402,14 @@ export function CouriersClient({ user }: { user: any }) {
       const res = await fetch("/api/konsol/recalculate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ payments })
+        body: JSON.stringify({ payments, overrides: countOverrides })
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        alert(`✅ Успешно! Задания пересчитаны: ${data.processed}. Можете проверить услуги в Консоли перед финализацией.`);
-        // Намеренно не очищаем галочки setSelectedPays([]), чтобы после проверки можно было сразу нажать "Финализировать"
+        alert(`✅ Успешно! Задания пересчитаны: ${data.processed}. Можете проверить услуги в Консоли перед финализацией.\n${data.message ? data.message : ''}`);
+        setCountOverrides({}); // Очищаем после успеха
       } else {
-        alert(`❌ Ошибка: ${data.error}`);
+        alert(`❌ Ошибка: ${data.error || data.message}`);
       }
     } catch (e: any) {
       alert(`❌ Ошибка: ${e.message}`);
@@ -705,7 +730,15 @@ export function CouriersClient({ user }: { user: any }) {
                 {loading ? <tr><td colSpan={9} style={{ padding: 20, textAlign: "center" }}>Загрузка...</td></tr>
                   : calcSortedAndFiltered.length === 0 ? <tr><td colSpan={9} style={{ padding: 40, textAlign: "center", color: "#a8a49c" }}>На этой неделе нет курьеров с заказами</td></tr>
                     : calcSortedAndFiltered.map(c => {
-                      const weekTotal = calcDates.reduce((acc, d) => acc + getSum(c.id, d), 0);
+                      const selectedDates = calcDates.filter(d => selectedPays.includes(`${c.id}_${d}`));
+                      let selectedTotal = 0;
+                      if (countOverrides[c.id]) {
+                          selectedTotal = Object.entries(countOverrides[c.id]).reduce((acc, [price, qty]) => acc + Number(price) * qty, 0);
+                      } else {
+                          selectedTotal = selectedDates.reduce((acc, d) => acc + getSum(c.id, d), 0);
+                      }
+                      const unselectedTotal = calcDates.filter(d => !selectedPays.includes(`${c.id}_${d}`)).reduce((acc, d) => acc + getSum(c.id, d), 0);
+                      const weekTotal = selectedTotal + unselectedTotal;
                       const weekTotal106 = weekTotal * 1.06;
 
                       const availableWeekKeys = calcDates.map(d => `${c.id}_${d}`).filter(k => {
@@ -770,8 +803,28 @@ export function CouriersClient({ user }: { user: any }) {
                             );
                           })}
                           <td style={{ ...s.td, textAlign: "right", fontWeight: 700, background: "#fafaf8" }}>
-                            <div style={{ fontSize: 14 }}>{weekTotal.toFixed(0)} ₽</div>
+                            <div style={{ fontSize: 14 }}>
+                                {weekTotal.toFixed(0)} ₽
+                                {selectedDates.length > 0 && (
+                                    <button 
+                                      style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: 4, opacity: 0.6 }}
+                                      onClick={(e) => {
+                                          e.stopPropagation();
+                                          const defaults = getCourierDefaultCounts(c.id);
+                                          const overrides = countOverrides[c.id] || {};
+                                          const merged = { ...defaults };
+                                          for (const k in overrides) merged[k] = overrides[k];
+                                          // Добавляем пустые поля для удобства, если их нет
+                                          [600, 1000, 1400].forEach(p => { if (merged[p] === undefined) merged[p] = 0; });
+                                          setTempCounts(merged);
+                                          setEditingCountsCourier(c.id);
+                                      }}
+                                      title="Редактировать количество услуг для пересчета"
+                                    >✏️</button>
+                                )}
+                            </div>
                             {weekTotal > 0 && <div style={{ fontSize: 11, color: "#10b981", marginTop: 4 }}>x 1.06 = {weekTotal106.toFixed(0)} ₽</div>}
+                            {countOverrides[c.id] && <div style={{ fontSize: 9, color: "#d94040", marginTop: 2 }}>Изменено вручную</div>}
                           </td>
                         </tr>
                       );
@@ -903,6 +956,7 @@ export function CouriersClient({ user }: { user: any }) {
         const DB_ST: Record<string, { label: string; color: string; bg: string }> = {
           DRAFT: { label: "⏳ Черновик", color: "#6b6860", bg: "#f5f4f0" },
           CONFIRMED: { label: "🔵 Принято", color: "#4a7aff", bg: "#eef3ff" },
+          ACCEPTED: { label: "🟢 Выполнено", color: "#10b981", bg: "#ecfdf5" },
           CONFIRMED_ACT: { label: "📄 Акт готов", color: "#8b5cf6", bg: "#f5f3ff" },
           SIGNED_BY_US: { label: "✅ Подписано", color: "#10b981", bg: "#f0fdf4" },       };
         const REMOTE_ST: Record<string, { label: string; color: string }> = {
@@ -924,7 +978,7 @@ export function CouriersClient({ user }: { user: any }) {
         const allSelectableIds = konsolTasks.filter((t: any) => t.status !== "SIGNED_BY_US").map((t: any) => t.id);
         const isAllTasksSelected = allSelectableIds.length > 0 && allSelectableIds.every((id: string) => selectedTasks.has(id));
         const selArr = konsolTasks.filter((t: any) => selectedTasks.has(t.id));
-        const selCanPay = selArr.filter((t: any) => t.status === "CONFIRMED").length;
+        const selCanPay = selArr.filter((t: any) => t.status === "CONFIRMED" || t.status === "ACCEPTED").length;
         const selCanFinalize = selArr.filter((t: any) => t.status !== "SIGNED_BY_US").length;
 
         return (
@@ -1025,7 +1079,7 @@ export function CouriersClient({ user }: { user: any }) {
 
                   {/* Строки заданий */}
                   {(cTasks as any[]).map((task: any, idx: number) => {
-                    const dbStKey = task.status === "CONFIRMED" && task.konsolActId
+                    const dbStKey = (task.status === "CONFIRMED" || task.status === "ACCEPTED") && task.konsolActId
                       ? "CONFIRMED_ACT"
                       : task.status;
                     const dbSt = DB_ST[dbStKey] || DB_ST.DRAFT;
@@ -1076,7 +1130,7 @@ export function CouriersClient({ user }: { user: any }) {
                           <div style={{ flex: 1 }} />
                           <span style={{ fontWeight: 700, fontSize: 13, color: isPaid ? "#10b981" : "#1a1a18" }}>{task.amount.toFixed(0)} ₽</span>
                           <div onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 4 }}>
-                          {!isPaid && !task.konsolActId && (
+                          {(!isPaid && !task.konsolActId) && (
                               <button
                                 onClick={async () => { setSelectedTasks(new Set([task.id])); await handleTasksAction("finalize"); }}
                                 disabled={konsolTasksLoading}
@@ -1084,7 +1138,7 @@ export function CouriersClient({ user }: { user: any }) {
                                 title="Финализировать"
                               >📄</button>
                             )}
-                            {task.status === "CONFIRMED" && (
+                            {(task.status === "CONFIRMED" || task.status === "ACCEPTED") && (
                                 <button
                                   onClick={async () => { setSelectedTasks(new Set([task.id])); await handleTasksAction("pay"); }}
                                 disabled={konsolTasksLoading}
@@ -1139,6 +1193,39 @@ export function CouriersClient({ user }: { user: any }) {
           </div>
         );
       })()}
+
+      {editingCountsCourier && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: '#fff', borderRadius: 12, padding: 20, width: 320, boxShadow: '0 4px 24px rgba(0,0,0,0.2)' }}>
+                <h3 style={{ margin: '0 0 16px 0', fontSize: 16 }}>Редактировать услуги</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
+                    {[500, 600, 900, 1000, 1300, 1400].map(price => {
+                        if (tempCounts[price] === undefined) return null;
+                        return (
+                            <div key={price} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <span style={{ fontSize: 14 }}>Доставка за {price} ₽:</span>
+                                <input 
+                                    type="number" 
+                                    min="0" 
+                                    value={tempCounts[price]} 
+                                    onChange={e => setTempCounts({...tempCounts, [price]: Number(e.target.value)})}
+                                    style={{ width: 60, padding: '4px 8px', border: '1px solid #e8e6df', borderRadius: 6, textAlign: 'center' }}
+                                />
+                            </div>
+                        )
+                    })}
+                </div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                    <button onClick={() => setEditingCountsCourier(null)} style={{ flex: 1, padding: '8px', border: '1px solid #e8e6df', background: '#fafaf8', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Отмена</button>
+                    <button onClick={() => {
+                        setCountOverrides({...countOverrides, [editingCountsCourier]: tempCounts});
+                        setEditingCountsCourier(null);
+                    }} style={{ flex: 1, padding: '8px', border: 'none', background: '#4a7aff', color: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Сохранить</button>
+                </div>
+            </div>
+        </div>
+      )}
+
       {selectedOrder && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 9999, display: "flex", justifyContent: "flex-end" }}>
           <div style={{ width: 450, maxWidth: "100%", background: "#fff", height: "100%", display: "flex", flexDirection: "column", boxShadow: "-4px 0 24px rgba(0,0,0,0.15)" }}>
