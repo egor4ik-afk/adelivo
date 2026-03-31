@@ -1,100 +1,80 @@
-// src/app/api/admin/fix/route.ts
+// src/app/api/admin/debug-sync/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import axios from "axios";
+import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
   const KONSOL_API_KEY = process.env.KONSOL_API_KEY;
   const KONSOL_BUS = "https://api.konsol.pro/bus/alpha";
 
   if (!KONSOL_API_KEY) {
-    return NextResponse.json({ error: "Нет ключа API KONSOL_API_KEY" }, { status: 500 });
+    return NextResponse.json({ error: "Нет ключа KONSOL_API_KEY" }, { status: 500 });
   }
 
-  try {
-    // 1. Строго и надежно получаем ID из параметра ?id=...
-    let taskId = req.nextUrl.searchParams.get("id");
-    
-    // Очищаем от мусора (оставляем только цифры)
-    if (taskId) {
-      taskId = taskId.replace(/\D/g, "");
-    }
+  const headers = {
+    "Authorization": `Bearer ${KONSOL_API_KEY}`,
+    "Content-Type": "application/json",
+  };
 
-    if (!taskId) {
-      return NextResponse.json({ 
-        error: "Укажите ID задания через параметр id",
-        example: "https://твой-домен/api/admin/fix?id=4768627" 
-      }, { status: 400 });
-    }
+  const today = new Date();
+  const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - dayOfWeek + 1);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const mondayStr = monday.toISOString().split("T")[0];
+  const sundayStr = sunday.toISOString().split("T")[0];
 
-    const headers = {
-      "Authorization": `Bearer ${KONSOL_API_KEY}`,
-      "Content-Type": "application/json"
-    };
+  // 1. Все задания без фильтра (первые 20)
+  const resAll = await axios.get(`${KONSOL_BUS}/workflow/tasks?per_page=20`, { headers });
+  const allTasks = resAll.data?.data || resAll.data || [];
 
-    // 2. Получаем инфу о задании
-    const taskRes = await axios.get(`${KONSOL_BUS}/workflow/tasks/${taskId}`, { headers });
-    const taskData = taskRes.data?.data || taskRes.data;
+  // 2. Задания с фильтром по неделе
+  const resWeek = await axios.get(
+    `${KONSOL_BUS}/workflow/tasks?per_page=100&since_date_from=${mondayStr}&since_date_to=${sundayStr}`,
+    { headers }
+  );
+  const weekTasks = resWeek.data?.data || resWeek.data || [];
 
-    // 3. Вытаскиваем все возможные даты (по документации Консоли)
-    const sinceDate = taskData.since_date; // "2025-02-15"
-    const uptoDate = taskData.upto_date;   // "2025-02-15"
-    const createdAt = taskData.created_at; // "2025-02-14T09:00:00.000+00:00"
-    const acceptedAt = taskData.accepted_at; // "15.02.2025" (бывает и в таком формате)
-    const submittedAt = taskData.submitted_at; 
+  // 3. Наши курьеры с konsolContractorId
+  const couriers = await prisma.courier.findMany({
+    where: { konsolContractorId: { not: null } },
+    select: { id: true, fullName: true, konsolContractorId: true },
+  });
 
-    // 4. Логика подбора Идеальной Даты для Акта
-    let targetActDate = new Date().toISOString().split('T')[0]; // сегодня по UTC
+  // 4. Анализ — находим ли курьера по contractor.id
+  const analysis = Array.isArray(allTasks)
+    ? allTasks.map((t: any) => ({
+        task_id: t.id,
+        state: t.state?.code,
+        since_date: t.since_date,
+        contractor_id: t.contractor?.id,
+        matched: couriers.find(c => c.konsolContractorId === String(t.contractor?.id))?.fullName ?? "❌ НЕ НАЙДЕН",
+      }))
+    : [];
 
-    if (submittedAt) {
-      targetActDate = submittedAt.split('T')[0];
-    } else if (uptoDate) {
-      targetActDate = uptoDate.split('T')[0];
-    } else if (sinceDate) {
-      targetActDate = sinceDate.split('T')[0];
-    }
+  return NextResponse.json({
+    week: `${mondayStr} — ${sundayStr}`,
 
-    // 5. Пробуем пробить финализацию с ИХ же датой
-    let finalizeResult = null;
-    let finalizeError = null;
+    // Первые 2 задания сырьём — смотрим структуру
+    raw_sample: Array.isArray(allTasks) ? allTasks.slice(0, 2) : allTasks,
 
-    try {
-      const finRes = await axios.post(`${KONSOL_BUS}/workflow/tasks/finalize`, {
-        ids: [Number(taskId)],
-        act_date: targetActDate,
-        date: targetActDate
-      }, { headers });
-      
-      finalizeResult = finRes.data;
-    } catch (err: any) {
-      finalizeError = err.response?.data || err.message;
-    }
+    // Анализ сопоставления всех 20
+    analysis,
 
-    // 6. Выводим красивый отчет
-    return NextResponse.json({
-      status: finalizeError ? "❌ ОШИБКА ФИНАЛИЗАЦИИ" : "✅ УСПЕШНО ФИНАЛИЗИРОВАНО",
-      used_taskId: taskId,
-      used_act_date: targetActDate,
-      extracted_dates: {
-        since_date: sinceDate,
-        upto_date: uptoDate,
-        created_at: createdAt,
-        accepted_at: acceptedAt,
-        submitted_at: submittedAt,
-      },
-      task_info: {
-        id: taskData.id,
-        state: taskData.state?.code || taskData.status, // статус задания
-        act_id: taskData.act_id || finalizeResult?.acts_ids?.[0] || "Акта нет",
-      },
-      finalize_response: finalizeResult,
-      finalize_error: finalizeError,
-      raw_task_data: taskData // сырые данные
-    });
+    // Результат фильтра по неделе
+    week_filter_count: Array.isArray(weekTasks) ? weekTasks.length : 0,
+    week_filter_tasks: Array.isArray(weekTasks)
+      ? weekTasks.map((t: any) => ({
+          id: t.id,
+          state: t.state?.code,
+          since_date: t.since_date,
+          contractor_id: t.contractor?.id,
+          matched: couriers.find(c => c.konsolContractorId === String(t.contractor?.id))?.fullName ?? "❌ НЕ НАЙДЕН",
+        }))
+      : [],
 
-  } catch (e: any) {
-    return NextResponse.json({ 
-      error: "Не удалось получить задание из Консоли", 
-      details: e.response?.data || e.message 
-    }, { status: 500 });
-  }
+    // Наши курьеры в БД
+    our_couriers: couriers,
+  });
 }

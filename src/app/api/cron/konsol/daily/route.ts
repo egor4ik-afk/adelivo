@@ -27,7 +27,9 @@ export async function GET(req: Request) {
     sunday.setDate(monday.getDate() + 6);
     sunday.setHours(23, 59, 59, 999);
 
-    const todayYMD = toYMD(today);
+    // Строки YYYY-MM-DD для поиска заказов в БД
+    const mondayYMD = toYMD(monday);
+    const sundayYMD = toYMD(sunday);
 
     const ddToday = String(today.getDate()).padStart(2, '0');
     const mmToday = String(today.getMonth() + 1).padStart(2, '0');
@@ -46,14 +48,17 @@ export async function GET(req: Request) {
     let createdCount = 0;
 
     for (const courier of couriers) {
-      // 1. Был ли назначен заказ СЕГОДНЯ?
-      const workedToday = await prisma.order.findFirst({
-        where: { courierId: courier.id, deliveryDate: todayYMD }
+      // 1. Был ли назначен заказ НА ЭТОЙ НЕДЕЛЕ? (С понедельника по воскресенье)
+      const workedThisWeek = await prisma.order.findFirst({
+        where: { 
+          courierId: courier.id, 
+          deliveryDate: { gte: mondayYMD, lte: sundayYMD } 
+        }
       });
 
-      if (!workedToday) continue;
+      if (!workedThisWeek) continue;
 
-      // 2. Ищем все задания на этой неделе
+      // 2. Ищем все задания на этой неделе в нашей базе
       const existingTasks = await prisma.konsolTask.findMany({
         where: { courierId: courier.id, date: { gte: monday, lte: sunday } },
         orderBy: { id: "desc" }
@@ -68,10 +73,15 @@ export async function GET(req: Request) {
         const remoteTask = await getKonsolTask(task.konsolTaskId);
         if (remoteTask?.state?.code) {
           const code = remoteTask.state.code;
-          if (!["accepted", "declined", "rejected", "revoked"].includes(code)) {
+          // Если статус НЕ является финальным (задание еще можно редактировать)
+          if (!["accepted", "declined", "rejected", "revoked", "finalized"].includes(code)) {
             hasActiveTask = true;
             break;
           }
+        } else if (task.status === "DRAFT" || task.status === "CONFIRMED") {
+          // Если не удалось получить статус, но в БД оно открыто, считаем активным
+          hasActiveTask = true;
+          break;
         }
       }
 
