@@ -387,21 +387,46 @@ export default function CourierProfilePage() {
 
                   {/* 🔥 ИЗМЕНЕННЫЙ ВЫБОР ВРЕМЕНИ ДЛЯ МОБИЛОК (SELECT вместо INPUT TIME) */}
                   {isWorking && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, paddingTop: 14, borderTop: "1px solid #d1fae5", flexWrap: "wrap" }}>
-                      <span style={{ fontSize: 13, color: "#059669", fontWeight: 600 }}>Часы работы:</span>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, justifyContent: "flex-end" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 14, paddingTop: 14, borderTop: "1px solid #d1fae5", flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 13, color: "#059669", fontWeight: 600, flex: 1 }}>Часы работы:</span>
+                      
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                         <select 
                           value={shift.startTime || "10:00"} 
                           onChange={(e) => updateShift(date, { isWorking: true, startTime: e.target.value, endTime: shift.endTime })}
-                          style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #a7f3d0", outline: "none", fontSize: 15, background: "#fff", color: "#065f46", fontWeight: 700, textAlign: "center", flex: 1, maxWidth: 100 }}
+                          style={{ 
+                            width: "80px", // 🔥 Жестко фиксируем маленькую ширину
+                            padding: "6px 4px", // 🔥 Уменьшили отступы
+                            borderRadius: 8, 
+                            border: "1px solid #a7f3d0", 
+                            outline: "none", 
+                            fontSize: 16, // 🔥 Строго 16px, чтобы iPhone не зумил экран при клике
+                            background: "#fff", 
+                            color: "#065f46", 
+                            fontWeight: 700, 
+                            textAlign: "center" 
+                          }}
                         >
                           {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
+                        
                         <span style={{ color: "#059669", fontWeight: 700 }}>-</span>
+                        
                         <select 
                           value={shift.endTime || "22:00"} 
                           onChange={(e) => updateShift(date, { isWorking: true, startTime: shift.startTime, endTime: e.target.value })}
-                          style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #a7f3d0", outline: "none", fontSize: 15, background: "#fff", color: "#065f46", fontWeight: 700, textAlign: "center", flex: 1, maxWidth: 100 }}
+                          style={{ 
+                            width: "80px", 
+                            padding: "6px 4px", 
+                            borderRadius: 8, 
+                            border: "1px solid #a7f3d0", 
+                            outline: "none", 
+                            fontSize: 16, 
+                            background: "#fff", 
+                            color: "#065f46", 
+                            fontWeight: 700, 
+                            textAlign: "center" 
+                          }}
                         >
                           {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>

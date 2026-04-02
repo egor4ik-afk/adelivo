@@ -7,18 +7,18 @@ import { OrderDetail } from "./OrderDetail";
 import { RouteEditor } from "./RouteEditor";
 import Link from "next/link";
 
-interface CourierShift { 
-  id: string; 
-  date: string; 
-  startTime?: string; 
-  endTime?: string; 
-  priority?: number; 
+interface CourierShift {
+  id: string;
+  date: string;
+  startTime?: string;
+  endTime?: string;
 }
 interface CourierPayment { id: string; date: string; }
 interface Courier {
   id: number; fullName: string; phone: string | null; description: string | null;
   isActive: boolean; shifts: CourierShift[]; payments: CourierPayment[];
   konsolContractorId?: string | null; // 🔥 ДОБАВЛЕНО для индикатора Консоли
+  priority?: number;
   isAuto?: boolean; // 🔥 ДОБАВЛЕНО для авто-курьеров
 }
 
@@ -57,7 +57,7 @@ export function CouriersClient({ user }: { user: any }) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
-  const [activeTab, setActiveTab] = useState<"calc" | "schedule" | "routes" | "tasks">("calc");
+  const [activeTab, setActiveTab] = useState<"schedule" | "calc" | "tasks" | "routes">("schedule");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   // Для переопределения количества услуг перед пересчетом
@@ -146,17 +146,17 @@ export function CouriersClient({ user }: { user: any }) {
     const courier = couriers.find(c => c.id === courierId);
     const dates = calcDates.filter(d => selectedPays.includes(`${courierId}_${d}`));
     const counts: Record<number, number> = {};
-    
+
     orders.filter(o => o.courierId === courierId && o.status === "DELIVERED" && dates.includes(getODate(o) as string))
-          .forEach(o => {
-            const p = o.price || 0;
-            if (p > 0) counts[p] = (counts[p] || 0) + 1;
-          });
-  
+      .forEach(o => {
+        const p = o.price || 0;
+        if (p > 0) counts[p] = (counts[p] || 0) + 1;
+      });
+
     // 🔥 Только 3 поля по типу курьера
     const prices = courier?.isAuto ? [600, 1000, 1400] : [500, 900, 1300];
     prices.forEach(p => { if (counts[p] === undefined) counts[p] = 0; });
-  
+
     return counts;
   };
 
@@ -179,6 +179,24 @@ export function CouriersClient({ user }: { user: any }) {
   const updateShiftDetails = async (courierId: number, date: string, data: any) => {
     setCouriers(prev => prev.map(c => c.id === courierId ? { ...c, shifts: c.shifts.map(s => s.date === date ? { ...s, ...data } : s) } : c));
     await fetch("/api/couriers/shifts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ courierId, date, isWorking: true, ...data }) });
+  };
+
+  const updateCourierPriority = async (courierId: number, priority: number) => {
+    // Оптимистичное обновление UI
+    setCouriers(prev => prev.map(c => c.id === courierId ? { ...c, priority } : c));
+
+    try {
+      const res = await fetch(`/api/couriers/${courierId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priority })
+      });
+
+      if (!res.ok) throw new Error("Ошибка сохранения");
+    } catch (e) {
+      alert("Ошибка сохранения приоритета. Обновите страницу.");
+      // Откат состояния, если сервер выдал ошибку (опционально можно добавить функцию перезагрузки списка)
+    }
   };
   // 🔥 Функция переключения Авто-курьера
   const toggleAuto = async (courierId: number, currentStatus: boolean) => {
@@ -330,7 +348,7 @@ export function CouriersClient({ user }: { user: any }) {
               const d = await r.json();
               enriched[t.id] = { state: d.state ?? null, duties: d.duties ?? [] };
             }
-          } catch {}
+          } catch { }
         })
       );
       setTaskRemoteData(prev => ({ ...prev, ...enriched }));
@@ -352,14 +370,14 @@ export function CouriersClient({ user }: { user: any }) {
 
   const handleTasksAction = async (action: "recalculate" | "finalize" | "pay") => {
     const sel = konsolTasks.filter(t => selectedTasks.has(t.id));
-    
+
     // 🔥 Точечно фильтруем, какие задания подходят под действие
     let targets = [];
     if (action === "pay") {
       targets = sel.filter(t => t.status === "CONFIRMED" || t.status === "ACCEPTED");
     } else if (action === "recalculate") {
       // ❌ Пересчитывать можно ТОЛЬКО черновики и в работе! ACCEPTED нельзя.
-      targets = sel.filter(t => t.status === "DRAFT" || t.status === "CONFIRMED"); 
+      targets = sel.filter(t => t.status === "DRAFT" || t.status === "CONFIRMED");
     } else if (action === "finalize") {
       // 📄 Финализировать можно всё, что еще не оплачено
       targets = sel.filter(t => t.status !== "SIGNED_BY_US");
@@ -538,9 +556,9 @@ export function CouriersClient({ user }: { user: any }) {
           <div>
             <h1 style={s.title}>Курьеры</h1>
             <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch" }}>
+              <button style={activeTab === "schedule" ? s.tabActive : s.tabInactive} onClick={() => setActiveTab("schedule")}>📅 График</button>
               <button style={activeTab === "calc" ? s.tabActive : s.tabInactive} onClick={() => setActiveTab("calc")}>💰 ЗП</button>
               <button style={activeTab === "tasks" ? s.tabActive : s.tabInactive} onClick={() => setActiveTab("tasks")}>📋 Задания</button>
-              <button style={activeTab === "schedule" ? s.tabActive : s.tabInactive} onClick={() => setActiveTab("schedule")}>📅 График</button>
               <button style={activeTab === "routes" ? s.tabActive : s.tabInactive} onClick={() => setActiveTab("routes")}>🗺️ Маршруты</button>
 
             </div>
@@ -567,65 +585,97 @@ export function CouriersClient({ user }: { user: any }) {
               </span>
               <button style={s.arrowBtn} onClick={() => setScheduleWeekStart(d => new Date(d.getTime() + 7 * 86400000))}>Неделя ▶</button>
             </div>
-            
+
             <table style={s.table}>
               <thead>
                 <tr>
                   <th style={{ ...s.th, width: 220 }}>Курьер</th>
                   <th style={{ ...s.th, width: 120 }}>Телефон</th>
-                  {scheduleDates.map((d, i) => (
-                    <th key={d} style={{ ...s.th, textAlign: "center", cursor: "pointer", color: sortDate === d ? "#4a7aff" : "#a8a49c", background: sortDate === d ? "#eef3ff" : "#fafaf8" }} onClick={() => setSortDate(d)}>
-                      {formatDay(d)}<br /><span style={{ fontSize: 10, fontWeight: 500 }}>{d.slice(5).replace("-", ".")}</span>
-                    </th>
-                  ))}
+                  {scheduleDates.map((d, i) => {
+                    const dObj = new Date(d);
+                    const dayStr = `${dObj.toLocaleDateString('ru', { weekday: 'short' }).toUpperCase()} ${dObj.toLocaleDateString('ru', { day: '2-digit', month: '2-digit' })}`;
+
+                    return (
+                      <th key={d} style={{ ...s.th, textAlign: "center", cursor: "pointer", color: sortDate === d ? "#4a7aff" : "#a8a49c", background: sortDate === d ? "#eef3ff" : "#fafaf8" }} onClick={() => setSortDate(d)}>
+                        {dayStr}
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
                 {loading ? <tr><td colSpan={9} style={{ padding: 20, textAlign: "center" }}>Загрузка...</td></tr> : scheduleSorted.map(c => {
                   const isSortDayWorking = c.shifts.some(s => s.date === sortDate);
+
                   return (
                     <tr key={c.id} style={{ background: isSortDayWorking ? "#fcfcfc" : "#fff", borderBottom: "1px solid #f0efe9" }}>
                       <td style={{ ...s.td, fontWeight: 600 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', maxWidth: '190px' }}>
-                          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.fullName}</span>
-                          <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '4px' }} onClick={(e) => { e.stopPropagation(); toggleAuto(c.id, c.isAuto || false); }}>
-                            <span style={{ fontSize: 9, color: c.isAuto ? '#10b981' : '#a8a49c', fontWeight: 800 }}>АВТО</span>
-                            <div style={{ position: 'relative', width: 28, height: 16, background: c.isAuto ? '#10b981' : '#e5e7eb', borderRadius: 20, transition: '0.2s', flexShrink: 0 }}>
-                              <div style={{ position: 'absolute', top: 2, left: c.isAuto ? 14 : 2, width: 12, height: 12, background: '#fff', borderRadius: '50%', transition: '0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }} />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', maxWidth: '190px' }}>
+                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.fullName}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '4px' }} onClick={(e) => { e.stopPropagation(); toggleAuto(c.id, c.isAuto || false); }}>
+                              <span style={{ fontSize: 9, color: c.isAuto ? '#10b981' : '#a8a49c', fontWeight: 800 }}>АВТО</span>
+                              <div style={{ position: 'relative', width: 28, height: 16, background: c.isAuto ? '#10b981' : '#e5e7eb', borderRadius: 20, transition: '0.2s', flexShrink: 0 }}>
+                                <div style={{ position: 'absolute', top: 2, left: c.isAuto ? 14 : 2, width: 12, height: 12, background: '#fff', borderRadius: '50%', transition: '0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }} />
+                              </div>
                             </div>
                           </div>
+
+                          {/* 🔥 ИСПРАВЛЕНО: Выбор приоритета теперь находится под именем курьера */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 10, color: '#a8a49c', fontWeight: 500 }}>Рейтинг:</span>
+                            <select
+                              value={c.priority || 3}
+                              onChange={e => updateCourierPriority(c.id, Number(e.target.value))}
+                              style={{ fontSize: 11, padding: "2px 4px", border: "1px solid #e8e6df", borderRadius: 4, background: "#fafaf8", outline: "none", cursor: "pointer", color: "#1a1a18", fontWeight: 600 }}
+                            >
+                              <option value="5">⭐⭐⭐⭐⭐</option>
+                              <option value="4">⭐⭐⭐⭐</option>
+                              <option value="3">⭐⭐⭐</option>
+                              <option value="2">⭐⭐</option>
+                              <option value="1">⭐</option>
+                            </select>
+                          </div>
                         </div>
-                      </td>                 
-                      <td style={{ ...s.td, color: "#6b6860", fontSize: 12 }}>{c.phone || "—"}</td>
-                      
+                      </td>
+                      <td style={{ ...s.td, color: "#6b6860", fontSize: 12, verticalAlign: "middle" }}>{c.phone || "—"}</td>
+
                       {scheduleDates.map(date => {
                         const shift = c.shifts.find(s => s.date === date);
                         const isWorking = !!shift;
-                        // Считаем вообще ВСЕ заказы курьера на этот день (без учета статуса DELIVERED)
                         const allOrdersCount = orders.filter(o => o.courierId === c.id && getODate(o) === date).length;
-                        
+
+                        const TIME_OPTIONS = Array.from({ length: 36 }, (_, i) => {
+                          const h = Math.floor(i / 2) + 6;
+                          const m = i % 2 === 0 ? "00" : "30";
+                          return `${String(h).padStart(2, '0')}:${m}`;
+                        });
+
                         return (
-                          <td key={date} style={{ ...s.td, textAlign: "center", background: sortDate === date ? "rgba(74,122,255,0.03)" : "transparent" }}>
+                          <td key={date} style={{ ...s.td, textAlign: "center", background: sortDate === date ? "rgba(74,122,255,0.03)" : "transparent", verticalAlign: "middle" }}>
                             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                              <div style={{display: "flex", alignItems: "center", gap: 6}}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                 <input type="checkbox" checked={isWorking} onChange={(e) => toggleShift(c.id, date, e.target.checked)} style={s.checkbox} />
-                                {allOrdersCount > 0 && <span style={{ fontSize: 11, color: "#fff", background: "#4a7aff", padding: "2px 6px", borderRadius: 10, fontWeight: 700 }}>{allOrdersCount}</span>}
+                                {allOrdersCount > 0 && <span style={{ fontSize: 11, color: "#fff", background: "#4a7aff", padding: "2px 6px", borderRadius: 10, fontWeight: 700 }} title="Всего точек">{allOrdersCount}</span>}
                               </div>
-                              
-                              {/* НАСТРОЙКИ ВРЕМЕНИ И ПРИОРИТЕТА */}
+
+                              {/* 🔥 ИСПРАВЛЕНО: Только время, без приоритета */}
                               {isWorking && (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4, background: "#fff", padding: "4px 6px", borderRadius: 6, border: "1px solid #e8e6df" }}>
-                                  <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                                    <input type="time" value={shift.startTime || "10:00"} onChange={e => updateShiftDetails(c.id, date, { startTime: e.target.value })} style={{ fontSize: 10, padding: 2, width: 45, border: "1px solid #e8e6df", borderRadius: 4, outline: "none" }} />
-                                    <span style={{ fontSize: 10, color: "#a8a49c" }}>-</span>
-                                    <input type="time" value={shift.endTime || "22:00"} onChange={e => updateShiftDetails(c.id, date, { endTime: e.target.value })} style={{ fontSize: 10, padding: 2, width: 45, border: "1px solid #e8e6df", borderRadius: 4, outline: "none" }} />
-                                  </div>
-                                  <select value={shift.priority || 3} onChange={e => updateShiftDetails(c.id, date, { priority: Number(e.target.value) })} style={{ fontSize: 10, padding: "2px 4px", border: "1px solid #e8e6df", borderRadius: 4, background: "#fafaf8", outline: "none", cursor: "pointer" }}>
-                                    <option value="5">⭐⭐⭐⭐⭐</option>
-                                    <option value="4">⭐⭐⭐⭐</option>
-                                    <option value="3">⭐⭐⭐ (Обычный)</option>
-                                    <option value="2">⭐⭐</option>
-                                    <option value="1">⭐ (Низкий)</option>
+                                <div style={{ display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'center', marginTop: 4, background: "#fff", padding: "4px 6px", borderRadius: 6, border: "1px solid #e8e6df" }}>
+                                  <select
+                                    value={shift.startTime || "10:00"}
+                                    onChange={e => updateShiftDetails(c.id, date, { startTime: e.target.value })}
+                                    style={{ fontSize: 11, padding: "2px 0", width: 44, border: "none", outline: "none", cursor: "pointer", background: "transparent", textAlign: "center", fontWeight: 600, color: "#1a1a18", appearance: "none" }}
+                                  >
+                                    {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                                  </select>
+                                  <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 700 }}>-</span>
+                                  <select
+                                    value={shift.endTime || "22:00"}
+                                    onChange={e => updateShiftDetails(c.id, date, { endTime: e.target.value })}
+                                    style={{ fontSize: 11, padding: "2px 0", width: 44, border: "none", outline: "none", cursor: "pointer", background: "transparent", textAlign: "center", fontWeight: 600, color: "#1a1a18", appearance: "none" }}
+                                  >
+                                    {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                                   </select>
                                 </div>
                               )}
@@ -719,7 +769,6 @@ export function CouriersClient({ user }: { user: any }) {
                 <tr>
                   <th style={{ ...s.th, width: 220, verticalAlign: "top" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      {/* 🔥 ГЛОБАЛЬНЫЙ ЧЕКБОКС "ВЫБРАТЬ ВСЕ" */}
                       <input
                         type="checkbox"
                         checked={isAllGlobalSelected && allAvailableKeys.length > 0}
@@ -730,6 +779,7 @@ export function CouriersClient({ user }: { user: any }) {
                       Курьер
                     </div>
                   </th>
+                  {/* 🔥 ПРАВИЛЬНЫЙ ЗАГОЛОВОК С ДАТАМИ (В ОДНУ СТРОКУ) */}
                   {calcDates.map(d => {
                     const availableDayKeys = calcSortedAndFiltered.map(c => `${c.id}_${d}`).filter(k => {
                       const cId = Number(k.split('_')[0]);
@@ -741,9 +791,12 @@ export function CouriersClient({ user }: { user: any }) {
                       .filter(p => p.endsWith(`_${d}`))
                       .reduce((acc, p) => acc + getSum(Number(p.split('_')[0]), d), 0);
 
+                    const dObj = new Date(d);
+                    const dayStr = `${dObj.toLocaleDateString('ru', { weekday: 'short' }).toUpperCase()} ${dObj.toLocaleDateString('ru', { day: '2-digit', month: '2-digit' })}`;
+
                     return (
-                      <th key={d} style={{ ...s.th, textAlign: "center", verticalAlign: "top" }}>
-                        {formatDay(d)}<br /><span style={{ fontSize: 10 }}>{d.slice(5).replace("-", ".")}</span>
+                      <th key={d} style={{ ...s.th, textAlign: "center", verticalAlign: "top", whiteSpace: "nowrap" }}>
+                        {dayStr}
                         <div style={{ marginTop: 6, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
                           <input type="checkbox" checked={isAllDaySelected} onChange={() => toggleDay(d)} style={{ ...s.checkbox, width: 14, height: 14 }} title="Выбрать весь день" />
                           {daySelectedSum > 0 && (
@@ -773,6 +826,7 @@ export function CouriersClient({ user }: { user: any }) {
                   </th>
                 </tr>
               </thead>
+              
               <tbody>
                 {loading ? <tr><td colSpan={9} style={{ padding: 20, textAlign: "center" }}>Загрузка...</td></tr>
                   : calcSortedAndFiltered.length === 0 ? <tr><td colSpan={9} style={{ padding: 40, textAlign: "center", color: "#a8a49c" }}>На этой неделе нет курьеров с заказами</td></tr>
@@ -780,9 +834,9 @@ export function CouriersClient({ user }: { user: any }) {
                       const selectedDates = calcDates.filter(d => selectedPays.includes(`${c.id}_${d}`));
                       let selectedTotal = 0;
                       if (countOverrides[c.id]) {
-                          selectedTotal = Object.entries(countOverrides[c.id]).reduce((acc, [price, qty]) => acc + Number(price) * qty, 0);
+                        selectedTotal = Object.entries(countOverrides[c.id]).reduce((acc, [price, qty]) => acc + Number(price) * qty, 0);
                       } else {
-                          selectedTotal = selectedDates.reduce((acc, d) => acc + getSum(c.id, d), 0);
+                        selectedTotal = selectedDates.reduce((acc, d) => acc + getSum(c.id, d), 0);
                       }
                       const unselectedTotal = calcDates.filter(d => !selectedPays.includes(`${c.id}_${d}`)).reduce((acc, d) => acc + getSum(c.id, d), 0);
                       const weekTotal = selectedTotal + unselectedTotal;
@@ -798,7 +852,6 @@ export function CouriersClient({ user }: { user: any }) {
                         <tr key={c.id} style={{ borderBottom: "1px solid #f0efe9", background: "#fff" }}>
                           <td style={{ ...s.td, fontWeight: 600 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                              {/* 🔥 Чекбокс выделения всей недели курьера */}
                               <input
                                 type="checkbox"
                                 checked={isAllWeekSelected}
@@ -814,7 +867,6 @@ export function CouriersClient({ user }: { user: any }) {
                               )}
                               <span style={{ whiteSpace: 'nowrap' }}>{c.fullName}</span>
 
-                              {/* 🔥 Ползунок во вкладке ЗП */}
                               <div
                                 style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '4px' }}
                                 onClick={(e) => { e.stopPropagation(); toggleAuto(c.id, c.isAuto || false); }}
@@ -832,6 +884,7 @@ export function CouriersClient({ user }: { user: any }) {
                               </div>
                             ))}
                           </td>
+                          {/* 🔥 ПРАВИЛЬНЫЕ ЯЧЕЙКИ С ДАННЫМИ ПО ДНЯМ */}
                           {calcDates.map(d => {
                             const count = getCount(c.id, d, true); const sum = getSum(c.id, d);
                             const isPaid = c.payments?.some(p => p.date === d);
@@ -851,24 +904,23 @@ export function CouriersClient({ user }: { user: any }) {
                           })}
                           <td style={{ ...s.td, textAlign: "right", fontWeight: 700, background: "#fafaf8" }}>
                             <div style={{ fontSize: 14 }}>
-                                {weekTotal.toFixed(0)} ₽
-                                {selectedDates.length > 0 && (
-                                    <button 
-                                      style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: 4, opacity: 0.6 }}
-                                      onClick={(e) => {
-                                          e.stopPropagation();
-                                          const defaults = getCourierDefaultCounts(c.id);
-                                          const overrides = countOverrides[c.id] || {};
-                                          const merged = { ...defaults };
-                                          for (const k in overrides) merged[k] = overrides[k];
-                                          // Добавляем пустые поля для удобства, если их нет
-                                          [600, 1000, 1400].forEach(p => { if (merged[p] === undefined) merged[p] = 0; });
-                                          setTempCounts(merged);
-                                          setEditingCountsCourier(c.id);
-                                      }}
-                                      title="Редактировать количество услуг для пересчета"
-                                    >✏️</button>
-                                )}
+                              {weekTotal.toFixed(0)} ₽
+                              {selectedDates.length > 0 && (
+                                <button
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: 4, opacity: 0.6 }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const defaults = getCourierDefaultCounts(c.id);
+                                    const overrides = countOverrides[c.id] || {};
+                                    const merged = { ...defaults };
+                                    for (const k in overrides) merged[k] = overrides[k];
+                                    [600, 1000, 1400].forEach(p => { if (merged[p] === undefined) merged[p] = 0; });
+                                    setTempCounts(merged);
+                                    setEditingCountsCourier(c.id);
+                                  }}
+                                  title="Редактировать количество услуг для пересчета"
+                                >✏️</button>
+                              )}
                             </div>
                             {weekTotal > 0 && <div style={{ fontSize: 11, color: "#10b981", marginTop: 4 }}>x 1.06 = {weekTotal106.toFixed(0)} ₽</div>}
                             {countOverrides[c.id] && <div style={{ fontSize: 9, color: "#d94040", marginTop: 2 }}>Изменено вручную</div>}
@@ -1005,7 +1057,8 @@ export function CouriersClient({ user }: { user: any }) {
           CONFIRMED: { label: "🔵 Принято", color: "#4a7aff", bg: "#eef3ff" },
           ACCEPTED: { label: "🟢 Выполнено", color: "#10b981", bg: "#ecfdf5" },
           CONFIRMED_ACT: { label: "📄 Акт готов", color: "#8b5cf6", bg: "#f5f3ff" },
-          SIGNED_BY_US: { label: "✅ Подписано", color: "#10b981", bg: "#f0fdf4" },       };
+          SIGNED_BY_US: { label: "✅ Подписано", color: "#10b981", bg: "#f0fdf4" },
+        };
         const REMOTE_ST: Record<string, { label: string; color: string }> = {
           submitted: { label: "🟡 Ожидает курьера", color: "#f59e0b" },
           confirmed: { label: "🔵 В работе", color: "#4a7aff" },
@@ -1050,34 +1103,34 @@ export function CouriersClient({ user }: { user: any }) {
               )}
               <div style={{ flex: 1 }} />
               <button
-                  onClick={async () => {
-                    await loadKonsolTasks();
-                    setKonsolToast({ message: `✅ Задания обновлены`, type: "success" });
-                    setTimeout(() => setKonsolToast(null), 3000);
-                  }}
-                  disabled={konsolTasksLoading}
-                  style={{
-                    ...s.navBtn,
-                    display: "flex", alignItems: "center", gap: 6,
-                    background: konsolTasksLoading ? "#f5f4f0" : "#fff",
-                    minWidth: 120,
-                  }}
-                >
-                  {konsolTasksLoading ? (
-                    <>
-                      <span style={{
-                        width: 14, height: 14, border: "2px solid #e8e6df",
-                        borderTopColor: "#4a7aff", borderRadius: "50%",
-                        display: "inline-block",
-                        animation: "spin 0.7s linear infinite",
-                        flexShrink: 0,
-                      }} />
-                      Загрузка...
-                    </>
-                  ) : (
-                    <>🔄 Обновить статусы</>
-                  )}
-                </button>
+                onClick={async () => {
+                  await loadKonsolTasks();
+                  setKonsolToast({ message: `✅ Задания обновлены`, type: "success" });
+                  setTimeout(() => setKonsolToast(null), 3000);
+                }}
+                disabled={konsolTasksLoading}
+                style={{
+                  ...s.navBtn,
+                  display: "flex", alignItems: "center", gap: 6,
+                  background: konsolTasksLoading ? "#f5f4f0" : "#fff",
+                  minWidth: 120,
+                }}
+              >
+                {konsolTasksLoading ? (
+                  <>
+                    <span style={{
+                      width: 14, height: 14, border: "2px solid #e8e6df",
+                      borderTopColor: "#4a7aff", borderRadius: "50%",
+                      display: "inline-block",
+                      animation: "spin 0.7s linear infinite",
+                      flexShrink: 0,
+                    }} />
+                    Загрузка...
+                  </>
+                ) : (
+                  <>🔄 Обновить статусы</>
+                )}
+              </button>
               {selectedTasks.size > 0 && <>
                 <span style={{ fontSize: 12, color: "#6b6860" }}>Выбрано: <b>{selectedTasks.size}</b></span>
                 <button onClick={() => handleTasksAction("recalculate")} disabled={konsolTasksLoading} style={{ ...s.navBtn, background: "#f5f3ff", color: "#8b5cf6", borderColor: "#8b5cf6" }}>🔁 Пересчитать</button>
@@ -1168,16 +1221,16 @@ export function CouriersClient({ user }: { user: any }) {
                           </a>
                           {/* Показываем реальный статус Консоли если загружен, иначе БД-статус */}
                           {remoteSt ? (
-                              <span style={{ fontSize: 11, background: `${remoteSt.color}18`, color: remoteSt.color, padding: "2px 8px", borderRadius: 20, fontWeight: 700 }}>{remoteSt.label}</span>
-                            ) : remote === null ? (
-                              <span style={{ fontSize: 11, background: "#f5f4f0", color: "#a8a49c", padding: "2px 8px", borderRadius: 20, fontWeight: 700 }}>⏳ загрузка...</span>
-                            ) : (
-                              <span style={{ fontSize: 11, background: dbSt.bg, color: dbSt.color, padding: "2px 8px", borderRadius: 20, fontWeight: 700 }}>{dbSt.label}</span>
-                            )}
+                            <span style={{ fontSize: 11, background: `${remoteSt.color}18`, color: remoteSt.color, padding: "2px 8px", borderRadius: 20, fontWeight: 700 }}>{remoteSt.label}</span>
+                          ) : remote === null ? (
+                            <span style={{ fontSize: 11, background: "#f5f4f0", color: "#a8a49c", padding: "2px 8px", borderRadius: 20, fontWeight: 700 }}>⏳ загрузка...</span>
+                          ) : (
+                            <span style={{ fontSize: 11, background: dbSt.bg, color: dbSt.color, padding: "2px 8px", borderRadius: 20, fontWeight: 700 }}>{dbSt.label}</span>
+                          )}
                           <div style={{ flex: 1 }} />
                           <span style={{ fontWeight: 700, fontSize: 13, color: isPaid ? "#10b981" : "#1a1a18" }}>{task.amount.toFixed(0)} ₽</span>
                           <div onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 4 }}>
-                          {(!isPaid && !task.konsolActId) && (
+                            {(!isPaid && !task.konsolActId) && (
                               <button
                                 onClick={async () => { setSelectedTasks(new Set([task.id])); await handleTasksAction("finalize"); }}
                                 disabled={konsolTasksLoading}
@@ -1186,8 +1239,8 @@ export function CouriersClient({ user }: { user: any }) {
                               >📄</button>
                             )}
                             {(task.status === "CONFIRMED" || task.status === "ACCEPTED") && (
-                                <button
-                                  onClick={async () => { setSelectedTasks(new Set([task.id])); await handleTasksAction("pay"); }}
+                              <button
+                                onClick={async () => { setSelectedTasks(new Set([task.id])); await handleTasksAction("pay"); }}
                                 disabled={konsolTasksLoading}
                                 style={{ padding: "4px 8px", borderRadius: 6, border: "none", background: "#10b981", color: "#fff", fontSize: 12, cursor: "pointer" }}
                                 title="Оплатить"
@@ -1241,54 +1294,54 @@ export function CouriersClient({ user }: { user: any }) {
         );
       })()}
 
-{editingCountsCourier && (() => {
-  const courier = couriers.find(c => c.id === editingCountsCourier);
-  const prices = courier?.isAuto ? [600, 1000, 1400] : [500, 900, 1300];
-  const label = courier?.isAuto ? '🚗 Авто' : '🚶 Пеший';
+      {editingCountsCourier && (() => {
+        const courier = couriers.find(c => c.id === editingCountsCourier);
+        const prices = courier?.isAuto ? [600, 1000, 1400] : [500, 900, 1300];
+        const label = courier?.isAuto ? '🚗 Авто' : '🚶 Пеший';
 
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: '#fff', borderRadius: 12, padding: 20, width: 320, boxShadow: '0 4px 24px rgba(0,0,0,0.2)' }}>
-        <h3 style={{ margin: '0 0 4px 0', fontSize: 16 }}>Редактировать услуги</h3>
-        <p style={{ margin: '0 0 16px 0', fontSize: 12, color: '#a8a49c' }}>{label} · {courier?.fullName}</p>
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: '#fff', borderRadius: 12, padding: 20, width: 320, boxShadow: '0 4px 24px rgba(0,0,0,0.2)' }}>
+              <h3 style={{ margin: '0 0 4px 0', fontSize: 16 }}>Редактировать услуги</h3>
+              <p style={{ margin: '0 0 16px 0', fontSize: 12, color: '#a8a49c' }}>{label} · {courier?.fullName}</p>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-          {prices.map(price => (
-            <div key={price} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 13 }}>{price} ₽ → <b>{Math.round(price * 1.06)} ₽</b></span>
-              <input
-                type="number" min="0"
-                value={tempCounts[price] ?? 0}
-                onChange={e => setTempCounts({ ...tempCounts, [price]: Number(e.target.value) })}
-                style={{ width: 60, padding: '4px 8px', border: '1px solid #e8e6df', borderRadius: 6, textAlign: 'center' }}
-              />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+                {prices.map(price => (
+                  <div key={price} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 13 }}>{price} ₽ → <b>{Math.round(price * 1.06)} ₽</b></span>
+                    <input
+                      type="number" min="0"
+                      value={tempCounts[price] ?? 0}
+                      onChange={e => setTempCounts({ ...tempCounts, [price]: Number(e.target.value) })}
+                      style={{ width: 60, padding: '4px 8px', border: '1px solid #e8e6df', borderRadius: 6, textAlign: 'center' }}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ marginBottom: 16, padding: '8px 12px', background: '#f5f4f0', borderRadius: 8, fontSize: 13 }}>
+                Итого: <b style={{ color: '#10b981' }}>
+                  {prices.reduce((acc, p) => acc + Math.round(p * 1.06) * (tempCounts[p] ?? 0), 0)} ₽
+                </b>
+              </div>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => setEditingCountsCourier(null)}
+                  style={{ flex: 1, padding: '8px', border: '1px solid #e8e6df', background: '#fafaf8', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>
+                  Отмена
+                </button>
+                <button onClick={() => {
+                  setCountOverrides({ ...countOverrides, [editingCountsCourier]: tempCounts });
+                  setEditingCountsCourier(null);
+                }}
+                  style={{ flex: 1, padding: '8px', border: 'none', background: '#4a7aff', color: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>
+                  Сохранить
+                </button>
+              </div>
             </div>
-          ))}
-        </div>
-
-        <div style={{ marginBottom: 16, padding: '8px 12px', background: '#f5f4f0', borderRadius: 8, fontSize: 13 }}>
-          Итого: <b style={{ color: '#10b981' }}>
-            {prices.reduce((acc, p) => acc + Math.round(p * 1.06) * (tempCounts[p] ?? 0), 0)} ₽
-          </b>
-        </div>
-
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={() => setEditingCountsCourier(null)}
-            style={{ flex: 1, padding: '8px', border: '1px solid #e8e6df', background: '#fafaf8', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>
-            Отмена
-          </button>
-          <button onClick={() => {
-            setCountOverrides({ ...countOverrides, [editingCountsCourier]: tempCounts });
-            setEditingCountsCourier(null);
-          }}
-            style={{ flex: 1, padding: '8px', border: 'none', background: '#4a7aff', color: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>
-            Сохранить
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-})()}
+          </div>
+        );
+      })()}
 
       {selectedOrder && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 9999, display: "flex", justifyContent: "flex-end" }}>
@@ -1305,7 +1358,8 @@ export function CouriersClient({ user }: { user: any }) {
           </div>
         </div>
       )}
-    <style dangerouslySetInnerHTML={{__html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}} />
