@@ -25,11 +25,13 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     if (body.status !== undefined) {
       updateData.status = body.status;
       updateData.changedAt = new Date();
-      // 🔥 Если заказ переведен "В пути", и еще нет времени выезда, фиксируем время забора
-      if (body.status === "IN_DELIVERY" && !order.pickedUpAt) {
+      
+      // 🔥 Простое и жесткое условие: перевели "В пути" — записали время выезда
+      if (body.status === "IN_DELIVERY") {
         updateData.pickedUpAt = new Date();
       }
-      // 🔥 ДОБАВЛЕНО: Если заказ вернули на статус "Новый" или "Назначен", очищаем время выезда
+      
+      // 🔥 Если вернули заказ обратно — очистили время выезда
       if (body.status === "NEW" || body.status === "ASSIGNED") {
         updateData.pickedUpAt = null;
       }

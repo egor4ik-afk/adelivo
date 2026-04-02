@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
   try {
-    const { courierId, date, isWorking, startTime, endTime, priority } = await req.json();
+    // 🔥 priority больше не достаем и не пытаемся сохранить в смену
+    const { courierId, date, isWorking, startTime, endTime } = await req.json();
 
     if (isWorking) {
       await prisma.courierShift.upsert({
@@ -14,12 +15,11 @@ export async function POST(req: Request) {
           date, 
           startTime: startTime ?? "10:00", 
           endTime: endTime ?? "22:00", 
-          priority: priority ?? 3 
         },
         update: {
           ...(startTime !== undefined && { startTime }),
           ...(endTime !== undefined && { endTime }),
-          ...(priority !== undefined && { priority })
+          // 🔥 Убрали ...(priority !== undefined && { priority })
         },
       });
     } else {
