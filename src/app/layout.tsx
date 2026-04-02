@@ -50,9 +50,6 @@ export const metadata: Metadata = {
   creator: "Event Wave",
   publisher: "Event Wave",
 
-  alternates: {
-    canonical: "/",
-  },
 
   openGraph: {
     title: "Event Wave — Диспетчеризация и управление курьерами",
