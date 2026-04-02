@@ -230,13 +230,20 @@ export function DashboardClient({ user }: { user: User }) {
       return a.fullName.localeCompare(b.fullName);
     });
     return base.map(c => {
-      const works = c.shifts.some(s => s.date === filterDate);
+      // 🔥 Находим саму смену и говорим TS игнорировать строгие типы (as any)
+      const shift = c.shifts.find(s => s.date === filterDate) as any;
       const cnt = orderCounts[c.fullName] || 0;
       let label = c.fullName;
-      if (works || cnt > 0) {
+      
+      if (shift || cnt > 0) {
         const flags = [];
-        if (works) flags.push("На смене");
-        if (cnt > 0) flags.push(`${cnt} зак.`);
+        if (shift) {
+          // Выводим время и приоритет (со значениями по умолчанию, если их вдруг нет)
+          flags.push(`На смене ${shift.startTime || "10:00"}-${shift.endTime || "22:00"} (⭐${shift.priority || 3})`);
+        }
+        if (cnt > 0) {
+          flags.push(`${cnt} зак.`);
+        }
         label += ` (${flags.join(", ")})`;
       }
       return { id: c.id, value: String(c.id), label };

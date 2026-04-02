@@ -91,7 +91,7 @@ export default function CourierProfilePage() {
   const [newFirstName, setNewFirstName] = useState("");
   const [newLastName, setNewLastName] = useState("");
   const [newHomeAddress, setNewHomeAddress] = useState(""); 
-  const [isAuto, setIsAuto] = useState(false); // 🔥 ДОБАВЛЕНО Состояние для авто
+  const [isAuto, setIsAuto] = useState(false); 
   
   // Консоль
   const [konsolModalOpen, setKonsolModalOpen] = useState(false);
@@ -99,7 +99,8 @@ export default function CourierProfilePage() {
   const [konsolLoading, setKonsolLoading] = useState(false);
 
   const [saving, setSaving] = useState(false);
-  const [myShifts, setMyShifts] = useState<string[]>([]);
+  // 🔥 Изменили тип стейта смен: теперь это массив объектов
+  const [myShifts, setMyShifts] = useState<any[]>([]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [pwaPrompt, setPwaPrompt] = useState<any>(null);
@@ -109,13 +110,10 @@ export default function CourierProfilePage() {
   const isSubscribed = pushState === "granted";
   const needsPushBanner = pushState === "default";
 
-  const days = Array.from({ length: 7 }).map((_, i) => {
-    const d = new Date(); d.setDate(d.getDate() + i);
-    return {
-      date: d.toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }),
-      dayName: d.toLocaleDateString("ru-RU", { weekday: "short" }),
-      dayNum: d.getDate()
-    };
+  // Генерируем 7 дней
+  const scheduleDates = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() + i); 
+    return d.toISOString().split("T")[0];
   });
 
   const loadData = () => {
@@ -125,14 +123,17 @@ export default function CourierProfilePage() {
       setNewFirstName(data.firstName || "");
       setNewLastName(data.lastName || "");
       setNewHomeAddress(data.homeAddress || "");
-      setIsAuto(data.isAuto || false); // 🔥 ЗАГРУЖАЕМ статус авто
+      setIsAuto(data.isAuto || false);
     });
 
     fetch("/api/courier/my-stats").then(r => r.json()).then(data => {
       setStats(data);
     });
 
-    fetch("/api/courier/my-shifts").then(r => r.json()).then(data => {
+    // Загружаем смены
+    const from = scheduleDates[0];
+    const to = scheduleDates[6];
+    fetch(`/api/courier/my-shifts?from=${from}&to=${to}`).then(r => r.json()).then(data => {
       if (Array.isArray(data)) setMyShifts(data);
     });
   };
@@ -151,18 +152,28 @@ export default function CourierProfilePage() {
     return () => window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
   }, []);
 
-  const toggleShift = async (date: string) => {
-    const isWorking = !myShifts.includes(date);
-    setMyShifts(prev => isWorking ? [...prev, date] : prev.filter(d => d !== date));
+  // 🔥 НОВАЯ Функция сохранения смены с учетом времени
+  const updateShift = async (date: string, data: { isWorking: boolean, startTime?: string, endTime?: string }) => {
+    // Оптимистичное обновление UI
+    if (data.isWorking) {
+      setMyShifts(prev => {
+        const existing = prev.find(s => s.date === date);
+        if (existing) return prev.map(s => s.date === date ? { ...s, ...data } : s);
+        return [...prev, { date, startTime: data.startTime || "10:00", endTime: data.endTime || "22:00" }];
+      });
+    } else {
+      setMyShifts(prev => prev.filter(s => s.date !== date));
+    }
 
     try {
+      // Отправка на сервер
       await fetch("/api/courier/my-shifts", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, isWorking })
+        body: JSON.stringify({ date, ...data })
       });
     } catch (e) {
       alert("Ошибка сохранения смены. Проверьте интернет.");
-      setMyShifts(prev => !isWorking ? [...prev, date] : prev.filter(d => d !== date));
+      loadData(); // Откат при ошибке
     }
   };
 
@@ -173,7 +184,6 @@ export default function CourierProfilePage() {
     try {
       await fetch("/api/profile", {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        // 🔥 ОТПРАВЛЯЕМ isAuto
         body: JSON.stringify({ phone: cleanPhone, firstName: newFirstName, lastName: newLastName, homeAddress: newHomeAddress, isAuto })
       });
       loadData();
@@ -185,7 +195,6 @@ export default function CourierProfilePage() {
     }
   };
 
-  // 🔥 Функция для мгновенного сохранения статуса Авто без кнопки "Сохранить"
   const toggleAutoStatus = async () => {
     const newStatus = !isAuto;
     setIsAuto(newStatus);
@@ -209,8 +218,7 @@ export default function CourierProfilePage() {
   
     try {
       const res = await fetch("/api/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ konsolPhone: phonePayload }),
       });
       const data = await res.json();
@@ -263,6 +271,11 @@ export default function CourierProfilePage() {
     setPwaPrompt(null);
   };
 
+  const formatDay = (dateStr: string) => {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString("ru", { weekday: "short", day: "2-digit", month: "long" });
+  };
+
   if (!profile) return <div style={{ padding: 20, textAlign: "center", color: "#a8a49c" }}>Загрузка профиля...</div>;
 
   return (
@@ -284,7 +297,7 @@ export default function CourierProfilePage() {
 
       <div style={{ padding: 16 }}>
 
-        {/* 🔥 НОВЫЙ ПЕРЕКЛЮЧАТЕЛЬ АВТО/ПЕШИЙ */}
+        {/* ПЕРЕКЛЮЧАТЕЛЬ АВТО/ПЕШИЙ */}
         <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18" }}>Тип курьера</div>
@@ -343,77 +356,85 @@ export default function CourierProfilePage() {
           </div>
         )}
 
+        {/* 🔥 НОВЫЙ БЛОК ГРАФИКА */}
         <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
-          <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", margin: "0 0 12px 0", textTransform: "uppercase" }}>График (Ближайшие 7 дней)</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6 }}>
-            {days.map((d, i) => {
-              const isWorking = myShifts.includes(d.date);
+          <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", margin: "0 0 12px 0", textTransform: "uppercase" }}>📅 График работы</h2>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {scheduleDates.map(date => {
+              const shift = myShifts.find(s => s.date === date);
+              const isWorking = !!shift;
+
               return (
-                <div
-                  key={d.date}
-                  onClick={() => toggleShift(d.date)}
-                  style={{
-                    display: "flex", flexDirection: "column", alignItems: "center", padding: "10px 0",
-                    borderRadius: 8, cursor: "pointer", transition: "all 0.2s",
-                    background: isWorking ? "#10b981" : "#f5f4f0",
-                    color: isWorking ? "#fff" : "#1a1a18",
-                    border: i === 0 && !isWorking ? "1px solid #1a1a18" : "1px solid transparent"
-                  }}
-                >
-                  <span style={{ fontSize: 11, textTransform: "uppercase", opacity: isWorking ? 0.9 : 0.5, fontWeight: 600 }}>{d.dayName}</span>
-                  <span style={{ fontSize: 18, fontWeight: 700 }}>{d.dayNum}</span>
+                <div key={date} style={{ background: isWorking ? "#f0fdf4" : "#fafaf8", padding: 12, borderRadius: 10, border: isWorking ? "1px solid #a7f3d0" : "1px solid #e8e6df", transition: "all 0.2s" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", textTransform: "capitalize" }}>
+                      {formatDay(date)}
+                    </span>
+                    
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: isWorking ? "#10b981" : "#a8a49c" }}>
+                        {isWorking ? "На смене" : "Выходной"}
+                      </span>
+                      <input 
+                        type="checkbox" 
+                        checked={isWorking} 
+                        onChange={(e) => updateShift(date, { 
+                          isWorking: e.target.checked, 
+                          startTime: shift?.startTime || "10:00", 
+                          endTime: shift?.endTime || "22:00" 
+                        })} 
+                        style={{ width: 16, height: 16, accentColor: "#10b981" }}
+                      />
+                    </label>
+                  </div>
+
+                  {isWorking && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, paddingTop: 10, borderTop: "1px solid #d1fae5" }}>
+                      <span style={{ fontSize: 12, color: "#059669", fontWeight: 600 }}>Часы работы:</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <input 
+                          type="time" 
+                          value={shift.startTime || "10:00"} 
+                          onChange={(e) => updateShift(date, { isWorking: true, startTime: e.target.value, endTime: shift.endTime })}
+                          style={{ padding: "4px 6px", borderRadius: 6, border: "1px solid #a7f3d0", outline: "none", fontSize: 13, background: "#fff", color: "#065f46" }}
+                        />
+                        <span style={{ color: "#059669" }}>-</span>
+                        <input 
+                          type="time" 
+                          value={shift.endTime || "22:00"} 
+                          onChange={(e) => updateShift(date, { isWorking: true, startTime: shift.startTime, endTime: e.target.value })}
+                          style={{ padding: "4px 6px", borderRadius: 6, border: "1px solid #a7f3d0", outline: "none", fontSize: 13, background: "#fff", color: "#065f46" }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         </div>
+        {/* 🔥 КОНЕЦ БЛОКА ГРАФИКА */}
 
-        {!isStandalone && (
-          <div
-            onClick={installPWA}
-            style={{
-              margin: "0 0 16px 0", padding: "14px 16px",
-              background: "linear-gradient(135deg, #38bdf8 0%, #4a7aff 100%)",
-              borderRadius: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 12,
-              WebkitTapHighlightColor: "transparent", boxShadow: "0 4px 12px rgba(74,122,255,0.2)"
-            }}
-          >
-            <span style={{ fontSize: 24, filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.1))" }}>📱</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>Установить приложение</div>
-              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.85)", marginTop: 2, lineHeight: 1.3 }}>
-                Для быстрой работы без адресной строки и поддержки Push
-              </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0" }}>
+          <div>
+            <div style={{ fontSize: 13, color: "#a8a49c" }}>Push-уведомления</div>
+            <div style={{ fontSize: 13, color: isSubscribed ? "#10b981" : "#d94040", marginTop: 4, fontWeight: 600 }}>
+              {pushState === "loading" ? "..." : pushState === "unsupported" ? "Не поддерживается" : isSubscribed ? "Включены" : "Выключены"}
             </div>
-            <span style={{ color: "#fff", fontSize: 20, fontWeight: 300 }}>›</span>
           </div>
-        )}
-
-        {needsPushBanner && (
-          <div
-            onClick={handleSubscribe}
-            style={{
-              margin: "0 0 16px 0", padding: "14px 16px",
-              background: "linear-gradient(135deg, #1a1a18 0%, #2d2d2a 100%)",
-              borderRadius: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 12,
-              WebkitTapHighlightColor: "transparent"
-            }}
-          >
-            <span style={{ fontSize: 24 }}>🔔</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>Включить уведомления</div>
-              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", marginTop: 2 }}>
-                Нажмите чтобы получать уведомления о маршрутах
-              </div>
-            </div>
-            <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 20 }}>›</span>
-          </div>
-        )}
+          {pushState !== "unsupported" && pushState !== "loading" && (
+            <label style={{ position: "relative", display: "inline-block", width: 44, height: 24, cursor: "pointer", touchAction: "manipulation" }}>
+              <input type="checkbox" checked={isSubscribed} onChange={isSubscribed ? unsubscribe : handleSubscribe} style={{ opacity: 0, width: 0, height: 0, position: "absolute" }} />
+              <span style={{ position: "absolute", inset: 0, borderRadius: 24, background: isSubscribed ? "#10b981" : "#d1d5db", transition: "background 0.2s" }} />
+              <span style={{ position: "absolute", top: 3, left: isSubscribed ? 23 : 3, width: 18, height: 18, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.2)", transition: "left 0.2s" }} />
+            </label>
+          )}
+        </div>
 
         <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
           <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", margin: "0 0 12px 0", textTransform: "uppercase" }}>Настройки</h2>
 
-          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-start", padding: "12px 0", borderBottom: "1px solid #f0efe9" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-start", padding: "12px 0" }}>
             <div style={{ flex: "1 1 100%", paddingRight: 0, display: "flex", flexDirection: "column", width: "100%" }}>              
               {!editingProfile ? (
                 <>
@@ -469,36 +490,18 @@ export default function CourierProfilePage() {
               </div>
             )}
           </div>
-
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0" }}>
-            <div>
-              <div style={{ fontSize: 13, color: "#a8a49c" }}>Push-уведомления</div>
-              <div style={{ fontSize: 13, color: isSubscribed ? "#10b981" : "#d94040", marginTop: 4, fontWeight: 600 }}>
-                {pushState === "loading" ? "..." : pushState === "unsupported" ? "Не поддерживается" : isSubscribed ? "Включены" : "Выключены"}
-              </div>
-            </div>
-            {pushState !== "unsupported" && pushState !== "loading" && (
-              <label style={{ position: "relative", display: "inline-block", width: 44, height: 24, cursor: "pointer", touchAction: "manipulation" }}>
-                <input
-                  type="checkbox"
-                  checked={isSubscribed}
-                  onChange={isSubscribed ? unsubscribe : handleSubscribe}
-                  style={{ opacity: 0, width: 0, height: 0, position: "absolute" }}
-                />
-                <span style={{
-                  position: "absolute", inset: 0, borderRadius: 24,
-                  background: isSubscribed ? "#10b981" : "#d1d5db",
-                  transition: "background 0.2s"
-                }} />
-                <span style={{
-                  position: "absolute", top: 3, left: isSubscribed ? 23 : 3,
-                  width: 18, height: 18, borderRadius: "50%", background: "#fff",
-                  boxShadow: "0 1px 4px rgba(0,0,0,0.2)", transition: "left 0.2s"
-                }} />
-              </label>
-            )}
-          </div>
         </div>
+
+        {!isStandalone && (
+          <div onClick={installPWA} style={{ margin: "0 0 16px 0", padding: "14px 16px", background: "linear-gradient(135deg, #38bdf8 0%, #4a7aff 100%)", borderRadius: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, WebkitTapHighlightColor: "transparent", boxShadow: "0 4px 12px rgba(74,122,255,0.2)" }}>
+            <span style={{ fontSize: 24, filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.1))" }}>📱</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>Установить приложение</div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.85)", marginTop: 2, lineHeight: 1.3 }}>Для быстрой работы без адресной строки и поддержки Push</div>
+            </div>
+            <span style={{ color: "#fff", fontSize: 20, fontWeight: 300 }}>›</span>
+          </div>
+        )}
 
         <button onClick={handleLogout} style={{ width: "100%", background: "rgba(217,64,64,0.08)", color: "#d94040", border: "1px solid rgba(217,64,64,0.2)", padding: 14, borderRadius: 12, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>
           Выйти из аккаунта
@@ -511,21 +514,11 @@ export default function CourierProfilePage() {
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
           <div style={{ background: "#fff", padding: 24, borderRadius: 20, width: "90%", maxWidth: 350 }}>
             <h3 style={{ margin: "0 0 8px 0", fontSize: 18, color: "#1a1a18" }}>Привязка Консоль.Про</h3>
-            <p style={{ fontSize: 13, color: "#6b6860", margin: "0 0 16px 0", lineHeight: 1.4 }}>
-              Введите номер телефона, на который оформлен ваш статус самозанятого.
-            </p>
-            <IMaskInput
-              mask="+7 (000) 000-00-00"
-              value={inputKonsolPhone}
-              onAccept={(val) => setInputKonsolPhone(val as string)}
-              placeholder="+7 (___) ___-__-__"
-              style={{ width: "100%", padding: "12px", borderRadius: 8, border: "1px solid #4a7aff", outline: "none", fontSize: 16, boxSizing: "border-box", display: "block", marginBottom: 20 }}
-            />
+            <p style={{ fontSize: 13, color: "#6b6860", margin: "0 0 16px 0", lineHeight: 1.4 }}>Введите номер телефона, на который оформлен ваш статус самозанятого.</p>
+            <IMaskInput mask="+7 (000) 000-00-00" value={inputKonsolPhone} onAccept={(val) => setInputKonsolPhone(val as string)} placeholder="+7 (___) ___-__-__" style={{ width: "100%", padding: "12px", borderRadius: 8, border: "1px solid #4a7aff", outline: "none", fontSize: 16, boxSizing: "border-box", display: "block", marginBottom: 20 }} />
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={() => setKonsolModalOpen(false)} style={{ flex: 1, padding: 12, background: "#f5f4f0", color: "#1a1a18", border: "none", borderRadius: 8, fontWeight: 600 }}>Отмена</button>
-              <button onClick={() => handleKonsolAction("link")} disabled={konsolLoading} style={{ flex: 1, padding: 12, background: "#4a7aff", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600 }}>
-                {konsolLoading ? "Проверка..." : "Привязать"}
-              </button>
+              <button onClick={() => handleKonsolAction("link")} disabled={konsolLoading} style={{ flex: 1, padding: 12, background: "#4a7aff", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600 }}>{konsolLoading ? "Проверка..." : "Привязать"}</button>
             </div>
           </div>
         </div>
