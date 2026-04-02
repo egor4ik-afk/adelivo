@@ -184,7 +184,11 @@ export function DashboardClient({ user }: { user: User }) {
 
   const fetchData = useCallback(async () => {
     try {
-      const [ordersRes, couriersRes] = await Promise.all([fetch(`/api/orders`), fetch(`/api/couriers`)]);
+      // 🔥 Добавлен Date.now() чтобы пробить кэш браузера!
+      const [ordersRes, couriersRes] = await Promise.all([
+        fetch(`/api/orders?t=${Date.now()}`), 
+        fetch(`/api/couriers?t=${Date.now()}`)
+      ]);
       if (ordersRes.ok) { setOrders(await ordersRes.json()); setLastSync(new Date().toLocaleTimeString("ru", { timeZone: "Europe/Moscow" })); }
       if (couriersRes.ok) setDbCouriers(await couriersRes.json());
     } catch (e) { console.error(e); }
@@ -753,10 +757,11 @@ export function DashboardClient({ user }: { user: User }) {
       
       <div style={{ marginBottom: 16 }}>
         <button 
-          onClick={handleAutoGenerateRoutes} 
-          style={{ width: "100%", background: "linear-gradient(135deg, #4a7aff 0%, #7c4dff 100%)", color: "#fff", border: "none", padding: "10px 14px", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer", boxShadow: "0 4px 12px rgba(124, 77, 255, 0.3)", display: "flex", justifyContent: "center", alignItems: "center", gap: 8 }}
+          onClick={handleAutoGenerateRoutes}
+          disabled={bulkSaving} // 🔥 Блокируем кнопку
+          style={{ width: "100%", background: "linear-gradient(135deg, #4a7aff 0%, #7c4dff 100%)", color: "#fff", border: "none", padding: "10px 14px", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: bulkSaving ? "default" : "pointer", boxShadow: "0 4px 12px rgba(124, 77, 255, 0.3)", display: "flex", justifyContent: "center", alignItems: "center", gap: 8, opacity: bulkSaving ? 0.7 : 1 }}
         >
-          ✨ AI Авто-сборка черновиков
+          {bulkSaving ? "⏳ Сборка маршрутов..." : "✨ AI Авто-сборка черновиков"}
         </button>
       </div>
 
@@ -766,8 +771,20 @@ export function DashboardClient({ user }: { user: User }) {
           {existingRoutes.map((r: any) => {
             const isDraft = r.isDraft;
             
-            // 🔥 3. Безопасный поиск имени курьера через courierOptions
+            // Безопасный поиск имени курьера через courierOptions
             const courierName = courierOptions.find(c => String(c.value) === String(r.courierId))?.label || "Неизвестен";
+
+            // 🔥 Вычисляем время выезда
+            const pickedUpTimes = r.orders.map((o: any) => o.pickedUpAt).filter(Boolean);
+            const actualDepartureMs = pickedUpTimes.length > 0 ? Math.min(...pickedUpTimes.map((d: string) => new Date(d).getTime())) : null;
+
+            // 🔥 Вычисляем время завершения (показываем, только если ВСЕ точки доставлены)
+            const isAllDelivered = r.orders.length > 0 && r.orders.every((o: any) => o.status === "DELIVERED");
+            let finishedMs: number | null = null;
+            if (isAllDelivered) {
+               const deliveryTimes = r.orders.map((o: any) => new Date(o.changedAt || o.updatedAt).getTime()).filter((t: number) => !isNaN(t));
+               finishedMs = deliveryTimes.length > 0 ? Math.max(...deliveryTimes) : null;
+            }
 
             return (
             <div key={r.id} onClick={() => {
@@ -777,7 +794,7 @@ export function DashboardClient({ user }: { user: User }) {
               setRouteTabMode("new");
             }} style={{ background: "#fafaf8", border: "1px solid #e8e6df", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   {r.name} 
                   {isDraft && <span style={{ background: "#fef3c7", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>Черновик</span>}
                   <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 500 }}>изм. {new Date(r.updatedAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</span>
@@ -785,6 +802,23 @@ export function DashboardClient({ user }: { user: User }) {
                 <div style={{ fontSize: 12, color: "#6b6860", marginTop: 4 }}>
                   Курьер: {courierName} · {r.orders.length} точек
                 </div>
+
+                {/* 🔥 ПЛАШКИ ВРЕМЕНИ (ВЫЕХАЛ / ЗАВЕРШИЛ) */}
+                {(actualDepartureMs || finishedMs) && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                    {actualDepartureMs && (
+                      <span style={{ fontSize: 11, background: "#fffbeb", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #fde68a" }}>
+                        📦 Выехал: {new Date(actualDepartureMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                    {finishedMs && (
+                      <span style={{ fontSize: 11, background: "#ecfdf5", color: "#10b981", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #a7f3d0" }}>
+                        ✅ Завершил: {new Date(finishedMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                  </div>
+                )}
+                
               </div>
               <div style={{ fontSize: 20, color: "#a8a49c" }}>✏️</div>
             </div>
@@ -897,7 +931,7 @@ export function DashboardClient({ user }: { user: User }) {
               // 🔥 Формируем плашку выезда
               const departureUI = actualDepartureMs ? (
                 <div style={{ fontSize: 13, color: "#f59e0b", fontWeight: 800, marginBottom: 8, paddingLeft: 8, display: "flex", alignItems: "center", gap: 6, background: "#fffbeb", padding: "8px 12px", borderRadius: 8, border: "1px solid #fde68a" }}>
-                  📦 Забрал заказы с базы в {new Date(actualDepartureMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
+                  📦 Забрал в {new Date(actualDepartureMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
                 </div>
               ) : null;
 
