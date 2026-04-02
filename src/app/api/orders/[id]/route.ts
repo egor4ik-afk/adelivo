@@ -22,7 +22,19 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updateData: any = {};
 
-    if (body.status         !== undefined) updateData.status         = body.status;
+    if (body.status !== undefined) {
+      updateData.status = body.status;
+      updateData.changedAt = new Date();
+      // 🔥 Если заказ переведен "В пути", и еще нет времени выезда, фиксируем время забора
+      if (body.status === "IN_DELIVERY" && !order.pickedUpAt) {
+        updateData.pickedUpAt = new Date();
+      }
+      // 🔥 ДОБАВЛЕНО: Если заказ вернули на статус "Новый" или "Назначен", очищаем время выезда
+      if (body.status === "NEW" || body.status === "ASSIGNED") {
+        updateData.pickedUpAt = null;
+      }
+    }
+    
     if (body.opComment      !== undefined) updateData.opComment      = body.opComment;
     if (body.address        !== undefined) updateData.address        = body.address;
     if (body.recipientPhone !== undefined) updateData.recipientPhone = body.recipientPhone;
@@ -186,6 +198,9 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       if (order.status === "ASSIGNED" && body.status === undefined) {
         updateData.status = "NEW";
       }
+      
+      // 🔥 ДОБАВЛЕНО: Очищаем время выезда, так как курьер снят
+      updateData.pickedUpAt = null;
 
       // 2. Убираем из маршрута и удаляем маршрут, если он стал пустым
       if (order.routeId) {

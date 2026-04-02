@@ -159,6 +159,7 @@ model Order {
   costPrice      Int?      // 🔥 НОВОЕ ПОЛЕ: Наша себестоимость доставки
   courierId     Int?        
   courier       String?
+  pickedUpAt    DateTime? // 🔥 Время выезда с базы
   comment       String?
   opComment     String?
   items         String?

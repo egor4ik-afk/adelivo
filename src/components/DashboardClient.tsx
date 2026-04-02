@@ -29,6 +29,7 @@ export interface DashboardOrder {
   isInvalid?: boolean; invalidReason?: string | null;
   routeId?: string | null; routeOrder?: number | null; route?: any;
   createdAt?: string; updatedAt?: string; changedAt?: string;
+  pickedUpAt?: string | null; // 🔥 ДОБАВИТЬ СЮДА
 }
 
 let ymapsReady: Promise<void> | null = null;
@@ -108,11 +109,16 @@ export function DashboardClient({ user }: { user: User }) {
   const [routeLegSeconds, setRouteLegSeconds] = useState<number[]>([]);
 
 
-  // 🔥 2. ДОБАВЬ ЭТУ ФУНКЦИЮ СЮДА ЖЕ (до return и до renderRouteListPanel)
   const handleQuickStatusChange = async (id: string, newStatus: string) => {
     // Оптимистичное обновление UI: сразу меняем статус заказа в локальном стейте
-    setOrders((prev: any[]) => 
-      prev.map(o => o.id === id ? { ...o, status: newStatus, changedAt: new Date().toISOString() } : o)
+    setOrders((prev: any[]) =>
+      prev.map(o => o.id === id ? {
+        ...o,
+        status: newStatus,
+        changedAt: new Date().toISOString(),
+        // 🔥 Если статус "В пути", оптимистично ставим время выезда
+        pickedUpAt: newStatus === "IN_DELIVERY" && !o.pickedUpAt ? new Date().toISOString() : o.pickedUpAt
+      } : o)
     );
     
     try {
@@ -847,7 +853,7 @@ export function DashboardClient({ user }: { user: User }) {
 
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             
-            {/* 🔥 НАЧАЛО БЛОКА РАСЧЕТА */}
+            {/* 🔥 БЛОК РАСЧЕТА С УЧЕТОМ РЕАЛЬНОГО ВЫЕЗДА */}
             {(() => {
               const parseYandexTimeMs = (text: string) => {
                 if (!text || text === "—") return 0;
@@ -867,22 +873,33 @@ export function DashboardClient({ user }: { user: User }) {
 
               const hasStarted = selectedRouteOrders.some((o: any) => o.status === "IN_DELIVERY" || o.status === "DELIVERED");
               
-              if (!hasStarted && selectedRouteOrders.length > 0 && routeLegs.length > 0) {
-                const firstOrder = selectedRouteOrders[0];
-                if (firstOrder.slotFrom) {
-                  const [hh, mm] = firstOrder.slotFrom.split(":").map(Number);
-                  if (!isNaN(hh) && !isNaN(mm)) {
-                    const slotStartMs = new Date().setHours(hh, mm, 0, 0);
-                    const firstLegMs = parseYandexTimeMs(routeLegs[0]);
-                    const legToFirstPointMs = firstLegMs + (5 * 60 * 1000);
-                    const plannedDepartureMs = slotStartMs - legToFirstPointMs;
-                    
-                    if (plannedDepartureMs > currentRunningMs) {
-                      currentRunningMs = plannedDepartureMs;
-                    }
-                  }
-                }
+              // 🔥 Ищем фактическое время выезда (самое раннее pickedUpAt)
+              const pickedUpTimes = selectedRouteOrders.map((o: any) => o.pickedUpAt).filter(Boolean);
+              const actualDepartureMs = pickedUpTimes.length > 0 ? Math.min(...pickedUpTimes.map((d: string) => new Date(d).getTime())) : null;
+
+              if (hasStarted && actualDepartureMs) {
+                 // 🎯 МАРШРУТ НАЧАТ: отсчет времени жестко от реального выезда с базы!
+                 currentRunningMs = actualDepartureMs;
+              } else if (!hasStarted && selectedRouteOrders.length > 0 && routeLegs.length > 0) {
+                 // Маршрут не начат: считаем плановый выезд назад от слота первой точки
+                 const firstOrder = selectedRouteOrders[0];
+                 if (firstOrder.slotFrom) {
+                   const [hh, mm] = firstOrder.slotFrom.split(":").map(Number);
+                   if (!isNaN(hh) && !isNaN(mm)) {
+                     const slotStartMs = new Date().setHours(hh, mm, 0, 0);
+                     const legToFirstPointMs = parseYandexTimeMs(routeLegs[0]) + (5 * 60 * 1000);
+                     const plannedDepartureMs = slotStartMs - legToFirstPointMs;
+                     if (plannedDepartureMs > currentRunningMs) currentRunningMs = plannedDepartureMs;
+                   }
+                 }
               }
+
+              // 🔥 Формируем плашку выезда
+              const departureUI = actualDepartureMs ? (
+                <div style={{ fontSize: 13, color: "#f59e0b", fontWeight: 800, marginBottom: 8, paddingLeft: 8, display: "flex", alignItems: "center", gap: 6, background: "#fffbeb", padding: "8px 12px", borderRadius: 8, border: "1px solid #fde68a" }}>
+                  📦 Забрал заказы с базы в {new Date(actualDepartureMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              ) : null;
 
               selectedRouteOrders.forEach((o: any, index: number) => {
                 const legMs = parseYandexTimeMs(routeLegs[index]);
@@ -890,7 +907,6 @@ export function DashboardClient({ user }: { user: User }) {
                 if (o.status === "DELIVERED") {
                   const t = o.changedAt || o.updatedAt;
                   if (t) {
-                    // 🔥 ГЛАВНЫЙ ФИКС: Жестко откатываем таймер к реальному времени доставки этой точки!
                     currentRunningMs = new Date(t).getTime(); 
                     const timeStr = new Date(currentRunningMs).toLocaleTimeString('ru', {hour: '2-digit', minute:'2-digit'});
                     etas[o.id] = { type: 'DELIVERED', timeStr, color: "#10b981" };
@@ -900,29 +916,29 @@ export function DashboardClient({ user }: { user: User }) {
                 } else if (o.status === "CANCELLED" || o.status === "RETURNED") {
                   etas[o.id] = { type: 'SKIPPED', timeStr: "—", color: "#a8a49c" };
                 } else {
-                  // Для точек в статусах NEW, ASSIGNED, IN_DELIVERY
                   if (!foundFirstActive) {
                     foundFirstActive = true;
-                    // 🔥 Если это ПЕРВАЯ активная точка, мы прибавляем время от базы или от последней доставленной (currentRunningMs)
+                    // Дорога только от базы (или от прошлой доставленной точки)
                     currentRunningMs += legMs; 
                   } else {
-                    // 🔥 Если это ВТОРАЯ, ТРЕТЬЯ и т.д. активная точка (в статусе IN_DELIVERY или NEW), 
-                    // мы прибавляем время на передачу ПРЕДЫДУЩЕГО заказа (4 мин) + дорогу
+                    // Передача прошлого заказа (4 мин) + дорога до следующей точки
                     currentRunningMs += (4 * 60 * 1000) + legMs; 
                   }
                   
                   const timeStr = new Date(currentRunningMs).toLocaleTimeString('ru', {hour: '2-digit', minute:'2-digit'});
-                  
                   let color = "#4a7aff";
                   if (o.status === "IN_DELIVERY") color = "#f59e0b";
                   etas[o.id] = { type: o.status, timeStr, color };
                 }
               });
 
-              return selectedRouteOrders.map((o: any, index: number) => {
-                const color = slotColor(o);
-                const st = ROUTE_STATUS_MAP[o.status] || ROUTE_STATUS_MAP.NEW;
-                const etaInfo = etas[o.id] || { type: "NEW", timeStr: "—", color: "#4a7aff" };
+              return (
+                <>
+                  {departureUI}
+                  {selectedRouteOrders.map((o: any, index: number) => {
+                     const color = slotColor(o);
+                     const st = ROUTE_STATUS_MAP[o.status] || ROUTE_STATUS_MAP.NEW;
+                     const etaInfo = etas[o.id] || { type: "NEW", timeStr: "—", color: "#4a7aff" };
 
                 return (
                   <React.Fragment key={o.id}>
@@ -966,11 +982,17 @@ export function DashboardClient({ user }: { user: User }) {
                       </div>
                       <button onClick={() => toggleBulkSelect(o.id)} title="Убрать из маршрута" style={{ background: "none", border: "none", color: "#d94040", cursor: "pointer", fontSize: 18, padding: 4 }}>×</button>
                     </div>
-                  </React.Fragment>
+                    </React.Fragment>
                 );
-              });
-            })()}
-            {/* 🔥 КОНЕЦ БЛОКА РАСЧЕТА */}
+              })} 
+              {/* 🔥 ЗАКРЫВАЕМ .map */}
+              
+            </>
+          ); 
+          {/* 🔥 ЗАКРЫВАЕМ return и Fragment */}
+
+        })()}
+        {/* 🔥 КОНЕЦ БЛОКА РАСЧЕТА */}
 
             {routeLegs[selectedRouteOrders.length] && returnToBase && (
               <div style={{ fontSize: 11, color: "#a8a49c", paddingLeft: 46, paddingBottom: 6, paddingTop: 4 }}>
