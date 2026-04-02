@@ -7,7 +7,13 @@ import { OrderDetail } from "./OrderDetail";
 import { RouteEditor } from "./RouteEditor";
 import Link from "next/link";
 
-interface CourierShift { id: string; date: string; }
+interface CourierShift { 
+  id: string; 
+  date: string; 
+  startTime?: string; 
+  endTime?: string; 
+  priority?: number; 
+}
 interface CourierPayment { id: string; date: string; }
 interface Courier {
   id: number; fullName: string; phone: string | null; description: string | null;
@@ -59,8 +65,13 @@ export function CouriersClient({ user }: { user: any }) {
   const [editingCountsCourier, setEditingCountsCourier] = useState<number | null>(null);
   const [tempCounts, setTempCounts] = useState<Record<number, number>>({});
 
+  // Было просто scheduleDates. Замени это на:
+  const [scheduleWeekStart, setScheduleWeekStart] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - (d.getDay() === 0 ? 6 : d.getDay() - 1));
+    return d;
+  });
   const scheduleDates = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(); d.setDate(d.getDate() + i); return d.toISOString().split("T")[0];
+    const d = new Date(scheduleWeekStart); d.setDate(d.getDate() + i); return d.toISOString().split("T")[0];
   });
   const [sortDate, setSortDate] = useState(scheduleDates[1]);
 
@@ -161,8 +172,13 @@ export function CouriersClient({ user }: { user: any }) {
   };
 
   const toggleShift = async (courierId: number, date: string, isWorking: boolean) => {
-    setCouriers(prev => prev.map(c => c.id === courierId ? { ...c, shifts: isWorking ? [...c.shifts, { id: "temp", date }] : c.shifts.filter(s => s.date !== date) } : c));
-    await fetch("/api/couriers/shifts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ courierId, date, isWorking }) });
+    setCouriers(prev => prev.map(c => c.id === courierId ? { ...c, shifts: isWorking ? [...c.shifts, { id: "temp", date, startTime: "10:00", endTime: "22:00", priority: 3 }] : c.shifts.filter(s => s.date !== date) } : c));
+    await fetch("/api/couriers/shifts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ courierId, date, isWorking, startTime: "10:00", endTime: "22:00", priority: 3 }) });
+  };
+
+  const updateShiftDetails = async (courierId: number, date: string, data: any) => {
+    setCouriers(prev => prev.map(c => c.id === courierId ? { ...c, shifts: c.shifts.map(s => s.date === date ? { ...s, ...data } : s) } : c));
+    await fetch("/api/couriers/shifts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ courierId, date, isWorking: true, ...data }) });
   };
   // 🔥 Функция переключения Авто-курьера
   const toggleAuto = async (courierId: number, currentStatus: boolean) => {
@@ -544,6 +560,14 @@ export function CouriersClient({ user }: { user: any }) {
         {/* --- ГРАФИК --- */}
         {activeTab === "schedule" && (
           <div style={s.tableWrap}>
+            <div style={{ display: "flex", alignItems: "center", padding: "12px 16px", background: "#fff", borderBottom: "1px solid #e8e6df" }}>
+              <button style={s.arrowBtn} onClick={() => setScheduleWeekStart(d => new Date(d.getTime() - 7 * 86400000))}>◀ Неделя</button>
+              <span style={{ fontWeight: 700, fontSize: 14, margin: "0 16px", textTransform: "capitalize", color: "#1a1a18" }}>
+                {scheduleWeekStart.toLocaleDateString('ru', { month: 'long', year: 'numeric' })}
+              </span>
+              <button style={s.arrowBtn} onClick={() => setScheduleWeekStart(d => new Date(d.getTime() + 7 * 86400000))}>Неделя ▶</button>
+            </div>
+            
             <table style={s.table}>
               <thead>
                 <tr>
@@ -551,7 +575,7 @@ export function CouriersClient({ user }: { user: any }) {
                   <th style={{ ...s.th, width: 120 }}>Телефон</th>
                   {scheduleDates.map((d, i) => (
                     <th key={d} style={{ ...s.th, textAlign: "center", cursor: "pointer", color: sortDate === d ? "#4a7aff" : "#a8a49c", background: sortDate === d ? "#eef3ff" : "#fafaf8" }} onClick={() => setSortDate(d)}>
-                      {i === 0 ? "Сегодня" : i === 1 ? "Завтра" : formatDay(d)}<br /><span style={{ fontSize: 10, fontWeight: 500 }}>{d.slice(5).replace("-", ".")}</span>
+                      {formatDay(d)}<br /><span style={{ fontSize: 10, fontWeight: 500 }}>{d.slice(5).replace("-", ".")}</span>
                     </th>
                   ))}
                 </tr>
@@ -563,32 +587,48 @@ export function CouriersClient({ user }: { user: any }) {
                     <tr key={c.id} style={{ background: isSortDayWorking ? "#fcfcfc" : "#fff", borderBottom: "1px solid #f0efe9" }}>
                       <td style={{ ...s.td, fontWeight: 600 }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', maxWidth: '190px' }}>
-                          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {c.fullName}
-                          </span>
-
-                          {/* 🔥 Красивый ползунок переключатель АВТО */}
-                          <div
-                            style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '4px' }}
-                            onClick={(e) => { e.stopPropagation(); toggleAuto(c.id, c.isAuto || false); }}
-                            title="Сделать авто-курьером"
-                          >
+                          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.fullName}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '4px' }} onClick={(e) => { e.stopPropagation(); toggleAuto(c.id, c.isAuto || false); }}>
                             <span style={{ fontSize: 9, color: c.isAuto ? '#10b981' : '#a8a49c', fontWeight: 800 }}>АВТО</span>
                             <div style={{ position: 'relative', width: 28, height: 16, background: c.isAuto ? '#10b981' : '#e5e7eb', borderRadius: 20, transition: '0.2s', flexShrink: 0 }}>
                               <div style={{ position: 'absolute', top: 2, left: c.isAuto ? 14 : 2, width: 12, height: 12, background: '#fff', borderRadius: '50%', transition: '0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }} />
                             </div>
                           </div>
-
                         </div>
-                      </td>                 <td style={{ ...s.td, color: "#6b6860", fontSize: 12 }}>{c.phone || "—"}</td>
+                      </td>                 
+                      <td style={{ ...s.td, color: "#6b6860", fontSize: 12 }}>{c.phone || "—"}</td>
+                      
                       {scheduleDates.map(date => {
-                        const isWorking = c.shifts.some(s => s.date === date);
-                        const orderCount = getCount(c.id, date);
+                        const shift = c.shifts.find(s => s.date === date);
+                        const isWorking = !!shift;
+                        // Считаем вообще ВСЕ заказы курьера на этот день (без учета статуса DELIVERED)
+                        const allOrdersCount = orders.filter(o => o.courierId === c.id && getODate(o) === date).length;
+                        
                         return (
                           <td key={date} style={{ ...s.td, textAlign: "center", background: sortDate === date ? "rgba(74,122,255,0.03)" : "transparent" }}>
                             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                              <input type="checkbox" checked={isWorking} onChange={(e) => toggleShift(c.id, date, e.target.checked)} style={s.checkbox} />
-                              {orderCount > 0 && <span style={{ fontSize: 10, color: "#4a7aff", fontWeight: 700 }}>{orderCount} зак.</span>}
+                              <div style={{display: "flex", alignItems: "center", gap: 6}}>
+                                <input type="checkbox" checked={isWorking} onChange={(e) => toggleShift(c.id, date, e.target.checked)} style={s.checkbox} />
+                                {allOrdersCount > 0 && <span style={{ fontSize: 11, color: "#fff", background: "#4a7aff", padding: "2px 6px", borderRadius: 10, fontWeight: 700 }}>{allOrdersCount}</span>}
+                              </div>
+                              
+                              {/* НАСТРОЙКИ ВРЕМЕНИ И ПРИОРИТЕТА */}
+                              {isWorking && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4, background: "#fff", padding: "4px 6px", borderRadius: 6, border: "1px solid #e8e6df" }}>
+                                  <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                                    <input type="time" value={shift.startTime || "10:00"} onChange={e => updateShiftDetails(c.id, date, { startTime: e.target.value })} style={{ fontSize: 10, padding: 2, width: 45, border: "1px solid #e8e6df", borderRadius: 4, outline: "none" }} />
+                                    <span style={{ fontSize: 10, color: "#a8a49c" }}>-</span>
+                                    <input type="time" value={shift.endTime || "22:00"} onChange={e => updateShiftDetails(c.id, date, { endTime: e.target.value })} style={{ fontSize: 10, padding: 2, width: 45, border: "1px solid #e8e6df", borderRadius: 4, outline: "none" }} />
+                                  </div>
+                                  <select value={shift.priority || 3} onChange={e => updateShiftDetails(c.id, date, { priority: Number(e.target.value) })} style={{ fontSize: 10, padding: "2px 4px", border: "1px solid #e8e6df", borderRadius: 4, background: "#fafaf8", outline: "none", cursor: "pointer" }}>
+                                    <option value="5">⭐⭐⭐⭐⭐</option>
+                                    <option value="4">⭐⭐⭐⭐</option>
+                                    <option value="3">⭐⭐⭐ (Обычный)</option>
+                                    <option value="2">⭐⭐</option>
+                                    <option value="1">⭐ (Низкий)</option>
+                                  </select>
+                                </div>
+                              )}
                             </div>
                           </td>
                         );

@@ -132,11 +132,14 @@ model CourierShift {
   courierId Int
   date      String   
   
+  startTime String?  @default("10:00") // 🔥 Начало смены
+  endTime   String?  @default("22:00") // 🔥 Конец смены
+  priority  Int      @default(3)       // 🔥 Приоритет (от 1 до 5, где 5 - высший)
+
   courier   Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
 
   @@unique([courierId, date])
 }
-
 model CourierPayment {
   id        String   @id @default(cuid())
   courierId Int

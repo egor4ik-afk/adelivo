@@ -3,40 +3,64 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const user = await getSession();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const user = await getSession(req as any);
+    if (!user || user.role !== "COURIER") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const courier = await prisma.courier.findFirst({ where: { email: user.email } });
-    if (!courier) return NextResponse.json([]); // Если не привязан, отдаем пустоту
+    if (!courier) return NextResponse.json({ error: "Courier not found" }, { status: 404 });
 
+    const { searchParams } = new URL(req.url);
+    const fromDate = searchParams.get("from");
+    const toDate = searchParams.get("to");
+
+    // Отдаем смены, но НЕ отдаем приоритет (хотя он не секретный, лучше просто скрыть)
     const shifts = await prisma.courierShift.findMany({
-      where: { courierId: courier.id }
+      where: {
+        courierId: courier.id,
+        ...(fromDate && toDate ? { date: { gte: fromDate, lte: toDate } } : {})
+      },
+      select: {
+        id: true,
+        date: true,
+        startTime: true,
+        endTime: true,
+        // 🔥 priority: true - НЕ ОТДАЕМ на фронт курьеру
+      }
     });
-    
-    // Возвращаем просто массив дат ['2026-03-22', '2026-03-23', ...]
-    return NextResponse.json(shifts.map(s => s.date));
-  } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+
+    return NextResponse.json(shifts);
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const user = await getSession();
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const user = await getSession(req as any);
+    if (!user || user.role !== "COURIER") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const courier = await prisma.courier.findFirst({ where: { email: user.email } });
-    if (!courier) return NextResponse.json({ error: "Курьер не найден" }, { status: 400 });
+    if (!courier) return NextResponse.json({ error: "Courier not found" }, { status: 404 });
 
-    const { date, isWorking } = await req.json();
+    const { date, isWorking, startTime, endTime } = await req.json();
 
     if (isWorking) {
       await prisma.courierShift.upsert({
         where: { courierId_date: { courierId: courier.id, date } },
-        update: {},
-        create: { courierId: courier.id, date }
+        create: { 
+          courierId: courier.id, 
+          date, 
+          startTime: startTime || "10:00", 
+          endTime: endTime || "22:00",
+          priority: 3 // Дефолтный приоритет при создании новой смены курьером
+        },
+        update: {
+          ...(startTime !== undefined && { startTime }),
+          ...(endTime !== undefined && { endTime }),
+          // 🔥 priority ЗДЕСЬ НЕТ. Курьер не может обновить свой приоритет
+        }
       });
     } else {
       await prisma.courierShift.deleteMany({
@@ -45,7 +69,7 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
