@@ -914,23 +914,23 @@ export function DashboardClient({ user }: { user: User }) {
 
               const hasStarted = selectedRouteOrders.some((o: any) => o.status === "IN_DELIVERY" || o.status === "DELIVERED");
               
-              // 🔥 Ищем фактическое время выезда (самое раннее pickedUpAt)
               const pickedUpTimes = selectedRouteOrders.map((o: any) => o.pickedUpAt).filter(Boolean);
               const actualDepartureMs = pickedUpTimes.length > 0 ? Math.min(...pickedUpTimes.map((d: string) => new Date(d).getTime())) : null;
 
               if (hasStarted && actualDepartureMs) {
-                 // 🎯 МАРШРУТ НАЧАТ: отсчет времени жестко от реального выезда с базы!
+                 // 📦 Если курьер выехал — жестко считаем от реального времени выезда!
                  currentRunningMs = actualDepartureMs;
               } else if (!hasStarted && selectedRouteOrders.length > 0 && routeLegs.length > 0) {
-                 // Маршрут не начат: считаем плановый выезд назад от слота первой точки
+                 // 🎯 🔥 ИСПРАВЛЕНО: Если не выехал — ВСЕГДА считаем от слота первой точки
                  const firstOrder = selectedRouteOrders[0];
                  if (firstOrder.slotFrom) {
                    const [hh, mm] = firstOrder.slotFrom.split(":").map(Number);
                    if (!isNaN(hh) && !isNaN(mm)) {
                      const slotStartMs = new Date().setHours(hh, mm, 0, 0);
                      const legToFirstPointMs = parseYandexTimeMs(routeLegs[0]) + (5 * 60 * 1000);
-                     const plannedDepartureMs = slotStartMs - legToFirstPointMs;
-                     if (plannedDepartureMs > currentRunningMs) currentRunningMs = plannedDepartureMs;
+                     
+                     // Игнорируем текущее время! Строим идеальный план прибытия ровно к началу слота
+                     currentRunningMs = slotStartMs - legToFirstPointMs;
                    }
                  }
               }
