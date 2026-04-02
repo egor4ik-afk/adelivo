@@ -54,7 +54,6 @@ export async function POST(req: Request) {
           date, 
           startTime: startTime || "10:00", 
           endTime: endTime || "22:00",
-          priority: 3 // Дефолтный приоритет при создании новой смены курьером
         },
         update: {
           ...(startTime !== undefined && { startTime }),
