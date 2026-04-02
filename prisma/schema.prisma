@@ -217,7 +217,7 @@ model Route {
   courier         Courier  @relation(fields: [courierId], references: [id])
   
   orders    Order[]
-  
+  isDraft         Boolean  @default(false) // 🔥 ДОБАВЛЕНО
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

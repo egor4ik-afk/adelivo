@@ -8,19 +8,42 @@ const STORE_COORDS = "55.749511,37.596205"; // База
 
 export async function POST(req: Request) {
   try {
-    const { orderIds, courierId, routeType = "auto", returnToBase = false, routeDate, oldRouteId, departureAdvice } = await req.json();
+    // 🔥 ДОБАВЛЕН ФЛАГ isDraft
+    const { orderIds, courierId, routeType = "auto", returnToBase = false, routeDate, oldRouteId, departureAdvice, isDraft } = await req.json();
 
     let existingRouteName = null;
     if (oldRouteId) {
       const oldRoute = await prisma.route.findUnique({ where: { id: oldRouteId } });
       if (oldRoute) existingRouteName = oldRoute.name;
+      
+      // 🔥 1. Отвязываем заказы, которые удалены из маршрута (или если маршрут удаляется целиком)
+      const ordersToReset = await prisma.order.findMany({
+        where: { routeId: oldRouteId, id: { notIn: orderIds || [] } }
+      });
+
+      for (const o of ordersToReset) {
+        await prisma.order.update({
+          where: { id: o.id },
+          data: {
+            courierId: null, courier: null, routeId: null, routeOrder: null,
+            status: o.status === "ASSIGNED" ? "NEW" : o.status // Откатываем статус
+          }
+        });
+        // Если заказ пришел из CRM - очищаем курьера и там
+        if (o.crmId) {
+          await updateCrmOrder(o.crmId, { courier: "" }).catch(() => {});
+        }
+      }
+
       await prisma.route.deleteMany({ where: { id: oldRouteId } });
     }
 
+    // 🔥 Если передан пустой массив orderIds — значит маршрут просто удален, выходим
     if (!orderIds?.length) return NextResponse.json({ success: true, deleted: true });
+    
     if (!courierId) return NextResponse.json({ error: "Неверные данные" }, { status: 400 });
 
-    // 🔥 ДОБАВЛЕНО: выбираем price и courierId, чтобы пересчитать цену!
+    // Выбираем price и courierId, чтобы пересчитать цену
     const orders = await prisma.order.findMany({
       where: { id: { in: orderIds } },
       select: { id: true, lat: true, lng: true, crmId: true, deliveryDate: true, crmCreatedAt: true, status: true, opComment: true, price: true, courierId: true }
@@ -44,7 +67,7 @@ export async function POST(req: Request) {
       const routes = await prisma.route.findMany({
         where: { 
           name: { startsWith: prefix },
-          date: finalRouteDate // 🔥 ДОБАВИТЬ ЭТУ СТРОКУ
+          date: finalRouteDate 
         },
         select: { name: true }
       });
@@ -63,7 +86,14 @@ export async function POST(req: Request) {
     }
 
     const newRoute = await prisma.route.create({
-      data: { name: routeName, link, date: finalRouteDate, departureAdvice: departureAdvice || null, courierId: Number(courierId) }
+      data: { 
+        name: routeName, 
+        link, 
+        date: finalRouteDate, 
+        departureAdvice: departureAdvice || null, 
+        courierId: Number(courierId),
+        isDraft: isDraft || false // Сохраняем флаг, полученный с фронта (если не передан - false)
+      }
     });
 
     const courierDb = await prisma.courier.findUnique({ where: { id: Number(courierId) } });
@@ -72,16 +102,14 @@ export async function POST(req: Request) {
     for (let i = 0; i < orderIds.length; i++) {
       const orderToUpdate = sortedOrders.find((o: any) => o.id === orderIds[i]);
       
-      // 🔥 Если это первая точка в маршруте и есть совет - пишем его в коммент оператора!
+      // Если это первая точка в маршруте и есть совет - пишем его в коммент оператора
       let newOpComment = orderToUpdate.opComment || "";
       if (i === 0 && departureAdvice && !newOpComment.includes(departureAdvice)) {
         newOpComment = `💡 ${departureAdvice}\n${newOpComment}`.trim();
       }
 
       // ==========================================
-      // 🔥 ЛОГИКА АВТО-КУРЬЕРА: ПЕРЕСЧЕТ ЦЕНЫ (РАБОТАЕТ ВСЕГДА, ДАЖЕ ПРИ ПЕРЕСОХРАНЕНИИ)
-      // Базовые цены: 500, 900, 1300
-      // Авто-надбавка: +100 → итого 600, 1000, 1400
+      // ЛОГИКА АВТО-КУРЬЕРА: ПЕРЕСЧЕТ ЦЕНЫ (РАБОТАЕТ ВСЕГДА, ДАЖЕ ПРИ ПЕРЕСОХРАНЕНИИ)
       // ==========================================
       let currentPrice = orderToUpdate.price && orderToUpdate.price > 0 ? orderToUpdate.price : 500;
       let finalPrice = currentPrice;
@@ -89,7 +117,6 @@ export async function POST(req: Request) {
       if (courierDb) {
         let basePrice = currentPrice;
         
-        // 1. Узнаем, был ли прошлый курьер на авто (чтобы вычленить чистую базовую цену)
         let oldCourierIsAuto = false;
         if (orderToUpdate.courierId) {
            if (orderToUpdate.courierId === courierDb.id) {
@@ -100,15 +127,11 @@ export async function POST(req: Request) {
            }
         }
 
-        // 2. Если заказ уже числился за авто-курьером, отнимаем 100 руб, чтобы получить базу.
-        // Снимаем надбавку только если цена стоит на "авто-уровне" (600, 1000, 1400),
-        // чтобы не уйти ниже базовых значений (500, 900, 1300).
         const AUTO_PRICES = [600, 1000, 1400]; // базовые + 100
         if (oldCourierIsAuto && AUTO_PRICES.includes(basePrice)) {
             basePrice -= 100;
         }
 
-        // 3. Накидываем 100 руб, если текущий (сохраняемый) курьер на авто
         const autoSurcharge = courierDb.isAuto ? 100 : 0;
         finalPrice = basePrice + autoSurcharge;
       }
@@ -121,7 +144,7 @@ export async function POST(req: Request) {
           routeId: newRoute.id, routeOrder: i + 1,
           status: orderToUpdate.status === "NEW" ? "ASSIGNED" : undefined,
           opComment: newOpComment,
-          price: finalPrice // 🔥 СОХРАНЯЕМ ИЗМЕНЕННУЮ ЦЕНУ ТОЛЬКО В НАШУ БД
+          price: finalPrice // СОХРАНЯЕМ ИЗМЕНЕННУЮ ЦЕНУ ТОЛЬКО В НАШУ БД
         }
       });
       
@@ -131,7 +154,8 @@ export async function POST(req: Request) {
       }
     }
 
-    if (courierDb?.email && !oldRouteId) {
+    // 🔥 ДОБАВЛЕНА ПРОВЕРКА: Если это черновик (isDraft) — Push-уведомление НЕ отправляется
+    if (courierDb?.email && !oldRouteId && !isDraft) {
       const courierUser = await prisma.user.findUnique({ where: { email: courierDb.email } });
       if (courierUser) {
         await notify({ type: "route.assigned", userId: courierUser.id, routeId: newRoute.name, pointsCount: orderIds.length }).catch(console.error); 

@@ -105,6 +105,33 @@ export function DashboardClient({ user }: { user: User }) {
   const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
 
   const [routeLegs, setRouteLegs] = useState<string[]>([]);
+  const [routeLegSeconds, setRouteLegSeconds] = useState<number[]>([]);
+
+
+  // 🔥 2. ДОБАВЬ ЭТУ ФУНКЦИЮ СЮДА ЖЕ (до return и до renderRouteListPanel)
+  const handleQuickStatusChange = async (id: string, newStatus: string) => {
+    // Оптимистичное обновление UI: сразу меняем статус заказа в локальном стейте
+    setOrders((prev: any[]) => 
+      prev.map(o => o.id === id ? { ...o, status: newStatus, changedAt: new Date().toISOString() } : o)
+    );
+    
+    try {
+      // Отправляем запрос на сервер
+      const res = await fetch(`/api/orders/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus })
+      });
+      
+      if (!res.ok) throw new Error("Ошибка обновления статуса");
+      
+      // Тихо обновляем данные в фоне
+      fetchData(); 
+    } catch (e) {
+      alert("Ошибка изменения статуса");
+      fetchData(); // Откат в случае ошибки
+    }
+  };
   const [routeTotals, setRouteTotals] = useState<{ time: string, dist: string } | null>(null);
   const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
   const [departureAdvice, setDepartureAdvice] = useState<string | null>(null);
@@ -454,8 +481,13 @@ export function DashboardClient({ user }: { user: User }) {
       if (o.route && oDate === filterDate) {
         if (!routesMap.has(o.route.id)) {
           routesMap.set(o.route.id, {
-            id: o.route.id, name: o.route.name, link: o.route.link, date: o.route.date,
-            orders: [], courierId: o.courierId,
+            id: o.route.id, 
+            name: o.route.name, 
+            link: o.route.link, 
+            date: o.route.date,
+            isDraft: o.route.isDraft, // 🔥 ТЯНЕМ ИЗ БД
+            orders: [], 
+            courierId: o.courierId,
             updatedAt: o.route.updatedAt || o.changedAt || o.createdAt
           });
         }
@@ -517,29 +549,31 @@ export function DashboardClient({ user }: { user: User }) {
 
         const cleanHtml = (str: string) => str ? str.replace(/&#160;/g, " ") : "";
 
+        // 🔥 1. БЕРЕМ ВРЕМЯ С УЧЕТОМ ПРОБОК (durationInTraffic)
+        const routeDuration = activeRoute.properties.get("durationInTraffic") || activeRoute.properties.get("duration");
+        
         setRouteTotals({
-          time: cleanHtml(activeRoute.properties.get("duration")?.text || "—"),
+          time: cleanHtml(routeDuration?.text || "—"),
           dist: cleanHtml(activeRoute.properties.get("distance")?.text || "—"),
         });
 
         const legsArr: string[] = [];
-        const nowMs = Date.now();
-        let cumulativeMs = 0; 
         let earliestDeadline: { externalId: string; slotFrom: string; pickupDeadlineMs: number } | null = null;
 
         activeRoute.getPaths().each((path: any, idx: number) => {
-          const legSeconds = path.properties.get("duration")?.value || 0; 
-          legsArr.push(cleanHtml(path.properties.get("duration")?.text || "—"));
+          // 🔥 2. ДЛЯ КАЖДОГО ОТРЕЗКА ТОЖЕ БЕРЕМ ПРОБКИ
+          const legDuration = path.properties.get("durationInTraffic") || path.properties.get("duration");
+          legsArr.push(cleanHtml(legDuration?.text || "—"));
 
           if (idx === 0 && validOrders.length > 0) {
             const order = validOrders[0];
+            const legSeconds = legDuration?.value || 0;
             const legToFirstPointMs = (legSeconds + 5 * 60) * 1000; 
 
             if (order.slotFrom) {
               const [hh, mm] = order.slotFrom.split(":").map(Number);
               if (!isNaN(hh) && !isNaN(mm)) {
                 const slotStartMs = new Date().setHours(hh, mm, 0, 0);
-                
                 earliestDeadline = {
                   externalId: order.externalId ?? order.crmId,
                   slotFrom: order.slotFrom,
@@ -596,7 +630,67 @@ export function DashboardClient({ user }: { user: User }) {
     }
   };
 
-  async function handleBulkAssign() {
+  // 🔥 Новая функция для полного удаления маршрута
+  async function handleDeleteRoute() {
+    if (!editingRouteId) return;
+    if (!window.confirm("Удалить маршрут полностью? Все точки снова станут свободными.")) return;
+    
+    setBulkSaving(true);
+    try {
+      const res = await fetch(`/api/routes/assign`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderIds: [], // Пустой массив отвяжет точки на бэкенде
+          courierId: bulkCourier,
+          oldRouteId: editingRouteId
+        })
+      });
+      if (!res.ok) throw new Error("Ошибка сервера");
+      setBulkCourier(""); setBulkSelectedIds([]); setEditingRouteId(null);
+      await fetchData();
+      alert("✅ Маршрут удален!");
+      setRouteTabMode("current"); // Возвращаемся к списку маршрутов
+    } catch { alert("Произошла ошибка при удалении"); }
+    finally { setBulkSaving(false); }
+  }
+  async function handleAutoGenerateRoutes() {
+    if (!window.confirm("Запустить авто-распределение свободных точек на сегодня?")) return;
+    
+    setBulkSaving(true);
+    try {
+      const res = await fetch(`/api/routes/auto-generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // 🔥 Добавили передачу выбранных слотов (массив строк, например ["10–12", "14–16"])
+        body: JSON.stringify({ 
+          routeDate: filterDate,
+          selectedSlots: selectedSlots 
+        })
+      });
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Ошибка сервера");
+      
+      await fetchData();
+      alert(`✅ Создано маршрутов: ${data.routesCreated}.\n📦 Раскидано точек: ${data.ordersAssigned}.\n⚠️ Осталось нераспределенных в этих слотах: ${data.leftOver}`);
+      setRouteTabMode("current");
+    } catch (e: any) {
+      alert(e.message || "Произошла ошибка при генерации");
+    } finally {
+      setBulkSaving(false);
+    }
+  }
+ // 🔥 1. Карта статусов (лучше держать её тут, чтобы не было ошибок undefined)
+  const ROUTE_STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
+    NEW: { label: "Новый", color: "#d94040", bg: "#fef2f2" },
+    ASSIGNED: { label: "Назначен", color: "#4a7aff", bg: "#eef3ff" },
+    IN_DELIVERY: { label: "🚀 В пути", color: "#10b981", bg: "#ecfdf5" },
+    DELIVERED: { label: "✅ Доставлен", color: "#6b6860", bg: "#f5f4f0" },
+    RETURNED: { label: "↩️ Возврат", color: "#d94040", bg: "#fef2f2" },
+    CANCELLED: { label: "❌ Отменен", color: "#a8a49c", bg: "#f5f4f0" }
+  };
+
+  async function handleBulkAssign(isDraft = false) {
     if (!bulkCourier || bulkSelectedIds.length === 0) return;
     setBulkSaving(true);
     try {
@@ -608,7 +702,8 @@ export function DashboardClient({ user }: { user: User }) {
           routeType,
           returnToBase,
           oldRouteId: editingRouteId,
-          departureAdvice
+          departureAdvice,
+          isDraft // Передаем флаг на сервер
         })
       });
       if (!res.ok) throw new Error("Ошибка сервера");
@@ -620,9 +715,10 @@ export function DashboardClient({ user }: { user: User }) {
     finally { setBulkSaving(false); }
   }
 
+  // 🔥 2. Добавили тип (prev: string[])
   const toggleSlot = (label: string) => {
     if (label === "all") setSelectedSlots([]);
-    else setSelectedSlots(prev => prev.includes(label) ? prev.filter(x => x !== label) : [...prev, label]);
+    else setSelectedSlots((prev: string[]) => prev.includes(label) ? prev.filter(x => x !== label) : [...prev, label]);
   };
 
   const showLeftPanel = (isListVisible || isDetailVisible) && !isBulkMode;
@@ -648,11 +744,26 @@ export function DashboardClient({ user }: { user: User }) {
           Текущие ({existingRoutes.length})
         </button>
       </div>
+      
+      <div style={{ marginBottom: 16 }}>
+        <button 
+          onClick={handleAutoGenerateRoutes} 
+          style={{ width: "100%", background: "linear-gradient(135deg, #4a7aff 0%, #7c4dff 100%)", color: "#fff", border: "none", padding: "10px 14px", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer", boxShadow: "0 4px 12px rgba(124, 77, 255, 0.3)", display: "flex", justifyContent: "center", alignItems: "center", gap: 8 }}
+        >
+          ✨ AI Авто-сборка черновиков
+        </button>
+      </div>
 
       {routeTabMode === "current" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {existingRoutes.length === 0 && <div style={{ textAlign: "center", color: "#a8a49c", padding: 20 }}>Нет маршрутов на {filterDate}</div>}
-          {existingRoutes.map(r => (
+          {existingRoutes.map((r: any) => {
+            const isDraft = r.isDraft;
+            
+            // 🔥 3. Безопасный поиск имени курьера через courierOptions
+            const courierName = courierOptions.find(c => String(c.value) === String(r.courierId))?.label || "Неизвестен";
+
+            return (
             <div key={r.id} onClick={() => {
               setBulkSelectedIds(r.orders.map((o: any) => o.id));
               setBulkCourier(String(r.courierId));
@@ -660,16 +771,18 @@ export function DashboardClient({ user }: { user: User }) {
               setRouteTabMode("new");
             }} style={{ background: "#fafaf8", border: "1px solid #e8e6df", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18" }}>
-                  {r.name} <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 500 }}>изм. {new Date(r.updatedAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</span>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8 }}>
+                  {r.name} 
+                  {isDraft && <span style={{ background: "#fef3c7", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>Черновик</span>}
+                  <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 500 }}>изм. {new Date(r.updatedAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
                 <div style={{ fontSize: 12, color: "#6b6860", marginTop: 4 }}>
-                  Курьер: {dbCouriers.find(c => c.id === r.courierId)?.fullName || "Неизвестен"} · {r.orders.length} точек
+                  Курьер: {courierName} · {r.orders.length} точек
                 </div>
               </div>
               <div style={{ fontSize: 20, color: "#a8a49c" }}>✏️</div>
             </div>
-          ))}
+          )})}
         </div>
       )}
 
@@ -678,7 +791,10 @@ export function DashboardClient({ user }: { user: User }) {
           {editingRouteId && (
             <div style={{ marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: "#4a7aff" }}>Редактирование маршрута</span>
-              <button onClick={() => { setEditingRouteId(null); setBulkSelectedIds([]); setRouteTabMode("current"); }} style={{ background: "none", border: "none", color: "#d94040", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Отменить</button>
+              <div style={{ display: "flex", gap: 12 }}>
+                <button onClick={handleDeleteRoute} disabled={bulkSaving} style={{ background: "none", border: "none", color: "#d94040", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>🗑 Удалить</button>
+                <button onClick={() => { setEditingRouteId(null); setBulkSelectedIds([]); setRouteTabMode("current"); }} style={{ background: "none", border: "none", color: "#6b6860", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Отменить</button>
+              </div>
             </div>
           )}
 
@@ -716,40 +832,161 @@ export function DashboardClient({ user }: { user: User }) {
             <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Курьер</div>
             <div style={{ display: "flex", gap: 10, flexDirection: isMobile ? "column" : "row" }}>
               <CourierSearchSelect value={bulkCourier} onChange={setBulkCourier} options={courierOptions.map(c => ({ value: String(c.value), label: c.label }))} />
-              <button style={{ ...s.actionBtn, width: isMobile ? "100%" : 120, background: bulkCourier && bulkSelectedIds.length > 0 ? '#4a7aff' : '#e8e6df', color: bulkCourier && bulkSelectedIds.length > 0 ? '#fff' : '#a8a49c' }} disabled={!bulkCourier || bulkSelectedIds.length === 0 || bulkSaving} onClick={handleBulkAssign}>
+              
+              <button style={{ ...s.actionBtn, background: bulkCourier && bulkSelectedIds.length > 0 ? '#e8e6df' : '#f5f4f0', color: bulkCourier && bulkSelectedIds.length > 0 ? '#1a1a18' : '#a8a49c', whiteSpace: 'nowrap' }} disabled={!bulkCourier || bulkSelectedIds.length === 0 || bulkSaving} onClick={() => handleBulkAssign(true)}>
+                📝 В черновик
+              </button>
+
+              <button style={{ ...s.actionBtn, width: isMobile ? "100%" : 120, background: bulkCourier && bulkSelectedIds.length > 0 ? '#4a7aff' : '#e8e6df', color: bulkCourier && bulkSelectedIds.length > 0 ? '#fff' : '#a8a49c' }} disabled={!bulkCourier || bulkSelectedIds.length === 0 || bulkSaving} onClick={() => handleBulkAssign(false)}>
                 {bulkSaving ? "..." : (editingRouteId ? "Сохранить" : "Создать")}
               </button>
             </div>
           </div>
 
           <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Очередь доставки ({bulkSelectedIds.length})</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {routeLegs[0] && <div style={{ fontSize: 11, color: "#a8a49c", paddingLeft: 46, paddingBottom: 6 }}>↓ {routeLegs[0]} от базы</div>}
 
-            {selectedRouteOrders.map((o, index) => (
-              <Fragment key={o.id}>
-                <div style={{ padding: "10px 12px", background: "#fff", border: "1px solid #e8e6df", borderRadius: 8, display: "flex", gap: 12, alignItems: "center" }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                    <button disabled={index === 0} onClick={() => moveBulkItem(index, 'up')} style={{ background: "none", border: "none", cursor: index === 0 ? "default" : "pointer", opacity: index === 0 ? 0.3 : 1, fontSize: 11, padding: 2, color: "#6b6860" }}>▲</button>
-                    <button disabled={index === selectedRouteOrders.length - 1} onClick={() => moveBulkItem(index, 'down')} style={{ background: "none", border: "none", cursor: index === selectedRouteOrders.length - 1 ? "default" : "pointer", opacity: index === selectedRouteOrders.length - 1 ? 0.3 : 1, fontSize: 11, padding: 2, color: "#6b6860" }}>▼</button>
-                  </div>
-                  <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#4a7aff", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{index + 1}</div>
-                  <div style={{ flex: 1, overflow: "hidden" }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#1a1a18", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.address}</div>
-                    <div style={{ fontSize: 11, color: "#a8a49c", marginTop: 2 }}>Слот: {o.slotRaw} · {o.externalId ?? o.crmId}</div>
-                  </div>
-                  <button onClick={() => toggleBulkSelect(o.id)} style={{ background: "none", border: "none", color: "#d94040", cursor: "pointer", fontSize: 18, padding: 4 }}>×</button>
-                </div>
-                {routeLegs[index + 1] && <div style={{ fontSize: 11, color: "#a8a49c", paddingLeft: 46, paddingBottom: 6, paddingTop: 4 }}>↓ {routeLegs[index + 1]} {index === selectedRouteOrders.length - 1 && returnToBase ? "возврат на базу" : ""}</div>}
-              </Fragment>
-            ))}
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            
+            {/* 🔥 ЗАМЕНИТЬ ВЕСЬ БЛОК РАСЧЕТА НА ЭТОТ */}
+            {(() => {
+              // Функция для парсинга текста Яндекса в миллисекунды ("1 ч 15 мин" -> 4500000)
+              // Функция для парсинга текста Яндекса в миллисекунды
+              const parseYandexTimeMs = (text: string) => {
+                if (!text || text === "—") return 0;
+                let ms = 0;
+                
+                const hMatch = text.match(/(\d+)\s*ч/);
+                if (hMatch) ms += parseInt(hMatch[1], 10) * 3600000;
+                
+                const mMatch = text.match(/(\d+)\s*мин/);
+                if (mMatch) ms += parseInt(mMatch[1], 10) * 60000;
+                
+                // 🔥 УМНАЯ ЛОГИКА ДЛЯ АВТО И ПЕШИХ
+                if (routeType === "auto") {
+                  // Для машины: Время Яндекса + жесткие 12 минут (парковка, дворы, шлагбаумы, лифт)
+                  return ms + (15 * 60 * 1000); 
+                } else {
+                  // Для пеших/транспорта: Время Яндекса + 3 минуты (погрешность на поиск квартиры)
+                  return ms + (5 * 60 * 1000);
+                }
+              };
+
+              const etas: Record<string, { type: string, timeStr: string, color: string }> = {};
+              let currentRunningMs = Date.now();
+              let foundFirstActive = false;
+
+              // Сдвигаем время старта, если маршрут еще не начали
+              const hasStarted = selectedRouteOrders.some((o: any) => o.status === "IN_DELIVERY" || o.status === "DELIVERED");
+              
+              if (!hasStarted && selectedRouteOrders.length > 0 && routeLegs.length > 0) {
+                const firstOrder = selectedRouteOrders[0];
+                if (firstOrder.slotFrom) {
+                  const [hh, mm] = firstOrder.slotFrom.split(":").map(Number);
+                  if (!isNaN(hh) && !isNaN(mm)) {
+                    const slotStartMs = new Date().setHours(hh, mm, 0, 0);
+                    const firstLegMs = parseYandexTimeMs(routeLegs[0]);
+                    const legToFirstPointMs = firstLegMs + (5 * 60 * 1000); // Время пути + 5 мин на первую точку
+                    const plannedDepartureMs = slotStartMs - legToFirstPointMs;
+                    
+                    // Если выезд планируется в будущем, начинаем отсчет с него
+                    if (plannedDepartureMs > currentRunningMs) {
+                      currentRunningMs = plannedDepartureMs;
+                    }
+                  }
+                }
+              }
+
+              selectedRouteOrders.forEach((o: any, index: number) => {
+                // 🔥 Читаем текстовое время из массива и превращаем в миллисекунды
+                const legMs = parseYandexTimeMs(routeLegs[index]);
+
+                if (o.status === "DELIVERED") {
+                  const t = o.changedAt || o.updatedAt;
+                  const timeStr = t ? new Date(t).toLocaleTimeString('ru', {hour: '2-digit', minute:'2-digit'}) : "—";
+                  etas[o.id] = { type: 'DELIVERED', timeStr, color: "#10b981" };
+                } else if (o.status === "CANCELLED" || o.status === "RETURNED") {
+                  etas[o.id] = { type: 'SKIPPED', timeStr: "—", color: "#a8a49c" };
+                } else {
+                  if (!foundFirstActive) {
+                    foundFirstActive = true;
+                    currentRunningMs += legMs; // Прибавляем время до 1 точки (уже с учетом 12 минут на парковку!)
+                  } else {
+                    // 🔥 Здесь оставляем только 3-4 минуты на саму передачу заказа клиенту. 
+                    // Время на спуск к машине и парковку уже заложено внутри legMs выше.
+                    currentRunningMs += (4 * 60 * 1000) + legMs; 
+                  }
+                  const timeStr = new Date(currentRunningMs).toLocaleTimeString('ru', {hour: '2-digit', minute:'2-digit'});
+                  
+                  let color = "#4a7aff";
+                  if (o.status === "IN_DELIVERY") color = "#f59e0b"; // Оранжевый для активной
+                  etas[o.id] = { type: o.status, timeStr, color };
+                }
+              });
+
+              return selectedRouteOrders.map((o: any, index: number) => {
+                const color = slotColor(o);
+                const st = ROUTE_STATUS_MAP[o.status] || ROUTE_STATUS_MAP.NEW;
+                const etaInfo = etas[o.id] || { type: "NEW", timeStr: "—", color: "#4a7aff" };
+
+                return (
+                  <React.Fragment key={o.id}>
+                    {routeLegs[index] && (
+                      <div style={{ fontSize: 12, color: etaInfo.color, paddingLeft: 46, paddingBottom: 6, fontWeight: 700 }}>
+                        {etaInfo.type === 'DELIVERED' ? `✅ Доставлен в ${etaInfo.timeStr}` :
+                         etaInfo.type === 'SKIPPED' ? `❌ Отменен / Возврат` :
+                         `↓ Ожидается в ${etaInfo.timeStr} (в пути ${routeLegs[index]})`}
+                      </div>
+                    )}
+
+                    <div style={{ padding: "10px 12px 10px 16px", background: o.status === "IN_DELIVERY" ? "#fffbeb" : "#fff", border: "1px solid #e8e6df", borderRadius: 8, display: "flex", gap: 12, alignItems: "center", position: "relative", overflow: "hidden" }}>
+                      <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: 4, background: color }} />
+                      
+                      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                        <button disabled={index === 0} onClick={() => moveBulkItem(index, 'up')} style={{ background: "none", border: "none", cursor: index === 0 ? "default" : "pointer", opacity: index === 0 ? 0.3 : 1, fontSize: 11, padding: 2, color: "#6b6860" }}>▲</button>
+                        <button disabled={index === selectedRouteOrders.length - 1} onClick={() => moveBulkItem(index, 'down')} style={{ background: "none", border: "none", cursor: index === selectedRouteOrders.length - 1 ? "default" : "pointer", opacity: index === selectedRouteOrders.length - 1 ? 0.3 : 1, fontSize: 11, padding: 2, color: "#6b6860" }}>▼</button>
+                      </div>
+                      
+                      <div style={{ width: 24, height: 24, borderRadius: "50%", background: color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{index + 1}</div>
+                      
+                      <div style={{ flex: 1, overflow: "hidden" }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#1a1a18", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.address}</div>
+                        <div style={{ fontSize: 11, color: "#a8a49c", marginTop: 2 }}>
+                          Слот: <span style={{ color, fontWeight: 700 }}>{o.slotRaw}</span> · {o.externalId ?? o.crmId}
+                        </div>
+                        
+                        <select 
+                          value={o.status} 
+                          onChange={(e) => handleQuickStatusChange(o.id, e.target.value)}
+                          style={{ background: st.bg, color: st.color, border: "none", padding: "4px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, outline: "none", cursor: "pointer", marginTop: 6, display: "block" }}
+                        >
+                          <option value="NEW">Новый</option>
+                          <option value="ASSIGNED">Назначен</option>
+                          <option value="IN_DELIVERY">🚀 В пути</option>
+                          <option value="DELIVERED">✅ Доставлен</option>
+                          <option value="RETURNED">↩️ Возврат</option>
+                          <option value="CANCELLED">❌ Отменен</option>
+                        </select>
+
+                      </div>
+                      <button onClick={() => toggleBulkSelect(o.id)} title="Убрать из маршрута" style={{ background: "none", border: "none", color: "#d94040", cursor: "pointer", fontSize: 18, padding: 4 }}>×</button>
+                    </div>
+                  </React.Fragment>
+                );
+              });
+            })()}
+            {/* 🔥 КОНЕЦ БЛОКА РАСЧЕТА */}
+
+            {routeLegs[selectedRouteOrders.length] && returnToBase && (
+              <div style={{ fontSize: 11, color: "#a8a49c", paddingLeft: 46, paddingBottom: 6, paddingTop: 4 }}>
+                ↓ {routeLegs[selectedRouteOrders.length]} возврат на базу
+              </div>
+            )}
             {selectedRouteOrders.length === 0 && <div style={{ fontSize: 13, color: "#a8a49c", textAlign: "center", padding: 20 }}>Отметьте точки на карте</div>}
           </div>
         </>
       )}
     </div>
   );
-
   return (
     <div style={isMobile ? sm.app : s.app}>
       <div style={isMobile ? sm.topbar : s.topbar}>

@@ -26,10 +26,10 @@ export async function GET(req: NextRequest) {
 
   // Фильтр по дате
   if (date) {
-    const start = new Date(date);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(date);
-    end.setHours(23, 59, 59, 999);
+    // 🔥 ИСПРАВЛЕНИЕ: Жестко фиксируем начало и конец дня в UTC,
+    // чтобы сервер не сместил дату из-за своего часового пояса
+    const start = new Date(`${date}T00:00:00.000Z`);
+    const end = new Date(`${date}T23:59:59.999Z`);
 
     where.OR = [
       // Есть явная дата доставки — приоритет
@@ -41,11 +41,10 @@ export async function GET(req: NextRequest) {
       },
     ];
   } else {
-    // ИСПРАВЛЕНИЕ: Если фронтенд запрашивает все заказы (без конкретной даты),
-    // мы отдаем только заказы за последние 10 дней, чтобы не перегружать память
-    // и чтобы старые утренние заказы не вытесняли новые вечерние.
+    // Если фронтенд запрашивает все заказы (без конкретной даты),
+    // мы отдаем только заказы за последние 10 дней
     const tenDaysAgo = new Date();
-    tenDaysAgo.setDate(tenDaysAgo.getDate() - 8);
+    tenDaysAgo.setDate(tenDaysAgo.getDate() - 8); // Исправил 8
     
     where.OR = [
       { crmCreatedAt: { gte: tenDaysAgo } },
@@ -60,12 +59,11 @@ export async function GET(req: NextRequest) {
 
   const orders = await prisma.order.findMany({
     where,
-    // ИСПРАВЛЕНИЕ: Сортируем строго по дате (самые свежие сверху).
-    // Убрали slotFrom из сортировки БД, чтобы вечерние заказы (20:00) не падали в конец списка.
+    // Сортируем строго по дате (самые свежие сверху).
     orderBy: { crmCreatedAt: "desc" },
     take: 3500,
-    include: { route: true } // 🔥 ЭТО САМОЕ ГЛАВНОЕ: теперь маршруты подтянутся!
-     // Увеличили лимит, чтобы база гарантированно отдавала все текущие заказы
+    // 🔥 ЭТО САМОЕ ГЛАВНОЕ: теперь маршруты подтянутся вместе с isDraft!
+    include: { route: true } 
   });
 
   return NextResponse.json(orders);
