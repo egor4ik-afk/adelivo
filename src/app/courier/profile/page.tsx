@@ -11,7 +11,7 @@ interface Profile {
   lastName: string | null; 
   phone: string | null;
   homeAddress: string | null; 
-  isAuto: boolean; // 🔥 ДОБАВЛЕНО
+  isAuto: boolean;
 }
 
 interface Stats {
@@ -21,6 +21,13 @@ interface Stats {
   allTimeTotal: number;
   konsolPhone: string | null;
   isLinked: boolean;
+}
+
+// 🔥 Генерируем удобный список времени (с 06:00 до 23:30)
+const TIME_OPTIONS: string[] = [];
+for (let i = 6; i <= 23; i++) {
+  TIME_OPTIONS.push(`${String(i).padStart(2, '0')}:00`);
+  TIME_OPTIONS.push(`${String(i).padStart(2, '0')}:30`);
 }
 
 function AddressSuggestInput({ value, onChange }: { value: string, onChange: (val: string) => void }) {
@@ -77,7 +84,7 @@ function AddressSuggestInput({ value, onChange }: { value: string, onChange: (va
       value={value} 
       onChange={e => onChangeRef.current(e.target.value)} 
       placeholder="Москва, ул. Пушкина, д. 1" 
-      style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontSize: 14, boxSizing: "border-box", display: "block" }} 
+      style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #4a7aff", outline: "none", fontSize: 15, boxSizing: "border-box", display: "block" }} 
     />
   );
 }
@@ -93,13 +100,11 @@ export default function CourierProfilePage() {
   const [newHomeAddress, setNewHomeAddress] = useState(""); 
   const [isAuto, setIsAuto] = useState(false); 
   
-  // Консоль
   const [konsolModalOpen, setKonsolModalOpen] = useState(false);
   const [inputKonsolPhone, setInputKonsolPhone] = useState("");
   const [konsolLoading, setKonsolLoading] = useState(false);
 
   const [saving, setSaving] = useState(false);
-  // 🔥 Изменили тип стейта смен: теперь это массив объектов
   const [myShifts, setMyShifts] = useState<any[]>([]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -110,7 +115,6 @@ export default function CourierProfilePage() {
   const isSubscribed = pushState === "granted";
   const needsPushBanner = pushState === "default";
 
-  // Генерируем 7 дней
   const scheduleDates = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(); d.setDate(d.getDate() + i); 
     return d.toISOString().split("T")[0];
@@ -130,7 +134,6 @@ export default function CourierProfilePage() {
       setStats(data);
     });
 
-    // Загружаем смены
     const from = scheduleDates[0];
     const to = scheduleDates[6];
     fetch(`/api/courier/my-shifts?from=${from}&to=${to}`).then(r => r.json()).then(data => {
@@ -152,9 +155,7 @@ export default function CourierProfilePage() {
     return () => window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
   }, []);
 
-  // 🔥 НОВАЯ Функция сохранения смены с учетом времени
   const updateShift = async (date: string, data: { isWorking: boolean, startTime?: string, endTime?: string }) => {
-    // Оптимистичное обновление UI
     if (data.isWorking) {
       setMyShifts(prev => {
         const existing = prev.find(s => s.date === date);
@@ -166,14 +167,13 @@ export default function CourierProfilePage() {
     }
 
     try {
-      // Отправка на сервер
       await fetch("/api/courier/my-shifts", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date, ...data })
       });
     } catch (e) {
       alert("Ошибка сохранения смены. Проверьте интернет.");
-      loadData(); // Откат при ошибке
+      loadData(); 
     }
   };
 
@@ -297,7 +297,6 @@ export default function CourierProfilePage() {
 
       <div style={{ padding: 16 }}>
 
-        {/* ПЕРЕКЛЮЧАТЕЛЬ АВТО/ПЕШИЙ */}
         <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18" }}>Тип курьера</div>
@@ -336,7 +335,6 @@ export default function CourierProfilePage() {
               </div>
             </div>
 
-            {/* ИНТЕГРАЦИЯ С КОНСОЛЬЮ */}
             <div style={{ padding: 12, background: stats.isLinked ? "#eef3ff" : "#fef2f2", borderRadius: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: stats.isLinked ? "#4a7aff" : "#d94040" }}>
@@ -356,23 +354,22 @@ export default function CourierProfilePage() {
           </div>
         )}
 
-        {/* 🔥 НОВЫЙ БЛОК ГРАФИКА */}
         <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
           <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", margin: "0 0 12px 0", textTransform: "uppercase" }}>📅 График работы</h2>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {scheduleDates.map(date => {
               const shift = myShifts.find(s => s.date === date);
               const isWorking = !!shift;
 
               return (
-                <div key={date} style={{ background: isWorking ? "#f0fdf4" : "#fafaf8", padding: 12, borderRadius: 10, border: isWorking ? "1px solid #a7f3d0" : "1px solid #e8e6df", transition: "all 0.2s" }}>
+                <div key={date} style={{ background: isWorking ? "#f0fdf4" : "#fafaf8", padding: "14px 16px", borderRadius: 12, border: isWorking ? "1px solid #a7f3d0" : "1px solid #e8e6df", transition: "all 0.2s" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", textTransform: "capitalize" }}>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", textTransform: "capitalize" }}>
                       {formatDay(date)}
                     </span>
                     
                     <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: isWorking ? "#10b981" : "#a8a49c" }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: isWorking ? "#10b981" : "#a8a49c" }}>
                         {isWorking ? "На смене" : "Выходной"}
                       </span>
                       <input 
@@ -383,28 +380,31 @@ export default function CourierProfilePage() {
                           startTime: shift?.startTime || "10:00", 
                           endTime: shift?.endTime || "22:00" 
                         })} 
-                        style={{ width: 16, height: 16, accentColor: "#10b981" }}
+                        style={{ width: 20, height: 20, accentColor: "#10b981" }}
                       />
                     </label>
                   </div>
 
+                  {/* 🔥 ИЗМЕНЕННЫЙ ВЫБОР ВРЕМЕНИ ДЛЯ МОБИЛОК (SELECT вместо INPUT TIME) */}
                   {isWorking && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, paddingTop: 10, borderTop: "1px solid #d1fae5" }}>
-                      <span style={{ fontSize: 12, color: "#059669", fontWeight: 600 }}>Часы работы:</span>
-                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <input 
-                          type="time" 
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, paddingTop: 14, borderTop: "1px solid #d1fae5", flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 13, color: "#059669", fontWeight: 600 }}>Часы работы:</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, justifyContent: "flex-end" }}>
+                        <select 
                           value={shift.startTime || "10:00"} 
                           onChange={(e) => updateShift(date, { isWorking: true, startTime: e.target.value, endTime: shift.endTime })}
-                          style={{ padding: "4px 6px", borderRadius: 6, border: "1px solid #a7f3d0", outline: "none", fontSize: 13, background: "#fff", color: "#065f46" }}
-                        />
-                        <span style={{ color: "#059669" }}>-</span>
-                        <input 
-                          type="time" 
+                          style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #a7f3d0", outline: "none", fontSize: 15, background: "#fff", color: "#065f46", fontWeight: 700, textAlign: "center", flex: 1, maxWidth: 100 }}
+                        >
+                          {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                        <span style={{ color: "#059669", fontWeight: 700 }}>-</span>
+                        <select 
                           value={shift.endTime || "22:00"} 
                           onChange={(e) => updateShift(date, { isWorking: true, startTime: shift.startTime, endTime: e.target.value })}
-                          style={{ padding: "4px 6px", borderRadius: 6, border: "1px solid #a7f3d0", outline: "none", fontSize: 13, background: "#fff", color: "#065f46" }}
-                        />
+                          style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #a7f3d0", outline: "none", fontSize: 15, background: "#fff", color: "#065f46", fontWeight: 700, textAlign: "center", flex: 1, maxWidth: 100 }}
+                        >
+                          {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
                       </div>
                     </div>
                   )}
@@ -413,7 +413,6 @@ export default function CourierProfilePage() {
             })}
           </div>
         </div>
-        {/* 🔥 КОНЕЦ БЛОКА ГРАФИКА */}
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0" }}>
           <div>
@@ -455,11 +454,11 @@ export default function CourierProfilePage() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
                   <div style={{ width: "100%" }}>
                     <div style={{ fontSize: 12, color: "#a8a49c", marginBottom: 4 }}>Имя</div>
-                    <input value={newFirstName} onChange={e => setNewFirstName(e.target.value)} style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontSize: 14, boxSizing: "border-box", display: "block" }} />
+                    <input value={newFirstName} onChange={e => setNewFirstName(e.target.value)} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #4a7aff", outline: "none", fontSize: 15, boxSizing: "border-box", display: "block" }} />
                   </div>
                   <div style={{ width: "100%" }}>
                     <div style={{ fontSize: 12, color: "#a8a49c", marginBottom: 4 }}>Фамилия</div>
-                    <input value={newLastName} onChange={e => setNewLastName(e.target.value)} style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontSize: 14, boxSizing: "border-box", display: "block" }} />
+                    <input value={newLastName} onChange={e => setNewLastName(e.target.value)} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #4a7aff", outline: "none", fontSize: 15, boxSizing: "border-box", display: "block" }} />
                   </div>
                   <div style={{ width: "100%" }}>
                     <div style={{ fontSize: 12, color: "#a8a49c", marginBottom: 4 }}>Телефон</div>
@@ -468,7 +467,7 @@ export default function CourierProfilePage() {
                       value={newPhone}
                       onAccept={(value: string) => setNewPhone(value)}
                       placeholder="+7 (___) ___-__-__"
-                      style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontSize: 14, boxSizing: "border-box", display: "block" }}
+                      style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #4a7aff", outline: "none", fontSize: 15, boxSizing: "border-box", display: "block" }}
                     />
                   </div>
                   
@@ -481,10 +480,10 @@ export default function CourierProfilePage() {
             </div>
             
             {!editingProfile ? (
-              <button onClick={() => setEditingProfile(true)} style={{ background: "none", border: "none", color: "#4a7aff", fontSize: 13, fontWeight: 600, padding: "10px 0", cursor: "pointer", marginLeft: "auto", marginTop: 8 }}>Изменить</button>
+              <button onClick={() => setEditingProfile(true)} style={{ background: "none", border: "none", color: "#4a7aff", fontSize: 14, fontWeight: 700, padding: "10px 0", cursor: "pointer", marginLeft: "auto", marginTop: 8 }}>Изменить</button>
             ) : (
               <div style={{ width: "100%", display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
-                <button onClick={handleSaveProfile} disabled={saving} style={{ background: "#4a7aff", border: "none", color: "#fff", padding: "10px 20px", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+                <button onClick={handleSaveProfile} disabled={saving} style={{ background: "#4a7aff", border: "none", color: "#fff", padding: "12px 20px", borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>
                   {saving ? "Сохраняем..." : "Сохранить"}
                 </button>
               </div>
@@ -509,7 +508,6 @@ export default function CourierProfilePage() {
 
       </div>
 
-      {/* Модалка Консоли */}
       {konsolModalOpen && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
           <div style={{ background: "#fff", padding: 24, borderRadius: 20, width: "90%", maxWidth: 350 }}>
