@@ -119,10 +119,12 @@ export async function POST(req: Request) {
       while (unassignedInSlot.length > 0 && progress) {
         progress = false;
 
-        // Сортируем курьеров: Сначала те, у кого МЕНЬШЕ ВСЕГО маршрутов (справедливость), затем по ПРИОРИТЕТУ (от 5 к 1)
+        // 🔥 1. Сортируем: Сначала по ПРИОРИТЕТУ КУРЬЕРА (от 5 к 1), а при равном — у кого меньше ходок
         availableCouriers.sort((a,b) => {
-            if (courierRouteCount[a.id] !== courierRouteCount[b.id]) return courierRouteCount[a.id] - courierRouteCount[b.id];
-            return (b.shifts[0]?.priority || 3) - (a.shifts[0]?.priority || 3);
+            const priorityA = a.priority || 3;
+            const priorityB = b.priority || 3;
+            if (priorityA !== priorityB) return priorityB - priorityA; // Высокий приоритет забирает заказы первым
+            return courierRouteCount[a.id] - courierRouteCount[b.id];  // Балансировка между курьерами одного уровня
         });
 
         for (const courier of availableCouriers) {
@@ -135,11 +137,30 @@ export async function POST(req: Request) {
           const mainSlotOrders = unassignedInSlot.filter(o => isOrderInShift(o, shift));
           if (mainSlotOrders.length === 0) continue;
 
-          const maxPoints = courier.isAuto ? Math.floor(Math.random() * 4) + 5 : 3; 
+          // 🔥 2. Динамическая вместимость: 5-звездочный пеший может взять 4 точки
+          const courierPriority = courier.priority || 3;
+          let maxPoints = 3; // Дефолт для пешего
+          if (courier.isAuto) {
+            maxPoints = Math.floor(Math.random() * 4) + 5; // 5-8 для авто
+          } else if (courierPriority === 5) {
+            maxPoints = 4; // Топовый пеший
+          }
+
           const clusterSize = Math.min(maxPoints, mainSlotOrders.length);
           
-          // Находим якорь (самая близкая к базе точка)
-          mainSlotOrders.sort((a,b) => getDist(STORE_LAT, STORE_LNG, a.lat!, a.lng!) - getDist(STORE_LAT, STORE_LNG, b.lat!, b.lng!));
+          // 🔥 3. Логика "Домой в конце смены"
+          // Если слот начинается менее чем за 3 часа до конца смены курьера — это "конец дня"
+          const shiftEndH = parseInt(shift.endTime?.split(":")[0] || "22", 10);
+          const slotStartH = parseInt(slotKey.split(":")[0] || "00", 10);
+          const isLateShift = slotStartH >= (shiftEndH - 3);
+
+          if (isLateShift && courier.homeLat && courier.homeLng) {
+             // Ищем точку, ближайшую к ДОМУ курьера
+             mainSlotOrders.sort((a,b) => getDist(courier.homeLat!, courier.homeLng!, a.lat!, a.lng!) - getDist(courier.homeLat!, courier.homeLng!, b.lat!, b.lng!));
+          } else {
+             // Ищем точку, ближайшую к БАЗЕ
+             mainSlotOrders.sort((a,b) => getDist(STORE_LAT, STORE_LNG, a.lat!, a.lng!) - getDist(STORE_LAT, STORE_LNG, b.lat!, b.lng!));
+          }
           const anchor = mainSlotOrders[0];
           
           // Сортируем остальные относительно якоря
@@ -167,14 +188,14 @@ export async function POST(req: Request) {
              }
           }
 
-          // 🔥 ОПТИМИЗИРУЕМ МАРШРУТ перед сохранением
+          // ОПТИМИЗИРУЕМ МАРШРУТ перед сохранением
           const optimizedRoute = optimizeCluster(routeOrders, STORE_LAT, STORE_LNG);
 
           await createDraftRoute(courier, optimizedRoute);
           progress = true; // Сделали шаг, крутим цикл дальше
         }
       }
-      groupedOrders[slotKey] = unassignedInSlot; // Возвращаем остатки (если кто-то не влез в рабочие часы)
+      groupedOrders[slotKey] = unassignedInSlot; // Возвращаем остатки
     }
 
     let leftOver = 0;
