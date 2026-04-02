@@ -847,35 +847,24 @@ export function DashboardClient({ user }: { user: User }) {
 
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             
-            {/* 🔥 ЗАМЕНИТЬ ВЕСЬ БЛОК РАСЧЕТА НА ЭТОТ */}
+            {/* 🔥 НАЧАЛО БЛОКА РАСЧЕТА */}
             {(() => {
-              // Функция для парсинга текста Яндекса в миллисекунды ("1 ч 15 мин" -> 4500000)
-              // Функция для парсинга текста Яндекса в миллисекунды
               const parseYandexTimeMs = (text: string) => {
                 if (!text || text === "—") return 0;
                 let ms = 0;
-                
                 const hMatch = text.match(/(\d+)\s*ч/);
                 if (hMatch) ms += parseInt(hMatch[1], 10) * 3600000;
-                
                 const mMatch = text.match(/(\d+)\s*мин/);
                 if (mMatch) ms += parseInt(mMatch[1], 10) * 60000;
                 
-                // 🔥 УМНАЯ ЛОГИКА ДЛЯ АВТО И ПЕШИХ
-                if (routeType === "auto") {
-                  // Для машины: Время Яндекса + жесткие 12 минут (парковка, дворы, шлагбаумы, лифт)
-                  return ms + (15 * 60 * 1000); 
-                } else {
-                  // Для пеших/транспорта: Время Яндекса + 3 минуты (погрешность на поиск квартиры)
-                  return ms + (5 * 60 * 1000);
-                }
+                if (routeType === "auto") return ms + (12 * 60 * 1000); 
+                else return ms + (3 * 60 * 1000);
               };
 
               const etas: Record<string, { type: string, timeStr: string, color: string }> = {};
               let currentRunningMs = Date.now();
               let foundFirstActive = false;
 
-              // Сдвигаем время старта, если маршрут еще не начали
               const hasStarted = selectedRouteOrders.some((o: any) => o.status === "IN_DELIVERY" || o.status === "DELIVERED");
               
               if (!hasStarted && selectedRouteOrders.length > 0 && routeLegs.length > 0) {
@@ -885,10 +874,9 @@ export function DashboardClient({ user }: { user: User }) {
                   if (!isNaN(hh) && !isNaN(mm)) {
                     const slotStartMs = new Date().setHours(hh, mm, 0, 0);
                     const firstLegMs = parseYandexTimeMs(routeLegs[0]);
-                    const legToFirstPointMs = firstLegMs + (5 * 60 * 1000); // Время пути + 5 мин на первую точку
+                    const legToFirstPointMs = firstLegMs + (5 * 60 * 1000);
                     const plannedDepartureMs = slotStartMs - legToFirstPointMs;
                     
-                    // Если выезд планируется в будущем, начинаем отсчет с него
                     if (plannedDepartureMs > currentRunningMs) {
                       currentRunningMs = plannedDepartureMs;
                     }
@@ -897,28 +885,36 @@ export function DashboardClient({ user }: { user: User }) {
               }
 
               selectedRouteOrders.forEach((o: any, index: number) => {
-                // 🔥 Читаем текстовое время из массива и превращаем в миллисекунды
                 const legMs = parseYandexTimeMs(routeLegs[index]);
 
                 if (o.status === "DELIVERED") {
                   const t = o.changedAt || o.updatedAt;
-                  const timeStr = t ? new Date(t).toLocaleTimeString('ru', {hour: '2-digit', minute:'2-digit'}) : "—";
-                  etas[o.id] = { type: 'DELIVERED', timeStr, color: "#10b981" };
+                  if (t) {
+                    // 🔥 ГЛАВНЫЙ ФИКС: Жестко откатываем таймер к реальному времени доставки этой точки!
+                    currentRunningMs = new Date(t).getTime(); 
+                    const timeStr = new Date(currentRunningMs).toLocaleTimeString('ru', {hour: '2-digit', minute:'2-digit'});
+                    etas[o.id] = { type: 'DELIVERED', timeStr, color: "#10b981" };
+                  } else {
+                    etas[o.id] = { type: 'DELIVERED', timeStr: "—", color: "#10b981" };
+                  }
                 } else if (o.status === "CANCELLED" || o.status === "RETURNED") {
                   etas[o.id] = { type: 'SKIPPED', timeStr: "—", color: "#a8a49c" };
                 } else {
+                  // Для точек в статусах NEW, ASSIGNED, IN_DELIVERY
                   if (!foundFirstActive) {
                     foundFirstActive = true;
-                    currentRunningMs += legMs; // Прибавляем время до 1 точки (уже с учетом 12 минут на парковку!)
+                    // 🔥 Если это ПЕРВАЯ активная точка, мы прибавляем время от базы или от последней доставленной (currentRunningMs)
+                    currentRunningMs += legMs; 
                   } else {
-                    // 🔥 Здесь оставляем только 3-4 минуты на саму передачу заказа клиенту. 
-                    // Время на спуск к машине и парковку уже заложено внутри legMs выше.
+                    // 🔥 Если это ВТОРАЯ, ТРЕТЬЯ и т.д. активная точка (в статусе IN_DELIVERY или NEW), 
+                    // мы прибавляем время на передачу ПРЕДЫДУЩЕГО заказа (4 мин) + дорогу
                     currentRunningMs += (4 * 60 * 1000) + legMs; 
                   }
+                  
                   const timeStr = new Date(currentRunningMs).toLocaleTimeString('ru', {hour: '2-digit', minute:'2-digit'});
                   
                   let color = "#4a7aff";
-                  if (o.status === "IN_DELIVERY") color = "#f59e0b"; // Оранжевый для активной
+                  if (o.status === "IN_DELIVERY") color = "#f59e0b";
                   etas[o.id] = { type: o.status, timeStr, color };
                 }
               });
