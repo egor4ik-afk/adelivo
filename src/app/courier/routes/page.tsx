@@ -13,24 +13,24 @@ interface RouteOrder {
   routeId: string | null; routeOrder: number | null;
   deliveryDate: string | null;
   eta?: string | null; // 🔥 ДОБАВЛЕНО: расчетное время прибытия
-  route?: { 
-    id: string; name: string; link: string | null; date: string; 
+  route?: {
+    id: string; name: string; link: string | null; date: string;
     departureAdvice: string | null;
     baseArrivalTime?: string | null; // 🔥 ДОБАВЛЕНО: Время на базе
   } | null;
 }
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
-  ASSIGNED:    { label: "Назначен",    color: "#4a7aff", bg: "#eef3ff" },
-  IN_DELIVERY: { label: "🚀 В пути",  color: "#10b981", bg: "#ecfdf5" },
-  DELIVERED:   { label: "✅ Доставлен", color: "#6b6860", bg: "#f5f4f0" },
+  ASSIGNED: { label: "Назначен", color: "#4a7aff", bg: "#eef3ff" },
+  IN_DELIVERY: { label: "🚀 В пути", color: "#10b981", bg: "#ecfdf5" },
+  DELIVERED: { label: "✅ Доставлен", color: "#6b6860", bg: "#f5f4f0" },
 };
 
 export default function CourierRoutesPage() {
-  const [orders,         setOrders]         = useState<RouteOrder[]>([]);
-  const [loading,        setLoading]        = useState(true);
+  const [orders, setOrders] = useState<RouteOrder[]>([]);
+  const [loading, setLoading] = useState(true);
   const [expandedRoutes, setExpandedRoutes] = useState<Record<string, boolean>>({});
-  const [showPast,       setShowPast]       = useState(false);
+  const [showPast, setShowPast] = useState(false);
 
   const fetchOrders = async () => {
     try {
@@ -60,8 +60,8 @@ export default function CourierRoutesPage() {
 
   // 🔥 НОВЫЕ ФУНКЦИИ ВСТАВЛЕНЫ СЮДА
   const handleBaseTimeChange = async (routeId: string, newTime: string) => {
-    setOrders(prev => prev.map(o => o.route?.id === routeId 
-      ? { ...o, route: { ...o.route!, baseArrivalTime: newTime } } 
+    setOrders(prev => prev.map(o => o.route?.id === routeId
+      ? { ...o, route: { ...o.route!, baseArrivalTime: newTime } }
       : o
     ));
     await fetch(`/api/routes/${routeId}`, {
@@ -72,9 +72,9 @@ export default function CourierRoutesPage() {
 
   const handlePickupAll = async (routeId: string) => {
     if (!window.confirm("Отметить все неначатые заказы в маршруте как «В пути»?")) return;
-    setOrders(prev => prev.map(o => 
+    setOrders(prev => prev.map(o =>
       (o.route?.id === routeId && (o.status === "ASSIGNED" || o.status === "NEW"))
-        ? { ...o, status: "IN_DELIVERY" } 
+        ? { ...o, status: "IN_DELIVERY" }
         : o
     ));
     await fetch(`/api/routes/${routeId}/pickup-all`, { method: "POST" });
@@ -87,7 +87,7 @@ export default function CourierRoutesPage() {
   const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" });
 
   const todayOrders: RouteOrder[] = [];
-  const pastOrders:  RouteOrder[] = [];
+  const pastOrders: RouteOrder[] = [];
 
   orders.forEach(o => {
     const d = o.route?.date || (o.deliveryDate ? o.deliveryDate.split("T")[0] : null) || todayStr;
@@ -130,14 +130,14 @@ export default function CourierRoutesPage() {
 
         {todayRouteKeys.map((rId) => {
           const routePoints = todayGrouped[rId].sort((a, b) => (a.routeOrder || 0) - (b.routeOrder || 0));
-          const isExpanded  = expandedRoutes[rId] ?? true;
-          const routeObj    = routePoints[0]?.route;
-          const routeName   = routeObj ? routeObj.name : "Без маршрута";
-          const routeLink   = routeObj?.link ?? null;
-          const advice      = routeObj?.departureAdvice ?? null;
+          const isExpanded = expandedRoutes[rId] ?? true;
+          const routeObj = routePoints[0]?.route;
+          const routeName = routeObj ? routeObj.name : "Без маршрута";
+          const routeLink = routeObj?.link ?? null;
+          const advice = routeObj?.departureAdvice ?? null;
 
-          const delivered   = routePoints.filter(o => o.status === "DELIVERED").length;
-          const total       = routePoints.length;
+          const delivered = routePoints.filter(o => o.status === "DELIVERED").length;
+          const total = routePoints.length;
 
           return (
             <div key={rId} style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
@@ -152,15 +152,21 @@ export default function CourierRoutesPage() {
                     <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 2 }}>
                       {delivered}/{total} доставлено
                     </div>
+
+                    {/* 🔥 СОВЕТ ОПЕРАТОРА — ВО СКОЛЬКО ЗАБРАТЬ */}
                     {advice && (
                       <div style={{
-                        marginTop: 6, fontSize: 12, color: "#4a7aff", fontWeight: 600,
-                        background: "#eef3ff", padding: "4px 8px", borderRadius: 6,
-                        display: "inline-block",
+                        marginTop: 8, padding: "10px 12px", background: "#fffbeb",
+                        border: "1px solid #fde68a", borderRadius: 10, display: "flex", gap: 8, alignItems: "center"
                       }}>
-                        💡 {advice}
+                        <span style={{ fontSize: 18 }}>⏰</span>
+                        <div>
+                          <div style={{ fontSize: 10, color: "#92400e", fontWeight: 700, textTransform: "uppercase" }}>Инфо: когда забрать</div>
+                          <div style={{ fontSize: 13, color: "#78350f", fontWeight: 700 }}>{advice}</div>
+                        </div>
                       </div>
                     )}
+
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0, marginLeft: 8 }}>
                     {routeLink && (
@@ -181,20 +187,40 @@ export default function CourierRoutesPage() {
                   <div style={{ display: "flex", gap: 8, alignItems: "center", borderTop: "1px dashed #e8e6df", paddingTop: 12 }} onClick={e => e.stopPropagation()}>
                     <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 600 }}>На базе в:</span>
-                      <input 
-                        type="time" 
+                      <select
                         value={routeObj?.baseArrivalTime || ""}
                         onChange={(e) => handleBaseTimeChange(rId, e.target.value)}
-                        style={{ 
-                          border: "1px solid #e8e6df", borderRadius: 6, padding: "4px 8px", 
-                          fontSize: 12, fontWeight: 600, color: "#1a1a18", background: "#fff", outline: "none"
-                        }} 
-                      />
+                        style={{
+                          border: "1px solid #e8e6df", borderRadius: 6, padding: "4px 8px",
+                          fontSize: 13, fontWeight: 600, color: "#1a1a18", background: "#fff",
+                          outline: "none", cursor: "pointer", minWidth: "90px"
+                        }}
+                      >
+                        <option value="" disabled>Выбрать...</option>
+
+                        {/* Если время уже было задано нестандартно (например 10:15), оставляем его видимым */}
+                        {routeObj?.baseArrivalTime && Number(routeObj.baseArrivalTime.split(':')[1]) % 10 !== 0 && (
+                          <option value={routeObj.baseArrivalTime}>{routeObj.baseArrivalTime}</option>
+                        )}
+
+                        {/* Генерируем слоты каждые 10 минут с 08:00 до 23:50 (96 вариантов) */}
+                        {Array.from({ length: 96 }).map((_, i) => {
+                          const hour = Math.floor(i / 6) + 8; // 6 слотов в часе (6 * 10 = 60 мин)
+                          const min = (i % 6) * 10;
+                          const val = `${hour.toString().padStart(2, "0")}:${min.toString().padStart(2, "0")}`;
+
+                          return (
+                            <option key={val} value={val}>
+                              {val}
+                            </option>
+                          );
+                        })}
+                      </select>
                     </div>
-                    <button 
+                    <button
                       onClick={() => handlePickupAll(rId)}
-                      style={{ 
-                        background: "#4a7aff", color: "#fff", border: "none", 
+                      style={{
+                        background: "#4a7aff", color: "#fff", border: "none",
                         padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer",
                         boxShadow: "0 2px 6px rgba(74, 122, 255, 0.25)"
                       }}
@@ -208,7 +234,7 @@ export default function CourierRoutesPage() {
               {isExpanded && (
                 <div style={{ display: "flex", flexDirection: "column" }}>
                   {routePoints.map((o, idx) => {
-                    const st    = STATUS_MAP[o.status] || STATUS_MAP.ASSIGNED;
+                    const st = STATUS_MAP[o.status] || STATUS_MAP.ASSIGNED;
                     const phone = o.recipientPhone || "—";
                     const rawOp = o.opComment || "";
                     const opComment = rawOp.split("\n").filter(line => !line.startsWith("💡")).join("\n").trim();
@@ -244,9 +270,9 @@ export default function CourierRoutesPage() {
                               </div>
                               {/* 🔥 ВЫВОД ВРЕМЕНИ ДОСТАВКИ (ETA) */}
                               {o.eta && (
-                                <div style={{ 
-                                  fontSize: 11, background: "#eef3ff", color: "#4a7aff", 
-                                  padding: "2px 6px", borderRadius: 4, fontWeight: 600 
+                                <div style={{
+                                  fontSize: 11, background: "#eef3ff", color: "#4a7aff",
+                                  padding: "2px 6px", borderRadius: 4, fontWeight: 600
                                 }}>
                                   ~{o.eta}
                                 </div>
@@ -337,7 +363,7 @@ export default function CourierRoutesPage() {
                 {pastGrouped[date]
                   .sort((a, b) => (a.routeOrder || 0) - (b.routeOrder || 0))
                   .map(o => {
-                    const st    = STATUS_MAP[o.status] || STATUS_MAP.ASSIGNED;
+                    const st = STATUS_MAP[o.status] || STATUS_MAP.ASSIGNED;
                     const phone = o.recipientPhone || "—";
                     const rawOp = o.opComment || "";
                     const opComment = rawOp.split("\n").filter(l => !l.startsWith("💡")).join("\n").trim();

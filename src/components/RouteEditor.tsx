@@ -12,7 +12,7 @@ const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> =
 };
 
 export function RouteEditor({ 
-  routeId, routeName, routeLink, initialOrders, globalFreeOrders, 
+  route, routeId, routeName, routeLink, initialOrders, globalFreeOrders, 
   courierId, routesDate, isMobile, onSaved, onStatusChange, onOpenDetail 
 }: any) {
   const [orders, setOrders] = useState<any[]>([]);
@@ -83,6 +83,11 @@ export function RouteEditor({
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
         <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>
           Маршрут {routeName} {hasChanges && <span style={{ color: "#4a7aff", fontSize: 12, marginLeft: 8 }}>*не сохранено</span>}
+          {route.baseArrivalTime && (
+            <span style={{ fontSize: 12, background: "#fffbeb", padding: "2px 6px", borderRadius: 4, color: "#92400e", fontWeight: 700, marginLeft: 8 }}>
+              🕒 На базе в: {route.baseArrivalTime}
+            </span>
+          )}
         </h4>
         <div style={{ display: "flex", gap: 8, alignItems: "center", width: isMobile ? "100%" : "auto" }}>
           {routeLink && !hasChanges && (
@@ -134,6 +139,14 @@ export function RouteEditor({
               </div>
 
               <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", marginBottom: 10, lineHeight: 1.4, flex: 1 }}>{o.address}</div>
+
+              {o.photoUrl && (
+                <div style={{ marginTop: 10, marginBottom: 10 }}>
+                  <a href={o.photoUrl} target="_blank" rel="noreferrer">
+                    <img src={o.photoUrl} alt="Confirmation" style={{ width: "100%", borderRadius: 8, maxHeight: 150, objectFit: "cover" }} />
+                  </a>
+                </div>
+              )}
 
               <div style={{ background: "#fafaf8", borderRadius: 8, padding: 10, border: "1px solid #f0efe9" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
