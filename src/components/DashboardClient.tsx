@@ -332,6 +332,38 @@ export function DashboardClient({ user }: { user: User }) {
       const storePm = new window.ymaps.Placemark([STORE_LAT, STORE_LNG], { hintContent: "БАЗА: Большой Афанасьевский переулок, 39", iconCaption: "База" }, { preset: 'islands#blackDotIcon' });
       map.geoObjects.add(storePm as any);
 
+     // 🔥 ЗАГРУЗКА ЗОН ИЗ ВАШЕГО КОНСТРУКТОРА (ПОДЛОЖКА)
+     // 🔥 ЗАГРУЗКА ЗОН ИЗ ЛОКАЛЬНОГО ФАЙЛА
+     const constructorUrl = "/zones.kml"; // Берем файл из папки public
+      
+     (window.ymaps as any).geoXml.load(constructorUrl)
+       .then((res: any) => {
+         if (!mounted) return;
+         
+         // 🔥 Рекурсивная функция для применения стилей (прозрачности)
+         const applyStyles = (collection: any) => {
+           if (collection && typeof collection.each === 'function') {
+             collection.each((obj: any) => {
+               if (obj.geometry) { 
+                 // Это сам полигон — делаем его прозрачным
+                 obj.options.set({
+                   fillOpacity: 0.15, 
+                   strokeOpacity: 0.7,
+                   interactivityModel: 'default#transparent' 
+                 });
+               } else { 
+                 // Это папка — идем глубже
+                 applyStyles(obj);
+               }
+             });
+           }
+         };
+
+         applyStyles(res.geoObjects);
+         map.geoObjects.add(res.geoObjects);
+       })
+       .catch((err: any) => console.error("Ошибка загрузки локальных зон:", err));
+
       ymapRef.current = map;
       clustererRef.current = clusterer;
       couriersGeoObjectsRef.current = courierColl;

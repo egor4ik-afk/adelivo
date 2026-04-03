@@ -4,6 +4,9 @@
 declare namespace ymaps {
   type Ready = (callback: () => void) => void;
   export const ready: Ready;
+  namespace geoXml {
+    function load(url: string): Promise<any>;
+  }
 
   // 🔥 Добавили геокодер
   export function geocode(request: string | number[], options?: any): Promise<any>;

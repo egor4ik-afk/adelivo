@@ -160,6 +160,55 @@ export async function mapCrmOrder(order: CrmOrder) {
   };
 }
 
+// 🔥 Формула для расчета расстояния по прямой между двумя координатами (в километрах)
+function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371; // Радиус Земли
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2); 
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); 
+  return R * c; 
+}
+
+export async function geocodeAddress(address: string) {
+  if (!GEO_KEY || !address) return null;
+  try {
+    // 🔥 Если менеджер не написал город, принудительно ищем в Московском регионе
+    const searchAddress = address.toLowerCase().includes("москва") 
+      ? address 
+      : `Москва, ${address}`;
+
+    const res = await axios.get("https://geocode-maps.yandex.ru/1.x/", {
+      params: { apikey: GEO_KEY, geocode: searchAddress, format: "json", results: 1, ll: "37.6175,55.7520", spn: "1.0,1.0" },
+      timeout: 5000,
+    });
+    
+    const members = res.data?.response?.GeoObjectCollection?.featureMember ?? [];
+    if (!members.length) return null;
+    
+    const point = members[0]?.GeoObject?.Point?.pos;
+    if (!point) return null;
+    
+    const [lng, lat] = point.split(" ").map(Number);
+    const precision = members[0]?.GeoObject?.metaDataProperty?.GeocoderMetaData?.precision;
+    
+    // 🔥 Координаты базы (откуда считаем расстояние). По умолчанию центр Москвы
+    const BASE_LAT = 55.755864; 
+    const BASE_LNG = 37.617698;
+    const distanceKm = getDistanceFromLatLonInKm(BASE_LAT, BASE_LNG, lat, lng);
+
+    return { 
+      lat, 
+      lng, 
+      precision, 
+      isExact: ["exact", "number", "near", "range"].includes(precision),
+      distanceKm // Возвращаем посчитанное расстояние
+    };
+  } catch (_) { return null; }
+}
+
 export async function geocodeNewOrders() {
   const orders = await prisma.order.findMany({ where: { geocoded: false, address: { not: null } }, take: 20 });
   if (orders.length === 0) return;
@@ -179,17 +228,35 @@ export async function geocodeNewOrders() {
 
     try {
       const geo = await geocodeAddress(order.address);
+      
       if (!geo) {
         await prisma.order.update({ where: { id: order.id }, data: { geocoded: true, isInvalid: true, invalidReason: "Адрес не найден" } });
         invalidOrders.push({ externalId: order.externalId, address: order.address, reason: "Адрес не найден" });
         continue;
       }
+
+      // 🔥 ПРОВЕРКА РАДИУСА (Максимум 75 км от центра/базы)
+      const MAX_ALLOWED_RADIUS_KM = 75; 
+      if (geo.distanceKm > MAX_ALLOWED_RADIUS_KM) {
+        const reason = `Вне зоны доставки (найдено в ${Math.round(geo.distanceKm)} км от МСК)`;
+        
+        // Оставляем координаты (чтобы логист на карте видел, куда улетела точка), но помечаем как ОШИБКУ
+        await prisma.order.update({ 
+          where: { id: order.id }, 
+          data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: true, invalidReason: reason } 
+        });
+        invalidOrders.push({ externalId: order.externalId, address: order.address, reason });
+        continue;
+      }
+
       if (!geo.isExact) {
         await prisma.order.update({ where: { id: order.id }, data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: true, invalidReason: `Неточный геокод: ${geo.precision}` } });
         invalidOrders.push({ externalId: order.externalId, address: order.address, reason: `Неточный геокод: ${geo.precision}` });
         continue;
       }
-      await prisma.order.update({ where: { id: order.id }, data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: false } });
+
+      // Если всё идеально (близко и точно)
+      await prisma.order.update({ where: { id: order.id }, data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: false, invalidReason: null } });
     } catch (_) {
       await prisma.order.update({ where: { id: order.id }, data: { geocoded: true, isInvalid: true, invalidReason: "Ошибка геокодирования" } }).catch(() => {});
     }
@@ -198,23 +265,6 @@ export async function geocodeNewOrders() {
   if (invalidOrders.length > 0) {
     notify({ type: "address.invalid", orders: invalidOrders }).catch(console.error);
   }
-}
-
-export async function geocodeAddress(address: string) {
-  if (!GEO_KEY || !address) return null;
-  try {
-    const res = await axios.get("https://geocode-maps.yandex.ru/1.x/", {
-      params: { apikey: GEO_KEY, geocode: address, format: "json", results: 1, ll: "37.6175,55.7520", spn: "1.0,1.0" },
-      timeout: 5000,
-    });
-    const members = res.data?.response?.GeoObjectCollection?.featureMember ?? [];
-    if (!members.length) return null;
-    const point = members[0]?.GeoObject?.Point?.pos;
-    if (!point) return null;
-    const [lng, lat] = point.split(" ").map(Number);
-    const precision = members[0]?.GeoObject?.metaDataProperty?.GeocoderMetaData?.precision;
-    return { lat, lng, precision, isExact: ["exact", "number", "near", "range"].includes(precision) };
-  } catch (_) { return null; }
 }
 
 export async function upsertOrder(crmOrder: CrmOrder) {
@@ -229,7 +279,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     });
     
     if (assignedCourier?.isAuto) {
-      const basePrices = [500, 900, 1300, 1400]; // Базовые цены, которые присылает CRM
+      const basePrices = [500, 900, 1300]; // 🔥 Убрали 1400, чтобы избежать двойной наценки
       if (basePrices.includes(data.price)) {
         data.price += 100; // Превращаем 500->600, 900->1000, 1300->1400
       }
@@ -270,6 +320,14 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     if (data.status === OrderStatus.NEW && existing.status !== OrderStatus.NEW) {
       updateFields.status = existing.status;
     }
+    
+    // 🔥 ЗАЩИТА ЦЕНЫ ОТ СБРОСА ИЗ CRM
+    // Если у заказа в нашей БД уже установлена цена (руками или при назначении авто-курьера),
+    // мы игнорируем цену, пришедшую из RetailCRM.
+    if (existing.price !== null) {
+      updateFields.price = existing.price;
+    }
+
     // Если статус перевели "В пути", а время выезда еще пустое — ставим текущее
     if (updateFields.status === OrderStatus.IN_DELIVERY && existing.status !== OrderStatus.IN_DELIVERY) {
       if (!existing.pickedUpAt) {
