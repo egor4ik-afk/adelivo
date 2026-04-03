@@ -1,5 +1,6 @@
 // src/lib/crm.ts
 import axios from "axios";
+import fs from "fs";
 import { prisma } from "./prisma";
 import { notify } from "./notifications";
 import { OrderStatus } from "@prisma/client";
@@ -17,7 +18,7 @@ async function resolveCourierId(name: string): Promise<number | null> {
 }
 
 export function parseSlot(raw: unknown) {
-  console.log("[parseSlot] raw =", JSON.stringify(raw)); 
+  console.log("[parseSlot] raw =", JSON.stringify(raw));
   if (!raw) return { from: null, to: null, text: null };
   if (typeof raw === "object" && raw !== null) {
     const r = raw as Record<string, string>;
@@ -83,7 +84,6 @@ function parseCourierFromDelivery(delivery: CrmOrder["delivery"]): { id: number 
     const name = dData.firstName ? String(dData.firstName) : null;
     return { id: dData.courierId, name };
   }
-
   if (dData?.courier !== undefined && dData.courier !== null && dData.courier !== "") {
     if (typeof dData.courier === "number" && dData.courier > 0) return { id: dData.courier, name: null };
     if (typeof dData.courier === "string" && !isNaN(Number(dData.courier)) && Number(dData.courier) > 0) return { id: Number(dData.courier), name: null };
@@ -92,11 +92,9 @@ function parseCourierFromDelivery(delivery: CrmOrder["delivery"]): { id: number 
       return { id: Number(dData.courier.id), name };
     }
   }
-
   if (dData?.firstName || dData?.lastName) {
     return { id: null, name: [dData.firstName, dData.lastName].filter(Boolean).join(" ") };
   }
-
   return { id: null, name: null };
 }
 
@@ -160,91 +158,158 @@ export async function mapCrmOrder(order: CrmOrder) {
   };
 }
 
-// 🔥 Формула для расчета расстояния по прямой между двумя координатами (в километрах)
+// ─────────────────────────────────────────────────────────────────────────────
+// ЗОНЫ KML
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface Zone {
+  name: string;
+  polygon: [number, number][];
+}
+
+let _zonesCache: { zone0: Zone | null; zone10: Zone | null; zone20: Zone | null } | null = null;
+
+function isPointInPolygon(point: [number, number], polygon: [number, number][]): boolean {
+  const [lng, lat] = point;
+  let isInside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i];
+    const [xj, yj] = polygon[j];
+    const intersect = (yi > lat) !== (yj > lat) &&
+      lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
+    if (intersect) isInside = !isInside;
+  }
+  return isInside;
+}
+
+function loadZonesFromKml(): typeof _zonesCache {
+  const kmlPath = "./public/zones.kml";
+  if (!fs.existsSync(kmlPath)) {
+    console.warn("[zones] zones.kml не найден:", kmlPath);
+    return { zone0: null, zone10: null, zone20: null };
+  }
+  const kml = fs.readFileSync(kmlPath, "utf-8");
+  const placemarks = kml.split("<Placemark>");
+  const zones: Zone[] = [];
+
+  for (let i = 1; i < placemarks.length; i++) {
+    const p = placemarks[i];
+    if (!p.includes("<Polygon>")) continue;
+
+    const name = (p.match(/<n>(.*?)<\/name>/)?.[1] ?? "")
+      .replace(/<!\[CDATA\[(.*?)\]\]>/g, "$1").replace(/<[^>]+>/g, "").trim().toLowerCase();
+    const desc = (p.match(/<description>(.*?)<\/description>/)?.[1] ?? "")
+      .replace(/<!\[CDATA\[(.*?)\]\]>/g, "$1").replace(/<[^>]+>/g, "").trim().toLowerCase();
+    const zoneName = name || desc || "без названия";
+
+    const coordsMatch = p.match(/<coordinates>\s*(.*?)\s*<\/coordinates>/s);
+    if (!coordsMatch) continue;
+
+    const points = coordsMatch[1].trim().split(/\s+/).map((pair) => {
+      const [lng, lat] = pair.split(",").map(Number);
+      return [lng, lat] as [number, number];
+    }).filter(([lng, lat]) => !isNaN(lng) && !isNaN(lat));
+
+    if (points.length > 3) zones.push({ name: zoneName, polygon: points });
+  }
+
+  console.log(`[zones] Загружено: ${zones.length} →`, zones.map(z => z.name).join(", "));
+
+  return {
+    zone0:  zones.find(z => z.name.startsWith("0"))  ?? null,
+    zone10: zones.find(z => z.name.startsWith("10")) ?? null,
+    zone20: zones.find(z => z.name.startsWith("20")) ?? null,
+  };
+}
+
+function getZones(): { zone0: Zone | null; zone10: Zone | null; zone20: Zone | null } {
+  if (!_zonesCache) _zonesCache = loadZonesFromKml();
+  return _zonesCache ?? { zone0: null, zone10: null, zone20: null };
+}
+
+// Базовая цена зоны (500 / 900 / 1300) — без надбавки авто
+export function calcBaseDeliveryPrice(lat: number, lng: number): number {
+  const distFromCenter = getDistanceFromLatLonInKm(55.755864, 37.617698, lat, lng);
+  const distFromMkad = Math.max(distFromCenter - 17, 0);
+  const { zone0, zone10, zone20 } = getZones();
+  const pt: [number, number] = [lng, lat];
+
+  if (zone0  && isPointInPolygon(pt, zone0.polygon))  return 500;
+  if (zone10 && isPointInPolygon(pt, zone10.polygon)) return 900;
+  if (zone20 && isPointInPolygon(pt, zone20.polygon)) return 1300;
+
+  if (distFromMkad > 10) return 1300;
+  if (distFromMkad > 0)  return 900;
+  return 500;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ГЕОКОДИРОВАНИЕ
+// ─────────────────────────────────────────────────────────────────────────────
+
 function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371; // Радиус Земли
+  const R = 6371;
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a = 
+  const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2); 
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); 
-  return R * c; 
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 export async function geocodeAddress(address: string) {
   if (!GEO_KEY || !address) return null;
   try {
-    // 🔥 Если менеджер не написал город, принудительно ищем в Московском регионе
-    const searchAddress = address.toLowerCase().includes("москва") 
-      ? address 
-      : `Москва, ${address}`;
-
+    const searchAddress = address.toLowerCase().includes("москва") ? address : `Москва, ${address}`;
     const res = await axios.get("https://geocode-maps.yandex.ru/1.x/", {
       params: { apikey: GEO_KEY, geocode: searchAddress, format: "json", results: 1, ll: "37.6175,55.7520", spn: "1.0,1.0" },
       timeout: 5000,
     });
-    
     const members = res.data?.response?.GeoObjectCollection?.featureMember ?? [];
     if (!members.length) return null;
-    
     const point = members[0]?.GeoObject?.Point?.pos;
     if (!point) return null;
-    
     const [lng, lat] = point.split(" ").map(Number);
     const precision = members[0]?.GeoObject?.metaDataProperty?.GeocoderMetaData?.precision;
-    
-    // 🔥 Координаты базы (откуда считаем расстояние). По умолчанию центр Москвы
-    const BASE_LAT = 55.755864; 
-    const BASE_LNG = 37.617698;
-    const distanceKm = getDistanceFromLatLonInKm(BASE_LAT, BASE_LNG, lat, lng);
-
-    return { 
-      lat, 
-      lng, 
-      precision, 
+    const distanceKm = getDistanceFromLatLonInKm(55.755864, 37.617698, lat, lng);
+    return {
+      lat, lng, precision,
       isExact: ["exact", "number", "near", "range"].includes(precision),
-      distanceKm // Возвращаем посчитанное расстояние
+      distanceKm,
     };
   } catch (_) { return null; }
 }
 
 export async function geocodeNewOrders() {
-  const orders = await prisma.order.findMany({ where: { geocoded: false, address: { not: null } }, take: 20 });
+  const orders = await prisma.order.findMany({
+    where: { geocoded: false, address: { not: null } },
+    take: 20,
+  });
   if (orders.length === 0) return;
 
   const invalidOrders: Array<{ externalId: string | null; address: string | null; reason: string }> = [];
 
   for (const order of orders) {
     if (!order.address) continue;
-    
+
     if (order.address.toLowerCase().includes("самовывоз")) {
-      await prisma.order.update({ 
-        where: { id: order.id }, 
-        data: { geocoded: true, isInvalid: false } 
-      });
+      await prisma.order.update({ where: { id: order.id }, data: { geocoded: true, isInvalid: false } });
       continue;
     }
 
     try {
       const geo = await geocodeAddress(order.address);
-      
+
       if (!geo) {
         await prisma.order.update({ where: { id: order.id }, data: { geocoded: true, isInvalid: true, invalidReason: "Адрес не найден" } });
         invalidOrders.push({ externalId: order.externalId, address: order.address, reason: "Адрес не найден" });
         continue;
       }
 
-      // 🔥 ПРОВЕРКА РАДИУСА (Максимум 75 км от центра/базы)
-      const MAX_ALLOWED_RADIUS_KM = 75; 
-      if (geo.distanceKm > MAX_ALLOWED_RADIUS_KM) {
+      if (geo.distanceKm > 75) {
         const reason = `Вне зоны доставки (найдено в ${Math.round(geo.distanceKm)} км от МСК)`;
-        
-        // Оставляем координаты (чтобы логист на карте видел, куда улетела точка), но помечаем как ОШИБКУ
-        await prisma.order.update({ 
-          where: { id: order.id }, 
-          data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: true, invalidReason: reason } 
-        });
+        await prisma.order.update({ where: { id: order.id }, data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: true, invalidReason: reason } });
         invalidOrders.push({ externalId: order.externalId, address: order.address, reason });
         continue;
       }
@@ -255,10 +320,25 @@ export async function geocodeNewOrders() {
         continue;
       }
 
-      // Если всё идеально (близко и точно)
-      await prisma.order.update({ where: { id: order.id }, data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: false, invalidReason: null } });
+      // ✅ Геокод точный — считаем базовую цену зоны (500/900/1300)
+      // Если курьер уже назначен и авто — сразу +100
+      const basePrice = calcBaseDeliveryPrice(geo.lat, geo.lng);
+      let finalPrice = basePrice;
+      if (order.courierId) {
+        const courier = await prisma.courier.findUnique({ where: { id: order.courierId }, select: { isAuto: true } });
+        if (courier?.isAuto) finalPrice = basePrice + 100;
+      }
+
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: false, invalidReason: null, price: finalPrice },
+      });
+
     } catch (_) {
-      await prisma.order.update({ where: { id: order.id }, data: { geocoded: true, isInvalid: true, invalidReason: "Ошибка геокодирования" } }).catch(() => {});
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { geocoded: true, isInvalid: true, invalidReason: "Ошибка геокодирования" },
+      }).catch(() => {});
     }
   }
 
@@ -267,24 +347,14 @@ export async function geocodeNewOrders() {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// UPSERT ЗАКАЗА
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function upsertOrder(crmOrder: CrmOrder) {
   const data = await mapCrmOrder(crmOrder);
 
-  // 🔥 ПЕРЕХВАТ НА ЛЕТУ: Накидываем 100₽ для авто-курьеров ДО сохранения в базу.
-  // Если CRM пришлет пустоту (null) — этот блок просто не сработает, и в базу запишется null.
-  if (data.courierId && data.price) {
-    const assignedCourier = await prisma.courier.findUnique({
-      where: { id: data.courierId },
-      select: { isAuto: true },
-    });
-    
-    if (assignedCourier?.isAuto) {
-      const basePrices = [500, 900, 1300]; // 🔥 Убрали 1400, чтобы избежать двойной наценки
-      if (basePrices.includes(data.price)) {
-        data.price += 100; // Превращаем 500->600, 900->1000, 1300->1400
-      }
-    }
-  }
+  // ❌ "Перехват на лету" УДАЛЁН — цена теперь считается в geocodeNewOrders по KML-зонам
 
   const existing = await prisma.order.findUnique({ where: { crmId: data.crmId } });
 
@@ -292,15 +362,15 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     lat?: number | null; lng?: number | null;
     geocoded?: boolean; isInvalid?: boolean; invalidReason?: string | null;
     changedAt?: Date;
-    routeId?: string | null;    
-    routeOrder?: number | null; 
-    pickedUpAt?: Date | null; // 🔥 ДОБАВЛЕНО
+    routeId?: string | null;
+    routeOrder?: number | null;
+    pickedUpAt?: Date | null;
   } = { ...data };
 
   if (existing) {
     const dbAddr = existing.address?.trim() || "";
     const crmAddr = data.address?.trim() || "";
-  
+
     if (dbAddr !== crmAddr) {
       updateFields.address       = crmAddr || null;
       updateFields.geocoded      = false;
@@ -316,30 +386,23 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       updateFields.isInvalid     = existing.isInvalid;
       updateFields.invalidReason = existing.invalidReason;
     }
-  
+
     if (data.status === OrderStatus.NEW && existing.status !== OrderStatus.NEW) {
       updateFields.status = existing.status;
     }
-    
-    // 🔥 АБСОЛЮТНАЯ ЗАЩИТА ЦЕНЫ ОТ СБРОСА ИЗ CRM
-    // Если в нашей базе УЖЕ ЕСТЬ цена (и она больше 0), мы НАМЕРТВО игнорируем 
-    // любую цену из RetailCRM. Наша база = главный источник правды.
+
+    // АБСОЛЮТНАЯ ЗАЩИТА ЦЕНЫ: если в нашей БД уже есть цена — не трогаем
     if (existing.price && existing.price > 0) {
       updateFields.price = existing.price;
     } else if (data.price && data.price > 0) {
-      // Записываем цену из CRM только если наша база пустая
       updateFields.price = data.price;
     } else {
       updateFields.price = existing.price || null;
     }
 
-    // Если статус перевели "В пути", а время выезда еще пустое — ставим текущее
     if (updateFields.status === OrderStatus.IN_DELIVERY && existing.status !== OrderStatus.IN_DELIVERY) {
-      if (!existing.pickedUpAt) {
-        updateFields.pickedUpAt = new Date();
-      }
+      if (!existing.pickedUpAt) updateFields.pickedUpAt = new Date();
     }
-    // Если откатили статус обратно на Новые/Назначен — очищаем время
     if ((updateFields.status === OrderStatus.NEW || updateFields.status === OrderStatus.ASSIGNED) && existing.status !== updateFields.status) {
       updateFields.pickedUpAt = null;
     }
@@ -349,26 +412,22 @@ export async function upsertOrder(crmOrder: CrmOrder) {
 
     if (isCancelledOrReturned || isPickup) {
       if (existing.routeId && updateFields.routeId !== null) {
-        const siblingsCount = await prisma.order.count({
-          where: { routeId: existing.routeId, id: { not: existing.id } },
-        });
-        if (siblingsCount === 0) {
-          await prisma.route.deleteMany({ where: { id: existing.routeId } });
-        }
+        const siblingsCount = await prisma.order.count({ where: { routeId: existing.routeId, id: { not: existing.id } } });
+        if (siblingsCount === 0) await prisma.route.deleteMany({ where: { id: existing.routeId } });
         updateFields.routeId = null;
         updateFields.routeOrder = null;
       }
     }
 
     const hasCoreChanges =
-      (existing.crmStatus  ?? "") !== (updateFields.crmStatus  ?? "") ||
-      (existing.courierId  ?? 0)  !== (updateFields.courierId  ?? 0)  ||
-      (existing.courier    ?? "") !== (updateFields.courier    ?? "") ||
-      (existing.items      ?? "") !== (updateFields.items      ?? "") ||
-      (existing.slotFrom   ?? "") !== (updateFields.slotFrom   ?? "") ||
-      (existing.slotTo     ?? "") !== (updateFields.slotTo     ?? "") ||
-      (existing.price      ?? 0)  !== (updateFields.price      ?? 0)  ||
-      dbAddr !== crmAddr; 
+      (existing.crmStatus ?? "") !== (updateFields.crmStatus ?? "") ||
+      (existing.courierId ?? 0)  !== (updateFields.courierId ?? 0)  ||
+      (existing.courier   ?? "") !== (updateFields.courier   ?? "") ||
+      (existing.items     ?? "") !== (updateFields.items     ?? "") ||
+      (existing.slotFrom  ?? "") !== (updateFields.slotFrom  ?? "") ||
+      (existing.slotTo    ?? "") !== (updateFields.slotTo    ?? "") ||
+      (existing.price     ?? 0)  !== (updateFields.price     ?? 0)  ||
+      dbAddr !== crmAddr;
 
     if (hasCoreChanges) updateFields.changedAt = new Date();
   }
@@ -392,23 +451,20 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       itemsChanged:     (existing.items     ?? "") !== (order.items     ?? ""),
       recipientPhoneChanged: (existing.recipientPhone ?? "") !== (order.recipientPhone ?? ""),
     };
-
     if (Object.values(changes).some(Boolean)) {
-      notify({
-        type: "order.updated",
-        order,
-        previousStatus: changes.statusChanged ? existing.status : undefined,
-        changes
-      }).catch(console.error);
+      notify({ type: "order.updated", order, previousStatus: changes.statusChanged ? existing.status : undefined, changes }).catch(console.error);
     }
   }
 
   return order;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// POLLING CRM
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function pollCrmOrders() {
   if (!CRM_URL || !CRM_KEY) return;
-  
   try {
     const dateFrom = new Date(Date.now() - 2 * 24 * 3_600_000).toISOString().split("T")[0];
     const resNew = await axios.get<CrmOrdersResponse>(`${CRM_URL}/api/v5/orders`, {
@@ -419,43 +475,43 @@ export async function pollCrmOrders() {
 
     const activeOrders = await prisma.order.findMany({
       where: { status: { notIn: ["DELIVERED", "CANCELLED", "RETURNED"] } },
-      select: { crmId: true }
+      select: { crmId: true },
     });
-
     const activeIds = activeOrders.map(o => o.crmId);
-    
+
     for (let i = 0; i < activeIds.length; i += 50) {
       const chunk = activeIds.slice(i, i + 50);
       const params = new URLSearchParams();
       params.append("apiKey", CRM_KEY);
       params.append("limit", "100");
       chunk.forEach(id => params.append("filter[ids][]", id));
-      
       const resUpdate = await axios.get<CrmOrdersResponse>(`${CRM_URL}/api/v5/orders?${params.toString()}`, { timeout: 15_000 });
       for (const order of resUpdate.data?.orders || []) await upsertOrder(order);
     }
 
     await prisma.syncState.upsert({ where: { id: 1 }, update: { lastSyncAt: new Date() }, create: { id: 1, lastSyncAt: new Date() } });
-    
     geocodeNewOrders().catch(console.error);
   } catch (err) {
     console.error("[Cron] Error polling CRM:", err);
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ОБНОВЛЕНИЕ ЗАКАЗА В CRM (статус, курьер, адрес — без цены)
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function updateCrmOrder(
   crmId: string,
-  data: { 
-    status?: OrderStatus; 
-    courier?: string; 
-    opComment?: string; 
-    address?: string; 
+  data: {
+    status?: OrderStatus;
+    courier?: string;
+    opComment?: string;
+    address?: string;
     deliveryType?: string | null;
     recipientPhone?: string;
   }
 ) {
   if (!CRM_URL || !CRM_KEY) return;
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const orderPayload: any = {};
 
@@ -465,7 +521,6 @@ export async function updateCrmOrder(
     orderPayload.delivery = orderPayload.delivery ?? {};
     orderPayload.delivery.address = { text: data.address };
   }
-
   if (data.recipientPhone !== undefined) {
     orderPayload.phone = data.recipientPhone.replace(/[^\d+]/g, "");
   }
@@ -486,12 +541,9 @@ export async function updateCrmOrder(
       resetParams.append("apiKey", CRM_KEY);
       resetParams.append("order", JSON.stringify({ delivery: { code: "self-delivery" } }));
       resetParams.append("by", "id");
-      await axios.post(
-        `${CRM_URL}/api/v5/orders/${crmId}/edit`,
-        resetParams.toString(),
-        { headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 5000 }
-      ).catch(() => {});
-
+      await axios.post(`${CRM_URL}/api/v5/orders/${crmId}/edit`, resetParams.toString(), {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 5000,
+      }).catch(() => {});
       orderPayload.delivery = { code: "logisty", typeId: 5 };
       orderPayload.customFields = { courier: null, kurier: null };
     }
@@ -505,74 +557,61 @@ export async function updateCrmOrder(
   params.append("by", "id");
 
   try {
-    await axios.post(
-      `${CRM_URL}/api/v5/orders/${crmId}/edit`,
-      params.toString(),
-      { headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 5000 }
-    );
+    await axios.post(`${CRM_URL}/api/v5/orders/${crmId}/edit`, params.toString(), {
+      headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 5000,
+    });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
     console.error(`[CRM] Ошибка обновления заказа ${crmId}:`, err?.response?.data ?? err.message);
   }
 }
 
-// 🔥 ДОБАВЛЕНА НОВАЯ ФУНКЦИЯ: Обновление стоимости доставки в CRM
-// src/lib/crm.ts
+// ─────────────────────────────────────────────────────────────────────────────
+// СЕБЕСТОИМОСТЬ В CRM — вызываешь сам когда нужно
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: number) {
   if (!CRM_URL || !CRM_KEY) return;
 
   const NET_COST_MAP: Record<number, number> = {
-    500: 732,
-    600: 838,
-    900: 1157,
-    1000: 1264,
-    1300: 1583,
-    1400: 1689,
+    500: 732, 600: 838, 900: 1157, 1000: 1264, 1300: 1583, 1400: 1689,
   };
-
-  // Берем себестоимость по таблице, если нет - передаем саму цену
   const calculatedNetCost = NET_COST_MAP[basePrice] || basePrice;
-
-  // Отправляем ТОЛЬКО себестоимость!
-  const orderPayload = {
-    delivery: { 
-      netCost: calculatedNetCost 
-    }
-  };
 
   const params = new URLSearchParams();
   params.append("apiKey", CRM_KEY);
-  params.append("order", JSON.stringify(orderPayload));
+  params.append("order", JSON.stringify({ delivery: { netCost: calculatedNetCost } }));
   params.append("by", "id");
 
   try {
-    await axios.post(
-      `${CRM_URL}/api/v5/orders/${crmId}/edit`,
-      params.toString(),
-      { headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 5000 }
-    );
-    console.log(`[CRM] Себестоимость заказа ${crmId} обновлена на ${calculatedNetCost} ₽ (наша цена: ${basePrice})`);
+    await axios.post(`${CRM_URL}/api/v5/orders/${crmId}/edit`, params.toString(), {
+      headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 5000,
+    });
+    console.log(`[CRM] netCost заказа ${crmId} → ${calculatedNetCost} ₽`);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
     console.error(`[CRM] Ошибка обновления себестоимости:`, err?.response?.data ?? err.message);
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ТИПЫ
+// ─────────────────────────────────────────────────────────────────────────────
+
 export interface CrmOrder {
   id: number; number?: string; externalId?: string; status?: string;
   createdAt?: string; customerComment?: string; managerComment?: string;
-  firstName?: string; lastName?: string;
-  phone?: string; email?: string;
+  firstName?: string; lastName?: string; phone?: string; email?: string;
   customer?: {
     firstName?: string; lastName?: string;
-    phones?: Array<{number?: string}>;
+    phones?: Array<{ number?: string }>;
     email?: string;
   };
   delivery?: {
     time?: unknown; date?: string; cost?: number; code?: string;
     address?: { text?: string };
     service?: { name?: string; code?: string };
-    data?: unknown;
-    courier?: unknown;
+    data?: unknown; courier?: unknown;
   };
   items?: Array<{
     productName?: string; quantity?: number; initialPrice?: number;
