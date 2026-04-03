@@ -990,6 +990,7 @@ export function CouriersClient({ user }: { user: any }) {
                         return (
                           <RouteEditor
                             key={rId}
+                            route={rObj} 
                             routeId={rId} routeName={rName} routeLink={rLink}
                             initialOrders={rOrders}
                             globalFreeOrders={globalFreeOrders}

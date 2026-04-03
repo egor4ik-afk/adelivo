@@ -81,9 +81,9 @@ export function RouteEditor({
     <div style={{ border: hasChanges ? "2px solid #4a7aff" : "1px solid #f0efe9", borderRadius: 12, padding: isMobile ? 12 : 16, background: hasChanges ? "#f4f7ff" : "#fff", transition: "all 0.3s", position: "relative" }}>
       
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
-        <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>
+      <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>
           Маршрут {routeName} {hasChanges && <span style={{ color: "#4a7aff", fontSize: 12, marginLeft: 8 }}>*не сохранено</span>}
-          {route.baseArrivalTime && (
+          {route?.baseArrivalTime && (
             <span style={{ fontSize: 12, background: "#fffbeb", padding: "2px 6px", borderRadius: 4, color: "#92400e", fontWeight: 700, marginLeft: 8 }}>
               🕒 На базе в: {route.baseArrivalTime}
             </span>
@@ -140,10 +140,26 @@ export function RouteEditor({
 
               <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", marginBottom: 10, lineHeight: 1.4, flex: 1 }}>{o.address}</div>
 
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", marginBottom: 10, lineHeight: 1.4, flex: 1 }}>{o.address}</div>
+
+              {/* 🔥 ФОТООТЧЕТ ОТ КУРЬЕРА ДЛЯ ОПЕРАТОРА */}
               {o.photoUrl && (
-                <div style={{ marginTop: 10, marginBottom: 10 }}>
-                  <a href={o.photoUrl} target="_blank" rel="noreferrer">
-                    <img src={o.photoUrl} alt="Confirmation" style={{ width: "100%", borderRadius: 8, maxHeight: 150, objectFit: "cover" }} />
+                <div style={{ marginBottom: 12, position: "relative" }}>
+                  <div style={{ fontSize: 11, color: "#10b981", fontWeight: 700, marginBottom: 4 }}>
+                    ✅ Прикреплено фото:
+                  </div>
+                  <a href={o.photoUrl} target="_blank" rel="noreferrer" style={{ display: "block" }}>
+                    <img 
+                      src={o.photoUrl} 
+                      alt="Фотоотчет курьера" 
+                      style={{ 
+                        width: "100%", 
+                        borderRadius: 8, 
+                        maxHeight: 180, 
+                        objectFit: "cover",
+                        border: "1px solid #e8e6df"
+                      }} 
+                    />
                   </a>
                 </div>
               )}

@@ -358,7 +358,7 @@ export default function CourierRoutesPage() {
                             <input
                               type="file"
                               accept="image/*"
-                              capture="environment"
+                              // 🔥 УБРАЛИ capture="environment", теперь телефон даст выбор: Камера или Галерея
                               style={{ display: "none" }}
                               onChange={(e) => {
                                 if (e.target.files?.[0]) {
@@ -371,9 +371,22 @@ export default function CourierRoutesPage() {
                               fontWeight: 700,
                               color: o.photoUrl ? "#10b981" : "#4a7aff"
                             }}>
-                              {o.photoUrl ? "✅ Фото отправлено" : "📸 Сделать фото"}
+                              {o.photoUrl ? "✅ Фото прикреплено (нажмите, чтобы заменить)" : "📸 Прикрепить фото (камера/галерея)"}
                             </span>
                           </label>
+
+                          {/* 🔥 ПРЕВЬЮ ФОТО ДЛЯ САМОГО КУРЬЕРА */}
+                          {o.photoUrl && (
+                            <div style={{ marginTop: 8 }}>
+                              <a href={o.photoUrl} target="_blank" rel="noopener noreferrer">
+                                <img 
+                                  src={o.photoUrl} 
+                                  alt="Фото заказа" 
+                                  style={{ width: "100%", maxHeight: 180, objectFit: "cover", borderRadius: 8, border: "1px solid #e8e6df", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }} 
+                                />
+                              </a>
+                            </div>
+                          )}
                         </div>
 
                         <div style={{ background: "#f5f4f0", borderRadius: 8, padding: 10, marginBottom: opComment ? 8 : 0 }}>
