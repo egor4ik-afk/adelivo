@@ -140,8 +140,6 @@ export function RouteEditor({
 
               <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", marginBottom: 10, lineHeight: 1.4, flex: 1 }}>{o.address}</div>
 
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", marginBottom: 10, lineHeight: 1.4, flex: 1 }}>{o.address}</div>
-
               {/* 🔥 ФОТООТЧЕТ ОТ КУРЬЕРА ДЛЯ ОПЕРАТОРА */}
               {o.photoUrl && (
                 <div style={{ marginBottom: 12, position: "relative" }}>

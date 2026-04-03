@@ -321,11 +321,16 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       updateFields.status = existing.status;
     }
     
-    // 🔥 ЗАЩИТА ЦЕНЫ ОТ СБРОСА ИЗ CRM
-    // Если у заказа в нашей БД уже установлена цена (руками или при назначении авто-курьера),
-    // мы игнорируем цену, пришедшую из RetailCRM.
-    if (existing.price !== null) {
+    // 🔥 АБСОЛЮТНАЯ ЗАЩИТА ЦЕНЫ ОТ СБРОСА ИЗ CRM
+    // Если в нашей базе УЖЕ ЕСТЬ цена (и она больше 0), мы НАМЕРТВО игнорируем 
+    // любую цену из RetailCRM. Наша база = главный источник правды.
+    if (existing.price && existing.price > 0) {
       updateFields.price = existing.price;
+    } else if (data.price && data.price > 0) {
+      // Записываем цену из CRM только если наша база пустая
+      updateFields.price = data.price;
+    } else {
+      updateFields.price = existing.price || null;
     }
 
     // Если статус перевели "В пути", а время выезда еще пустое — ставим текущее

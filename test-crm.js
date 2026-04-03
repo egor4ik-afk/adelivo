@@ -1,105 +1,92 @@
 import { PrismaClient } from '@prisma/client';
+import axios from 'axios';
+import * as dotenv from 'dotenv';
 
+dotenv.config();
 const prisma = new PrismaClient();
+const GEO_KEY = process.env.YANDEX_GEOCODER_KEY;
 
-async function mergeCouriers() {
-  const oldId = 242;
-  const newName = 'Симдянов Артём';
-
-  try {
-    // 1. Находим обоих курьеров
-    const oldCourier = await prisma.courier.findUnique({
-      where: { id: oldId }
-    });
-
-    const newCourier = await prisma.courier.findFirst({
-      where: { fullName: { contains: newName } }
-    });
-
-    if (!oldCourier) throw new Error(`Старый курьер с ID ${oldId} не найден.`);
-    if (!newCourier) throw new Error(`Новый курьер "${newName}" не найден.`);
-
-    const newId = newCourier.id;
-    console.log(`Начинаем перенос: ID ${oldId} -> ID ${newId} (${newCourier.fullName})`);
-
-    // 2. Переносим Заказы (точки)
-    // У модели Order обновляем как courierId, так и строковое поле courier (имя)
-    const ordersResult = await prisma.order.updateMany({
-      where: { courierId: oldId },
-      data: { 
-        courierId: newId,
-        courier: newCourier.fullName 
-      },
-    });
-    console.log(`✅ Заказы перенесены: ${ordersResult.count}`);
-
-    // 3. Переносим Маршруты
-    const routesResult = await prisma.route.updateMany({
-      where: { courierId: oldId },
-      data: { courierId: newId },
-    });
-    console.log(`✅ Маршруты перенесены: ${routesResult.count}`);
-
-    // 4. Переносим Смены ("проекты")
-    const shifts = await prisma.courierShift.findMany({ where: { courierId: oldId } });
-    let shiftsMoved = 0;
-    for (const shift of shifts) {
-      try {
-        await prisma.courierShift.update({
-          where: { id: shift.id },
-          data: { courierId: newId },
-        });
-        shiftsMoved++;
-      } catch (error) {
-        // Если смена на эту дату уже есть у нового курьера, удаляем дубль старого
-        await prisma.courierShift.delete({ where: { id: shift.id } });
-      }
-    }
-    console.log(`✅ Смены перенесены: ${shiftsMoved} (удалено дублей: ${shifts.length - shiftsMoved})`);
-
-    // 5. Переносим Платежи
-    const payments = await prisma.courierPayment.findMany({ where: { courierId: oldId } });
-    let paymentsMoved = 0;
-    for (const payment of payments) {
-      try {
-        await prisma.courierPayment.update({
-          where: { id: payment.id },
-          data: { courierId: newId },
-        });
-        paymentsMoved++;
-      } catch (error) {
-        await prisma.courierPayment.delete({ where: { id: payment.id } });
-      }
-    }
-    console.log(`✅ Платежи перенесены: ${paymentsMoved} (удалено дублей: ${payments.length - paymentsMoved})`);
-
-    // 6. Переносим Задачи Консоли (если они подразумевались под "проектами")
-    const tasks = await prisma.konsolTask.findMany({ where: { courierId: oldId } });
-    let tasksMoved = 0;
-    for (const task of tasks) {
-      try {
-        await prisma.konsolTask.update({
-          where: { id: task.id },
-          data: { courierId: newId },
-        });
-        tasksMoved++;
-      } catch (error) {
-        await prisma.konsolTask.delete({ where: { id: task.id } });
-      }
-    }
-    console.log(`✅ Задачи Консоли перенесены: ${tasksMoved}`);
-
-    // 7. Удаляем старого курьера
-    await prisma.courier.delete({
-      where: { id: oldId },
-    });
-    console.log(`✅ Старый курьер (ID ${oldId}) успешно удален.`);
-
-  } catch (error) {
-    console.error('❌ Ошибка при выполнении скрипта:', error);
-  } finally {
-    await prisma.$disconnect();
-  }
+// Формула расстояния (чистый JS, без типов)
+function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2); 
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); 
+  return R * c; 
 }
 
-mergeCouriers();
+async function runTest() {
+  const testIds = ["21153C", "20172C"];
+  
+  console.log("🚀 Запуск тестирования геокодинга и цен...\n");
+
+  for (const externalId of testIds) {
+    const order = await prisma.order.findFirst({
+      where: { OR: [{ externalId: externalId }, { crmId: externalId }] }
+    });
+
+    if (!order) {
+      console.log(`❌ Заказ ${externalId} не найден в базе.`);
+      continue;
+    }
+
+    console.log(`📦 ЗАКАЗ: ${externalId}`);
+    console.log(`📍 Исходный адрес: ${order.address}`);
+    console.log(`💲 Текущая цена в БД: ${order.price || "пусто"}`);
+
+    if (!order.address) {
+      console.log(`⚠️ Нет адреса для проверки.\n`);
+      continue;
+    }
+
+    // Симуляция логики геокодинга
+    const searchAddress = order.address.toLowerCase().includes("москва") ? order.address : `Москва, ${order.address}`;
+    
+    try {
+      const res = await axios.get("https://geocode-maps.yandex.ru/1.x/", {
+        params: { apikey: GEO_KEY, geocode: searchAddress, format: "json", results: 1 },
+      });
+      
+      const point = res.data?.response?.GeoObjectCollection?.featureMember?.[0]?.GeoObject?.Point?.pos;
+      
+      if (!point) {
+        console.log(`❌ Яндекс не смог найти этот адрес.\n`);
+        continue;
+      }
+
+      const [lng, lat] = point.split(" ").map(Number);
+      
+      // Координаты базы/центра
+      const BASE_LAT = 55.755864; 
+      const BASE_LNG = 37.617698;
+      
+      const distance = getDistanceFromLatLonInKm(BASE_LAT, BASE_LNG, lat, lng);
+      console.log(`🧭 Найдена точка: [${lat}, ${lng}]`);
+      console.log(`📏 Расстояние от базы: ${distance.toFixed(1)} км`);
+
+      if (distance > 45) {
+        console.log(`🛑 ВЕРДИКТ: ОШИБКА! Адрес улетел за пределы 45 км (Вне зоны доставки)`);
+      } else {
+        console.log(`✅ ВЕРДИКТ: Адрес в пределах нормы (Доставка разрешена)`);
+        
+        // Симуляция логики расчета цены
+        let simPrice = order.price || 500;
+        if ([500, 900, 1300].includes(simPrice)) {
+          simPrice += 100;
+          console.log(`💰 При назначении авто-курьера цена станет: ${simPrice} ₽`);
+        } else {
+          console.log(`💰 Цена не подпадает под базовые тарифы CRM, останется: ${simPrice} ₽`);
+        }
+      }
+    } catch (e) {
+      console.log(`❌ Ошибка запроса к Яндексу: ${e.message}`);
+    }
+    console.log("--------------------------------------------------\n");
+  }
+
+  await prisma.$disconnect();
+}
+
+runTest();
