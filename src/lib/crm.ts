@@ -244,6 +244,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     changedAt?: Date;
     routeId?: string | null;    
     routeOrder?: number | null; 
+    pickedUpAt?: Date | null; // 🔥 ДОБАВЛЕНО
   } = { ...data };
 
   if (existing) {
@@ -268,6 +269,16 @@ export async function upsertOrder(crmOrder: CrmOrder) {
   
     if (data.status === OrderStatus.NEW && existing.status !== OrderStatus.NEW) {
       updateFields.status = existing.status;
+    }
+    // Если статус перевели "В пути", а время выезда еще пустое — ставим текущее
+    if (updateFields.status === OrderStatus.IN_DELIVERY && existing.status !== OrderStatus.IN_DELIVERY) {
+      if (!existing.pickedUpAt) {
+        updateFields.pickedUpAt = new Date();
+      }
+    }
+    // Если откатили статус обратно на Новые/Назначен — очищаем время
+    if ((updateFields.status === OrderStatus.NEW || updateFields.status === OrderStatus.ASSIGNED) && existing.status !== updateFields.status) {
+      updateFields.pickedUpAt = null;
     }
 
     const isCancelledOrReturned = updateFields.status === OrderStatus.CANCELLED || updateFields.status === OrderStatus.RETURNED;

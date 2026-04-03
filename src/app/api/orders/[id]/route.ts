@@ -26,9 +26,13 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       updateData.status = body.status;
       updateData.changedAt = new Date();
       
-      // 🔥 Простое и жесткое условие: перевели "В пути" — записали время выезда
+      // 🔥 Улучшенное условие: перевели "В пути" — записали время выезда
       if (body.status === "IN_DELIVERY") {
-        updateData.pickedUpAt = new Date();
+        // Записываем время ТОЛЬКО если статус реально изменился 
+        // ИЛИ если время выезда по какой-то причине пустое
+        if (order.status !== "IN_DELIVERY" || !order.pickedUpAt) {
+          updateData.pickedUpAt = new Date();
+        }
       }
       
       // 🔥 Если вернули заказ обратно — очистили время выезда
