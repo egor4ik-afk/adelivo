@@ -35,6 +35,12 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       if (body.status === "NEW" || body.status === "ASSIGNED") {
         updateData.pickedUpAt = null;
       }
+
+      // ⚡️ ТРИГГЕР ПЕРЕРАСЧЕТА: Если заказ доставили, нужно пересчитать время для остальных
+      if (body.status === "DELIVERED" && order.status !== "DELIVERED" && order.routeId) {
+        // Мы не блокируем основной поток (await), просто запускаем расчет в фоне
+        triggerRouteRecalculation(order.routeId).catch(console.error);
+      }
     }
     
     if (body.opComment      !== undefined) updateData.opComment      = body.opComment;
@@ -304,4 +310,18 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     console.error("PATCH /api/orders/[id] error:", e);
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
+}
+
+// 🔥 Функция-хелпер для перерасчета времени оставшихся точек в маршруте
+async function triggerRouteRecalculation(routeId: string) {
+  console.log(`[ETA] Запуск перерасчета маршрута ${routeId} после доставки точки...`);
+  
+  // 1. Получить все НЕ доставленные точки в маршруте `routeId`
+  // 2. Взять текущее время (как время старта) или baseArrivalTime маршрута
+  // 3. Отправить запрос в Yandex Routing API
+  // 4. Обновить поле `eta` у всех не доставленных заказов в БД
+  
+  // Пример (псевдокод):
+  // const yandexResult = await fetchYandexETA(points);
+  // await prisma.order.update({ where: { id: orderId }, data: { eta: newTime } });
 }

@@ -12,9 +12,15 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     const courierId = Number(id);
     const body = await req.json();
 
+    // 🔥 Собираем только те поля, которые были переданы в запросе
+    const updateData: any = {};
+    if (body.isAuto !== undefined) updateData.isAuto = body.isAuto;
+    if (body.priority !== undefined) updateData.priority = Number(body.priority);
+    // Сюда можно будет добавлять и другие поля в будущем
+
     const updatedCourier = await prisma.courier.update({
       where: { id: courierId },
-      data: { isAuto: body.isAuto }
+      data: updateData
     });
 
     return NextResponse.json({ success: true, courier: updatedCourier });

@@ -9,10 +9,15 @@ interface RouteOrder {
   recipientPhone: string | null;
   price: number | null; items: string | null;
   comment: string | null;
-  opComment: string | null; // 🔥 Коммент оператора
+  opComment: string | null;
   routeId: string | null; routeOrder: number | null;
   deliveryDate: string | null;
-  route?: { id: string; name: string; link: string | null; date: string; departureAdvice: string | null } | null;
+  eta?: string | null; // 🔥 ДОБАВЛЕНО: расчетное время прибытия
+  route?: { 
+    id: string; name: string; link: string | null; date: string; 
+    departureAdvice: string | null;
+    baseArrivalTime?: string | null; // 🔥 ДОБАВЛЕНО: Время на базе
+  } | null;
 }
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
@@ -53,6 +58,28 @@ export default function CourierRoutesPage() {
     setExpandedRoutes(prev => ({ ...prev, [routeId]: !(prev[routeId] ?? true) }));
   };
 
+  // 🔥 НОВЫЕ ФУНКЦИИ ВСТАВЛЕНЫ СЮДА
+  const handleBaseTimeChange = async (routeId: string, newTime: string) => {
+    setOrders(prev => prev.map(o => o.route?.id === routeId 
+      ? { ...o, route: { ...o.route!, baseArrivalTime: newTime } } 
+      : o
+    ));
+    await fetch(`/api/routes/${routeId}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseArrivalTime: newTime }),
+    });
+  };
+
+  const handlePickupAll = async (routeId: string) => {
+    if (!window.confirm("Отметить все неначатые заказы в маршруте как «В пути»?")) return;
+    setOrders(prev => prev.map(o => 
+      (o.route?.id === routeId && (o.status === "ASSIGNED" || o.status === "NEW"))
+        ? { ...o, status: "IN_DELIVERY" } 
+        : o
+    ));
+    await fetch(`/api/routes/${routeId}/pickup-all`, { method: "POST" });
+  };
+
   if (loading) return (
     <div style={{ padding: 20, textAlign: "center", color: "#a8a49c" }}>Загрузка маршрутов...</div>
   );
@@ -68,7 +95,6 @@ export default function CourierRoutesPage() {
     else pastOrders.push(o);
   });
 
-  // Группировка сегодняшних по маршруту
   const todayGrouped: Record<string, RouteOrder[]> = {};
   todayOrders.forEach(o => {
     const key = o.route?.id || "no-route";
@@ -77,7 +103,6 @@ export default function CourierRoutesPage() {
   });
   const todayRouteKeys = Object.keys(todayGrouped).sort();
 
-  // Группировка прошлых по дате
   const pastGrouped: Record<string, RouteOrder[]> = {};
   pastOrders.forEach(o => {
     const d = o.route?.date || (o.deliveryDate ? o.deliveryDate.split("T")[0] : "Ранее");
@@ -103,14 +128,12 @@ export default function CourierRoutesPage() {
 
       <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 16 }}>
 
-        {/* ── Сегодняшние маршруты ── */}
         {todayRouteKeys.map((rId) => {
           const routePoints = todayGrouped[rId].sort((a, b) => (a.routeOrder || 0) - (b.routeOrder || 0));
           const isExpanded  = expandedRoutes[rId] ?? true;
           const routeObj    = routePoints[0]?.route;
           const routeName   = routeObj ? routeObj.name : "Без маршрута";
           const routeLink   = routeObj?.link ?? null;
-          // 🔥 Совет оператора — когда забрать заказы (из departureAdvice маршрута)
           const advice      = routeObj?.departureAdvice ?? null;
 
           const delivered   = routePoints.filter(o => o.status === "DELIVERED").length;
@@ -120,55 +143,75 @@ export default function CourierRoutesPage() {
             <div key={rId} style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
 
               {/* Заголовок маршрута */}
-              <div
-                onClick={() => toggleRoute(rId)}
-                style={{ padding: "14px 16px", background: "#fafaf8", borderBottom: isExpanded ? "1px solid #e8e6df" : "none", display: "flex", justifyContent: "space-between", alignItems: "flex-start", cursor: "pointer" }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18" }}>
-                    Маршрут {routeName}
-                  </div>
-                  <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 2 }}>
-                    {delivered}/{total} доставлено
-                  </div>
-                  {/* 🔥 Совет оператора — рекомендация когда забрать */}
-                  {advice && (
-                    <div style={{
-                      marginTop: 6, fontSize: 12, color: "#4a7aff", fontWeight: 600,
-                      background: "#eef3ff", padding: "4px 8px", borderRadius: 6,
-                      display: "inline-block",
-                    }}>
-                      💡 {advice}
+              <div style={{ padding: "14px 16px", background: "#fafaf8", borderBottom: isExpanded ? "1px solid #e8e6df" : "none" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", cursor: "pointer", marginBottom: isExpanded ? 12 : 0 }} onClick={() => toggleRoute(rId)}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18" }}>
+                      Маршрут {routeName}
                     </div>
-                  )}
+                    <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 2 }}>
+                      {delivered}/{total} доставлено
+                    </div>
+                    {advice && (
+                      <div style={{
+                        marginTop: 6, fontSize: 12, color: "#4a7aff", fontWeight: 600,
+                        background: "#eef3ff", padding: "4px 8px", borderRadius: 6,
+                        display: "inline-block",
+                      }}>
+                        💡 {advice}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0, marginLeft: 8 }}>
+                    {routeLink && (
+                      <a
+                        href={routeLink} target="_blank" rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        style={{ fontSize: 11, background: "#facc15", color: "#1a1a18", padding: "5px 10px", borderRadius: 7, textDecoration: "none", fontWeight: 700, whiteSpace: "nowrap" }}
+                      >
+                        📍 Карты
+                      </a>
+                    )}
+                    <div style={{ fontSize: 18, color: "#a8a49c", transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</div>
+                  </div>
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0, marginLeft: 8 }}>
-                  {routeLink && (
-                    <a
-                      href={routeLink} target="_blank" rel="noopener noreferrer"
-                      onClick={e => e.stopPropagation()}
-                      style={{ fontSize: 11, background: "#facc15", color: "#1a1a18", padding: "5px 10px", borderRadius: 7, textDecoration: "none", fontWeight: 700, whiteSpace: "nowrap" }}
+
+                {/* 🔥 ПАНЕЛЬ УПРАВЛЕНИЯ МАРШРУТОМ */}
+                {isExpanded && (
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", borderTop: "1px dashed #e8e6df", paddingTop: 12 }} onClick={e => e.stopPropagation()}>
+                    <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 600 }}>На базе в:</span>
+                      <input 
+                        type="time" 
+                        value={routeObj?.baseArrivalTime || ""}
+                        onChange={(e) => handleBaseTimeChange(rId, e.target.value)}
+                        style={{ 
+                          border: "1px solid #e8e6df", borderRadius: 6, padding: "4px 8px", 
+                          fontSize: 12, fontWeight: 600, color: "#1a1a18", background: "#fff", outline: "none"
+                        }} 
+                      />
+                    </div>
+                    <button 
+                      onClick={() => handlePickupAll(rId)}
+                      style={{ 
+                        background: "#4a7aff", color: "#fff", border: "none", 
+                        padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                        boxShadow: "0 2px 6px rgba(74, 122, 255, 0.25)"
+                      }}
                     >
-                      📍 Карты
-                    </a>
-                  )}
-                  <div style={{ fontSize: 18, color: "#a8a49c", transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</div>
-                </div>
+                      🚀 Забрал все
+                    </button>
+                  </div>
+                )}
               </div>
 
-              {/* Список точек */}
               {isExpanded && (
                 <div style={{ display: "flex", flexDirection: "column" }}>
                   {routePoints.map((o, idx) => {
                     const st    = STATUS_MAP[o.status] || STATUS_MAP.ASSIGNED;
                     const phone = o.recipientPhone || "—";
-                    // 🔥 Чистим opComment от строки с советом оператора (💡 ...) — она уже показана в шапке
                     const rawOp = o.opComment || "";
-                    const opComment = rawOp
-                      .split("\n")
-                      .filter(line => !line.startsWith("💡"))
-                      .join("\n")
-                      .trim();
+                    const opComment = rawOp.split("\n").filter(line => !line.startsWith("💡")).join("\n").trim();
 
                     return (
                       <div
@@ -180,7 +223,6 @@ export default function CourierRoutesPage() {
                           transition: "opacity 0.2s",
                         }}
                       >
-                        {/* Строка: номер точки + ID + слот + статус */}
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                           {o.routeOrder && (
                             <div style={{
@@ -196,8 +238,19 @@ export default function CourierRoutesPage() {
                             <div style={{ fontSize: 10, color: "#a8a49c", fontFamily: "monospace" }}>
                               {o.externalId ?? o.crmId}
                             </div>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: "#1a1a18" }}>
-                              {o.slotRaw ?? "Время не указано"}
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: "#1a1a18" }}>
+                                {o.slotRaw ?? "Время не указано"}
+                              </div>
+                              {/* 🔥 ВЫВОД ВРЕМЕНИ ДОСТАВКИ (ETA) */}
+                              {o.eta && (
+                                <div style={{ 
+                                  fontSize: 11, background: "#eef3ff", color: "#4a7aff", 
+                                  padding: "2px 6px", borderRadius: 4, fontWeight: 600 
+                                }}>
+                                  ~{o.eta}
+                                </div>
+                              )}
                             </div>
                           </div>
                           <select
@@ -216,12 +269,10 @@ export default function CourierRoutesPage() {
                           </select>
                         </div>
 
-                        {/* Адрес */}
                         <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", marginBottom: 10, lineHeight: 1.3 }}>
                           {o.address}
                         </div>
 
-                        {/* Телефон + комментарий клиента */}
                         <div style={{ background: "#f5f4f0", borderRadius: 8, padding: 10, marginBottom: opComment ? 8 : 0 }}>
                           <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 2 }}>
                             Получатель
@@ -238,7 +289,6 @@ export default function CourierRoutesPage() {
                           )}
                         </div>
 
-                        {/* 🔥 Комментарий оператора (если есть и не пустой после очистки) */}
                         {opComment && (
                           <div style={{
                             background: "#fffbeb", borderRadius: 8, padding: 10,
@@ -267,7 +317,6 @@ export default function CourierRoutesPage() {
           </div>
         )}
 
-        {/* ── Прошлые заказы ── */}
         {pastOrders.length > 0 && (
           <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "hidden" }}>
             <div

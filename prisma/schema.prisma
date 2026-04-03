@@ -169,7 +169,8 @@ model Order {
   slotTo        String?
   slotRaw       String?
   deliveryType  String?
-  deliveryDate  String?     
+  deliveryDate  String?
+  eta           String?     // 🔥 НОВОЕ ПОЛЕ: Примерное время прибытия курьера
   crmStatus     String?
   isInvalid     Boolean     @default(false)
   invalidReason String?
@@ -218,7 +219,7 @@ model Route {
   departureAdvice String?
   courierId       Int
   courier         Courier  @relation(fields: [courierId], references: [id])
-  
+  baseArrivalTime String?  // 🔥 ДОБАВЛЕНО: Время, когда курьер планирует быть на базе
   orders    Order[]
   isDraft         Boolean  @default(false) // 🔥 ДОБАВЛЕНО
   createdAt DateTime @default(now())
