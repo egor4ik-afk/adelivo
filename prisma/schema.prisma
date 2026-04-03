@@ -171,6 +171,7 @@ model Order {
   deliveryType  String?
   deliveryDate  String?
   eta           String?     // 🔥 НОВОЕ ПОЛЕ: Примерное время прибытия курьера
+  photoUrl      String?     // 🔥 ДОБАВЛЕНО: Ссылка на одно фото от курьера
   crmStatus     String?
   isInvalid     Boolean     @default(false)
   invalidReason String?

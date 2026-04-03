@@ -9,7 +9,7 @@ import { OrderStatus } from "@prisma/client";
 const STORE_COORDS = "55.749511,37.596205";
 
 export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const user = await getSession(req);
+  const user = await getSession(req as any);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
@@ -245,6 +245,11 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       updateData.routeOrder = null;
     }
 
+    // 🔥 ДОБАВЛЕНО: Обработка фото (сохраняем одну ссылку в БД, если есть поле)
+    if (body.photoUrl !== undefined) {
+       updateData.photoUrl = body.photoUrl;
+    }
+
     let updatedOrder = order;
     if (Object.keys(updateData).length > 0) {
       updatedOrder = await prisma.order.update({
@@ -252,6 +257,55 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         data: updateData,
         include: { route: true },
       });
+    }
+
+    // 🔥 ДОБАВЛЕНО: Уведомление в Telegram о фото
+    const tgToken = process.env.TELEGRAM_BOT_TOKEN;
+    const tgChat  = process.env.TELEGRAM_CHAT_ID;
+
+    if (tgToken && tgChat) {
+      // 1. Уведомление об 1 фото (если передано photoUrl)
+      if (body.photoUrl && body.photoUrl !== order.photoUrl) {
+        fetch(`https://api.telegram.org/bot${tgToken}/sendPhoto`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            chat_id: tgChat, 
+            photo: body.photoUrl,
+            caption: `📸 *Фото к заказу ${order.externalId || order.crmId}*\n📍 *Адрес:* ${order.address}`,
+            parse_mode: "Markdown" 
+          }),
+        }).catch(e => console.error("[TG] Ошибка отправки 1 фото:", e));
+      }
+
+
+      // 3. Уведомление об опоздании (если ETA > slotTo на 30 мин)
+      if (body.eta && order.slotTo && body.eta !== order.eta) {
+        const [etaH, etaM] = body.eta.split(':').map(Number);
+        const [planH, planM] = order.slotTo.split(':').map(Number);
+        
+        if (!isNaN(etaH) && !isNaN(planH)) {
+          const etaMins = (etaH * 60) + (etaM || 0);
+          const planMins = (planH * 60) + (planM || 0);
+          
+          if (etaMins - planMins >= 30) {
+            const msg = [
+              `⚠️ *Опоздание на точку (>30 мин)*`,
+              ``,
+              `📦 *Заказ:* ${order.externalId || order.crmId}`,
+              `📍 *Адрес:* ${order.address}`,
+              `🎯 *План (до):* ${order.slotTo}`,
+              `🕒 *Расчетное (ETA):* ${body.eta}`
+            ].join("\n");
+
+            fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ chat_id: tgChat, text: msg, parse_mode: "Markdown" }),
+            }).catch(e => console.error("[TG] Ошибка уведомления об опоздании:", e));
+          }
+        }
+      }
     }
 
     // 🔥 ДОБАВЛЕНО: Теперь честно отслеживаем изменения времени, комментариев и товаров

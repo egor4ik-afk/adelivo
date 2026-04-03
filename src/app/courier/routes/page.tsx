@@ -13,6 +13,7 @@ interface RouteOrder {
   routeId: string | null; routeOrder: number | null;
   deliveryDate: string | null;
   eta?: string | null; // 🔥 ДОБАВЛЕНО: расчетное время прибытия
+  photoUrl?: string | null; // 🔥 ДОБАВЛЕНО
   route?: {
     id: string; name: string; link: string | null; date: string;
     departureAdvice: string | null;
@@ -80,6 +81,54 @@ export default function CourierRoutesPage() {
     await fetch(`/api/routes/${routeId}/pickup-all`, { method: "POST" });
   };
 
+  // 🔥 ФУНКЦИЯ ЗАГРУЗКИ ФОТО (Исправленная под Yandex S3 Presigned URL)
+  const handlePhotoUpload = async (orderId: string, file: File) => {
+    try {
+      // 1. Сжимаем фото
+      const imageCompression = (await import('browser-image-compression')).default;
+      const compressedFile = await imageCompression(file, { maxSizeMB: 1, maxWidthOrHeight: 1280 });
+
+      // 2. Получаем одноразовую ссылку (Presigned URL) от твоего сервера
+      const signRes = await fetch("/api/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          filename: `photo_${orderId}.jpg`, 
+          contentType: compressedFile.type || "image/jpeg" 
+        }),
+      });
+      
+      if (!signRes.ok) throw new Error("Не удалось получить ссылку от сервера");
+      const { uploadUrl, fileUrl } = await signRes.json();
+
+      // 3. Отправляем само фото НАПРЯМУЮ в Yandex Cloud
+      const uploadRes = await fetch(uploadUrl, {
+        method: "PUT", // Yandex S3 ожидает именно PUT
+        headers: {
+          "Content-Type": compressedFile.type || "image/jpeg",
+        },
+        body: compressedFile,
+      });
+
+      if (!uploadRes.ok) throw new Error("Не удалось загрузить файл в Яндекс Облако");
+
+      // 4. Сохраняем ссылку в БД заказа (это запустит уведомление в Telegram)
+      await fetch(`/api/orders/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoUrl: fileUrl }),
+      });
+
+      // 5. Обновляем интерфейс
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, photoUrl: fileUrl } : o));
+      alert("✅ Фото успешно отправлено!");
+      
+    } catch (e) {
+      console.error(e);
+      alert("❌ Ошибка при загрузке фото");
+    }
+  };
+
   if (loading) return (
     <div style={{ padding: 20, textAlign: "center", color: "#a8a49c" }}>Загрузка маршрутов...</div>
   );
@@ -115,7 +164,7 @@ export default function CourierRoutesPage() {
     <div style={{
       display: "flex", flexDirection: "column", background: "#f5f4f0",
       minHeight: "100%", overflowY: "auto",
-      paddingBottom: `calc(var(--nav-height, ${NAV_HEIGHT}px) + env(safe-area-inset-bottom) + 16px)`,
+      paddingBottom: `calc(var(--nav-height, ${NAV_HEIGHT}px) + env(safe-area-inset-bottom) + 16px)`
     }}>
 
       {/* Шапка */}
@@ -161,7 +210,6 @@ export default function CourierRoutesPage() {
                       }}>
                         <span style={{ fontSize: 18 }}>⏰</span>
                         <div>
-                          <div style={{ fontSize: 10, color: "#92400e", fontWeight: 700, textTransform: "uppercase" }}>Инфо: когда забрать</div>
                           <div style={{ fontSize: 13, color: "#78350f", fontWeight: 700 }}>{advice}</div>
                         </div>
                       </div>
@@ -297,6 +345,35 @@ export default function CourierRoutesPage() {
 
                         <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", marginBottom: 10, lineHeight: 1.3 }}>
                           {o.address}
+                        </div>
+
+                        {/* 🔥 КНОПКА ЗАГРУЗКИ ФОТО */}
+                        <div style={{ marginBottom: 10 }}>
+                          <label style={{
+                            display: "block", background: o.photoUrl ? "#ecfdf5" : "#fff",
+                            border: `1px solid ${o.photoUrl ? "#10b981" : "#e8e6df"}`,
+                            padding: "10px 14px", borderRadius: 8, cursor: "pointer",
+                            textAlign: "center", transition: "all 0.2s"
+                          }}>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              style={{ display: "none" }}
+                              onChange={(e) => {
+                                if (e.target.files?.[0]) {
+                                  handlePhotoUpload(o.id, e.target.files[0]);
+                                }
+                              }}
+                            />
+                            <span style={{
+                              fontSize: 13,
+                              fontWeight: 700,
+                              color: o.photoUrl ? "#10b981" : "#4a7aff"
+                            }}>
+                              {o.photoUrl ? "✅ Фото отправлено" : "📸 Сделать фото"}
+                            </span>
+                          </label>
                         </div>
 
                         <div style={{ background: "#f5f4f0", borderRadius: 8, padding: 10, marginBottom: opComment ? 8 : 0 }}>

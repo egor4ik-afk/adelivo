@@ -810,12 +810,17 @@ export function DashboardClient({ user }: { user: User }) {
                   Курьер: {courierName} · {r.orders.length} точек
                 </div>
 
-                {/* 🔥 ПЛАШКИ ВРЕМЕНИ (ВЫЕХАЛ / ЗАВЕРШИЛ) */}
-                {(actualDepartureMs || finishedMs) && (
-                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                {/* 🔥 ПЛАШКИ ВРЕМЕНИ (ВЫЕХАЛ / НА БАЗЕ / ЗАВЕРШИЛ) */}
+                {(actualDepartureMs || finishedMs || r.baseArrivalTime) && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
                     {actualDepartureMs && (
                       <span style={{ fontSize: 11, background: "#fffbeb", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #fde68a" }}>
                         📦 Выехал: {new Date(actualDepartureMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                    {r.baseArrivalTime && (
+                      <span style={{ fontSize: 11, background: "#eef3ff", color: "#4a7aff", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #bfdbfe" }}>
+                        🏠 На базе: {r.baseArrivalTime}
                       </span>
                     )}
                     {finishedMs && (
@@ -859,8 +864,19 @@ export function DashboardClient({ user }: { user: User }) {
           {routeTotals && (
             <div style={{ fontSize: 13, color: "#1a1a18", background: "#eef3ff", padding: "12px 14px", borderRadius: 8, marginBottom: 16, fontWeight: 600 }}>
               {isCalculatingRoute ? "⏳ Считаем время в пути..." : `🏁 Итого: ~${routeTotals.time} (${routeTotals.dist})`}
+              
               {!isCalculatingRoute && departureAdvice && (
                 <div style={{ marginTop: 6, fontSize: 12, color: "#4a7aff", fontWeight: 700 }}>💡 {departureAdvice}</div>
+              )}
+
+              {/* 🔥 ВЫВОД ВРЕМЕНИ ВОЗВРАТА НА БАЗУ (ЕСЛИ КУРЬЕР ЕГО УКАЗАЛ) */}
+              {!isCalculatingRoute && editingRouteId && existingRoutes.find((r: any) => r.id === editingRouteId)?.baseArrivalTime && (
+                <div style={{ 
+                  marginTop: 8, fontSize: 12, color: "#92400e", background: "#fffbeb", 
+                  padding: "4px 8px", borderRadius: 6, display: "inline-block", border: "1px solid #fde68a" 
+                }}>
+                  🏠 Будет на базе в: {existingRoutes.find((r: any) => r.id === editingRouteId)?.baseArrivalTime}
+                </div>
               )}
             </div>
           )}
@@ -877,16 +893,45 @@ export function DashboardClient({ user }: { user: User }) {
 
           <div style={{ background: "#fafaf8", padding: 16, borderRadius: 8, marginBottom: 20 }}>
             <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Курьер</div>
-            <div style={{ display: "flex", gap: 10, flexDirection: isMobile ? "column" : "row" }}>
-              <CourierSearchSelect value={bulkCourier} onChange={setBulkCourier} options={courierOptions.map(c => ({ value: String(c.value), label: c.label }))} />
+            
+            {/* 🔥 Включаем flexWrap, чтобы элементы могли переноситься на новую строку */}
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "stretch" }}>
               
-              <button style={{ ...s.actionBtn, background: bulkCourier && bulkSelectedIds.length > 0 ? '#e8e6df' : '#f5f4f0', color: bulkCourier && bulkSelectedIds.length > 0 ? '#1a1a18' : '#a8a49c', whiteSpace: 'nowrap' }} disabled={!bulkCourier || bulkSelectedIds.length === 0 || bulkSaving} onClick={() => handleBulkAssign(true)}>
+              {/* Обертка для селекта: занимает минимум 200px, но может расти и заполнять пустоту */}
+              <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+                <CourierSearchSelect value={bulkCourier} onChange={setBulkCourier} options={courierOptions.map(c => ({ value: String(c.value), label: c.label }))} />
+              </div>
+              
+              {/* Кнопка Черновика */}
+              <button 
+                style={{ 
+                  ...s.actionBtn, 
+                  flex: isMobile ? "1 1 100%" : "1 1 auto", // На мобилке на всю ширину, на ПК — по размеру
+                  background: bulkCourier && bulkSelectedIds.length > 0 ? '#e8e6df' : '#f5f4f0', 
+                  color: bulkCourier && bulkSelectedIds.length > 0 ? '#1a1a18' : '#a8a49c', 
+                  whiteSpace: 'nowrap' 
+                }} 
+                disabled={!bulkCourier || bulkSelectedIds.length === 0 || bulkSaving} 
+                onClick={() => handleBulkAssign(true)}
+              >
                 📝 В черновик
               </button>
 
-              <button style={{ ...s.actionBtn, width: isMobile ? "100%" : 120, background: bulkCourier && bulkSelectedIds.length > 0 ? '#4a7aff' : '#e8e6df', color: bulkCourier && bulkSelectedIds.length > 0 ? '#fff' : '#a8a49c' }} disabled={!bulkCourier || bulkSelectedIds.length === 0 || bulkSaving} onClick={() => handleBulkAssign(false)}>
+              {/* Кнопка Создать/Сохранить */}
+              <button 
+                style={{ 
+                  ...s.actionBtn, 
+                  flex: isMobile ? "1 1 100%" : "1 1 auto", 
+                  minWidth: 120, 
+                  background: bulkCourier && bulkSelectedIds.length > 0 ? '#4a7aff' : '#e8e6df', 
+                  color: bulkCourier && bulkSelectedIds.length > 0 ? '#fff' : '#a8a49c' 
+                }} 
+                disabled={!bulkCourier || bulkSelectedIds.length === 0 || bulkSaving} 
+                onClick={() => handleBulkAssign(false)}
+              >
                 {bulkSaving ? "..." : (editingRouteId ? "Сохранить" : "Создать")}
               </button>
+
             </div>
           </div>
 
