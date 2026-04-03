@@ -11,7 +11,7 @@ interface Order {
   lat: number | null;
   lng: number | null;
   price: number | null;
-  costPrice: number | null; // 🔥 Добавили поле себестоимости из базы
+  costPrice: number | null;
   courier: string | null;
   comment: string | null;
   opComment: string | null;
@@ -43,6 +43,8 @@ function fmt(d?: string | null) {
   return new Date(d).toLocaleString("ru", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
+type SortKey = keyof Order | "costPriceDisplay";
+
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,6 +59,13 @@ export default function OrdersPage() {
   const [fStatus, setFStatus] = useState("ALL");
   const [fCourier, setFCourier] = useState("ALL");
   const [fSearch, setFSearch] = useState("");
+
+  // 🔥 Стейт для сортировки
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey | null, direction: 'asc' | 'desc' }>({ key: 'changedAt', direction: 'desc' });
+
+  // 🔥 Стейт для редактирования (inline)
+  const [editingCell, setEditingCell] = useState<{ id: string, field: 'price' | 'costPrice' } | null>(null);
+  const [editValue, setEditValue] = useState("");
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -81,7 +90,6 @@ export default function OrdersPage() {
     finally { setSyncing(false); }
   };
 
-  // Одиночное обновление себестоимости
   const handleUpdateCost = async (orderId: string) => {
     setCostLoaders(prev => ({ ...prev, [orderId]: true }));
     try {
@@ -99,7 +107,6 @@ export default function OrdersPage() {
     }
   };
 
-  // 🔥 МАССОВОЕ обновление себестоимости
   const handleMassUpdateCost = async () => {
     if (selectedIds.size === 0) return;
     if (!confirm(`Рассчитать себестоимость для ${selectedIds.size} заказов?`)) return;
@@ -113,13 +120,46 @@ export default function OrdersPage() {
       });
       const data = await res.json();
       alert(`Готово! Успешно: ${data.success}, Ошибок: ${data.failed}`);
-      await fetchOrders(); // Перезагружаем список, чтобы увидеть costPrice из базы
+      await fetchOrders();
     } catch (e) {
       alert("Ошибка при массовом обновлении");
     } finally {
       setMassUpdating(false);
       setSelectedIds(new Set());
     }
+  };
+
+  // 🔥 Логика включения редактирования
+  const handleEditClick = (id: string, field: 'price' | 'costPrice', currentValue: number | null) => {
+    setEditingCell({ id, field });
+    setEditValue(currentValue ? String(currentValue) : "");
+  };
+
+  // 🔥 Логика сохранения инлайн-редактирования
+  const handleEditSave = async () => {
+    if (!editingCell) return;
+    const { id, field } = editingCell;
+    const val = editValue === "" ? null : parseFloat(editValue.replace(",", "."));
+    
+    // Оптимистичное обновление UI
+    setOrders(prev => prev.map(o => o.id === id ? { ...o, [field]: val } : o));
+    setEditingCell(null);
+
+    try {
+      // Отправляем PATCH на сервер
+      await fetch(`/api/orders/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: val })
+      });
+    } catch (e) {
+      console.error("Ошибка при сохранении значения:", e);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleEditSave();
+    if (e.key === 'Escape') setEditingCell(null);
   };
 
   const dateOrders = orders.filter(o => {
@@ -133,23 +173,64 @@ export default function OrdersPage() {
   );
 
   const filtered = useMemo(() => {
-    return dateOrders
-      .filter(o => {
-        if (fStatus !== "ALL" && o.status !== fStatus) return false;
-        if (fCourier !== "ALL" && (o.courier || "UNASSIGNED") !== fCourier) return false;
-        if (fSearch) {
-          const q = fSearch.toLowerCase();
-          return (o.externalId || "").toLowerCase().includes(q) ||
-            (o.address || "").toLowerCase().includes(q) ||
-            (o.courier || "").toLowerCase().includes(q);
-        }
-        return true;
-      })
-      .sort((a, b) => new Date(b.changedAt || b.updatedAt || "").getTime() - new Date(a.changedAt || a.updatedAt || "").getTime());
+    return dateOrders.filter(o => {
+      if (fStatus !== "ALL" && o.status !== fStatus) return false;
+      if (fCourier !== "ALL" && (o.courier || "UNASSIGNED") !== fCourier) return false;
+      if (fSearch) {
+        const q = fSearch.toLowerCase();
+        return (o.externalId || "").toLowerCase().includes(q) ||
+          (o.address || "").toLowerCase().includes(q) ||
+          (o.courier || "").toLowerCase().includes(q);
+      }
+      return true;
+    });
   }, [dateOrders, fStatus, fCourier, fSearch]);
 
+  // 🔥 СОРТИРОВКА ТАБЛИЦЫ
+  const sortedAndFiltered = useMemo(() => {
+    let result = [...filtered];
+    if (sortConfig.key) {
+      result.sort((a, b) => {
+        let aVal: any = a[sortConfig.key as keyof Order];
+        let bVal: any = b[sortConfig.key as keyof Order];
+
+        // Обработка специальных полей
+        if (sortConfig.key === "costPriceDisplay") {
+          aVal = a.costPrice || localCosts[a.id] || 0;
+          bVal = b.costPrice || localCosts[b.id] || 0;
+        } else if (sortConfig.key === "externalId") {
+          aVal = a.externalId || a.crmId;
+          bVal = b.externalId || b.crmId;
+        } else if (sortConfig.key === "changedAt") {
+          aVal = new Date(a.changedAt || a.updatedAt || 0).getTime();
+          bVal = new Date(b.changedAt || b.updatedAt || 0).getTime();
+        }
+
+        if (aVal === bVal) return 0;
+        if (aVal == null) return 1; // Пустые значения всегда в конце
+        if (bVal == null) return -1;
+
+        if (typeof aVal === 'string' && typeof bVal === 'string') {
+          return sortConfig.direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+        }
+
+        return sortConfig.direction === 'asc' ? (aVal < bVal ? -1 : 1) : (aVal > bVal ? -1 : 1);
+      });
+    }
+    return result;
+  }, [filtered, sortConfig, localCosts]);
+
+  const handleSort = (key: SortKey) => {
+    setSortConfig(prev => {
+      if (prev.key === key) {
+        return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, direction: 'asc' };
+    });
+  };
+
   const toggleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.checked) setSelectedIds(new Set(filtered.map(o => o.id)));
+    if (e.target.checked) setSelectedIds(new Set(sortedAndFiltered.map(o => o.id)));
     else setSelectedIds(new Set());
   };
 
@@ -160,7 +241,20 @@ export default function OrdersPage() {
     setSelectedIds(next);
   };
 
-  const isAllSelected = filtered.length > 0 && selectedIds.size === filtered.length;
+  const isAllSelected = sortedAndFiltered.length > 0 && selectedIds.size === sortedAndFiltered.length;
+
+  // Конфигурация столбцов для кликабельных заголовков
+  const HEADERS: { label: string, key: SortKey | null }[] = [
+    { label: "ID", key: "externalId" },
+    { label: "Статус", key: "status" },
+    { label: "Курьер", key: "courier" },
+    { label: "Адрес", key: "address" },
+    { label: "Слот", key: "slotRaw" },
+    { label: "Себ-ть", key: "costPriceDisplay" },
+    { label: "Сумма", key: "price" },
+    { label: "Изменён", key: "changedAt" },
+    { label: "Карта", key: null }
+  ];
 
   return (
     <div style={{ fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", minHeight: "100vh", paddingBottom: selectedIds.size > 0 ? 80 : 0 }}>
@@ -202,22 +296,34 @@ export default function OrdersPage() {
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
-                <tr style={{ background: "#fafaf8", borderBottom: "1px solid #e8e6df" }}>
+                <tr style={{ background: "#fafaf8", borderBottom: "1px solid #e8e6df", userSelect: "none" }}>
                   <th style={{ padding: "10px 14px", textAlign: "left", width: 40 }}>
                     <input type="checkbox" checked={isAllSelected} onChange={toggleSelectAll} style={{ cursor: "pointer" }} />
                   </th>
-                  {["ID", "Статус", "Курьер", "Адрес", "Слот", "Себ-ть", "Сумма", "Изменён", "Карта"].map(h => (
-                    <th key={h} style={thStyle}>{h}</th>
+                  {HEADERS.map(h => (
+                    <th 
+                      key={h.label} 
+                      style={{ ...thStyle, cursor: h.key ? "pointer" : "default" }}
+                      onClick={() => h.key && handleSort(h.key)}
+                      title={h.key ? "Нажмите для сортировки" : ""}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        {h.label}
+                        {sortConfig.key === h.key && (
+                          <span style={{ fontSize: 10, color: "#4a7aff" }}>{sortConfig.direction === 'asc' ? "▲" : "▼"}</span>
+                        )}
+                      </div>
+                    </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr><td colSpan={10} style={{ padding: 32, textAlign: "center", color: "#a8a49c" }}>Загрузка...</td></tr>
-                ) : filtered.map((o, i) => {
+                ) : sortedAndFiltered.map((o, i) => {
                   const statusColor = STATUS_COLORS[o.status] ?? "#a8a49c";
                   const isSelected = selectedIds.has(o.id);
-                  const displayCost = o.costPrice || localCosts[o.id]; // 🔥 Вывод из базы ИЛИ локальный
+                  const displayCost = o.costPrice || localCosts[o.id]; 
                   
                   return (
                     <tr key={o.id} style={{ borderBottom: "1px solid #f5f4f0", background: isSelected ? "#f4f7ff" : (i % 2 === 0 ? "#fff" : "#fafaf8") }}>
@@ -234,22 +340,62 @@ export default function OrdersPage() {
                       <td style={{ padding: "10px 14px", maxWidth: 260 }}>{o.address || "—"}</td>
                       <td style={{ padding: "10px 14px", color: "#6b6860" }}>{o.slotRaw || "—"}</td>
                       
-                      {/* 🔥 ЯЧЕЙКА СЕБЕСТОИМОСТИ */}
-                      <td style={{ padding: "10px 14px" }}>
-                        {displayCost ? (
-                          <span style={{ color: "#1a9e5c", fontWeight: 700 }}>{displayCost} ₽</span>
+                      {/* 🔥 ЯЧЕЙКА СЕБЕСТОИМОСТИ (Кликабельная) */}
+                      <td style={{ padding: "10px 14px", minWidth: 90 }}>
+                        {editingCell?.id === o.id && editingCell?.field === "costPrice" ? (
+                          <input
+                            autoFocus
+                            type="number"
+                            value={editValue}
+                            onChange={e => setEditValue(e.target.value)}
+                            onBlur={handleEditSave}
+                            onKeyDown={handleKeyDown}
+                            style={inlineInputStyle}
+                          />
                         ) : (
-                          <button
-                            onClick={() => handleUpdateCost(o.id)}
-                            disabled={costLoaders[o.id] || !o.price}
-                            style={calcBtnStyle(costLoaders[o.id] || !o.price)}
+                          <div 
+                            style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", minHeight: 24 }}
+                            onClick={() => handleEditClick(o.id, "costPrice", displayCost || null)}
+                            title="Нажмите, чтобы изменить вручную"
                           >
-                            {costLoaders[o.id] ? "..." : "Считать"}
-                          </button>
+                            {displayCost ? (
+                              <span style={{ color: "#1a9e5c", fontWeight: 700, borderBottom: "1px dashed #a8a49c" }}>{displayCost} ₽</span>
+                            ) : (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleUpdateCost(o.id); }}
+                                disabled={costLoaders[o.id] || !o.price}
+                                style={calcBtnStyle(costLoaders[o.id] || !o.price)}
+                              >
+                                {costLoaders[o.id] ? "..." : "Считать"}
+                              </button>
+                            )}
+                          </div>
                         )}
                       </td>
 
-                      <td style={{ padding: "10px 14px", fontWeight: 600 }}>{o.price ? `${o.price} ₽` : "—"}</td>
+                      {/* 🔥 ЯЧЕЙКА СУММЫ/ЦЕНЫ (Кликабельная) */}
+                      <td style={{ padding: "10px 14px", fontWeight: 600, minWidth: 80 }} >
+                        {editingCell?.id === o.id && editingCell?.field === "price" ? (
+                          <input
+                            autoFocus
+                            type="number"
+                            value={editValue}
+                            onChange={e => setEditValue(e.target.value)}
+                            onBlur={handleEditSave}
+                            onKeyDown={handleKeyDown}
+                            style={inlineInputStyle}
+                          />
+                        ) : (
+                          <span 
+                            onClick={() => handleEditClick(o.id, "price", o.price)}
+                            title="Нажмите, чтобы изменить" 
+                            style={{ borderBottom: "1px dashed #a8a49c", cursor: "pointer", display: "inline-block", minHeight: 20 }}
+                          >
+                            {o.price ? `${o.price} ₽` : "—"}
+                          </span>
+                        )}
+                      </td>
+
                       <td style={{ padding: "10px 14px", fontSize: 11 }}>{o.changedAt ? fmt(o.changedAt) : "—"}</td>
                       <td style={{ padding: "10px 14px" }}>
                         <Link href={`/dashboard?orderId=${o.id}`} style={openBtnStyle}>📍 Открыть</Link>
@@ -286,6 +432,7 @@ export default function OrdersPage() {
 const navBtn = { padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, color: "#1a1a18", textDecoration: "none" };
 const syncBtn = { padding: "6px 14px", color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer" };
 const inputStyle = { padding: "7px 10px", borderRadius: 7, border: "1px solid #e0dfd7", fontSize: 12, outline: "none", color: "#1a1a18", background: "#fff", maxWidth: 160 };
+const inlineInputStyle = { width: "100%", padding: "4px 6px", borderRadius: 4, border: "1px solid #4a7aff", outline: "none", fontWeight: 600, fontSize: 12 };
 const thStyle = { padding: "10px 14px", textAlign: "left" as const, fontSize: 10, fontWeight: 700, color: "#a8a49c", textTransform: "uppercase" as const, letterSpacing: ".4px" };
 const openBtnStyle = { color: "#1a1a18", textDecoration: "none", fontSize: 11, fontWeight: 600, background: "#f5f4f0", border: "1px solid #e8e6df", padding: "4px 8px", borderRadius: 6 };
 const calcBtnStyle = (disabled: boolean) => ({ padding: "4px 8px", fontSize: 10, borderRadius: 5, border: "1px solid #e8e6df", background: "#fff", cursor: disabled ? "not-allowed" : "pointer", fontWeight: 600, color: disabled ? "#a8a49c" : "#1a1a18" });

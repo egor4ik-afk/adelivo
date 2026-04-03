@@ -55,12 +55,18 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     if (body.slotRaw        !== undefined) updateData.slotRaw        = body.slotRaw;
     if (body.comment        !== undefined) updateData.comment        = body.comment;
     if (body.items          !== undefined) updateData.items          = body.items;
-
     if (body.routeId    !== undefined) updateData.routeId    = body.routeId;
     if (body.routeOrder !== undefined) updateData.routeOrder = body.routeOrder;
 
-    let finalPrice: number | undefined; // 🔥 Переменная для отслеживания изменения цены
+    // 🔥 ДОБАВИЛИ РУЧНУЮ ПРАВКУ ЦЕНЫ И СЕБЕСТОИМОСТИ
+    if (body.price      !== undefined) updateData.price      = body.price;
+    if (body.costPrice  !== undefined) updateData.costPrice  = body.costPrice;
 
+    let finalPrice: number | undefined; // 🔥 Переменная для отслеживания изменения цены
+    
+    // Если мы вручную обновили цену, нужно переопределить finalPrice, чтобы он улетел в CRM
+    if (body.price !== undefined) finalPrice = body.price;
+    // Если мы вручную обновили цену, нужно переопределить finalPrice, чтобы он улетел в CRM
     if (body.courier !== undefined) {
       if (body.courier) {
         const numericId = Number(body.courier);
