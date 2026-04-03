@@ -202,7 +202,7 @@ function loadZonesFromKml(): typeof _zonesCache {
       .replace(/<!\[CDATA\[(.*?)\]\]>/g, "$1").replace(/<[^>]+>/g, "").trim().toLowerCase();
     const zoneName = name || desc || "без названия";
 
-    const coordsMatch = p.match(/<coordinates>\s*(.*?)\s*<\/coordinates>/s);
+    const coordsMatch = p.match(/<coordinates>\s*([\s\S]*?)\s*<\/coordinates>/);
     if (!coordsMatch) continue;
 
     const points = coordsMatch[1].trim().split(/\s+/).map((pair) => {
@@ -333,6 +333,26 @@ export async function geocodeNewOrders() {
         where: { id: order.id },
         data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: false, invalidReason: null, price: finalPrice },
       });
+
+      // Уведомление если цена в CRM отличается от рассчитанной по зонам
+      const crmPrice = order.price ?? 0;
+      if (crmPrice !== finalPrice) {
+        const tgToken = process.env.TELEGRAM_BOT_TOKEN;
+        if (tgToken) {
+          const msg = [
+            `⚠️ *Расхождение цены доставки*`,
+            ``,
+            `📦 *Заказ:* ${order.externalId || order.crmId}`,
+            `💰 *Цена в CRM:* ${crmPrice} ₽`,
+            `✅ *Фактическая цена доставки:* ${finalPrice} ₽`,
+          ].join("\n");
+          fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: process.env.TELEGRAM_ADMIN_CHAT_ID, text: msg, parse_mode: "Markdown" }),
+          }).catch(e => console.error("[TG] Ошибка уведомления о цене:", e));
+        }
+      }
 
     } catch (_) {
       await prisma.order.update({

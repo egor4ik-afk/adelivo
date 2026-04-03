@@ -30,7 +30,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     // 3. Отправляем уведомление в Telegram, если время действительно поменялось
     if (body.baseArrivalTime && oldRoute.baseArrivalTime !== body.baseArrivalTime) {
       const tgToken = process.env.TELEGRAM_BOT_TOKEN;
-      const tgChat  = process.env.TELEGRAM_CHAT_ID;
+      const tgChat  = process.env.TELEGRAM_ADMIN_CHAT_ID;
       
       if (tgToken && tgChat) {
         const msg = [

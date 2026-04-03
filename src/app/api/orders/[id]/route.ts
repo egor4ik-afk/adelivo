@@ -271,7 +271,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 
     // 🔥 ДОБАВЛЕНО: Уведомление в Telegram о фото
     const tgToken = process.env.TELEGRAM_BOT_TOKEN;
-    const tgChat  = process.env.TELEGRAM_CHAT_ID;
+    const tgChat  = process.env.TELEGRAM_ADMIN_CHAT_ID;
 
     if (tgToken && tgChat) {
       // 1. Уведомление об 1 фото (если передано photoUrl)
