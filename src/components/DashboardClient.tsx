@@ -100,7 +100,7 @@ export function DashboardClient({ user }: { user: User }) {
   const [bulkSelectedIds, setBulkSelectedIds] = useState<string[]>([]);
   const [bulkCourier, setBulkCourier] = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
-  const [routeType, setRouteType] = useState<"auto" | "mt">("auto");
+  const [routeType, setRouteType] = useState<"auto" | "mt">("mt");
   const [returnToBase, setReturnToBase] = useState(true);
 
   const [routeTabMode, setRouteTabMode] = useState<"new" | "current">("new");
@@ -621,64 +621,66 @@ export function DashboardClient({ user }: { user: User }) {
     return () => { clearTimeout(timer); if (multiRoute) multiRoute.destroy(); };
   }, [bulkSelectedIds, routeType, returnToBase, routeTab, isBulkMode, isMobile]);
 
-  // 🔥 ВЫНЕСЕННАЯ ЛОГИКА РАСЧЕТА ETA
-  const calculatedEtas = useMemo(() => {
-    const etas: Record<string, { type: string, timeStr: string, color: string }> = {};
-    if (selectedRouteOrders.length === 0 || routeLegs.length === 0) return etas;
+// 🔥 ВЫНЕСЕННАЯ ЛОГИКА РАСЧЕТА ETA
+const calculatedEtas = useMemo(() => {
+  const etas: Record<string, { type: string, timeStr: string, color: string }> = {};
+  if (selectedRouteOrders.length === 0 || routeLegs.length === 0) return etas;
 
-    const parseYandexTimeMs = (text: string) => {
-      if (!text || text === "—") return 0;
-      let ms = 0;
-      const hMatch = text.match(/(\d+)\s*ч/);
-      if (hMatch) ms += parseInt(hMatch[1], 10) * 3600000;
-      const mMatch = text.match(/(\d+)\s*мин/);
-      if (mMatch) ms += parseInt(mMatch[1], 10) * 60000;
-      return routeType === "auto" ? ms + (12 * 60 * 1000) : ms + (3 * 60 * 1000);
-    };
+  const parseYandexTimeMs = (text: string) => {
+    if (!text || text === "—") return 0;
+    let ms = 0;
+    const hMatch = text.match(/(\d+)\s*ч/);
+    if (hMatch) ms += parseInt(hMatch[1], 10) * 3600000;
+    const mMatch = text.match(/(\d+)\s*мин/);
+    if (mMatch) ms += parseInt(mMatch[1], 10) * 60000;
+    return routeType === "auto" ? ms + (12 * 60 * 1000) : ms + (3 * 60 * 1000);
+  };
 
-    let currentRunningMs = Date.now();
-    let foundFirstActive = false;
+  let currentRunningMs = Date.now();
+  let foundFirstActive = false;
 
-    const hasStarted = selectedRouteOrders.some((o: any) => o.status === "IN_DELIVERY" || o.status === "DELIVERED");
-    const pickedUpTimes = selectedRouteOrders.map((o: any) => o.pickedUpAt).filter(Boolean);
-    const actualDepartureMs = pickedUpTimes.length > 0 ? Math.min(...pickedUpTimes.map((d: string) => new Date(d).getTime())) : null;
+  const hasStarted = selectedRouteOrders.some((o: any) => o.status === "IN_DELIVERY" || o.status === "DELIVERED");
+  const pickedUpTimes = selectedRouteOrders.map((o: any) => o.pickedUpAt).filter(Boolean);
+  const actualDepartureMs = pickedUpTimes.length > 0 ? Math.min(...pickedUpTimes.map((d: string) => new Date(d).getTime())) : null;
 
-    if (hasStarted && actualDepartureMs) {
-      currentRunningMs = actualDepartureMs;
-    } else if (!hasStarted && selectedRouteOrders.length > 0 && routeLegs.length > 0) {
-      const firstOrder = selectedRouteOrders[0];
-      if (firstOrder.slotFrom) {
-        const [hh, mm] = firstOrder.slotFrom.split(":").map(Number);
-        if (!isNaN(hh) && !isNaN(mm)) {
-          const slotStartMs = new Date().setHours(hh, mm, 0, 0);
-          const legToFirstPointMs = parseYandexTimeMs(routeLegs[0]) + (5 * 60 * 1000);
-          currentRunningMs = slotStartMs - legToFirstPointMs;
-        }
+  if (hasStarted && actualDepartureMs) {
+    currentRunningMs = actualDepartureMs;
+  } else if (!hasStarted && selectedRouteOrders.length > 0 && routeLegs.length > 0) {
+    const firstOrder = selectedRouteOrders[0];
+    if (firstOrder.slotFrom) {
+      const [hh, mm] = firstOrder.slotFrom.split(":").map(Number);
+      if (!isNaN(hh) && !isNaN(mm)) {
+        const slotStartMs = new Date().setHours(hh, mm, 0, 0);
+        const legToFirstPointMs = parseYandexTimeMs(routeLegs[0]) + (5 * 60 * 1000);
+        const idealStartMs = slotStartMs - legToFirstPointMs;
+        
+        // 🔥 ИСПРАВЛЕНИЕ: Если курьер опаздывает, берем РЕАЛЬНОЕ ТЕКУЩЕЕ ВРЕМЯ (Date.now)!
+        currentRunningMs = Math.max(Date.now(), idealStartMs);
       }
     }
+  }
 
-    selectedRouteOrders.forEach((o: any, index: number) => {
-      const legMs = parseYandexTimeMs(routeLegs[index]);
-      if (o.status === "DELIVERED") {
-        const t = o.changedAt || o.updatedAt;
-        etas[o.id] = { 
-          type: 'DELIVERED', 
-          timeStr: t ? new Date(t).toLocaleTimeString('ru', {hour: '2-digit', minute:'2-digit'}) : "—", 
-          color: "#10b981" 
-        };
-      } else if (o.status === "CANCELLED" || o.status === "RETURNED") {
-        etas[o.id] = { type: 'SKIPPED', timeStr: "—", color: "#a8a49c" };
-      } else {
-        currentRunningMs += (!foundFirstActive ? legMs : (4 * 60 * 1000) + legMs);
-        foundFirstActive = true;
-        const timeStr = new Date(currentRunningMs).toLocaleTimeString('ru', {hour: '2-digit', minute:'2-digit'});
-        etas[o.id] = { type: o.status, timeStr, color: o.status === "IN_DELIVERY" ? "#f59e0b" : "#4a7aff" };
-      }
-    });
+  selectedRouteOrders.forEach((o: any, index: number) => {
+    const legMs = parseYandexTimeMs(routeLegs[index]);
+    if (o.status === "DELIVERED") {
+      const t = o.changedAt || o.updatedAt;
+      etas[o.id] = { 
+        type: 'DELIVERED', 
+        timeStr: t ? new Date(t).toLocaleTimeString('ru', {hour: '2-digit', minute:'2-digit'}) : "—", 
+        color: "#10b981" 
+      };
+    } else if (o.status === "CANCELLED" || o.status === "RETURNED") {
+      etas[o.id] = { type: 'SKIPPED', timeStr: "—", color: "#a8a49c" };
+    } else {
+      currentRunningMs += (!foundFirstActive ? legMs : (4 * 60 * 1000) + legMs);
+      foundFirstActive = true;
+      const timeStr = new Date(currentRunningMs).toLocaleTimeString('ru', {hour: '2-digit', minute:'2-digit'});
+      etas[o.id] = { type: o.status, timeStr, color: o.status === "IN_DELIVERY" ? "#f59e0b" : "#4a7aff" };
+    }
+  });
 
-    return etas;
-  }, [selectedRouteOrders, routeLegs, routeType]);
-
+  return etas;
+}, [selectedRouteOrders, routeLegs, routeType]);
   const generateYandexUrl = (ordersToRoute: DashboardOrder[], type: "auto" | "mt", rtb: boolean) => {
     const validOrders = ordersToRoute.filter(o => o.lat && o.lng && !o.isInvalid);
     if (validOrders.length === 0) return null;

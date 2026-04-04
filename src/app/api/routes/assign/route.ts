@@ -8,7 +8,6 @@ const STORE_COORDS = "55.749511,37.596205"; // База
 
 export async function POST(req: Request) {
   try {
-    // 🔥 ДОБАВЛЕН ПРИЕМ routeEtas
     const { orderIds, courierId, routeType = "auto", returnToBase = false, routeDate, oldRouteId, departureAdvice, isDraft, routeEtas } = await req.json();
 
     let existingRouteName = null;
@@ -16,7 +15,6 @@ export async function POST(req: Request) {
       const oldRoute = await prisma.route.findUnique({ where: { id: oldRouteId } });
       if (oldRoute) existingRouteName = oldRoute.name;
       
-      // 🔥 1. Отвязываем заказы, которые удалены из маршрута (или если маршрут удаляется целиком)
       const ordersToReset = await prisma.order.findMany({
         where: { routeId: oldRouteId, id: { notIn: orderIds || [] } }
       });
@@ -26,11 +24,10 @@ export async function POST(req: Request) {
           where: { id: o.id },
           data: {
             courierId: null, courier: null, routeId: null, routeOrder: null,
-            status: o.status === "ASSIGNED" ? "NEW" : o.status, // Откатываем статус
-            eta: null // 🔥 Очищаем ETA, так как заказ выпал из маршрута
+            status: o.status === "ASSIGNED" ? "NEW" : o.status,
+            eta: null 
           }
         });
-        // Если заказ пришел из CRM - очищаем курьера и там
         if (o.crmId) {
           await updateCrmOrder(o.crmId, { courier: "" }).catch(() => {});
         }
@@ -39,12 +36,10 @@ export async function POST(req: Request) {
       await prisma.route.deleteMany({ where: { id: oldRouteId } });
     }
 
-    // 🔥 Если передан пустой массив orderIds — значит маршрут просто удален, выходим
     if (!orderIds?.length) return NextResponse.json({ success: true, deleted: true });
     
     if (!courierId) return NextResponse.json({ error: "Неверные данные" }, { status: 400 });
 
-    // Выбираем price и courierId, чтобы пересчитать цену
     const orders = await prisma.order.findMany({
       where: { id: { in: orderIds } },
       select: { id: true, lat: true, lng: true, crmId: true, deliveryDate: true, crmCreatedAt: true, status: true, opComment: true, price: true, courierId: true }
@@ -64,36 +59,26 @@ export async function POST(req: Request) {
       const routeDay = finalRouteDate.split('-')[2];
       const prefix = `M-${routeDay}`;
 
-      // Безопасный поиск максимального номера маршрута ИМЕННО ЗА ЭТОТ ДЕНЬ
       const routes = await prisma.route.findMany({
-        where: { 
-          name: { startsWith: prefix },
-          date: finalRouteDate 
-        },
+        where: { name: { startsWith: prefix }, date: finalRouteDate },
         select: { name: true }
       });
 
       let maxNum = 0;
       for (const r of routes) {
-        // Ищем любые цифры после префикса (например M-28001 или M-281)
         const match = r.name.match(new RegExp(`^${prefix}(\\d+)$`));
         if (match) {
           const num = parseInt(match[1], 10);
           if (num > maxNum) maxNum = num;
         }
       }
-
       routeName = `${prefix}${(maxNum + 1).toString().padStart(3, '0')}`;
     }
 
     const newRoute = await prisma.route.create({
       data: { 
-        name: routeName, 
-        link, 
-        date: finalRouteDate, 
-        departureAdvice: departureAdvice || null, 
-        courierId: Number(courierId),
-        isDraft: isDraft || false // Сохраняем флаг, полученный с фронта (если не передан - false)
+        name: routeName, link, date: finalRouteDate, departureAdvice: departureAdvice || null, courierId: Number(courierId),
+        isDraft: isDraft || false
       }
     });
 
@@ -103,32 +88,27 @@ export async function POST(req: Request) {
     for (let i = 0; i < orderIds.length; i++) {
       const orderToUpdate = sortedOrders.find((o: any) => o.id === orderIds[i]);
       
-      // Если это первая точка в маршруте и есть совет - пишем его в коммент оператора
       let newOpComment = orderToUpdate.opComment || "";
       if (i === 0 && departureAdvice && !newOpComment.includes(departureAdvice)) {
         newOpComment = `💡 ${departureAdvice}\n${newOpComment}`.trim();
       }
 
-      // ==========================================
-      // ЛОГИКА АВТО-КУРЬЕРА: ПЕРЕСЧЕТ ЦЕНЫ (РАБОТАЕТ ВСЕГДА, ДАЖЕ ПРИ ПЕРЕСОХРАНЕНИИ)
-      // ==========================================
       let currentPrice = orderToUpdate.price && orderToUpdate.price > 0 ? orderToUpdate.price : 500;
       let finalPrice = currentPrice;
 
       if (courierDb) {
         let basePrice = currentPrice;
-        
         let oldCourierIsAuto = false;
         if (orderToUpdate.courierId) {
            if (orderToUpdate.courierId === courierDb.id) {
-               oldCourierIsAuto = courierDb.isAuto; // Это тот же самый курьер
+               oldCourierIsAuto = courierDb.isAuto;
            } else {
                const oldCourier = await prisma.courier.findUnique({ where: { id: orderToUpdate.courierId } });
-               oldCourierIsAuto = !!oldCourier?.isAuto; // Это другой курьер
+               oldCourierIsAuto = !!oldCourier?.isAuto;
            }
         }
 
-        const AUTO_PRICES = [600, 1000, 1400]; // базовые + 100
+        const AUTO_PRICES = [600, 1000, 1400];
         if (oldCourierIsAuto && AUTO_PRICES.includes(basePrice)) {
             basePrice -= 100;
         }
@@ -136,9 +116,8 @@ export async function POST(req: Request) {
         const autoSurcharge = courierDb.isAuto ? 100 : 0;
         finalPrice = basePrice + autoSurcharge;
       }
-      // ==========================================
 
-      // 🔥 Достаем ETA для конкретного заказа из присланного объекта
+      // 🔥 Берем ETA конкретно для этого заказа из присланных данных Яндекса
       const orderEta = routeEtas ? routeEtas[orderIds[i]] : undefined;
 
       await prisma.order.update({
@@ -147,19 +126,16 @@ export async function POST(req: Request) {
           courierId: Number(courierId), courier: courierFullName,
           routeId: newRoute.id, routeOrder: i + 1,
           status: orderToUpdate.status === "NEW" ? "ASSIGNED" : undefined,
-          opComment: newOpComment,
-          price: finalPrice, 
-          eta: orderEta // 🔥 СОХРАНЯЕМ ETA ПРИ СОЗДАНИИ МАРШРУТА
+          opComment: newOpComment, price: finalPrice, 
+          eta: orderEta // Сохраняем первичный ПЛАН!
         }
       });
       
       if (courierFullName && orderToUpdate?.crmId) {
-        // В CRM отправляем только курьера, без цены
         await updateCrmOrder(orderToUpdate.crmId, { courier: courierFullName }).catch(() => {});
       }
     }
 
-    // 🔥 ДОБАВЛЕНА ПРОВЕРКА: Если это черновик (isDraft) — Push-уведомление НЕ отправляется
     if (courierDb?.email && !oldRouteId && !isDraft) {
       const courierUser = await prisma.user.findUnique({ where: { email: courierDb.email } });
       if (courierUser) {
