@@ -8,8 +8,8 @@ const STORE_COORDS = "55.749511,37.596205"; // База
 
 export async function POST(req: Request) {
   try {
-    // 🔥 ДОБАВЛЕН ФЛАГ isDraft
-    const { orderIds, courierId, routeType = "auto", returnToBase = false, routeDate, oldRouteId, departureAdvice, isDraft } = await req.json();
+    // 🔥 ДОБАВЛЕН ПРИЕМ routeEtas
+    const { orderIds, courierId, routeType = "auto", returnToBase = false, routeDate, oldRouteId, departureAdvice, isDraft, routeEtas } = await req.json();
 
     let existingRouteName = null;
     if (oldRouteId) {
@@ -26,7 +26,8 @@ export async function POST(req: Request) {
           where: { id: o.id },
           data: {
             courierId: null, courier: null, routeId: null, routeOrder: null,
-            status: o.status === "ASSIGNED" ? "NEW" : o.status // Откатываем статус
+            status: o.status === "ASSIGNED" ? "NEW" : o.status, // Откатываем статус
+            eta: null // 🔥 Очищаем ETA, так как заказ выпал из маршрута
           }
         });
         // Если заказ пришел из CRM - очищаем курьера и там
@@ -137,6 +138,9 @@ export async function POST(req: Request) {
       }
       // ==========================================
 
+      // 🔥 Достаем ETA для конкретного заказа из присланного объекта
+      const orderEta = routeEtas ? routeEtas[orderIds[i]] : undefined;
+
       await prisma.order.update({
         where: { id: orderIds[i] },
         data: { 
@@ -144,7 +148,8 @@ export async function POST(req: Request) {
           routeId: newRoute.id, routeOrder: i + 1,
           status: orderToUpdate.status === "NEW" ? "ASSIGNED" : undefined,
           opComment: newOpComment,
-          price: finalPrice // СОХРАНЯЕМ ИЗМЕНЕННУЮ ЦЕНУ ТОЛЬКО В НАШУ БД
+          price: finalPrice, 
+          eta: orderEta // 🔥 СОХРАНЯЕМ ETA ПРИ СОЗДАНИИ МАРШРУТА
         }
       });
       

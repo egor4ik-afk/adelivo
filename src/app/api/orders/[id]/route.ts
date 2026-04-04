@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { updateCrmOrder, updateCrmOrderDeliveryPrice } from "@/lib/crm"; // 🔥 ДОБАВИЛИ updateCrmOrderDeliveryPrice
+import { updateCrmOrder, updateCrmOrderDeliveryPrice } from "@/lib/crm";
 import { notify } from "@/lib/notifications";
 import { OrderStatus } from "@prisma/client";
 
@@ -22,61 +22,63 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updateData: any = {};
 
+    // ── ПЕРЕМЕННЫЕ ДЛЯ СДВИГА МАРШРУТА "В ПУТИ" ──
+    let inDeliveryDiff = 0;
+    let triggerInDeliveryShift = false;
+
     if (body.status !== undefined) {
       updateData.status = body.status;
       updateData.changedAt = new Date();
       
-      // 🔥 Улучшенное условие: перевели "В пути" — записали время выезда
+      // 🚀 ЛОГИКА "В ПУТИ"
       if (body.status === "IN_DELIVERY") {
-        // Записываем время ТОЛЬКО если статус реально изменился 
-        // ИЛИ если время выезда по какой-то причине пустое
         if (order.status !== "IN_DELIVERY" || !order.pickedUpAt) {
           updateData.pickedUpAt = new Date();
         }
-      }
 
-      // 🔥 НОВОЕ: Записываем готовое ETA с фронтенда (заполняем один раз)
-      if (body.eta !== undefined) {
-        // Если в базе ETA ещё пустое — записываем то, что посчитал интерфейс
-        if (!order.eta) {
-          updateData.eta = body.eta;
+        // Если пришло новое ETA от интерфейса
+        if (body.eta) {
+           updateData.eta = body.eta;
+           // Считаем разницу ДО ТОГО как сохраним новое значение в базу
+           if (order.eta && order.status !== "IN_DELIVERY") {
+               const [oldH, oldM] = order.eta.split(':').map(Number);
+               const [newH, newM] = body.eta.split(':').map(Number);
+               if (!isNaN(oldH) && !isNaN(newH)) {
+                  inDeliveryDiff = (newH * 60 + newM) - (oldH * 60 + oldM);
+                  triggerInDeliveryShift = true;
+               }
+           }
         }
       }
       
-      // 🔥 Если вернули заказ обратно — очистили время выезда и ETA
+      // ↩️ СБРОС
       if (body.status === "NEW" || body.status === "ASSIGNED") {
         updateData.pickedUpAt = null;
-        updateData.eta = null; // Очищаем ETA, чтобы при новом выезде записать заново
-      }
-
-      // ⚡️ ТРИГГЕР ПЕРЕРАСЧЕТА: Если заказ доставили, нужно пересчитать время для остальных
-      if (body.status === "DELIVERED" && order.status !== "DELIVERED" && order.routeId) {
-        // 🔥 ПЕРЕДАЕМ order.id в функцию
-        triggerRouteRecalculation(order.routeId, order.id).catch(console.error);
+        updateData.eta = null;
       }
     }
     
+    // Если просто руками правим ETA, без смены статуса
+    if (body.eta !== undefined && body.status !== "IN_DELIVERY") {
+       updateData.eta = body.eta;
+    }
+
     if (body.opComment      !== undefined) updateData.opComment      = body.opComment;
     if (body.address        !== undefined) updateData.address        = body.address;
     if (body.recipientPhone !== undefined) updateData.recipientPhone = body.recipientPhone;
     
-    // 🔥 ДОБАВЛЕНО: обновляем время, комментарии и состав
     if (body.slotRaw        !== undefined) updateData.slotRaw        = body.slotRaw;
     if (body.comment        !== undefined) updateData.comment        = body.comment;
     if (body.items          !== undefined) updateData.items          = body.items;
     if (body.routeId    !== undefined) updateData.routeId    = body.routeId;
     if (body.routeOrder !== undefined) updateData.routeOrder = body.routeOrder;
-    if (body.eta !== undefined) updateData.eta = body.eta;
 
-    // 🔥 ДОБАВИЛИ РУЧНУЮ ПРАВКУ ЦЕНЫ И СЕБЕСТОИМОСТИ
     if (body.price      !== undefined) updateData.price      = body.price;
     if (body.costPrice  !== undefined) updateData.costPrice  = body.costPrice;
 
-    let finalPrice: number | undefined; // 🔥 Переменная для отслеживания изменения цены
-    
-    // Если мы вручную обновили цену, нужно переопределить finalPrice, чтобы он улетел в CRM
+    let finalPrice: number | undefined; 
     if (body.price !== undefined) finalPrice = body.price;
-    // Если мы вручную обновили цену, нужно переопределить finalPrice, чтобы он улетел в CRM
+    
     if (body.courier !== undefined) {
       if (body.courier) {
         const numericId = Number(body.courier);
@@ -88,11 +90,9 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         updateData.courier   = dbCourier?.fullName ?? body.courier;
         updateData.courierId = dbCourier?.id ?? null;
 
-        // 🔥 ЛОГИКА АВТО-КУРЬЕРА: пересчет цены (+100 руб)
         if (dbCourier && dbCourier.id !== order.courierId) {
           let basePrice = order.price && order.price > 0 ? order.price : 500;
           
-          // Если прошлый курьер УЖЕ был авто, отнимаем его 100р, чтобы получить "чистую" базу
           if (order.courierId) {
              const oldCourier = await prisma.courier.findUnique({ where: { id: order.courierId } });
              if (oldCourier?.isAuto && basePrice >= 600) {
@@ -100,7 +100,6 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
              }
           }
 
-          // Накидываем 100р, если новый курьер на авто
           const autoSurcharge = dbCourier.isAuto ? 100 : 0;
           finalPrice = basePrice + autoSurcharge;
           updateData.price = finalPrice;
@@ -110,7 +109,6 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         updateData.courierId   = null;
         updateData.courierLink = null;
 
-        // 🔥 Если курьера сняли, откатываем цену (убираем надбавку авто)
         if (order.courierId) {
            const oldCourier = await prisma.courier.findUnique({ where: { id: order.courierId } });
            if (oldCourier?.isAuto && order.price && order.price >= 600) {
@@ -121,7 +119,6 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       }
     }
 
-    // ── Свежие координаты из БД ──
     const freshCoords = await prisma.order.findUnique({
       where: { id },
       select: { lat: true, lng: true },
@@ -129,7 +126,6 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     const freshLat = freshCoords?.lat;
     const freshLng = freshCoords?.lng;
 
-    // ── Генерация ссылки для курьера ──
     const finalCourier = updateData.courier !== undefined ? updateData.courier : order.courier;
     const isCourierChanged = body.courier !== undefined && body.courier !== null;
     const isAddressChanged = body.address !== undefined;
@@ -140,12 +136,10 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       }
     }
 
-    // ── Автосоздание маршрута при назначении или СМЕНЕ курьера ──
     const newCourierId = updateData.courierId as number | undefined;
     const isCourierAssignedOrChanged = newCourierId && newCourierId !== order.courierId;
 
     if (isCourierAssignedOrChanged) {
-      // 1. Если заказ был в другом маршруте, вытаскиваем его оттуда и удаляем пустой маршрут
       if (order.routeId) {
         const siblingsCount = await prisma.order.count({
           where: { routeId: order.routeId, id: { not: id } },
@@ -155,7 +149,6 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         }
       }
 
-      // 2. Создаем новый маршрут для нового курьера
       const orderDate = order.deliveryDate
         ? order.deliveryDate.toString().split("T")[0]
         : new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" });
@@ -163,12 +156,8 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       const routeDay = orderDate.split("-")[2];
       const prefix = `M-${routeDay}`;
 
-      // 🔥 ДОБАВЛЕНО: Безопасный поиск максимального номера маршрута ЗА ЭТОТ ДЕНЬ
       const routes = await prisma.route.findMany({
-        where: { 
-          name: { startsWith: prefix },
-          date: orderDate 
-        },
+        where: { name: { startsWith: prefix }, date: orderDate },
         select: { name: true }
       });
 
@@ -182,18 +171,12 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       }
 
       const routeName = `${prefix}${(maxNum + 1).toString().padStart(3, "0")}`;
-
       const routeLink = freshLat && freshLng
         ? `https://yandex.ru/maps/?rtext=${STORE_COORDS}~${freshLat},${freshLng}&rtt=auto`
         : null;
 
       const newRoute = await prisma.route.create({
-        data: {
-          name:      routeName,
-          link:      routeLink,
-          date:      orderDate,
-          courierId: newCourierId,
-        },
+        data: { name: routeName, link: routeLink, date: orderDate, courierId: newCourierId },
       });
 
       updateData.routeId    = newRoute.id;
@@ -203,34 +186,23 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         updateData.status = "ASSIGNED";
       }
 
-      // 3. Отправляем красивый Push новому курьеру
       const courierRec = await prisma.courier.findUnique({ where: { id: newCourierId } });
       if (courierRec?.email) {
         const courierUser = await prisma.user.findUnique({ where: { email: courierRec.email } });
         if (courierUser) {
-          notify({
-            type: "route.assigned",
-            userId: courierUser.id,
-            routeId: routeName,
-            pointsCount: 1,
-          }).catch(console.error);
+          notify({ type: "route.assigned", userId: courierUser.id, routeId: routeName, pointsCount: 1 }).catch(console.error);
         }
       }
     }
 
-    // ── Снятие курьера (если просто очистили поле курьера) ──
     const courierIsBeingRemoved = (body.courier === "" || body.courier === null) && order.courierId !== null;
         
     if (courierIsBeingRemoved) {
-      // 1. Откатываем статус на "Новый"
       if (order.status === "ASSIGNED" && body.status === undefined) {
         updateData.status = "NEW";
       }
-      
-      // 🔥 ДОБАВЛЕНО: Очищаем время выезда, так как курьер снят
       updateData.pickedUpAt = null;
 
-      // 2. Убираем из маршрута и удаляем маршрут, если он стал пустым
       if (order.routeId) {
         const siblingsCount = await prisma.order.count({
           where: { routeId: order.routeId, id: { not: id } },
@@ -243,15 +215,12 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       }
     }
 
-    // ── Автовыброс из маршрута ──
     const newStatus  = body.status  || order.status;
     const newAddress = body.address || order.address;
     const isCancelledOrReturned = newStatus === "CANCELLED" || newStatus === "RETURNED";
     const isPickup   = newAddress?.toLowerCase().includes("самовывоз");
 
     if (isCancelledOrReturned || isPickup) {
-      // Если заказ выкидывается из маршрута из-за отмены/самовывоза,
-      // также нужно проверить, не остался ли маршрут пустым!
       if (order.routeId && updateData.routeId !== null) {
         const siblingsCount = await prisma.order.count({
           where: { routeId: order.routeId, id: { not: id } },
@@ -260,12 +229,10 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
           await prisma.route.deleteMany({ where: { id: order.routeId } });
         }
       }
-
       updateData.routeId    = null;
       updateData.routeOrder = null;
     }
 
-    // 🔥 ДОБАВЛЕНО: Обработка фото (сохраняем одну ссылку в БД, если есть поле)
     if (body.photoUrl !== undefined) {
        updateData.photoUrl = body.photoUrl;
     }
@@ -279,12 +246,22 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       });
     }
 
-    // 🔥 ДОБАВЛЕНО: Уведомление в Telegram о фото
+    // ⚡️ ВЫЗОВ ТВОЕЙ ФУНКЦИИ СДВИГА МАРШРУТОВ
+    if (updatedOrder.routeId) {
+      if (body.status === "DELIVERED" && order.status !== "DELIVERED") {
+         // Для "Доставлен" вызываем классически — разница вычисляется внутри
+         triggerRouteRecalculation(updatedOrder.routeId, updatedOrder.id).catch(console.error);
+      } else if (triggerInDeliveryShift) {
+         // Для "В пути" передаем уже посчитанную нами разницу
+         triggerRouteRecalculation(updatedOrder.routeId, updatedOrder.id, inDeliveryDiff).catch(console.error);
+      }
+    }
+
+    // ── УВЕДОМЛЕНИЯ TELEGRAM ──
     const tgToken = process.env.TELEGRAM_BOT_TOKEN;
     const tgChat  = process.env.TELEGRAM_ADMIN_CHAT_ID;
 
     if (tgToken && tgChat) {
-      // 1. Уведомление об 1 фото (если передано photoUrl)
       if (body.photoUrl && body.photoUrl !== order.photoUrl) {
         fetch(`https://api.telegram.org/bot${tgToken}/sendPhoto`, {
           method: "POST",
@@ -298,10 +275,10 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         }).catch(e => console.error("[TG] Ошибка отправки 1 фото:", e));
       }
 
-
-      // 3. Уведомление об опоздании (если ETA > slotTo на 30 мин)
-      if (body.eta && order.slotTo && body.eta !== order.eta) {
-        const [etaH, etaM] = body.eta.split(':').map(Number);
+      // Уведомление об опоздании
+      const currentEta = updateData.eta || order.eta;
+      if (currentEta && order.slotTo && currentEta !== order.eta) {
+        const [etaH, etaM] = currentEta.split(':').map(Number);
         const [planH, planM] = order.slotTo.split(':').map(Number);
         
         if (!isNaN(etaH) && !isNaN(planH)) {
@@ -315,7 +292,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
               `📦 *Заказ:* ${order.externalId || order.crmId}`,
               `📍 *Адрес:* ${order.address}`,
               `🎯 *План (до):* ${order.slotTo}`,
-              `🕒 *Расчетное (ETA):* ${body.eta}`
+              `🕒 *Расчетное (ETA):* ${currentEta}`
             ].join("\n");
 
             fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
@@ -328,7 +305,6 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       }
     }
 
-    // 🔥 ДОБАВЛЕНО: Теперь честно отслеживаем изменения времени, комментариев и товаров
     const changes = {
       statusChanged:    body.status    !== undefined && order.status    !== (updateData.status ?? body.status),
       courierChanged:   body.courier   !== undefined && (order.courierId ?? 0) !== (updateData.courierId ?? 0),
@@ -337,7 +313,6 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       commentChanged:   body.comment   !== undefined && (order.comment   ?? "") !== (body.comment ?? ""),
       opCommentChanged: body.opComment !== undefined && (order.opComment ?? "") !== (body.opComment ?? ""),
       itemsChanged:     body.items     !== undefined && (order.items     ?? "") !== (body.items ?? ""),
-      // 🔥 ДОБАВИЛ
       recipientPhoneChanged: body.recipientPhone !== undefined && (order.recipientPhone ?? "") !== (body.recipientPhone ?? ""),
     };
 
@@ -362,7 +337,6 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       }).catch(console.error);
     }
 
-    // ── CRM синхронизация ──
     let crmStatus = body.status ?? updateData.status;
     if (crmStatus === "ASSIGNED") crmStatus = undefined;
 
@@ -374,7 +348,6 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       recipientPhone: body.recipientPhone,
     });
 
-    // 🔥 Отправляем обновленную цену в CRM, если она изменилась из-за авто-курьера
     if (finalPrice !== undefined && order.crmId) {
       await updateCrmOrderDeliveryPrice(order.crmId, finalPrice);
     }
@@ -386,36 +359,44 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
   }
 }
 
-// 🔥 Функция для сдвига ETA у оставшихся точек в маршруте
-async function triggerRouteRecalculation(routeId: string, deliveredOrderId: string) {
+// 🔥 Твоя функция перерасчета (восстановлена и прокачана)
+async function triggerRouteRecalculation(routeId: string, orderId: string, forcedDiffMinutes?: number) {
   try {
-    console.log(`[ETA] Запуск перерасчета маршрута ${routeId} после доставки точки ${deliveredOrderId}...`);
+    console.log(`[ETA] Запуск перерасчета маршрута ${routeId} от точки ${orderId}...`);
 
-    // 1. Находим заказ, который только что доставили
-    const deliveredOrder = await prisma.order.findUnique({ 
-      where: { id: deliveredOrderId },
+    // 1. Находим заказ (нам нужен его порядковый номер и ETA)
+    const targetOrder = await prisma.order.findUnique({ 
+      where: { id: orderId },
       select: { eta: true, routeOrder: true }
     });
 
-    if (!deliveredOrder || !deliveredOrder.eta || deliveredOrder.routeOrder === null) {
+    if (!targetOrder || !targetOrder.eta || targetOrder.routeOrder === null) {
       console.log(`[ETA] Нет первоначального ETA или порядкового номера (routeOrder). Перерасчет отменен.`);
       return;
     }
 
-    // 2. Вычисляем разницу между ПЛАНОМ (ETA) и ФАКТОМ (текущее время)
-    const [etaH, etaM] = deliveredOrder.eta.split(':').map(Number);
-    if (isNaN(etaH) || isNaN(etaM)) return;
+    let diffMinutes = 0;
 
-    const now = new Date();
-    const plannedTime = new Date();
-    plannedTime.setHours(etaH, etaM, 0, 0);
+    // 2. Вычисляем разницу
+    if (forcedDiffMinutes !== undefined) {
+       // Если мы вызвали функцию из статуса "В пути", используем вычисленную разницу
+       diffMinutes = forcedDiffMinutes;
+    } else {
+       // ТВОЙ КОД: Вычисляем разницу между ПЛАНОМ (ETA) и ФАКТОМ (текущее время) для статуса Доставлен
+       const [etaH, etaM] = targetOrder.eta.split(':').map(Number);
+       if (isNaN(etaH) || isNaN(etaM)) return;
 
-    // Разница в миллисекундах -> переводим в минуты
-    const diffMs = now.getTime() - plannedTime.getTime();
-    const diffMinutes = Math.round(diffMs / 60000);
+       const now = new Date();
+       const plannedTime = new Date();
+       plannedTime.setHours(etaH, etaM, 0, 0);
+
+       // Разница в миллисекундах -> переводим в минуты
+       const diffMs = now.getTime() - plannedTime.getTime();
+       diffMinutes = Math.round(diffMs / 60000);
+    }
 
     if (diffMinutes === 0) {
-      console.log(`[ETA] Курьер доставил вовремя, сдвиг не требуется.`);
+      console.log(`[ETA] Сдвиг не требуется.`);
       return; 
     }
 
@@ -423,7 +404,7 @@ async function triggerRouteRecalculation(routeId: string, deliveredOrderId: stri
     const futureOrders = await prisma.order.findMany({
       where: {
         routeId,
-        routeOrder: { gt: deliveredOrder.routeOrder }, // строго больше, чем номер доставленного
+        routeOrder: { gt: targetOrder.routeOrder }, // строго больше, чем номер текущего
         status: { in: ["NEW", "ASSIGNED", "IN_DELIVERY"] }
       }
     });
@@ -440,7 +421,7 @@ async function triggerRouteRecalculation(routeId: string, deliveredOrderId: stri
       const oldEtaTime = new Date();
       oldEtaTime.setHours(h, m, 0, 0);
 
-      // Прибавляем (или отнимаем, если приехал раньше) разницу
+      // Прибавляем (или отнимаем) разницу
       const newEtaTime = new Date(oldEtaTime.getTime() + diffMinutes * 60000);
       
       const newH = newEtaTime.getHours().toString().padStart(2, "0");

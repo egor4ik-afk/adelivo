@@ -1043,7 +1043,8 @@ export function DashboardClient({ user }: { user: User }) {
                         
                         <div style={{ fontSize: 11, color: "#a8a49c", marginTop: 2 }}>
                           Слот: <span style={{ color, fontWeight: 700 }}>{o.slotRaw}</span> · {o.externalId ?? o.crmId}
-                          {o.eta && <span style={{ marginLeft: 8, color: "#4a7aff", fontWeight: 700 }}>⏱ В базе: {o.eta}</span>}
+                          {/* 🔥 Заменили "На базе" на "План" или "ETA", чтобы не путаться */}
+                          {o.eta && <span style={{ marginLeft: 8, color: "#4a7aff", fontWeight: 700 }}>⏱ План: {o.eta}</span>}
                         </div>
                         
                         {/* 🔥 ОТПРАВКА СТАТУСА С ПЕРЕСЧИТАННЫМ ETA */}
