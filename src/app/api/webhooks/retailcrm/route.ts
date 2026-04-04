@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { upsertOrder, geocodeNewOrders, type CrmOrder } from "@/lib/crm";
 import axios from "axios";
+import { applyUniversalEtaShift } from "@/lib/eta";
 
 const CRM_URL = process.env.RETAILCRM_API_URL;
 const CRM_KEY = process.env.RETAILCRM_API_KEY;
@@ -104,6 +105,25 @@ export async function POST(req: Request) {
     
     // 3. Сохраняем в БД
     await upsertOrder(orderPayload);
+    
+    // 🔥 ДОБАВЛЯЕМ ВЫЗОВ УНИВЕРСАЛЬНОГО ТРИГГЕРА ETA
+    try {
+      // Ищем внутренний ID заказа в нашей базе данных по его crmId
+      // (Нужно импортировать prisma вверху файла, если еще не добавил: import { prisma } from "@/lib/prisma";)
+      const { prisma } = await import("@/lib/prisma"); 
+      const localOrder = await prisma.order.findUnique({
+        where: { crmId: String(orderPayload.id) },
+        select: { id: true, status: true }
+      });
+
+      // Если заказ есть в базе и его статус В ПУТИ или ДОСТАВЛЕН — пересчитываем маршрут
+      if (localOrder && (localOrder.status === "IN_DELIVERY" || localOrder.status === "DELIVERED")) {
+         console.log(`[Webhook] Запускаем пересчет ETA для заказа ${orderPayload.id} (status: ${localOrder.status})`);
+         await applyUniversalEtaShift(localOrder.id, localOrder.status);
+      }
+    } catch (err) {
+      console.error("[Webhook] Ошибка при вызове триггера ETA:", err);
+    }
     
     // 4. Запускаем фоновое геокодирование
     geocodeNewOrders().catch(console.error);
