@@ -56,42 +56,20 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
           updateData.pickedUpAt = new Date();
         }
 
+        // Если пришло точное расчетное время (из Дашборда или Карты курьера)
         if (body.eta && body.eta !== "—") {
-           // 1. Фронт прислал точный пересчет 
            updateData.eta = body.eta;
            const oldMins = parseTimeStr(order.eta);
            const newMins = parseTimeStr(body.eta);
+           
+           // Считаем разницу для сдвига остальных точек
            if (oldMins !== null && newMins !== null && order.status !== "IN_DELIVERY") {
               diffMinutesToShift = newMins - oldMins;
               shouldShift = true;
            }
-        } else if (order.eta && order.status !== "IN_DELIVERY") {
-           // ⚡ 2. Фронта нет (нажали с телефона). Считаем сами!
-           const currentMins = getCurrentMskMinutes();
-           
-           let planMins = 0;
-           // 🔥 Ищем ПОСЛЕДНЕЕ вхождение "Выехать до", чтобы старые комменты не мешали
-           const matches = [...(order.opComment || "").matchAll(/Выехать до (\d{2}):(\d{2})/g)];
-           
-           if (order.route?.departureAdvice) {
-               const m = order.route.departureAdvice.match(/Выехать до (\d{2}):(\d{2})/);
-               if (m) planMins = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
-           } else if (matches.length > 0) {
-               const m = matches[matches.length - 1]; 
-               planMins = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
-           } else {
-               const oldMins = parseTimeStr(order.eta);
-               planMins = oldMins !== null ? oldMins - 30 : currentMins;
-           }
-
-           diffMinutesToShift = currentMins - planMins;
-           const oldEtaMins = parseTimeStr(order.eta);
-           
-           if (oldEtaMins !== null) {
-              updateData.eta = formatTimeStr(oldEtaMins + diffMinutesToShift);
-              shouldShift = true;
-           }
-        }
+        } 
+        // ❌ Мы полностью УДАЛИЛИ попытки сервера самому угадывать ETA при выезде. 
+        // Если body.eta нет, мы просто фиксируем выезд (pickedUpAt) и оставляем старый план (eta) в покое.
       }
       
       // ✅ ЛОГИКА "ДОСТАВЛЕН"
@@ -100,6 +78,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
          const planMins = parseTimeStr(order.eta);
          
          if (planMins !== null) {
+            // ФАКТ закрытия МИНУС ПЛАН = опоздание
             diffMinutesToShift = currentMins - planMins;
             shouldShift = true;
          }
@@ -111,11 +90,11 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         updateData.eta = null; // Очищаем план ТОЛЬКО если совсем отменили
       } else if (body.status === "ASSIGNED") {
         updateData.pickedUpAt = null;
-        // 🔥 БАГФИКС: Не трогаем ETA при возврате в "Назначен", сохраняем план!
+        // При возврате в "Назначен" мы НЕ трогаем ETA, сохраняем первоначальный план!
       }
     }
     
-    // Ручные правки
+    // Ручные правки (если статус не IN_DELIVERY)
     if (body.eta !== undefined && body.status !== "IN_DELIVERY") updateData.eta = body.eta;
     if (body.opComment !== undefined) updateData.opComment = body.opComment;
     if (body.address !== undefined) updateData.address = body.address;
@@ -212,21 +191,20 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     }
 
     // ⚡️ ВЫЗОВ СДВИГА МАРШРУТА
+    // Если есть разница во времени, запускаем сдвиг всех ПОСЛЕДУЮЩИХ точек в фоне
     if (shouldShift && diffMinutesToShift !== 0 && updatedOrder.routeId) {
       shiftFutureRouteEtas(updatedOrder.routeId, updatedOrder.routeOrder, diffMinutesToShift).catch(console.error);
     }
 
-    // Уведомления и CRM
+    // Отправка ФОТО в Telegram (уведомления об опоздании удалены, так как теперь есть Cron)
     const tgToken = process.env.TELEGRAM_BOT_TOKEN;
     const tgChat  = process.env.TELEGRAM_ADMIN_CHAT_ID;
     if (tgToken && tgChat) {
       if (body.photoUrl && body.photoUrl !== order.photoUrl) {
         fetch(`https://api.telegram.org/bot${tgToken}/sendPhoto`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+          method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
-            chat_id: tgChat, 
-            photo: body.photoUrl,
+            chat_id: tgChat, photo: body.photoUrl,
             caption: `📸 *Фото к заказу ${order.externalId || order.crmId}*\n📍 *Адрес:* ${order.address}`,
             parse_mode: "Markdown" 
           }),
@@ -246,7 +224,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
   }
 }
 
-// 🔥 Строгая функция сдвига всех последующих точек
+// 🔥 Строгая функция сдвига всех ПОСЛЕДУЮЩИХ точек
 async function shiftFutureRouteEtas(routeId: string, currentRouteOrder: number | null, diffMinutes: number) {
   if (!currentRouteOrder || diffMinutes === 0) return;
   
@@ -259,9 +237,8 @@ async function shiftFutureRouteEtas(routeId: string, currentRouteOrder: number |
       const oldMins = parseTimeStr(o.eta);
       if (oldMins === null) continue;
       
-      // Сдвигаем на вычисленную разницу
+      // Сдвигаем строго на вычисленную разницу
       const newEtaStr = formatTimeStr(oldMins + diffMinutes);
-
       await prisma.order.update({ where: { id: o.id }, data: { eta: newEtaStr } });
     }
     console.log(`[ETA] Сдвинуто ${futureOrders.length} точек на ${diffMinutes} минут.`);
