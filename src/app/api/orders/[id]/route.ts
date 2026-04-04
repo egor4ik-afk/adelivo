@@ -3,12 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { updateCrmOrder, updateCrmOrderDeliveryPrice } from "@/lib/crm";
-import { notify } from "@/lib/notifications";
 import { OrderStatus } from "@prisma/client";
 
 const STORE_COORDS = "55.749511,37.596205";
 
-// 🔥 Хелперы для строгой математики времени (МСК)
+// 🔥 Хелперы для строгой математики времени
 function getCurrentMskMinutes() {
   const mskDate = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Moscow" }));
   return mskDate.getHours() * 60 + mskDate.getMinutes();
@@ -46,17 +45,18 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     let diffMinutesToShift = 0;
     let shouldShift = false;
 
-    // 1. Обработка статусов и расчет сдвигов ETA
     if (body.status !== undefined) {
       updateData.status = body.status;
       updateData.changedAt = new Date();
       
+      // 🚀 ЛОГИКА "В ПУТИ"
       if (body.status === "IN_DELIVERY") {
         if (order.status !== "IN_DELIVERY" || !order.pickedUpAt) {
           updateData.pickedUpAt = new Date();
         }
 
         if (body.eta && body.eta !== "—") {
+           // Вариант А: Фронтенд сам прислал точный пересчет
            updateData.eta = body.eta;
            const oldMins = parseTimeStr(order.eta);
            const newMins = parseTimeStr(body.eta);
@@ -65,33 +65,54 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
               shouldShift = true;
            }
         } else if (order.eta && order.status !== "IN_DELIVERY") {
-           // ⚡ Сдвиг по "Выехать до" из маршрута или коммента
+           // Вариант Б: Кнопку нажали из списка (без ETA). Считаем сами!
            const currentMins = getCurrentMskMinutes();
-           const adviceSource = order.route?.departureAdvice || order.opComment || "";
-           const matches = [...adviceSource.matchAll(/Выехать до (\d{1,2}):(\d{2})/g)];
-           
-           if (matches.length > 0) {
-               const lastMatch = matches[matches.length - 1];
-               const planMins = parseInt(lastMatch[1], 10) * 60 + parseInt(lastMatch[2], 10);
-               diffMinutesToShift = currentMins - planMins;
-               const oldEtaMins = parseTimeStr(order.eta);
-               if (oldEtaMins !== null) {
-                  updateData.eta = formatTimeStr(oldEtaMins + diffMinutesToShift);
-                  shouldShift = true;
+           const oldEtaMins = parseTimeStr(order.eta);
+
+           // Считаем время в пути ТОЛЬКО для первой точки!
+           if (order.routeOrder === 1) {
+               const adviceSource = order.route?.departureAdvice || order.opComment || "";
+               // Ищем одновременно и время отъезда, и время прибытия
+               const matches = [...adviceSource.matchAll(/Выехать до\s*(\d{1,2}):(\d{2}).*?к\s*(\d{1,2}):(\d{2})/g)];
+               
+               let driveTimeMins = 30; // 30 минут по умолчанию
+               if (matches.length > 0) {
+                   const lastMatch = matches[matches.length - 1];
+                   const depMins = parseInt(lastMatch[1], 10) * 60 + parseInt(lastMatch[2], 10);
+                   const arrMins = parseInt(lastMatch[3], 10) * 60 + parseInt(lastMatch[4], 10);
+                   // Чистое время поездки от базы до первой точки
+                   driveTimeMins = ((arrMins - depMins) + 1440) % 1440;
                }
+
+               // Новое ETA = Текущее время + Чистое время в пути
+               const newEtaMins = currentMins + driveTimeMins;
+               updateData.eta = formatTimeStr(newEtaMins);
+
+               // Разницу передаем остальным точкам
+               if (oldEtaMins !== null) {
+                   diffMinutesToShift = newEtaMins - oldEtaMins;
+                   shouldShift = true;
+               }
+           } else {
+               // Для 2, 3, 4 точек нажатие "В пути" НЕ ДОЛЖНО двигать ETA, 
+               // так как оно уже было идеально сдвинуто, когда доставили предыдущую точку!
+               shouldShift = false;
            }
         }
       }
       
+      // ✅ ЛОГИКА "ДОСТАВЛЕН"
       if (body.status === "DELIVERED" && order.status !== "DELIVERED") {
          const currentMins = getCurrentMskMinutes();
          const planMins = parseTimeStr(order.eta);
          if (planMins !== null) {
+            // ФАКТ закрытия МИНУС ПЛАН = опоздание/опережение
             diffMinutesToShift = currentMins - planMins;
             shouldShift = true;
          }
       }
 
+      // ↩️ СБРОС
       if (body.status === "NEW") {
         updateData.pickedUpAt = null;
         updateData.eta = null;
@@ -100,7 +121,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       }
     }
     
-    // 2. Копирование остальных полей
+    // Ручные правки
     if (body.eta !== undefined && body.status !== "IN_DELIVERY") updateData.eta = body.eta;
     if (body.opComment !== undefined) updateData.opComment = body.opComment;
     if (body.address !== undefined) updateData.address = body.address;
@@ -113,7 +134,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     if (body.price !== undefined) updateData.price = body.price;
     if (body.costPrice !== undefined) updateData.costPrice = body.costPrice;
 
-    // 3. Логика курьера, цены и АВТОМАРШРУТОВ
+    // Логика курьера и пересчет цены
     let finalPrice: number | undefined = body.price;
     if (body.courier !== undefined) {
       if (body.courier) {
@@ -145,26 +166,19 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       }
     }
 
-    // 🔥 ВОЗВРАЩЕНО: Генерация ссылки на навигатор
+    // Ссылки на Яндекс
+    const rttMode = updateData.courierId 
+      ? ((await prisma.courier.findUnique({ where: { id: updateData.courierId } }))?.isAuto ? "auto" : "mt") 
+      : "auto";
     const freshCoords = await prisma.order.findUnique({ where: { id }, select: { lat: true, lng: true }});
-    const courierData = updateData.courierId 
-  ? await prisma.courier.findUnique({ where: { id: updateData.courierId } })
-  : order.courierId 
-    ? await prisma.courier.findUnique({ where: { id: order.courierId } })
-    : null;
+    const finalCourier = updateData.courier !== undefined ? updateData.courier : order.courier;
+    if (finalCourier && (body.courier !== undefined || body.address !== undefined)) {
+      if (freshCoords?.lat && freshCoords?.lng) {
+        updateData.courierLink = `https://yandex.ru/maps/?mode=routes&rtext=${STORE_COORDS}~${freshCoords.lat},${freshCoords.lng}&rtt=${rttMode}`;
+      }
+    }
 
-// Определяем режим маршрута: если isAuto = true, то 'auto', иначе 'mt' (общественный транспорт/пеший)
-const rttMode = courierData?.isAuto ? "auto" : "mt";
-
-const finalCourier = updateData.courier !== undefined ? updateData.courier : order.courier;
-if (finalCourier && (body.courier !== undefined || body.address !== undefined)) {
-  if (freshCoords?.lat && freshCoords?.lng) {
-    // 🔥 ТЕПЕРЬ ИСПОЛЬЗУЕТСЯ rttMode вместо жесткого auto
-    updateData.courierLink = `https://yandex.ru/maps/?mode=routes&rtext=${STORE_COORDS}~${freshCoords.lat},${freshCoords.lng}&rtt=${rttMode}`;
-  }
-}
-
-    // 🔥 ВОЗВРАЩЕНО: Автосоздание и удаление маршрутов
+    // Авто-маршруты при смене курьера
     const newCourierId = updateData.courierId as number | undefined;
     if (newCourierId && newCourierId !== order.courierId) {
       if (order.routeId) {
@@ -186,7 +200,6 @@ if (finalCourier && (body.courier !== undefined || body.address !== undefined)) 
       if (order.status === "NEW") updateData.status = "ASSIGNED";
     }
 
-    // Снятие курьера
     if ((body.courier === "" || body.courier === null) && order.courierId !== null) {
       if (order.status === "ASSIGNED" && body.status === undefined) updateData.status = "NEW";
       updateData.pickedUpAt = null;
@@ -197,18 +210,19 @@ if (finalCourier && (body.courier !== undefined || body.address !== undefined)) 
       }
     }
 
-    // Сохранение и сдвиг
     if (body.photoUrl !== undefined) updateData.photoUrl = body.photoUrl;
+
     let updatedOrder = order;
     if (Object.keys(updateData).length > 0) {
       updatedOrder = await prisma.order.update({ where: { id }, data: updateData, include: { route: true } });
     }
 
+    // ⚡️ ВЫПОЛНЕНИЕ СДВИГА ОСТАЛЬНЫХ ТОЧЕК
     if (shouldShift && diffMinutesToShift !== 0 && updatedOrder.routeId) {
       await shiftFutureRouteEtas(updatedOrder.routeId, updatedOrder.routeOrder, diffMinutesToShift);
     }
 
-    // Уведомление в ТГ о фото
+    // CRM и Telegram (Фото)
     const tgToken = process.env.TELEGRAM_BOT_TOKEN;
     const tgChat  = process.env.TELEGRAM_ADMIN_CHAT_ID;
     if (tgToken && tgChat && body.photoUrl && body.photoUrl !== order.photoUrl) {
@@ -218,7 +232,6 @@ if (finalCourier && (body.courier !== undefined || body.address !== undefined)) 
         }).catch(() => {});
     }
 
-    // Синхронизация CRM
     if (finalPrice !== undefined && order.crmId) await updateCrmOrderDeliveryPrice(order.crmId, finalPrice);
     let crmStatus = body.status ?? updateData.status;
     if (crmStatus === "ASSIGNED") crmStatus = undefined;
@@ -230,6 +243,7 @@ if (finalCourier && (body.courier !== undefined || body.address !== undefined)) 
   }
 }
 
+// 🔥 Функция сдвига ПОСЛЕДУЮЩИХ точек
 async function shiftFutureRouteEtas(routeId: string, currentRouteOrder: number | null, diffMinutes: number) {
   if (!currentRouteOrder || diffMinutes === 0) return;
   try {

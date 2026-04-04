@@ -1,37 +1,32 @@
-import * as dotenv from 'dotenv';
-import fs from 'fs';
-
-if (fs.existsSync('.env.local')) dotenv.config({ path: '.env.local' });
-else dotenv.config();
-
-const tgToken = process.env.TELEGRAM_BOT_TOKEN;
-const tgChat  = process.env.TELEGRAM_ADMIN_CHAT_ID;
-
-if (!tgToken) { console.error('❌ TELEGRAM_BOT_TOKEN не задан'); process.exit(1); }
-if (!tgChat)  { console.error('❌ TELEGRAM_ADMIN_CHAT_ID не задан'); process.exit(1); }
-
-console.log(`✅ TELEGRAM_BOT_TOKEN: ${tgToken.slice(0, 10)}...`);
-console.log(`✅ TELEGRAM_ADMIN_CHAT_ID: ${tgChat}`);
-console.log(`📤 Отправляем тестовое сообщение...`);
-
-const msg = [
-  `⚠️ *Расхождение цены доставки*`,
-  ``,
-  `📦 *Заказ:* #TEST-001`,
-  `💰 *Цена в CRM:* 500 ₽`,
-  `✅ *Фактическая цена доставки:* 900 ₽`,
-].join("\n");
-
-const res = await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ chat_id: tgChat, text: msg, parse_mode: "Markdown" }),
-});
-
-const data = await res.json();
-
-if (data.ok) {
-  console.log(`\n✅ Сообщение отправлено! message_id: ${data.result.message_id}`);
-} else {
-  console.error(`\n❌ Ошибка:`, JSON.stringify(data, null, 2));
+function testParsing(text) {
+  console.log(`\n🔍 Текст для проверки:\n"${text}"`);
+  
+  // Точная регулярка с нашего бэкенда (ищет все вхождения)
+  const matches = [...text.matchAll(/Выехать до\s*(\d{1,2}):(\d{2})/g)];
+  
+  if (matches.length > 0) {
+      console.log(`✅ Найдено вхождений: ${matches.length}`);
+      
+      // Бэкенд берет САМОЕ ПОСЛЕДНЕЕ вхождение (matches[matches.length - 1])
+      const lastMatch = matches[matches.length - 1];
+      const planH = parseInt(lastMatch[1], 10);
+      const planM = parseInt(lastMatch[2], 10);
+      
+      console.log(`🎯 Итоговое время, которое берет скрипт: ${planH}:${planM.toString().padStart(2, '0')}`);
+      console.log(`🧮 В минутах от начала суток: ${planH * 60 + planM}`);
+  } else {
+      console.log("❌ Скрипт НЕ НАШЕЛ фразу 'Выехать до HH:mm' в этом тексте.");
+  }
 }
+
+// Тест 1: Идеальная строка
+testParsing("💡 Выехать до 08:49 — первый заказ к 10:00 (зак. 20172C)");
+
+// Тест 2: Твой пример с дубликатами (сработает последнее)
+testParsing("💡 Выехать до 08:49 — первый заказ к 10:00 (зак. 20172C) 💡 Выехать до 08:57 — первый заказ к 10:00 (зак. 20172C)");
+
+// Тест 3: Без нулей, с лишними пробелами
+testParsing("Просто текст. Выехать до 9:05. И еще текст.");
+
+// Тест 4: Если текста вообще нет
+testParsing("Курьер Камран, позвонить за час");
