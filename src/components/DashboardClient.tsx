@@ -633,19 +633,21 @@ const calculatedEtas = useMemo(() => {
     if (hMatch) ms += parseInt(hMatch[1], 10) * 3600000;
     const mMatch = text.match(/(\d+)\s*мин/);
     if (mMatch) ms += parseInt(mMatch[1], 10) * 60000;
-    return routeType === "auto" ? ms + (12 * 60 * 1000) : ms + (3 * 60 * 1000);
+    return routeType === "auto" ? ms + (12 * 60 * 1000) : ms + (3 * 60 * 1000); // Закладываем время на парковку и поиск двери
   };
 
   let currentRunningMs = Date.now();
   let foundFirstActive = false;
 
+  // Проверяем, стартовал ли уже маршрут
   const hasStarted = selectedRouteOrders.some((o: any) => o.status === "IN_DELIVERY" || o.status === "DELIVERED");
   const pickedUpTimes = selectedRouteOrders.map((o: any) => o.pickedUpAt).filter(Boolean);
   const actualDepartureMs = pickedUpTimes.length > 0 ? Math.min(...pickedUpTimes.map((d: string) => new Date(d).getTime())) : null;
 
   if (hasStarted && actualDepartureMs) {
-    currentRunningMs = actualDepartureMs;
+    currentRunningMs = actualDepartureMs; // Начинаем отсчет от времени выезда с базы
   } else if (!hasStarted && selectedRouteOrders.length > 0 && routeLegs.length > 0) {
+    // Маршрут еще не начат (Черновик)
     const firstOrder = selectedRouteOrders[0];
     if (firstOrder.slotFrom) {
       const [hh, mm] = firstOrder.slotFrom.split(":").map(Number);
@@ -654,7 +656,6 @@ const calculatedEtas = useMemo(() => {
         const legToFirstPointMs = parseYandexTimeMs(routeLegs[0]) + (5 * 60 * 1000);
         const idealStartMs = slotStartMs - legToFirstPointMs;
         
-        // 🔥 ИСПРАВЛЕНИЕ: Если курьер опаздывает, берем РЕАЛЬНОЕ ТЕКУЩЕЕ ВРЕМЯ (Date.now)!
         currentRunningMs = Math.max(Date.now(), idealStartMs);
       }
     }
@@ -662,8 +663,15 @@ const calculatedEtas = useMemo(() => {
 
   selectedRouteOrders.forEach((o: any, index: number) => {
     const legMs = parseYandexTimeMs(routeLegs[index]);
+
     if (o.status === "DELIVERED") {
       const t = o.changedAt || o.updatedAt;
+      if (t) {
+          // 🔥 ИСПРАВЛЕНИЕ: Выравниваем "виртуальные часы" фронтенда по факту доставки этой точки!
+          currentRunningMs = new Date(t).getTime();
+      } else {
+          currentRunningMs += legMs;
+      }
       etas[o.id] = { 
         type: 'DELIVERED', 
         timeStr: t ? new Date(t).toLocaleTimeString('ru', {hour: '2-digit', minute:'2-digit'}) : "—", 
@@ -672,15 +680,20 @@ const calculatedEtas = useMemo(() => {
     } else if (o.status === "CANCELLED" || o.status === "RETURNED") {
       etas[o.id] = { type: 'SKIPPED', timeStr: "—", color: "#a8a49c" };
     } else {
+      // Точка активна (В пути или Назначена)
+      // Прибавляем время дороги от базы ИЛИ от предыдущей доставленной точки!
       currentRunningMs += (!foundFirstActive ? legMs : (4 * 60 * 1000) + legMs);
       foundFirstActive = true;
+
       const timeStr = new Date(currentRunningMs).toLocaleTimeString('ru', {hour: '2-digit', minute:'2-digit'});
+      
       etas[o.id] = { type: o.status, timeStr, color: o.status === "IN_DELIVERY" ? "#f59e0b" : "#4a7aff" };
     }
   });
 
   return etas;
 }, [selectedRouteOrders, routeLegs, routeType]);
+
   const generateYandexUrl = (ordersToRoute: DashboardOrder[], type: "auto" | "mt", rtb: boolean) => {
     const validOrders = ordersToRoute.filter(o => o.lat && o.lng && !o.isInvalid);
     if (validOrders.length === 0) return null;
