@@ -29,7 +29,8 @@ export interface DashboardOrder {
   isInvalid?: boolean; invalidReason?: string | null;
   routeId?: string | null; routeOrder?: number | null; route?: any;
   createdAt?: string; updatedAt?: string; changedAt?: string;
-  pickedUpAt?: string | null; // 🔥 ДОБАВИТЬ СЮДА
+  pickedUpAt?: string | null; 
+  eta?: string | null;
 }
 
 let ymapsReady: Promise<void> | null = null;
@@ -106,41 +107,42 @@ export function DashboardClient({ user }: { user: User }) {
   const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
 
   const [routeLegs, setRouteLegs] = useState<string[]>([]);
-  const [routeLegSeconds, setRouteLegSeconds] = useState<number[]>([]);
+  const [routeTotals, setRouteTotals] = useState<{ time: string, dist: string } | null>(null);
+  const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
+  const [departureAdvice, setDepartureAdvice] = useState<string | null>(null);
 
-
-  const handleQuickStatusChange = async (id: string, newStatus: string) => {
-    // Оптимистичное обновление UI: сразу меняем статус заказа в локальном стейте
+  const handleQuickStatusChange = async (id: string, newStatus: string, calculatedEta?: string) => {
     setOrders((prev: any[]) =>
       prev.map(o => o.id === id ? {
         ...o,
         status: newStatus,
         changedAt: new Date().toISOString(),
-        // 🔥 Если статус "В пути", оптимистично ставим время выезда
-        pickedUpAt: newStatus === "IN_DELIVERY" && !o.pickedUpAt ? new Date().toISOString() : o.pickedUpAt
+        pickedUpAt: newStatus === "IN_DELIVERY" && !o.pickedUpAt ? new Date().toISOString() : o.pickedUpAt,
+        eta: (newStatus === "IN_DELIVERY" && calculatedEta && calculatedEta !== "—") 
+              ? calculatedEta 
+              : (newStatus === "NEW" || newStatus === "ASSIGNED" ? null : o.eta)
       } : o)
     );
     
     try {
-      // Отправляем запрос на сервер
+      const body: any = { status: newStatus };
+      if (newStatus === "IN_DELIVERY" && calculatedEta && calculatedEta !== "—") {
+         body.eta = calculatedEta;
+      }
+
       const res = await fetch(`/api/orders/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus })
+        body: JSON.stringify(body)
       });
       
       if (!res.ok) throw new Error("Ошибка обновления статуса");
-      
-      // Тихо обновляем данные в фоне
       fetchData(); 
     } catch (e) {
       alert("Ошибка изменения статуса");
-      fetchData(); // Откат в случае ошибки
+      fetchData(); 
     }
   };
-  const [routeTotals, setRouteTotals] = useState<{ time: string, dist: string } | null>(null);
-  const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
-  const [departureAdvice, setDepartureAdvice] = useState<string | null>(null);
 
   useEffect(() => {
     const fd = localStorage.getItem("fo_filterDate");
@@ -184,7 +186,6 @@ export function DashboardClient({ user }: { user: User }) {
 
   const fetchData = useCallback(async () => {
     try {
-      // 🔥 Добавлен Date.now() чтобы пробить кэш браузера!
       const [ordersRes, couriersRes] = await Promise.all([
         fetch(`/api/orders?t=${Date.now()}`), 
         fetch(`/api/couriers?t=${Date.now()}`)
@@ -230,20 +231,14 @@ export function DashboardClient({ user }: { user: User }) {
       return a.fullName.localeCompare(b.fullName);
     });
     return base.map(c => {
-      // 🔥 Находим саму смену и говорим TS игнорировать строгие типы (as any)
       const shift = c.shifts.find(s => s.date === filterDate) as any;
       const cnt = orderCounts[c.fullName] || 0;
       let label = c.fullName;
       
       if (shift || cnt > 0) {
         const flags = [];
-        if (shift) {
-          // Выводим время и приоритет (со значениями по умолчанию, если их вдруг нет)
-          flags.push(`На смене ${shift.startTime || "10:00"}-${shift.endTime || "22:00"} (⭐${shift.priority || 3})`);
-        }
-        if (cnt > 0) {
-          flags.push(`${cnt} зак.`);
-        }
+        if (shift) flags.push(`На смене ${shift.startTime || "10:00"}-${shift.endTime || "22:00"} (⭐${shift.priority || 3})`);
+        if (cnt > 0) flags.push(`${cnt} зак.`);
         label += ` (${flags.join(", ")})`;
       }
       return { id: c.id, value: String(c.id), label };
@@ -257,26 +252,23 @@ export function DashboardClient({ user }: { user: User }) {
     if (oDate !== filterDate) return false;
     if (filterStatus !== "ALL" && o.status !== filterStatus) return false;
     if (filterCourier !== "ALL") {
-      if (filterCourier === "UNASSIGNED") {
-        if (o.courierId) return false;
-      } else {
-        if (String(o.courierId) !== filterCourier) return false;
-      }
+      if (filterCourier === "UNASSIGNED") return !o.courierId;
+      else return String(o.courierId) === filterCourier;
     }
     return true;
   });
 
   const selected = orders.find(o => o.id === selectedId) ?? null;
-  
-  // 🔥 ИСПРАВЛЕНИЕ: Жестко игнорируем "Самовывоз" для невалидных адресов
   const invalid = dateAndStatusOrders.filter(o => o.isInvalid && !/самовывоз/i.test(o.address || ""));
   
+  // 🔥 ФИЛЬТР "ДРУГИЕ": если слот не совпадает ни с одним из стандартных, он попадает в "Другие"
   const filtered = selectedSlots.length === 0 ? dateAndStatusOrders : dateAndStatusOrders.filter(o => {
-    if (!o.slotFrom) return false;
+    if (!o.slotFrom) return selectedSlots.includes("Другие");
     const exact = SLOTS.find(s => s.from === o.slotFrom && s.to === o.slotTo);
     if (exact) return selectedSlots.includes(exact.label);
     const match = SLOTS.find(s => o.slotFrom! > s.from && o.slotFrom! <= s.to);
-    return match ? selectedSlots.includes(match.label) : false;
+    if (match) return selectedSlots.includes(match.label);
+    return selectedSlots.includes("Другие");
   });
 
   const sidePanelOrders = [...filtered].sort((a, b) => {
@@ -332,33 +324,19 @@ export function DashboardClient({ user }: { user: User }) {
       const storePm = new window.ymaps.Placemark([STORE_LAT, STORE_LNG], { hintContent: "БАЗА: Большой Афанасьевский переулок, 39", iconCaption: "База" }, { preset: 'islands#blackDotIcon' });
       map.geoObjects.add(storePm as any);
 
-     // 🔥 ЗАГРУЗКА ЗОН ИЗ ВАШЕГО КОНСТРУКТОРА (ПОДЛОЖКА)
-     // 🔥 ЗАГРУЗКА ЗОН ИЗ ЛОКАЛЬНОГО ФАЙЛА
-     const constructorUrl = "/zones.kml"; // Берем файл из папки public
-      
+     const constructorUrl = "/zones.kml";
      (window.ymaps as any).geoXml.load(constructorUrl)
        .then((res: any) => {
          if (!mounted) return;
-         
-         // 🔥 Рекурсивная функция для применения стилей (прозрачности)
          const applyStyles = (collection: any) => {
            if (collection && typeof collection.each === 'function') {
              collection.each((obj: any) => {
                if (obj.geometry) { 
-                 // Это сам полигон — делаем его прозрачным
-                 obj.options.set({
-                   fillOpacity: 0.15, 
-                   strokeOpacity: 0.7,
-                   interactivityModel: 'default#transparent' 
-                 });
-               } else { 
-                 // Это папка — идем глубже
-                 applyStyles(obj);
-               }
+                 obj.options.set({ fillOpacity: 0.15, strokeOpacity: 0.7, interactivityModel: 'default#transparent' });
+               } else { applyStyles(obj); }
              });
            }
          };
-
          applyStyles(res.geoObjects);
          map.geoObjects.add(res.geoObjects);
        })
@@ -409,13 +387,9 @@ export function DashboardClient({ user }: { user: User }) {
           const dB = (b.lat && b.lng) ? dist(currentLat, currentLng, b.lat, b.lng) : Infinity;
           return dA - dB;
         });
-
         const next = remaining.shift()!;
         sorted.push(next.id);
-        if (next.lat && next.lng) {
-          currentLat = next.lat;
-          currentLng = next.lng;
-        }
+        if (next.lat && next.lng) { currentLat = next.lat; currentLng = next.lng; }
       }
       return sorted;
     });
@@ -455,7 +429,6 @@ export function DashboardClient({ user }: { user: User }) {
         if (isBulkMode && routeTabMode === "new") {
           pinColor = isBulkSelected ? '#1a9e5c' : '#d1d5db';
         }
-
         const finalSlotLabel = (isBulkMode && routeTabMode === "new" && isBulkSelected) ? `${bulkIndex + 1}. ${slotLabelText}` : slotLabelText;
 
         pm = new ymaps.Placemark([lat, lng], {
@@ -480,9 +453,8 @@ export function DashboardClient({ user }: { user: User }) {
       }
 
       pm.events.add("click", () => {
-        if (isBulkMode && routeTabMode === "new") {
-          toggleBulkSelect(order.id);
-        } else {
+        if (isBulkMode && routeTabMode === "new") toggleBulkSelect(order.id);
+        else {
           clickedFromMapRef.current = true;
           setSelectedId(order.id);
           if (!isMobile) { setIsListVisible(true); setIsDetailVisible(true); }
@@ -534,10 +506,11 @@ export function DashboardClient({ user }: { user: User }) {
             name: o.route.name, 
             link: o.route.link, 
             date: o.route.date,
-            isDraft: o.route.isDraft, // 🔥 ТЯНЕМ ИЗ БД
+            isDraft: o.route.isDraft,
             orders: [], 
             courierId: o.courierId,
-            updatedAt: o.route.updatedAt || o.changedAt || o.createdAt
+            updatedAt: o.route.updatedAt || o.changedAt || o.createdAt,
+            baseArrivalTime: o.route.baseArrivalTime
           });
         }
         routesMap.get(o.route.id).orders.push(o);
@@ -597,8 +570,6 @@ export function DashboardClient({ user }: { user: User }) {
         if (!activeRoute) { setIsCalculatingRoute(false); return; }
 
         const cleanHtml = (str: string) => str ? str.replace(/&#160;/g, " ") : "";
-
-        // 🔥 1. БЕРЕМ ВРЕМЯ С УЧЕТОМ ПРОБОК (durationInTraffic)
         const routeDuration = activeRoute.properties.get("durationInTraffic") || activeRoute.properties.get("duration");
         
         setRouteTotals({
@@ -610,7 +581,6 @@ export function DashboardClient({ user }: { user: User }) {
         let earliestDeadline: { externalId: string; slotFrom: string; pickupDeadlineMs: number } | null = null;
 
         activeRoute.getPaths().each((path: any, idx: number) => {
-          // 🔥 2. ДЛЯ КАЖДОГО ОТРЕЗКА ТОЖЕ БЕРЕМ ПРОБКИ
           const legDuration = path.properties.get("durationInTraffic") || path.properties.get("duration");
           legsArr.push(cleanHtml(legDuration?.text || "—"));
 
@@ -638,8 +608,6 @@ export function DashboardClient({ user }: { user: User }) {
           const deadlineDate = new Date(ed.pickupDeadlineMs);
           const hh = String(deadlineDate.getHours()).padStart(2, "0");
           const mm = String(deadlineDate.getMinutes()).padStart(2, "0");
-
-          // Никаких предупреждений, просто пишем ко скольки нужно выехать
           setDepartureAdvice(`Выехать до ${hh}:${mm} — первый заказ к ${ed.slotFrom} (зак. ${ed.externalId})`);
         } else {
           setDepartureAdvice("Слоты не строгие — выезд в любое время");
@@ -652,6 +620,64 @@ export function DashboardClient({ user }: { user: User }) {
 
     return () => { clearTimeout(timer); if (multiRoute) multiRoute.destroy(); };
   }, [bulkSelectedIds, routeType, returnToBase, routeTab, isBulkMode, isMobile]);
+
+  // 🔥 ВЫНЕСЕННАЯ ЛОГИКА РАСЧЕТА ETA
+  const calculatedEtas = useMemo(() => {
+    const etas: Record<string, { type: string, timeStr: string, color: string }> = {};
+    if (selectedRouteOrders.length === 0 || routeLegs.length === 0) return etas;
+
+    const parseYandexTimeMs = (text: string) => {
+      if (!text || text === "—") return 0;
+      let ms = 0;
+      const hMatch = text.match(/(\d+)\s*ч/);
+      if (hMatch) ms += parseInt(hMatch[1], 10) * 3600000;
+      const mMatch = text.match(/(\d+)\s*мин/);
+      if (mMatch) ms += parseInt(mMatch[1], 10) * 60000;
+      return routeType === "auto" ? ms + (12 * 60 * 1000) : ms + (3 * 60 * 1000);
+    };
+
+    let currentRunningMs = Date.now();
+    let foundFirstActive = false;
+
+    const hasStarted = selectedRouteOrders.some((o: any) => o.status === "IN_DELIVERY" || o.status === "DELIVERED");
+    const pickedUpTimes = selectedRouteOrders.map((o: any) => o.pickedUpAt).filter(Boolean);
+    const actualDepartureMs = pickedUpTimes.length > 0 ? Math.min(...pickedUpTimes.map((d: string) => new Date(d).getTime())) : null;
+
+    if (hasStarted && actualDepartureMs) {
+      currentRunningMs = actualDepartureMs;
+    } else if (!hasStarted && selectedRouteOrders.length > 0 && routeLegs.length > 0) {
+      const firstOrder = selectedRouteOrders[0];
+      if (firstOrder.slotFrom) {
+        const [hh, mm] = firstOrder.slotFrom.split(":").map(Number);
+        if (!isNaN(hh) && !isNaN(mm)) {
+          const slotStartMs = new Date().setHours(hh, mm, 0, 0);
+          const legToFirstPointMs = parseYandexTimeMs(routeLegs[0]) + (5 * 60 * 1000);
+          currentRunningMs = slotStartMs - legToFirstPointMs;
+        }
+      }
+    }
+
+    selectedRouteOrders.forEach((o: any, index: number) => {
+      const legMs = parseYandexTimeMs(routeLegs[index]);
+      if (o.status === "DELIVERED") {
+        const t = o.changedAt || o.updatedAt;
+        etas[o.id] = { 
+          type: 'DELIVERED', 
+          timeStr: t ? new Date(t).toLocaleTimeString('ru', {hour: '2-digit', minute:'2-digit'}) : "—", 
+          color: "#10b981" 
+        };
+      } else if (o.status === "CANCELLED" || o.status === "RETURNED") {
+        etas[o.id] = { type: 'SKIPPED', timeStr: "—", color: "#a8a49c" };
+      } else {
+        currentRunningMs += (!foundFirstActive ? legMs : (4 * 60 * 1000) + legMs);
+        foundFirstActive = true;
+        const timeStr = new Date(currentRunningMs).toLocaleTimeString('ru', {hour: '2-digit', minute:'2-digit'});
+        etas[o.id] = { type: o.status, timeStr, color: o.status === "IN_DELIVERY" ? "#f59e0b" : "#4a7aff" };
+      }
+    });
+
+    return etas;
+  }, [selectedRouteOrders, routeLegs, routeType]);
 
   const generateYandexUrl = (ordersToRoute: DashboardOrder[], type: "auto" | "mt", rtb: boolean) => {
     const validOrders = ordersToRoute.filter(o => o.lat && o.lng && !o.isInvalid);
@@ -679,7 +705,6 @@ export function DashboardClient({ user }: { user: User }) {
     }
   };
 
-  // 🔥 Новая функция для полного удаления маршрута
   async function handleDeleteRoute() {
     if (!editingRouteId) return;
     if (!window.confirm("Удалить маршрут полностью? Все точки снова станут свободными.")) return;
@@ -689,7 +714,7 @@ export function DashboardClient({ user }: { user: User }) {
       const res = await fetch(`/api/routes/assign`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          orderIds: [], // Пустой массив отвяжет точки на бэкенде
+          orderIds: [], 
           courierId: bulkCourier,
           oldRouteId: editingRouteId
         })
@@ -698,38 +723,31 @@ export function DashboardClient({ user }: { user: User }) {
       setBulkCourier(""); setBulkSelectedIds([]); setEditingRouteId(null);
       await fetchData();
       alert("✅ Маршрут удален!");
-      setRouteTabMode("current"); // Возвращаемся к списку маршрутов
+      setRouteTabMode("current"); 
     } catch { alert("Произошла ошибка при удалении"); }
     finally { setBulkSaving(false); }
   }
+
   async function handleAutoGenerateRoutes() {
     if (!window.confirm("Запустить авто-распределение свободных точек на сегодня?")) return;
-    
     setBulkSaving(true);
     try {
       const res = await fetch(`/api/routes/auto-generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // 🔥 Добавили передачу выбранных слотов (массив строк, например ["10–12", "14–16"])
-        body: JSON.stringify({ 
-          routeDate: filterDate,
-          selectedSlots: selectedSlots 
-        })
+        body: JSON.stringify({ routeDate: filterDate, selectedSlots: selectedSlots })
       });
       
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Ошибка сервера");
       
       await fetchData();
-      alert(`✅ Создано маршрутов: ${data.routesCreated}.\n📦 Раскидано точек: ${data.ordersAssigned}.\n⚠️ Осталось нераспределенных в этих слотах: ${data.leftOver}`);
+      alert(`✅ Создано маршрутов: ${data.routesCreated}.\n📦 Раскидано точек: ${data.ordersAssigned}.\n⚠️ Осталось нераспределенных: ${data.leftOver}`);
       setRouteTabMode("current");
-    } catch (e: any) {
-      alert(e.message || "Произошла ошибка при генерации");
-    } finally {
-      setBulkSaving(false);
-    }
+    } catch (e: any) { alert(e.message || "Произошла ошибка при генерации"); } 
+    finally { setBulkSaving(false); }
   }
- // 🔥 1. Карта статусов (лучше держать её тут, чтобы не было ошибок undefined)
+
   const ROUTE_STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
     NEW: { label: "Новый", color: "#d94040", bg: "#fef2f2" },
     ASSIGNED: { label: "Назначен", color: "#4a7aff", bg: "#eef3ff" },
@@ -742,17 +760,23 @@ export function DashboardClient({ user }: { user: User }) {
   async function handleBulkAssign(isDraft = false) {
     if (!bulkCourier || bulkSelectedIds.length === 0) return;
     setBulkSaving(true);
+    
+    // 🔥 Отправляем ETA на бэкенд
+    const etasPayload: Record<string, string> = {};
+    for (const id of bulkSelectedIds) {
+       if (calculatedEtas[id] && calculatedEtas[id].timeStr !== "—") {
+           etasPayload[id] = calculatedEtas[id].timeStr;
+       }
+    }
+
     try {
       const res = await fetch(`/api/routes/assign`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           orderIds: bulkSelectedIds,
           courierId: bulkCourier,
-          routeType,
-          returnToBase,
-          oldRouteId: editingRouteId,
-          departureAdvice,
-          isDraft // Передаем флаг на сервер
+          routeType, returnToBase, oldRouteId: editingRouteId, departureAdvice, isDraft,
+          routeEtas: etasPayload
         })
       });
       if (!res.ok) throw new Error("Ошибка сервера");
@@ -764,13 +788,10 @@ export function DashboardClient({ user }: { user: User }) {
     finally { setBulkSaving(false); }
   }
 
-  // 🔥 2. Добавили тип (prev: string[])
   const toggleSlot = (label: string) => {
     if (label === "all") setSelectedSlots([]);
     else setSelectedSlots((prev: string[]) => prev.includes(label) ? prev.filter(x => x !== label) : [...prev, label]);
   };
-
-  const showLeftPanel = (isListVisible || isDetailVisible) && !isBulkMode;
 
   const renderRouteListPanel = () => (
     <div style={{ maxWidth: 600, margin: isMobile ? 0 : "0 auto", background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: isMobile ? 16 : 20 }}>
@@ -797,7 +818,7 @@ export function DashboardClient({ user }: { user: User }) {
       <div style={{ marginBottom: 16 }}>
         <button 
           onClick={handleAutoGenerateRoutes}
-          disabled={bulkSaving} // 🔥 Блокируем кнопку
+          disabled={bulkSaving} 
           style={{ width: "100%", background: "linear-gradient(135deg, #4a7aff 0%, #7c4dff 100%)", color: "#fff", border: "none", padding: "10px 14px", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: bulkSaving ? "default" : "pointer", boxShadow: "0 4px 12px rgba(124, 77, 255, 0.3)", display: "flex", justifyContent: "center", alignItems: "center", gap: 8, opacity: bulkSaving ? 0.7 : 1 }}
         >
           {bulkSaving ? "⏳ Сборка маршрутов..." : "✨ AI Авто-сборка черновиков"}
@@ -809,21 +830,30 @@ export function DashboardClient({ user }: { user: User }) {
           {existingRoutes.length === 0 && <div style={{ textAlign: "center", color: "#a8a49c", padding: 20 }}>Нет маршрутов на {filterDate}</div>}
           {existingRoutes.map((r: any) => {
             const isDraft = r.isDraft;
-            
-            // Безопасный поиск имени курьера через courierOptions
             const courierName = courierOptions.find(c => String(c.value) === String(r.courierId))?.label || "Неизвестен";
 
-            // 🔥 Вычисляем время выезда
             const pickedUpTimes = r.orders.map((o: any) => o.pickedUpAt).filter(Boolean);
             const actualDepartureMs = pickedUpTimes.length > 0 ? Math.min(...pickedUpTimes.map((d: string) => new Date(d).getTime())) : null;
 
-            // 🔥 Вычисляем время завершения (показываем, только если ВСЕ точки доставлены)
             const isAllDelivered = r.orders.length > 0 && r.orders.every((o: any) => o.status === "DELIVERED");
             let finishedMs: number | null = null;
             if (isAllDelivered) {
                const deliveryTimes = r.orders.map((o: any) => new Date(o.changedAt || o.updatedAt).getTime()).filter((t: number) => !isNaN(t));
                finishedMs = deliveryTimes.length > 0 ? Math.max(...deliveryTimes) : null;
             }
+
+            // 🔥 Считаем количество опозданий в маршруте
+            const delaysCount = r.orders.filter((o: any) => {
+              if (["DELIVERED", "RETURNED", "CANCELLED"].includes(o.status)) return false;
+              if (o.eta && o.slotTo) {
+                const [eH, eM] = o.eta.split(':').map(Number);
+                const [sH, sM] = o.slotTo.split(':').map(Number);
+                if (!isNaN(eH) && !isNaN(sH)) {
+                  return (eH * 60 + eM) > (sH * 60 + sM);
+                }
+              }
+              return false;
+            }).length;
 
             return (
             <div key={r.id} onClick={() => {
@@ -836,13 +866,20 @@ export function DashboardClient({ user }: { user: User }) {
                 <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   {r.name} 
                   {isDraft && <span style={{ background: "#fef3c7", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>Черновик</span>}
+                  
+                  {/* 🔥 БЕЙДЖИК ОПОЗДАНИЯ */}
+                  {delaysCount > 0 && (
+                    <span style={{ background: "#fef2f2", color: "#d94040", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #fecaca" }}>
+                      ⚠️ Опаздывает ({delaysCount})
+                    </span>
+                  )}
+                  
                   <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 500 }}>изм. {new Date(r.updatedAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
                 <div style={{ fontSize: 12, color: "#6b6860", marginTop: 4 }}>
                   Курьер: {courierName} · {r.orders.length} точек
                 </div>
 
-                {/* 🔥 ПЛАШКИ ВРЕМЕНИ (ВЫЕХАЛ / НА БАЗЕ / ЗАВЕРШИЛ) */}
                 {(actualDepartureMs || finishedMs || r.baseArrivalTime) && (
                   <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
                     {actualDepartureMs && (
@@ -850,6 +887,7 @@ export function DashboardClient({ user }: { user: User }) {
                         📦 Выехал: {new Date(actualDepartureMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     )}
+                    {/* 🔥 ВРЕМЯ НА БАЗЕ */}
                     {r.baseArrivalTime && (
                       <span style={{ fontSize: 11, background: "#eef3ff", color: "#4a7aff", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #bfdbfe" }}>
                         🏠 На базе: {r.baseArrivalTime}
@@ -862,7 +900,6 @@ export function DashboardClient({ user }: { user: User }) {
                     )}
                   </div>
                 )}
-                
               </div>
               <div style={{ fontSize: 20, color: "#a8a49c" }}>✏️</div>
             </div>
@@ -901,7 +938,6 @@ export function DashboardClient({ user }: { user: User }) {
                 <div style={{ marginTop: 6, fontSize: 12, color: "#4a7aff", fontWeight: 700 }}>💡 {departureAdvice}</div>
               )}
 
-              {/* 🔥 ВЫВОД ВРЕМЕНИ ВОЗВРАТА НА БАЗУ (ЕСЛИ КУРЬЕР ЕГО УКАЗАЛ) */}
               {!isCalculatingRoute && editingRouteId && existingRoutes.find((r: any) => r.id === editingRouteId)?.baseArrivalTime && (
                 <div style={{ 
                   marginTop: 8, fontSize: 12, color: "#92400e", background: "#fffbeb", 
@@ -926,19 +962,15 @@ export function DashboardClient({ user }: { user: User }) {
           <div style={{ background: "#fafaf8", padding: 16, borderRadius: 8, marginBottom: 20 }}>
             <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Курьер</div>
             
-            {/* 🔥 Включаем flexWrap, чтобы элементы могли переноситься на новую строку */}
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "stretch" }}>
-              
-              {/* Обертка для селекта: занимает минимум 200px, но может расти и заполнять пустоту */}
               <div style={{ flex: "1 1 200px", minWidth: 0 }}>
                 <CourierSearchSelect value={bulkCourier} onChange={setBulkCourier} options={courierOptions.map(c => ({ value: String(c.value), label: c.label }))} />
               </div>
               
-              {/* Кнопка Черновика */}
               <button 
                 style={{ 
                   ...s.actionBtn, 
-                  flex: isMobile ? "1 1 100%" : "1 1 auto", // На мобилке на всю ширину, на ПК — по размеру
+                  flex: isMobile ? "1 1 100%" : "1 1 auto", 
                   background: bulkCourier && bulkSelectedIds.length > 0 ? '#e8e6df' : '#f5f4f0', 
                   color: bulkCourier && bulkSelectedIds.length > 0 ? '#1a1a18' : '#a8a49c', 
                   whiteSpace: 'nowrap' 
@@ -949,7 +981,6 @@ export function DashboardClient({ user }: { user: User }) {
                 📝 В черновик
               </button>
 
-              {/* Кнопка Создать/Сохранить */}
               <button 
                 style={{ 
                   ...s.actionBtn, 
@@ -963,92 +994,21 @@ export function DashboardClient({ user }: { user: User }) {
               >
                 {bulkSaving ? "..." : (editingRouteId ? "Сохранить" : "Создать")}
               </button>
-
             </div>
           </div>
 
           <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Очередь доставки ({bulkSelectedIds.length})</div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            
-            {/* 🔥 БЛОК РАСЧЕТА С УЧЕТОМ РЕАЛЬНОГО ВЫЕЗДА */}
             {(() => {
-              const parseYandexTimeMs = (text: string) => {
-                if (!text || text === "—") return 0;
-                let ms = 0;
-                const hMatch = text.match(/(\d+)\s*ч/);
-                if (hMatch) ms += parseInt(hMatch[1], 10) * 3600000;
-                const mMatch = text.match(/(\d+)\s*мин/);
-                if (mMatch) ms += parseInt(mMatch[1], 10) * 60000;
-                
-                if (routeType === "auto") return ms + (12 * 60 * 1000); 
-                else return ms + (3 * 60 * 1000);
-              };
-
-              const etas: Record<string, { type: string, timeStr: string, color: string }> = {};
-              let currentRunningMs = Date.now();
-              let foundFirstActive = false;
-
-              const hasStarted = selectedRouteOrders.some((o: any) => o.status === "IN_DELIVERY" || o.status === "DELIVERED");
-              
               const pickedUpTimes = selectedRouteOrders.map((o: any) => o.pickedUpAt).filter(Boolean);
               const actualDepartureMs = pickedUpTimes.length > 0 ? Math.min(...pickedUpTimes.map((d: string) => new Date(d).getTime())) : null;
 
-              if (hasStarted && actualDepartureMs) {
-                 // 📦 Если курьер выехал — жестко считаем от реального времени выезда!
-                 currentRunningMs = actualDepartureMs;
-              } else if (!hasStarted && selectedRouteOrders.length > 0 && routeLegs.length > 0) {
-                 // 🎯 🔥 ИСПРАВЛЕНО: Если не выехал — ВСЕГДА считаем от слота первой точки
-                 const firstOrder = selectedRouteOrders[0];
-                 if (firstOrder.slotFrom) {
-                   const [hh, mm] = firstOrder.slotFrom.split(":").map(Number);
-                   if (!isNaN(hh) && !isNaN(mm)) {
-                     const slotStartMs = new Date().setHours(hh, mm, 0, 0);
-                     const legToFirstPointMs = parseYandexTimeMs(routeLegs[0]) + (5 * 60 * 1000);
-                     
-                     // Игнорируем текущее время! Строим идеальный план прибытия ровно к началу слота
-                     currentRunningMs = slotStartMs - legToFirstPointMs;
-                   }
-                 }
-              }
-
-              // 🔥 Формируем плашку выезда
               const departureUI = actualDepartureMs ? (
                 <div style={{ fontSize: 13, color: "#f59e0b", fontWeight: 800, marginBottom: 8, paddingLeft: 8, display: "flex", alignItems: "center", gap: 6, background: "#fffbeb", padding: "8px 12px", borderRadius: 8, border: "1px solid #fde68a" }}>
                   📦 Забрал в {new Date(actualDepartureMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
                 </div>
               ) : null;
-
-              selectedRouteOrders.forEach((o: any, index: number) => {
-                const legMs = parseYandexTimeMs(routeLegs[index]);
-
-                if (o.status === "DELIVERED") {
-                  const t = o.changedAt || o.updatedAt;
-                  if (t) {
-                    currentRunningMs = new Date(t).getTime(); 
-                    const timeStr = new Date(currentRunningMs).toLocaleTimeString('ru', {hour: '2-digit', minute:'2-digit'});
-                    etas[o.id] = { type: 'DELIVERED', timeStr, color: "#10b981" };
-                  } else {
-                    etas[o.id] = { type: 'DELIVERED', timeStr: "—", color: "#10b981" };
-                  }
-                } else if (o.status === "CANCELLED" || o.status === "RETURNED") {
-                  etas[o.id] = { type: 'SKIPPED', timeStr: "—", color: "#a8a49c" };
-                } else {
-                  if (!foundFirstActive) {
-                    foundFirstActive = true;
-                    // Дорога только от базы (или от прошлой доставленной точки)
-                    currentRunningMs += legMs; 
-                  } else {
-                    // Передача прошлого заказа (4 мин) + дорога до следующей точки
-                    currentRunningMs += (4 * 60 * 1000) + legMs; 
-                  }
-                  
-                  const timeStr = new Date(currentRunningMs).toLocaleTimeString('ru', {hour: '2-digit', minute:'2-digit'});
-                  let color = "#4a7aff";
-                  if (o.status === "IN_DELIVERY") color = "#f59e0b";
-                  etas[o.id] = { type: o.status, timeStr, color };
-                }
-              });
 
               return (
                 <>
@@ -1056,7 +1016,7 @@ export function DashboardClient({ user }: { user: User }) {
                   {selectedRouteOrders.map((o: any, index: number) => {
                      const color = slotColor(o);
                      const st = ROUTE_STATUS_MAP[o.status] || ROUTE_STATUS_MAP.NEW;
-                     const etaInfo = etas[o.id] || { type: "NEW", timeStr: "—", color: "#4a7aff" };
+                     const etaInfo = calculatedEtas[o.id] || { type: "NEW", timeStr: "—", color: "#4a7aff" };
 
                 return (
                   <React.Fragment key={o.id}>
@@ -1080,13 +1040,16 @@ export function DashboardClient({ user }: { user: User }) {
                       
                       <div style={{ flex: 1, overflow: "hidden" }}>
                         <div style={{ fontSize: 13, fontWeight: 600, color: "#1a1a18", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.address}</div>
+                        
                         <div style={{ fontSize: 11, color: "#a8a49c", marginTop: 2 }}>
                           Слот: <span style={{ color, fontWeight: 700 }}>{o.slotRaw}</span> · {o.externalId ?? o.crmId}
+                          {o.eta && <span style={{ marginLeft: 8, color: "#4a7aff", fontWeight: 700 }}>⏱ В базе: {o.eta}</span>}
                         </div>
                         
+                        {/* 🔥 ОТПРАВКА СТАТУСА С ПЕРЕСЧИТАННЫМ ETA */}
                         <select 
                           value={o.status} 
-                          onChange={(e) => handleQuickStatusChange(o.id, e.target.value)}
+                          onChange={(e) => handleQuickStatusChange(o.id, e.target.value, etaInfo.timeStr)}
                           style={{ background: st.bg, color: st.color, border: "none", padding: "4px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, outline: "none", cursor: "pointer", marginTop: 6, display: "block" }}
                         >
                           <option value="NEW">Новый</option>
@@ -1100,17 +1063,12 @@ export function DashboardClient({ user }: { user: User }) {
                       </div>
                       <button onClick={() => toggleBulkSelect(o.id)} title="Убрать из маршрута" style={{ background: "none", border: "none", color: "#d94040", cursor: "pointer", fontSize: 18, padding: 4 }}>×</button>
                     </div>
-                    </React.Fragment>
+                  </React.Fragment>
                 );
               })} 
-              {/* 🔥 ЗАКРЫВАЕМ .map */}
-              
             </>
           ); 
-          {/* 🔥 ЗАКРЫВАЕМ return и Fragment */}
-
         })()}
-        {/* 🔥 КОНЕЦ БЛОКА РАСЧЕТА */}
 
             {routeLegs[selectedRouteOrders.length] && returnToBase && (
               <div style={{ fontSize: 11, color: "#a8a49c", paddingLeft: 46, paddingBottom: 6, paddingTop: 4 }}>
@@ -1156,6 +1114,8 @@ export function DashboardClient({ user }: { user: User }) {
           <div style={s.slotBar}>
             <SlotBtn label="Все" active={selectedSlots.length === 0} color="#4a7aff" onClick={() => toggleSlot("all")} />
             {SLOTS.map(sl => <SlotBtn key={sl.label} label={sl.label} active={selectedSlots.includes(sl.label)} color={sl.color} onClick={() => toggleSlot(sl.label)} />)}
+            {/* 🔥 КНОПКА ДРУГИЕ */}
+            <SlotBtn label="Другие" active={selectedSlots.includes("Другие")} color="#6b6860" onClick={() => toggleSlot("Другие")} />
           </div>
         )}
         <div style={{ flex: 1 }} />
@@ -1180,6 +1140,7 @@ export function DashboardClient({ user }: { user: User }) {
         <div style={sm.mobileSlotsWrap}>
           <SlotBtn label="Все" active={selectedSlots.length === 0} color="#4a7aff" onClick={() => toggleSlot("all")} />
           {SLOTS.map(sl => <SlotBtn key={sl.label} label={sl.label} active={selectedSlots.includes(sl.label)} color={sl.color} onClick={() => toggleSlot(sl.label)} />)}
+          <SlotBtn label="Другие" active={selectedSlots.includes("Другие")} color="#6b6860" onClick={() => toggleSlot("Другие")} />
         </div>
       )}
 
@@ -1323,7 +1284,7 @@ export function DashboardClient({ user }: { user: User }) {
               <table style={s.table}>
                 <thead>
                   <tr>
-                    {[{ label: "Внешний ID", key: "externalId" }, { label: "Время", key: "slotFrom" }, { label: "Адрес", key: "address" }, { label: "Курьер", key: "courier" }, { label: "Сумма", key: "price" }, { label: "Статус", key: "status" }, { label: "Комментарий", key: "comment" }, { label: "Оператор", key: "opComment" }, { label: "Состав", key: "items" }, { label: "Создан", key: "crmCreatedAt" }, { label: "Изменён", key: "changedAt" }].map(col => (
+                    {[{ label: "Внешний ID", key: "externalId" }, { label: "Время", key: "slotFrom" }, { label: "ETA", key: "eta" }, { label: "Адрес", key: "address" }, { label: "Курьер", key: "courier" }, { label: "Сумма", key: "price" }, { label: "Статус", key: "status" }, { label: "Комментарий", key: "comment" }, { label: "Оператор", key: "opComment" }, { label: "Состав", key: "items" }, { label: "Создан", key: "crmCreatedAt" }, { label: "Изменён", key: "changedAt" }].map(col => (
                       <th key={col.key} style={{ ...s.th, cursor: "pointer", userSelect: "none" }} onClick={() => handleSort(col.key)} title={`Сортировать по: ${col.label}`}>
                         {col.label} {sortConfig.key === col.key ? (sortConfig.dir === 'asc' ? '↑' : '↓') : ''}
                       </th>
@@ -1337,6 +1298,7 @@ export function DashboardClient({ user }: { user: User }) {
                       <tr id={`row-${o.id}`} key={o.id} style={{ background: selectedId === o.id ? "#eef3ff" : i % 2 === 0 ? "#fff" : "#fafaf8", cursor: "pointer" }} onClick={() => { setSelectedId(o.id); setIsListVisible(true); setIsDetailVisible(true); }}>
                         <td style={{ ...s.td, whiteSpace: "nowrap" }}><span style={{ ...s.statusDot, background: color }} /><span style={{ fontFamily: "monospace", fontSize: 10, color: "#a8a49c" }}>{o.externalId ?? o.crmId}</span></td>
                         <td style={{ ...s.td, whiteSpace: "nowrap", color }}>{o.slotRaw ?? "—"}</td>
+                        <td style={{ ...s.td, whiteSpace: "nowrap", color: "#4a7aff", fontWeight: 700 }}>{o.eta ?? "—"}</td>
                         <td style={{ ...s.td, minWidth: 160, maxWidth: 220 }}>{o.address ?? "—"}</td>
                         <td style={{ ...s.td, whiteSpace: "nowrap", fontWeight: 600 }}>{o.courier ?? <span style={{ color: "#d94040" }}>—</span>}</td>
                         <td style={{ ...s.td, whiteSpace: "nowrap" }}>{o.price ? `${o.price} ₽` : "—"}</td>
@@ -1356,13 +1318,11 @@ export function DashboardClient({ user }: { user: User }) {
         </div>
       )}
 
-      {/* 🔥 ИСПРАВЛЕНИЕ: Жестко чистим куку перед логаутом */}
       {profileOpen && (
         <div style={{ position: "fixed", top: 52, right: 8, zIndex: 200 }}>
         <ProfilePanel 
           onClose={() => setProfileOpen(false)} 
           onLogout={async () => {
-            // 🔥 ИСПРАВЛЕНО: Делаем запрос на сервер для удаления HttpOnly куки
             await fetch("/api/auth/logout", { method: "POST" });
             window.location.href = "/login";
           }} 
@@ -1411,6 +1371,7 @@ function OrderCard({ order, selected, isBulkMode, isBulkSelected, onSelect }: an
       <div style={s.cardAddr}>{order.address ?? "—"}</div>
       <div style={s.cardMeta}>
         <span style={{ ...s.slotTag, color }}>{order.slotFrom}–{order.slotTo ?? ""}</span>
+        {order.eta && <span style={{ fontSize: 10, color: "#4a7aff", fontWeight: 700, marginLeft: 6 }}>~{order.eta}</span>}
         <span style={s.courierTag}>{order.courier ?? "—"}</span>
       </div>
     </div>

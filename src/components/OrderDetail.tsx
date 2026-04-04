@@ -1,3 +1,4 @@
+// src/components/OrderDetail.tsx
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { IMaskInput } from "react-imask";
@@ -104,10 +105,12 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
   const [editCourier, setEditCourier] = useState("");
   const [editAddress, setEditAddress] = useState("");
   const [editRecipientPhone, setEditRecipientPhone] = useState("");
+  // 🔥 ДОБАВЛЕН СТЕЙТ ЦЕНЫ
+  const [editPrice, setEditPrice] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const snapshot = useRef<{ status: string; courier: string; opComment: string; address: string; phone: string } | null>(null);
+  const snapshot = useRef<{ status: string; courier: string; opComment: string; address: string; phone: string; price: string } | null>(null);
 
   useEffect(() => {
     if (!selected) return;
@@ -117,6 +120,7 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
     setEditCourier(selected.courier ?? "");
     setEditAddress(selected.address ?? "");
     setEditRecipientPhone(initialPhone);
+    setEditPrice(selected.price?.toString() || "");
     setSaved(false);
     snapshot.current = {
       status: selected.status ?? "",
@@ -124,10 +128,10 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
       opComment: selected.opComment ?? "",
       address: selected.address ?? "",
       phone: initialPhone,
+      price: selected.price?.toString() || "",
     };
   }, [selected?.id]);
 
-  // 🔥 Простой и рабочий саджест из v2.1
   useEffect(() => {
     if (!selected) return;
     if (typeof window === "undefined") return;
@@ -140,7 +144,6 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
       ymaps.ready(() => {
         setTimeout(() => {
           const input = document.getElementById(inputId);
-          // Инициализируем только если есть input и еще не инициализирован
           if (input && !(input as any).isSuggestInitialized) {
             try {
               const suggestView = new ymaps.SuggestView(inputId, { results: 5 });
@@ -148,7 +151,6 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
                 const val = e.get("item").value;
                 setEditAddress(val);
                 
-                // 🔥 Сразу геокодируем выбранный адрес и ставим серый пин
                 ymaps.geocode(val, { results: 1 }).then((res: any) => {
                   const obj = res.geoObjects.get(0);
                   if (obj) {
@@ -172,7 +174,6 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
       const script = document.createElement("script");
       const mapsKey = process.env.NEXT_PUBLIC_YANDEX_MAPS_KEY;
       const suggestKey = process.env.NEXT_PUBLIC_YANDEX_SUGGEST_KEY;
-      // Обязательно подставляем оба ключа!
       script.src = `https://api-maps.yandex.ru/2.1/?lang=ru_RU&apikey=${mapsKey}${suggestKey ? `&suggest_apikey=${suggestKey}` : ''}`;
       script.onload = initSuggest;
       document.head.appendChild(script);
@@ -187,6 +188,7 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
     opComment: selected.opComment ?? "",
     address: selected.address ?? "",
     phone: "",
+    price: "",
   };
 
   const hasChanges =
@@ -194,7 +196,8 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
     editCourier !== snap.courier ||
     opComment !== snap.opComment ||
     editAddress !== snap.address ||
-    editRecipientPhone !== snap.phone;
+    editRecipientPhone !== snap.phone ||
+    editPrice !== snap.price; // 🔥 ПРОВЕРЯЕМ ИЗМЕНЕНИЕ ЦЕНЫ
 
   async function handleGeocode(mode: "ai" | "manual") {
     setFixingAI(true);
@@ -231,12 +234,14 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
       });
     }
 
-    const body: Record<string, string> = {};
+    const body: Record<string, any> = {};
     if (editStatus !== snap.status) body.status = editStatus;
     if (editCourier !== snap.courier) body.courier = editCourier;
     if (opComment !== snap.opComment) body.opComment = opComment;
     if (isAddressChanged) body.address = editAddress;
     if (editRecipientPhone !== snap.phone) body.recipientPhone = editRecipientPhone;
+    // 🔥 ОТПРАВЛЯЕМ НОВУЮ ЦЕНУ НА СЕРВЕР
+    if (editPrice !== snap.price) body.price = editPrice ? Number(editPrice) : null;
 
     if (Object.keys(body).length > 0) {
       await fetch(`/api/orders/${selected!.id}`, {
@@ -246,7 +251,7 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
       });
     }
 
-    snapshot.current = { status: editStatus, courier: editCourier, opComment, address: editAddress, phone: editRecipientPhone };
+    snapshot.current = { status: editStatus, courier: editCourier, opComment, address: editAddress, phone: editRecipientPhone, price: editPrice };
     onPreviewGeo(null);
     onUpdateSuccess();
     setSaving(false);
@@ -272,17 +277,12 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
       <div style={{ marginBottom: 10 }}>
         <div style={lbl}>Адрес доставки</div>
         
-        {/* 🔥 Textarea для саджеста, чтобы длинный адрес влазил */}
         <textarea
           id={`order-address-${selected.id}`}
           value={editAddress}
           onChange={e => setEditAddress(e.target.value)}
-          rows={3} // 👈 Указываем высоту в строках (3 строки)
-          style={{ 
-            ...ta, 
-            resize: "vertical", // Позволяет пользователю растягивать поле по вертикали (если нужно)
-            minHeight: "60px"   // Минимальная высота
-          }}
+          rows={3} 
+          style={{ ...ta, resize: "vertical", minHeight: "60px" }}
         />
         
         <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
@@ -302,7 +302,21 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
         </div>
         <div style={card}>
           <div style={lbl}>Стоимость</div>
-          <div style={{ fontSize: 12, fontWeight: 500 }}>{selected.price ? `${selected.price} ₽` : "—"}</div>
+          {/* 🔥 РЕДАКТИРУЕМОЕ ПОЛЕ СТОИМОСТИ */}
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <input
+              type="number"
+              value={editPrice}
+              onChange={e => setEditPrice(e.target.value)}
+              style={{ 
+                width: "100%", padding: "4px 8px", borderRadius: 4, 
+                border: "1px solid #e8e6df", fontSize: 12, background: "#fff", 
+                outline: "none", fontWeight: 600
+              }}
+              placeholder="0"
+            />
+            <span style={{ fontSize: 12, color: "#6b6860", fontWeight: 600 }}>₽</span>
+          </div>
         </div>
       </div>
 

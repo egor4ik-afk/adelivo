@@ -34,16 +34,25 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
           updateData.pickedUpAt = new Date();
         }
       }
+
+      // 🔥 НОВОЕ: Записываем готовое ETA с фронтенда (заполняем один раз)
+      if (body.eta !== undefined) {
+        // Если в базе ETA ещё пустое — записываем то, что посчитал интерфейс
+        if (!order.eta) {
+          updateData.eta = body.eta;
+        }
+      }
       
-      // 🔥 Если вернули заказ обратно — очистили время выезда
+      // 🔥 Если вернули заказ обратно — очистили время выезда и ETA
       if (body.status === "NEW" || body.status === "ASSIGNED") {
         updateData.pickedUpAt = null;
+        updateData.eta = null; // Очищаем ETA, чтобы при новом выезде записать заново
       }
 
       // ⚡️ ТРИГГЕР ПЕРЕРАСЧЕТА: Если заказ доставили, нужно пересчитать время для остальных
       if (body.status === "DELIVERED" && order.status !== "DELIVERED" && order.routeId) {
-        // Мы не блокируем основной поток (await), просто запускаем расчет в фоне
-        triggerRouteRecalculation(order.routeId).catch(console.error);
+        // 🔥 ПЕРЕДАЕМ order.id в функцию
+        triggerRouteRecalculation(order.routeId, order.id).catch(console.error);
       }
     }
     
@@ -57,6 +66,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     if (body.items          !== undefined) updateData.items          = body.items;
     if (body.routeId    !== undefined) updateData.routeId    = body.routeId;
     if (body.routeOrder !== undefined) updateData.routeOrder = body.routeOrder;
+    if (body.eta !== undefined) updateData.eta = body.eta;
 
     // 🔥 ДОБАВИЛИ РУЧНУЮ ПРАВКУ ЦЕНЫ И СЕБЕСТОИМОСТИ
     if (body.price      !== undefined) updateData.price      = body.price;
@@ -376,16 +386,76 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
   }
 }
 
-// 🔥 Функция-хелпер для перерасчета времени оставшихся точек в маршруте
-async function triggerRouteRecalculation(routeId: string) {
-  console.log(`[ETA] Запуск перерасчета маршрута ${routeId} после доставки точки...`);
-  
-  // 1. Получить все НЕ доставленные точки в маршруте `routeId`
-  // 2. Взять текущее время (как время старта) или baseArrivalTime маршрута
-  // 3. Отправить запрос в Yandex Routing API
-  // 4. Обновить поле `eta` у всех не доставленных заказов в БД
-  
-  // Пример (псевдокод):
-  // const yandexResult = await fetchYandexETA(points);
-  // await prisma.order.update({ where: { id: orderId }, data: { eta: newTime } });
+// 🔥 Функция для сдвига ETA у оставшихся точек в маршруте
+async function triggerRouteRecalculation(routeId: string, deliveredOrderId: string) {
+  try {
+    console.log(`[ETA] Запуск перерасчета маршрута ${routeId} после доставки точки ${deliveredOrderId}...`);
+
+    // 1. Находим заказ, который только что доставили
+    const deliveredOrder = await prisma.order.findUnique({ 
+      where: { id: deliveredOrderId },
+      select: { eta: true, routeOrder: true }
+    });
+
+    if (!deliveredOrder || !deliveredOrder.eta || deliveredOrder.routeOrder === null) {
+      console.log(`[ETA] Нет первоначального ETA или порядкового номера (routeOrder). Перерасчет отменен.`);
+      return;
+    }
+
+    // 2. Вычисляем разницу между ПЛАНОМ (ETA) и ФАКТОМ (текущее время)
+    const [etaH, etaM] = deliveredOrder.eta.split(':').map(Number);
+    if (isNaN(etaH) || isNaN(etaM)) return;
+
+    const now = new Date();
+    const plannedTime = new Date();
+    plannedTime.setHours(etaH, etaM, 0, 0);
+
+    // Разница в миллисекундах -> переводим в минуты
+    const diffMs = now.getTime() - plannedTime.getTime();
+    const diffMinutes = Math.round(diffMs / 60000);
+
+    if (diffMinutes === 0) {
+      console.log(`[ETA] Курьер доставил вовремя, сдвиг не требуется.`);
+      return; 
+    }
+
+    // 3. Получаем все ПОСЛЕДУЮЩИЕ не доставленные точки этого маршрута
+    const futureOrders = await prisma.order.findMany({
+      where: {
+        routeId,
+        routeOrder: { gt: deliveredOrder.routeOrder }, // строго больше, чем номер доставленного
+        status: { in: ["NEW", "ASSIGNED", "IN_DELIVERY"] }
+      }
+    });
+
+    if (futureOrders.length === 0) return;
+
+    // 4. Сдвигаем время у каждой последующей точки
+    for (const o of futureOrders) {
+      if (!o.eta) continue;
+
+      const [h, m] = o.eta.split(':').map(Number);
+      if (isNaN(h) || isNaN(m)) continue;
+
+      const oldEtaTime = new Date();
+      oldEtaTime.setHours(h, m, 0, 0);
+
+      // Прибавляем (или отнимаем, если приехал раньше) разницу
+      const newEtaTime = new Date(oldEtaTime.getTime() + diffMinutes * 60000);
+      
+      const newH = newEtaTime.getHours().toString().padStart(2, "0");
+      const newM = newEtaTime.getMinutes().toString().padStart(2, "0");
+      const newEtaStr = `${newH}:${newM}`;
+
+      // Сохраняем в БД новое время
+      await prisma.order.update({
+        where: { id: o.id },
+        data: { eta: newEtaStr }
+      });
+    }
+
+    console.log(`[ETA] Успешно сдвинули ${futureOrders.length} точек на ${diffMinutes} минут.`);
+  } catch (err) {
+    console.error(`[ETA] Ошибка при перерасчете маршрута:`, err);
+  }
 }
