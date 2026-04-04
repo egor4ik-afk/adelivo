@@ -33,6 +33,10 @@ if (!initialized && process.env.NODE_ENV !== "test") {
   cron.schedule("0 15 * * *", async () => {
     await callInternalCron("/api/cron/konsol/daily", "Ежедневная проверка (18:00 MSK)");
   });
+  // Проверка опозданий каждые 5 минут
+  cron.schedule("*/15 * * * *", async () => {
+    await callInternalCron("/api/cron/check-delays", "Проверка опозданий");
+  });
 
 //   // 3. Еженедельная ФИНАЛИЗАЦИЯ (Воскресенье 20:00 UTC = 23:00 МСК)
 //   cron.schedule("0 20 * * 0", async () => {

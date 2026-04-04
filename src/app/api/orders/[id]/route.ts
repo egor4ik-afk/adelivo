@@ -220,23 +220,17 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     const tgToken = process.env.TELEGRAM_BOT_TOKEN;
     const tgChat  = process.env.TELEGRAM_ADMIN_CHAT_ID;
     if (tgToken && tgChat) {
-      const currentEta = updateData.eta || order.eta;
-      if (currentEta && order.slotTo && currentEta !== order.eta) {
-        const etaMins = parseTimeStr(currentEta);
-        const planMins = parseTimeStr(order.slotTo);
-        if (etaMins !== null && planMins !== null && (etaMins - planMins >= 30)) {
-          const msg = [
-            `⚠️ *Опоздание на точку (>30 мин)*`, ``,
-            `📦 *Заказ:* ${order.externalId || order.crmId}`,
-            `📍 *Адрес:* ${order.address}`,
-            `🎯 *План (до):* ${order.slotTo}`,
-            `🕒 *Расчетное (ETA):* ${currentEta}`
-          ].join("\n");
-          fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chat_id: tgChat, text: msg, parse_mode: "Markdown" }),
-          }).catch(e => console.error("[TG] Ошибка:", e));
-        }
+      if (body.photoUrl && body.photoUrl !== order.photoUrl) {
+        fetch(`https://api.telegram.org/bot${tgToken}/sendPhoto`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            chat_id: tgChat, 
+            photo: body.photoUrl,
+            caption: `📸 *Фото к заказу ${order.externalId || order.crmId}*\n📍 *Адрес:* ${order.address}`,
+            parse_mode: "Markdown" 
+          }),
+        }).catch(e => console.error("[TG] Ошибка отправки 1 фото:", e));
       }
     }
 

@@ -170,6 +170,7 @@ model Order {
   slotRaw       String?
   deliveryType  String?
   deliveryDate  String?
+  delayNotified Boolean @default(false)
   eta           String?     // 🔥 НОВОЕ ПОЛЕ: Примерное время прибытия курьера
   photoUrl      String?     // 🔥 ДОБАВЛЕНО: Ссылка на одно фото от курьера
   crmStatus     String?
