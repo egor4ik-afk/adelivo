@@ -1,12 +1,14 @@
+// src/components/ProfilePanel.tsx
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { usePushNotifications } from "./usePushNotifications";
+import imageCompression from "browser-image-compression"; // 🔥 Для сжатия фото перед загрузкой
 
 interface Profile {
   id: string; email: string; role: string;
   firstName?: string | null; lastName?: string | null;
   phone?: string | null; lastLoginAt?: string | null;
-  // Настройки уведомлений
+  avatarUrl?: string | null; // 🔥 Добавили аватарку
   notifyNewOrder?: boolean;
   notifyStatus?: boolean;
   notifyCourier?: boolean;
@@ -40,7 +42,10 @@ export function ProfilePanel({ onClose, onLogout }: { onClose: () => void; onLog
   const [form, setForm] = useState({ firstName: "", lastName: "", phone: "" });
   const [saving, setSaving] = useState(false);
   
-  // 🔥 Берем правильные методы из твоего хука
+  // Для загрузки аватарки
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
   const { state: pushState, subscribe, unsubscribe } = usePushNotifications();
   const isSubscribed = pushState === "granted";
 
@@ -67,14 +72,52 @@ export function ProfilePanel({ onClose, onLogout }: { onClose: () => void; onLog
   const togglePref = async (key: keyof Profile) => {
     if (!profile) return;
     const newVal = !(profile[key] ?? true);
-    // Обновляем локально для скорости интерфейса
     setProfile({ ...profile, [key]: newVal });
-    // Отправляем на сервер
     await fetch("/api/profile", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ [key]: newVal })
     });
+  };
+
+  // 🔥 Функция загрузки аватарки
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !profile) return;
+
+    setUploadingAvatar(true);
+    try {
+      // 1. Сжимаем картинку (аватарке не нужно высокое разрешение)
+      const compressed = await imageCompression(file, { maxSizeMB: 0.5, maxWidthOrHeight: 500, useWebWorker: true });
+
+      // 2. Получаем ссылку для загрузки в S3
+      const presignRes = await fetch("/api/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: `avatar-${profile.id}-${Date.now()}.jpg`, contentType: compressed.type }),
+      });
+
+      if (!presignRes.ok) throw new Error("Upload failed");
+      const { uploadUrl, fileUrl } = await presignRes.json();
+
+      // 3. Загружаем файл
+      await fetch(uploadUrl, { method: "PUT", body: compressed, headers: { "Content-Type": compressed.type } });
+
+      // 4. Сохраняем ссылку в БД профиля
+      await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatarUrl: fileUrl })
+      });
+
+      // 5. Обновляем интерфейс
+      setProfile(p => ({ ...p!, avatarUrl: fileUrl }));
+    } catch (err) {
+      alert("Ошибка при загрузке фото. Попробуйте еще раз.");
+    } finally {
+      setUploadingAvatar(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   const initials = profile
@@ -88,12 +131,36 @@ export function ProfilePanel({ onClose, onLogout }: { onClose: () => void; onLog
   return (
     <div style={s.panel} onClick={e => e.stopPropagation()}>
       <div style={s.header}>
-        <div style={s.avatarLg}>{initials}</div>
+        
+        {/* БЛОК АВАТАРКИ */}
+        <div 
+          style={{ position: "relative", cursor: editing ? "pointer" : "default" }} 
+          onClick={() => editing && fileInputRef.current?.click()}
+          title={editing ? "Изменить фото" : ""}
+        >
+          {uploadingAvatar ? (
+            <div style={{ ...s.avatarLg, background: "#e8e6df" }}>⏳</div>
+          ) : profile.avatarUrl ? (
+            <img src={profile.avatarUrl} alt="Avatar" style={{ ...s.avatarLg, objectFit: "cover" }} />
+          ) : (
+            <div style={s.avatarLg}>{initials}</div>
+          )}
+
+          {/* Иконка фотика показывается только в режиме редактирования */}
+          {editing && !uploadingAvatar && (
+            <div style={{ position: "absolute", bottom: -2, right: -4, background: "#fff", borderRadius: "50%", padding: 4, boxShadow: "0 2px 5px rgba(0,0,0,0.2)", fontSize: 10, lineHeight: 1, display: "flex", alignItems: "center", justifyItems: "center" }}>
+              📷
+            </div>
+          )}
+        </div>
+
+        {/* Скрытый инпут для файлов */}
+        <input type="file" ref={fileInputRef} style={{ display: "none" }} accept="image/*" onChange={handleAvatarUpload} />
+
         <div style={{ flex: 1 }}>
           <div style={s.name}>{fullName}</div>
           <div style={{ marginTop: 4, display: "flex", gap: 6, flexWrap: "wrap" as const }}>
             <span style={s.roleBadge}>{ROLE_LABELS[profile.role] ?? profile.role}</span>
-            
           </div>
         </div>
         <button style={s.closeBtn} onClick={onClose}>✕</button>
@@ -128,7 +195,6 @@ export function ProfilePanel({ onClose, onLogout }: { onClose: () => void; onLog
             )}
           </div>
 
-          {/* Тонкие настройки пушей (показываем только если пуши включены) */}
           {isSubscribed && (
             <div style={{ background: "#fafaf8", padding: 12, borderRadius: 8, display: "flex", flexDirection: "column", gap: 10, marginTop: 8, marginBottom: 8 }}>
               {SETTINGS.map(set => (
@@ -193,21 +259,14 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
 
 const s: Record<string, React.CSSProperties> = {
   panel: { 
-    background: "#fff", 
-    border: "1px solid #e8e6df", 
-    borderRadius: 12, 
-    padding: 16, 
-    width: 300, 
-    boxShadow: "0 4px 24px rgba(0,0,0,0.09)", 
-    fontFamily: "Manrope, system-ui, sans-serif",
-    maxHeight: "85vh",   // 🔥 Ограничиваем высоту панели (85% от экрана)
-    overflowY: "auto",   // 🔥 Включаем вертикальный скролл, если контент не влезает
+    background: "#fff", border: "1px solid #e8e6df", borderRadius: 12, padding: 16, width: 300, 
+    boxShadow: "0 4px 24px rgba(0,0,0,0.09)", fontFamily: "Manrope, system-ui, sans-serif",
+    maxHeight: "85vh", overflowY: "auto",
   },
   header: { display: "flex", alignItems: "center", gap: 12, marginBottom: 12, position: "relative" },
   avatarLg: { width: 44, height: 44, borderRadius: "50%", background: "#4a7aff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 600, color: "#fff", flexShrink: 0 },
   name: { fontSize: 14, fontWeight: 500, color: "#1a1a18" },
   roleBadge: { display: "inline-block", padding: "2px 8px", borderRadius: 20, fontSize: 10, fontWeight: 500, background: "#E6F1FB", color: "#0C447C" },
-  futureBadge: { display: "inline-block", padding: "2px 6px", borderRadius: 10, fontSize: 9, fontWeight: 500, background: "#FAEEDA", color: "#633806" },
   closeBtn: { position: "absolute", right: 0, top: 0, background: "none", border: "none", color: "#a8a49c", fontSize: 14, cursor: "pointer", padding: 2 },
   divider: { height: "0.5px", background: "#e8e6df", margin: "10px 0" },
   pushRow: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", marginBottom: 4 },

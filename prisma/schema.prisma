@@ -33,7 +33,8 @@ model User {
   role              Role               @default(COURIER)
   firstName         String?
   lastName          String?
-  phone             String?            
+  phone             String?      
+  avatarUrl         String?            // 🔥 ДОБАВЛЕНО: Ссылка на аватарку      
   lastLoginAt       DateTime?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
@@ -170,6 +171,7 @@ model Order {
   slotRaw       String?
   deliveryType  String?
   deliveryDate  String?
+  deliveredAt   DateTime? // 🔥 ДОБАВИТЬ ЭТУ СТРОКУ
   delayNotified Boolean @default(false)
   eta           String?     // 🔥 НОВОЕ ПОЛЕ: Примерное время прибытия курьера
   photoUrl      String?     // 🔥 ДОБАВЛЕНО: Ссылка на одно фото от курьера

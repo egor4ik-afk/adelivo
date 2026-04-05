@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { usePushNotifications } from "@/components/usePushNotifications";
 import { IMaskInput } from "react-imask";
+import imageCompression from "browser-image-compression"; // 🔥 Добавили для сжатия
 
 interface Profile {
   id: string; 
@@ -12,6 +13,7 @@ interface Profile {
   phone: string | null;
   homeAddress: string | null; 
   isAuto: boolean;
+  avatarUrl?: string | null; // 🔥 Добавлено поле аватарки
 }
 
 interface Stats {
@@ -23,7 +25,6 @@ interface Stats {
   isLinked: boolean;
 }
 
-// 🔥 Генерируем удобный список времени (с 06:00 до 23:30)
 const TIME_OPTIONS: string[] = [];
 for (let i = 6; i <= 23; i++) {
   TIME_OPTIONS.push(`${String(i).padStart(2, '0')}:00`);
@@ -107,13 +108,16 @@ export default function CourierProfilePage() {
   const [saving, setSaving] = useState(false);
   const [myShifts, setMyShifts] = useState<any[]>([]);
 
+  // 🔥 Загрузка аватарки
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [pwaPrompt, setPwaPrompt] = useState<any>(null);
   const [isStandalone, setIsStandalone] = useState(true);
 
   const { state: pushState, subscribe, unsubscribe } = usePushNotifications();
   const isSubscribed = pushState === "granted";
-  const needsPushBanner = pushState === "default";
 
   const scheduleDates = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(); d.setDate(d.getDate() + i); 
@@ -154,6 +158,37 @@ export default function CourierProfilePage() {
     window.addEventListener("beforeinstallprompt", handleBeforeInstall);
     return () => window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
   }, []);
+
+  // 🔥 Логика загрузки фото
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !profile) return;
+
+    setUploadingAvatar(true);
+    try {
+      const compressed = await imageCompression(file, { maxSizeMB: 0.5, maxWidthOrHeight: 500, useWebWorker: true });
+      const presignRes = await fetch("/api/upload", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: `avatar-courier-${profile.id}-${Date.now()}.jpg`, contentType: compressed.type }),
+      });
+
+      if (!presignRes.ok) throw new Error("Upload failed");
+      const { uploadUrl, fileUrl } = await presignRes.json();
+      await fetch(uploadUrl, { method: "PUT", body: compressed, headers: { "Content-Type": compressed.type } });
+
+      await fetch("/api/profile", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avatarUrl: fileUrl })
+      });
+
+      setProfile(p => ({ ...p!, avatarUrl: fileUrl }));
+    } catch (err) {
+      alert("Ошибка при загрузке фото.");
+    } finally {
+      setUploadingAvatar(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const updateShift = async (date: string, data: { isWorking: boolean, startTime?: string, endTime?: string }) => {
     if (data.isWorking) {
@@ -206,7 +241,6 @@ export default function CourierProfilePage() {
         body: JSON.stringify({ isAuto: newStatus })
       });
     } catch (e) {
-      alert("Не удалось обновить статус Авто");
       setIsAuto(!newStatus);
       setProfile(prev => prev ? { ...prev, isAuto: !newStatus } : null);
     }
@@ -248,24 +282,15 @@ export default function CourierProfilePage() {
   const handleSubscribe = async () => {
     const ua = window.navigator.userAgent.toLowerCase();
     const isIOS = /iphone|ipad|ipod/.test(ua);
-
     if (isIOS && !isStandalone) {
       alert("На iPhone уведомления работают только в установленном приложении.\n\nНажмите кнопку «Поделиться» ⍐ в браузере, а затем «На экран Домой» ➕.");
       return;
     }
-
-    try {
-      await subscribe();
-    } catch (error) {
-      alert("Браузер заблокировал уведомления. Убедитесь, что вы разрешили их в настройках сайта.");
-    }
+    try { await subscribe(); } catch (error) { alert("Браузер заблокировал уведомления."); }
   };
 
   const installPWA = async () => {
-    if (!pwaPrompt) {
-      alert("Для установки на iPhone нажмите «Поделиться» ⍐ в браузере и выберите «На экран Домой» ➕.\n\nНа Android включите установку в настройках браузера.");
-      return;
-    }
+    if (!pwaPrompt) return;
     pwaPrompt.prompt();
     await pwaPrompt.userChoice;
     setPwaPrompt(null);
@@ -282,9 +307,24 @@ export default function CourierProfilePage() {
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#f5f4f0", overflowY: "auto", paddingBottom: 80 }}>
 
       <div style={{ padding: "24px 16px", background: "#fff", display: "flex", alignItems: "center", gap: 16, borderBottom: "1px solid #e8e6df" }}>
-        <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#4a7aff", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 700, flexShrink: 0 }}>
-          {(profile.firstName?.[0] || "") + (profile.lastName?.[0] || "")}
+        
+        {/* БЛОК АВАТАРКИ */}
+        <div style={{ position: "relative", cursor: "pointer" }} onClick={() => fileInputRef.current?.click()}>
+          {uploadingAvatar ? (
+            <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#e8e6df", display: "flex", alignItems: "center", justifyContent: "center" }}>⏳</div>
+          ) : profile.avatarUrl ? (
+            <img src={profile.avatarUrl} alt="Avatar" style={{ width: 56, height: 56, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "1px solid #e8e6df" }} />
+          ) : (
+            <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#4a7aff", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 700, flexShrink: 0 }}>
+              {(profile.firstName?.[0] || "") + (profile.lastName?.[0] || "")}
+            </div>
+          )}
+          <div style={{ position: "absolute", bottom: -2, right: -4, background: "#fff", borderRadius: "50%", padding: 4, boxShadow: "0 2px 5px rgba(0,0,0,0.2)", fontSize: 12, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            📷
+          </div>
         </div>
+        <input type="file" ref={fileInputRef} style={{ display: "none" }} accept="image/*" onChange={handleAvatarUpload} />
+
         <div style={{ flex: 1, overflow: "hidden" }}>
           <h1 style={{ margin: 0, fontSize: 20, color: "#1a1a18", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {profile.firstName} {profile.lastName}
@@ -303,16 +343,10 @@ export default function CourierProfilePage() {
             <div style={{ fontSize: 12, color: "#6b6860", marginTop: 2 }}>{isAuto ? "Автомобиль (+100₽ к доставке)" : "Пеший / Авто"}</div>
           </div>
           <div style={{ display: "flex", alignItems: "center", background: "#f5f4f0", borderRadius: 8, padding: 4 }}>
-            <button 
-              onClick={toggleAutoStatus} 
-              style={{ padding: "6px 12px", borderRadius: 6, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: !isAuto ? "#fff" : "transparent", color: !isAuto ? "#1a1a18" : "#a8a49c", boxShadow: !isAuto ? "0 1px 3px rgba(0,0,0,0.1)" : "none", transition: "all 0.2s" }}
-            >
+            <button onClick={toggleAutoStatus} style={{ padding: "6px 12px", borderRadius: 6, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: !isAuto ? "#fff" : "transparent", color: !isAuto ? "#1a1a18" : "#a8a49c", boxShadow: !isAuto ? "0 1px 3px rgba(0,0,0,0.1)" : "none", transition: "all 0.2s" }}>
               🚶 Пеший
             </button>
-            <button 
-              onClick={toggleAutoStatus} 
-              style={{ padding: "6px 12px", borderRadius: 6, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: isAuto ? "#10b981" : "transparent", color: isAuto ? "#fff" : "#a8a49c", boxShadow: isAuto ? "0 1px 3px rgba(0,0,0,0.1)" : "none", transition: "all 0.2s" }}
-            >
+            <button onClick={toggleAutoStatus} style={{ padding: "6px 12px", borderRadius: 6, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: isAuto ? "#10b981" : "transparent", color: isAuto ? "#fff" : "#a8a49c", boxShadow: isAuto ? "0 1px 3px rgba(0,0,0,0.1)" : "none", transition: "all 0.2s" }}>
               🚗 Авто
             </button>
           </div>
@@ -344,10 +378,7 @@ export default function CourierProfilePage() {
                   {stats.isLinked ? `Выплаты на: ${stats.konsolPhone}` : "Налоги +6% не начисляются"}
                 </div>
               </div>
-              <button 
-                onClick={() => stats.isLinked ? handleKonsolAction("unlink") : setKonsolModalOpen(true)}
-                style={{ background: stats.isLinked ? "transparent" : "#1a1a18", border: stats.isLinked ? "1px solid #4a7aff" : "none", color: stats.isLinked ? "#4a7aff" : "#fff", padding: "6px 12px", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
-              >
+              <button onClick={() => stats.isLinked ? handleKonsolAction("unlink") : setKonsolModalOpen(true)} style={{ background: stats.isLinked ? "transparent" : "#1a1a18", border: stats.isLinked ? "1px solid #4a7aff" : "none", color: stats.isLinked ? "#4a7aff" : "#fff", padding: "6px 12px", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                 {stats.isLinked ? "Отвязать" : "Привязать"}
               </button>
             </div>
@@ -372,62 +403,20 @@ export default function CourierProfilePage() {
                       <span style={{ fontSize: 13, fontWeight: 600, color: isWorking ? "#10b981" : "#a8a49c" }}>
                         {isWorking ? "На смене" : "Выходной"}
                       </span>
-                      <input 
-                        type="checkbox" 
-                        checked={isWorking} 
-                        onChange={(e) => updateShift(date, { 
-                          isWorking: e.target.checked, 
-                          startTime: shift?.startTime || "10:00", 
-                          endTime: shift?.endTime || "22:00" 
-                        })} 
-                        style={{ width: 20, height: 20, accentColor: "#10b981" }}
-                      />
+                      <input type="checkbox" checked={isWorking} onChange={(e) => updateShift(date, { isWorking: e.target.checked, startTime: shift?.startTime || "10:00", endTime: shift?.endTime || "22:00" })} style={{ width: 20, height: 20, accentColor: "#10b981" }} />
                     </label>
                   </div>
 
-                  {/* 🔥 ИЗМЕНЕННЫЙ ВЫБОР ВРЕМЕНИ ДЛЯ МОБИЛОК (SELECT вместо INPUT TIME) */}
                   {isWorking && (
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 14, paddingTop: 14, borderTop: "1px solid #d1fae5", flexWrap: "wrap" }}>
                       <span style={{ fontSize: 13, color: "#059669", fontWeight: 600, flex: 1 }}>Часы работы:</span>
                       
                       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <select 
-                          value={shift.startTime || "10:00"} 
-                          onChange={(e) => updateShift(date, { isWorking: true, startTime: e.target.value, endTime: shift.endTime })}
-                          style={{ 
-                            width: "80px", // 🔥 Жестко фиксируем маленькую ширину
-                            padding: "6px 4px", // 🔥 Уменьшили отступы
-                            borderRadius: 8, 
-                            border: "1px solid #a7f3d0", 
-                            outline: "none", 
-                            fontSize: 16, // 🔥 Строго 16px, чтобы iPhone не зумил экран при клике
-                            background: "#fff", 
-                            color: "#065f46", 
-                            fontWeight: 700, 
-                            textAlign: "center" 
-                          }}
-                        >
+                        <select value={shift.startTime || "10:00"} onChange={(e) => updateShift(date, { isWorking: true, startTime: e.target.value, endTime: shift.endTime })} style={{ width: "80px", padding: "6px 4px", borderRadius: 8, border: "1px solid #a7f3d0", outline: "none", fontSize: 16, background: "#fff", color: "#065f46", fontWeight: 700, textAlign: "center" }}>
                           {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
-                        
                         <span style={{ color: "#059669", fontWeight: 700 }}>-</span>
-                        
-                        <select 
-                          value={shift.endTime || "22:00"} 
-                          onChange={(e) => updateShift(date, { isWorking: true, startTime: shift.startTime, endTime: e.target.value })}
-                          style={{ 
-                            width: "80px", 
-                            padding: "6px 4px", 
-                            borderRadius: 8, 
-                            border: "1px solid #a7f3d0", 
-                            outline: "none", 
-                            fontSize: 16, 
-                            background: "#fff", 
-                            color: "#065f46", 
-                            fontWeight: 700, 
-                            textAlign: "center" 
-                          }}
-                        >
+                        <select value={shift.endTime || "22:00"} onChange={(e) => updateShift(date, { isWorking: true, startTime: shift.startTime, endTime: e.target.value })} style={{ width: "80px", padding: "6px 4px", borderRadius: 8, border: "1px solid #a7f3d0", outline: "none", fontSize: 16, background: "#fff", color: "#065f46", fontWeight: 700, textAlign: "center" }}>
                           {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
                       </div>
@@ -487,15 +476,8 @@ export default function CourierProfilePage() {
                   </div>
                   <div style={{ width: "100%" }}>
                     <div style={{ fontSize: 12, color: "#a8a49c", marginBottom: 4 }}>Телефон</div>
-                    <IMaskInput
-                      mask="+7 (000) 000-00-00"
-                      value={newPhone}
-                      onAccept={(value: string) => setNewPhone(value)}
-                      placeholder="+7 (___) ___-__-__"
-                      style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #4a7aff", outline: "none", fontSize: 15, boxSizing: "border-box", display: "block" }}
-                    />
+                    <IMaskInput mask="+7 (000) 000-00-00" value={newPhone} onAccept={(value: string) => setNewPhone(value)} placeholder="+7 (___) ___-__-__" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #4a7aff", outline: "none", fontSize: 15, boxSizing: "border-box", display: "block" }} />
                   </div>
-                  
                   <div style={{ width: "100%" }}>
                     <div style={{ fontSize: 12, color: "#a8a49c", marginBottom: 4 }}>Домашний адрес (Город, Улица, Дом)</div>
                     <AddressSuggestInput value={newHomeAddress} onChange={setNewHomeAddress} />

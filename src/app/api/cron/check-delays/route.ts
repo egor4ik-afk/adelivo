@@ -1,7 +1,8 @@
+// src/app/api/cron/check-delays/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// Функция парсинга времени (как мы делали)
+// Функция парсинга времени
 function parseTimeStr(timeStr: string | null | undefined) {
   if (!timeStr || timeStr === "—") return null;
   const [h, m] = timeStr.split(':').map(Number);
@@ -16,6 +17,16 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Получаем текущее время по МСК
+  const mskDateStr = new Date().toLocaleString("en-US", { timeZone: "Europe/Moscow" });
+  const mskDate = new Date(mskDateStr);
+  const currentHour = mskDate.getHours();
+
+  // 🔥 ОГРАНИЧЕНИЕ ПО ВРЕМЕНИ: Не работаем до 9:00 и после 23:00
+  if (currentHour < 9 || currentHour >= 23) {
+    return NextResponse.json({ ok: true, message: "Night time (outside 09:00-23:00 MSK), check skipped" });
+  }
+
   const tgToken = process.env.TELEGRAM_BOT_TOKEN;
   const tgChat = process.env.TELEGRAM_ADMIN_CHAT_ID;
 
@@ -24,30 +35,53 @@ export async function GET(request: Request) {
   }
 
   try {
-    // Берем все активные заказы на сегодня, по которым еще не было алерта
+    // Берем все активные заказы
     const activeOrders = await prisma.order.findMany({
       where: {
         status: { in: ["ASSIGNED", "IN_DELIVERY"] },
         delayNotified: false,
         slotTo: { not: null }
+      },
+      include: {
+        route: true
       }
     });
 
     let notifiedCount = 0;
 
-    // Текущее время в минутах (МСК)
-    const mskDate = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Moscow" }));
-    const currentMins = mskDate.getHours() * 60 + mskDate.getMinutes();
+    // Текущее время в минутах для расчетов
+    const currentMins = currentHour * 60 + mskDate.getMinutes();
+
+    // Сегодняшняя дата по МСК в формате "YYYY-MM-DD"
+    const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" });
 
     for (const order of activeOrders) {
+      let orderDate = null;
+      if (order.route?.date) {
+        orderDate = order.route.date;
+      } else if (order.deliveryDate) {
+        orderDate = new Date(order.deliveryDate).toISOString().split('T')[0];
+      }
+
+      if (orderDate && orderDate !== todayStr) {
+        continue;
+      }
+
       const planMins = parseTimeStr(order.slotTo);
       if (planMins === null) continue;
+
+      // 🔥 ДОБАВЛЕНО: ЗАЩИТА ОТ РАННЕЙ ПАНИКИ
+      // Если до конца слота доставки еще больше 60 минут — игнорируем.
+      // Курьер еще может нагнать время, выехать быстрее или перестроить маршрут.
+      if (planMins - currentMins > 60) {
+        continue;
+      }
 
       const etaMins = parseTimeStr(order.eta);
       
       // Опоздание считается если: 
       // Либо расчетное ETA > slotTo на 30 мин
-      // Либо просто текущее время > slotTo на 30 мин (курьер тупит и ничего не жмет)
+      // Либо просто текущее время > slotTo на 30 мин (курьер ничего не жмет)
       const isEtaLate = etaMins !== null && (etaMins - planMins >= 30);
       const isTimeLate = (currentMins - planMins >= 30);
 

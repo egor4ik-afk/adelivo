@@ -3,33 +3,23 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function mergeCouriers() {
-  const oldId = 242;
-  const newName = 'Симдянов Артём';
+  // 🔥 ЖЕСТКО ЗАДАЕМ ID
+  const oldId = 271;
+  const newId = 291; 
 
   try {
-    // 1. Находим обоих курьеров
-    const oldCourier = await prisma.courier.findUnique({
-      where: { id: oldId }
-    });
-
-    const newCourier = await prisma.courier.findFirst({
-      where: { fullName: { contains: newName } }
-    });
+    const oldCourier = await prisma.courier.findUnique({ where: { id: oldId } });
+    const newCourier = await prisma.courier.findUnique({ where: { id: newId } });
 
     if (!oldCourier) throw new Error(`Старый курьер с ID ${oldId} не найден.`);
-    if (!newCourier) throw new Error(`Новый курьер "${newName}" не найден.`);
+    if (!newCourier) throw new Error(`Новый курьер с ID ${newId} не найден.`);
 
-    const newId = newCourier.id;
-    console.log(`Начинаем перенос: ID ${oldId} -> ID ${newId} (${newCourier.fullName})`);
+    console.log(`🚀 Начинаем перенос: ID ${oldId} -> ID ${newId} (${newCourier.fullName})`);
 
-    // 2. Переносим Заказы (точки)
-    // У модели Order обновляем как courierId, так и строковое поле courier (имя)
+    // 2. Переносим Заказы
     const ordersResult = await prisma.order.updateMany({
       where: { courierId: oldId },
-      data: { 
-        courierId: newId,
-        courier: newCourier.fullName 
-      },
+      data: { courierId: newId, courier: newCourier.fullName },
     });
     console.log(`✅ Заказы перенесены: ${ordersResult.count}`);
 
@@ -40,7 +30,7 @@ async function mergeCouriers() {
     });
     console.log(`✅ Маршруты перенесены: ${routesResult.count}`);
 
-    // 4. Переносим Смены ("проекты")
+    // 4. Переносим Смены
     const shifts = await prisma.courierShift.findMany({ where: { courierId: oldId } });
     let shiftsMoved = 0;
     for (const shift of shifts) {
@@ -51,11 +41,10 @@ async function mergeCouriers() {
         });
         shiftsMoved++;
       } catch (error) {
-        // Если смена на эту дату уже есть у нового курьера, удаляем дубль старого
         await prisma.courierShift.delete({ where: { id: shift.id } });
       }
     }
-    console.log(`✅ Смены перенесены: ${shiftsMoved} (удалено дублей: ${shifts.length - shiftsMoved})`);
+    console.log(`✅ Смены перенесены: ${shiftsMoved}`);
 
     // 5. Переносим Платежи
     const payments = await prisma.courierPayment.findMany({ where: { courierId: oldId } });
@@ -71,9 +60,9 @@ async function mergeCouriers() {
         await prisma.courierPayment.delete({ where: { id: payment.id } });
       }
     }
-    console.log(`✅ Платежи перенесены: ${paymentsMoved} (удалено дублей: ${payments.length - paymentsMoved})`);
+    console.log(`✅ Платежи перенесены: ${paymentsMoved}`);
 
-    // 6. Переносим Задачи Консоли (если они подразумевались под "проектами")
+    // 6. Переносим Задачи Консоли
     const tasks = await prisma.konsolTask.findMany({ where: { courierId: oldId } });
     let tasksMoved = 0;
     for (const task of tasks) {
@@ -93,7 +82,7 @@ async function mergeCouriers() {
     await prisma.courier.delete({
       where: { id: oldId },
     });
-    console.log(`✅ Старый курьер (ID ${oldId}) успешно удален.`);
+    console.log(`✅ Старый курьер (ID ${oldId}) успешно удален!`);
 
   } catch (error) {
     console.error('❌ Ошибка при выполнении скрипта:', error);

@@ -29,11 +29,11 @@ export async function POST(req: NextRequest) {
       ContentType: contentType,
     });
 
-    // Генерируем ссылку, которая действительна 1 час (3600 секунд)
+    // Генерируем ссылку для загрузки, которая действительна 1 час (3600 секунд)
     const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
     
-    // Итоговая публичная ссылка на файл
-    const fileUrl = `https://${process.env.YANDEX_BUCKET_NAME}.storage.yandexcloud.net/${key}`;
+    // 🔥 ИЗМЕНЕНО: Итоговая публичная ссылка на файл теперь использует ваш CDN домен
+    const fileUrl = `https://cdn.relaxdev.ru/${key}`;
 
     return NextResponse.json({ uploadUrl, fileUrl });
   } catch (e) {

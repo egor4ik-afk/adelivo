@@ -48,11 +48,29 @@ export async function POST(req: Request) {
     const sortedOrders = orderIds.map((id: string) => orders.find((o) => o.id === id)).filter(Boolean);
     const coordsList = sortedOrders.map((o: any) => o.lat && o.lng ? `${o.lat},${o.lng}` : null).filter(Boolean);
     
+    // 🔥 1. Получаем данные курьера РАНЬШЕ, чтобы использовать его тип (авто/пеший) для ссылки Яндекс Карт
+    const courierDb = await prisma.courier.findUnique({ where: { id: Number(courierId) } });
+    const courierFullName = courierDb?.fullName || "";
+    const rttMode = courierDb?.isAuto ? "auto" : "mt";
+
     const rtextArr = [STORE_COORDS, ...coordsList];
     if (returnToBase) rtextArr.push(STORE_COORDS);
-    const link = `https://yandex.ru/maps/?rtext=${rtextArr.join("~")}&rtt=${routeType}`;
+    
+    // 🔥 2. Генерируем ссылку с правильным rttMode
+    const link = `https://yandex.ru/maps/?rtext=${rtextArr.join("~")}&rtt=${rttMode}`;
 
-    let finalRouteDate = routeDate || new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }); 
+    // 🔥 3. Улучшенная логика даты: если с фронта не пришла, берем из первой точки
+    let finalRouteDate = routeDate;
+    if (!finalRouteDate && sortedOrders.length > 0) {
+      const firstOrder = sortedOrders[0];
+      if (firstOrder) {
+        finalRouteDate = firstOrder.deliveryDate || (firstOrder.crmCreatedAt ? firstOrder.crmCreatedAt.split('T')[0] : null);
+      }
+    }
+    // Если и в точках пусто, берем сегодняшний день
+    if (!finalRouteDate) {
+      finalRouteDate = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }); 
+    }
 
     let routeName = existingRouteName;
     if (!routeName) {
@@ -82,11 +100,9 @@ export async function POST(req: Request) {
       }
     });
 
-    const courierDb = await prisma.courier.findUnique({ where: { id: Number(courierId) } });
-    const courierFullName = courierDb?.fullName || "";
-
     for (let i = 0; i < orderIds.length; i++) {
       const orderToUpdate = sortedOrders.find((o: any) => o.id === orderIds[i]);
+      if (!orderToUpdate) continue;
       
       let newOpComment = orderToUpdate.opComment || "";
       if (i === 0 && departureAdvice && !newOpComment.includes(departureAdvice)) {

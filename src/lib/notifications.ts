@@ -5,13 +5,13 @@ import { sendNewOrderAlert, sendOrderUpdateAlert, sendInvalidAddressAlert } from
 
 export type NotificationEvent =
   | { type: "order.new"; order: OrderPayload }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   | { type: "order.updated"; order: OrderPayload; previousStatus?: string; changes?: any }
   | { type: "address.invalid"; orders: InvalidOrderPayload[] }
   | { type: "route.assigned"; userId: string; routeId: string; pointsCount: number }
-  // 🔥 ДОБАВЛЕНО: Поддержка произвольных пуш-уведомлений (для Консоли и других системных алертов)
-  | { type: "custom"; userId: string; title: string; body: string; url?: string };
-
+  | { type: "custom"; userId: string; title: string; body: string; url?: string }
+  // 🔥 ДОБАВЛЕНО: Два новых типа для чатов
+  | { type: "chat.private"; senderName: string; text: string; targetUserId: string; conversationId: string }
+  | { type: "chat.global"; senderName: string; text: string; senderId: string };
 interface OrderPayload {
   id: string;
   crmId: string;
@@ -109,6 +109,37 @@ async function sendIndividualPushes(event: NotificationEvent) {
     }
     return; // Завершаем функцию, так как custom-пуш отправлен
   }
+  // 🔥 ОБРАБОТКА ЛИЧНЫХ СООБЩЕНИЙ ЧАТА (Отправляем только одному пользователю)
+  if (event.type === "chat.private") {
+    const targetUser = await prisma.user.findUnique({
+      where: { id: event.targetUserId },
+      include: { pushSubscriptions: true },
+    });
+    
+    if (!targetUser || !targetUser.pushSubscriptions.length) return;
+
+    const payload = JSON.stringify({
+      title: `💬 Сообщение от: ${event.senderName}`,
+      body: event.text,
+      url: `/`, // Можно перенаправить на нужную страницу (например, в дашборд)
+      role: targetUser.role,
+      orderId: null, // orderId тут не нужен
+      timestamp: Date.now(),
+    });
+
+    const expiredEndpoints: string[] = [];
+    for (const sub of targetUser.pushSubscriptions) {
+      try {
+        await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload);
+      } catch (e: any) {
+        if (e.statusCode === 410 || e.statusCode === 404) expiredEndpoints.push(sub.endpoint);
+      }
+    }
+    if (expiredEndpoints.length > 0) {
+      await prisma.pushSubscription.deleteMany({ where: { endpoint: { in: expiredEndpoints } } });
+    }
+    return;
+  }
 
   const users = await prisma.user.findMany({
     include: { pushSubscriptions: true },
@@ -176,7 +207,6 @@ async function sendIndividualPushes(event: NotificationEvent) {
           shouldSend = true;
           bodyTexts.push(`Телефон получателя изменен`);
         }
-
         if (shouldSend) {
           title = `📦 Заказ ${event.order.externalId ?? event.order.crmId} обновлён`;
           targetUrl = `/dashboard?orderId=${event.order.id}`;
@@ -250,7 +280,14 @@ async function sendIndividualPushes(event: NotificationEvent) {
         }
       }
     }
-
+    // ── ГЛОБАЛЬНЫЙ ЧАТ (Для всех, кроме отправителя) ──
+    // ════════════════════════════════════════════════════════════
+    if (event.type === "chat.global" && user.id !== event.senderId) {
+      shouldSend = true;
+      title = `🌐 Общий чат: ${event.senderName}`;
+      bodyTexts.push(event.text);
+      targetUrl = "/"; // Или "/dashboard"
+    }
     // ── Отправляем push если есть что отправить ──
     if (shouldSend && title) {
       const payload = JSON.stringify({

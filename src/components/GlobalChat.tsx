@@ -1,9 +1,10 @@
+// src/components/GlobalChat.tsx
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 import imageCompression from "browser-image-compression";
 import { usePathname } from "next/navigation";
 
-type UserInfo = { id: string; firstName?: string | null; lastName?: string | null; email: string; phone?: string | null; role: string };
+type UserInfo = { id: string; firstName?: string | null; lastName?: string | null; email: string; phone?: string | null; role: string; avatarUrl?: string | null };
 type LastMessage = { id: string; text?: string | null; mediaType?: string | null; createdAt: string; senderId: string; readAt?: string | null };
 type Conversation = { id: string; user1: UserInfo; user2: UserInfo; messages: LastMessage[]; unread: number; updatedAt: string };
 type Message = { id: string; text?: string | null; mediaType?: string | null; mediaUrl?: string | null; createdAt: string; sender: UserInfo; readAt?: string | null };
@@ -24,22 +25,25 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
   const [hasNewGlobal, setHasNewGlobal] = useState(false);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
 
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  // 🔥 Три режима уведомлений: "all" (звук+пуш), "push" (только пуш), "mute" (без уведомлений)
+  const [notifyMode, setNotifyMode] = useState<"all" | "push" | "mute">("all");
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("chat_sound");
-      if (saved !== null) setSoundEnabled(saved === "true");
+      const saved = localStorage.getItem("chat_notify_mode");
+      if (saved === "push" || saved === "mute") setNotifyMode(saved);
     }
   }, []);
-  const toggleSound = () => {
-    const next = !soundEnabled;
-    setSoundEnabled(next);
-    localStorage.setItem("chat_sound", String(next));
+  const toggleNotifyMode = () => {
+    setNotifyMode(prev => {
+      const next = prev === "all" ? "push" : prev === "push" ? "mute" : "all";
+      localStorage.setItem("chat_notify_mode", next);
+      return next;
+    });
   };
 
   const endRef = useRef<HTMLDivElement>(null);
-  const chatBodyRef = useRef<HTMLDivElement>(null); // 🔥 Реф для контейнера сообщений
-  const textareaRef = useRef<HTMLTextAreaElement>(null); // 🔥 Реф для поля ввода
+  const chatBodyRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevUnreadRef = useRef(0);
@@ -64,12 +68,9 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
   }, []);
 
   const playNotificationSound = useCallback(() => {
-    if (soundEnabled) {
-      try { const audio = new Audio('/message.mp3'); audio.play().catch(() => {}); } catch (e) {}
-    }
-  }, [soundEnabled]);
+    try { const audio = new Audio('/message.mp3'); audio.play().catch(() => {}); } catch (e) {}
+  }, []);
 
-  // 🔥 ФУНКЦИЯ ДЛЯ РЕАЛЬНОГО СКАЧИВАНИЯ ФАЙЛОВ ИЗ S3
   const forceDownload = async (url: string, filename: string) => {
     try {
       const response = await fetch(url);
@@ -85,7 +86,7 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
       window.URL.revokeObjectURL(blobUrl);
     } catch (error) {
       console.error("Ошибка скачивания, открываем в новой вкладке", error);
-      window.open(url, "_blank"); // Фолбэк, если CORS блокирует fetch
+      window.open(url, "_blank");
     }
   };
 
@@ -99,8 +100,8 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
         setTotalUnread(unreadCount);
 
         if (unreadCount > prevUnreadRef.current) {
-          playNotificationSound();
-          if ("Notification" in window && Notification.permission === "granted" && !open) {
+          if (notifyMode === "all") playNotificationSound();
+          if (notifyMode !== "mute" && "Notification" in window && Notification.permission === "granted" && !open) {
             new Notification("Новое личное сообщение", { icon: "/favicon-96x96.png" });
           }
         }
@@ -115,8 +116,8 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
           const lastSeen = localStorage.getItem("last_global_msg");
           if (lastSeen !== latest.id && latest.senderId !== currentUserId) {
             setHasNewGlobal(true);
-            playNotificationSound();
-            if ("Notification" in window && Notification.permission === "granted" && !open) {
+            if (notifyMode === "all") playNotificationSound();
+            if (notifyMode !== "mute" && "Notification" in window && Notification.permission === "granted" && !open) {
               new Notification("Новое сообщение в Общем чате", { icon: "/favicon-96x96.png" });
             }
             localStorage.setItem("last_global_msg", latest.id);
@@ -124,23 +125,26 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
         }
       }
     } catch (e) { console.error(e); }
-  }, [open, currentUserId, playNotificationSound]);
+  }, [open, currentUserId, playNotificationSound, notifyMode]);
 
-  // 🔥 ИСПРАВЛЕННЫЙ СКРОЛЛ
   const fetchMessages = useCallback(async (convId: string, isInitialLoad = false) => {
+    // 🔥 Защита: не отправляем запросы для виртуальных чатов
+    if (convId.startsWith("virtual_")) {
+      setMessages([]);
+      return;
+    }
+    
     try {
       const url = convId === "general" ? "/api/chat/general" : `/api/chat/conversations/${convId}/messages`;
       const res = await fetch(url);
       if (!res.ok) return;
       const msgs = await res.json();
       
-      // Проверяем, находится ли скролл в самом низу ПЕРЕД обновлением сообщений
       const container = chatBodyRef.current;
       const isAtBottom = container ? (container.scrollHeight - container.scrollTop - container.clientHeight < 150) : true;
 
       setMessages(msgs);
 
-      // Скроллим вниз только при первом открытии или если мы УЖЕ были внизу
       if (isInitialLoad || isAtBottom) {
         setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
       }
@@ -179,7 +183,7 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
       setActiveConv({ id: "general" } as any);
       setView("dialog");
       setHasNewGlobal(false);
-      await fetchMessages("general", true); // true = первый лоад, скроллим вниз
+      await fetchMessages("general", true);
     } else {
       setActiveConv(convOrId);
       setView("dialog");
@@ -201,7 +205,7 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
     if ((!val && !payload) || !activeConv || loading) return;
     
     setText("");
-    if (textareaRef.current) textareaRef.current.style.height = "auto"; // Сбрасываем высоту
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
     
     setLoading(true);
     try {
@@ -212,10 +216,19 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
         body: JSON.stringify({ text: val, ...payload }),
       });
       if (res.ok) {
-        const msg: Message = await res.json();
-        setMessages(prev => [...prev, msg]);
-        setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 50); // При своей отправке скроллим всегда
-        if (activeConv.id === "general") localStorage.setItem("last_global_msg", msg.id);
+        const data = await res.json();
+        
+        // 🔥 БАГФИКС: Если мы писали в виртуальный диалог, бэкенд вернет нам его РЕАЛЬНЫЙ ID в базе
+        if (data.actualConvId) {
+          setMessages(prev => [...prev, data.message]);
+          setActiveConv(prev => prev ? { ...prev, id: data.actualConvId } : null);
+        } else {
+          const msg: Message = data;
+          setMessages(prev => [...prev, msg]);
+          if (activeConv.id === "general") localStorage.setItem("last_global_msg", msg.id);
+        }
+        
+        setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
         fetchConversations();
       }
     } finally { setLoading(false); }
@@ -317,7 +330,6 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
     return () => clearTimeout(t);
   }, [searchQ, view]);
 
-  // 🔥 ОБРАБОТКА ИЗМЕНЕНИЯ ВЫСОТЫ TEXTAREA
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setText(e.target.value);
     if (textareaRef.current) {
@@ -326,10 +338,13 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
     }
   };
 
-  const userName = (u: UserInfo) => [u.firstName, u.lastName].filter(Boolean).join(" ") || u.email;
-  const roleLabel = (r: string) => r === "ADMIN" ? "Админ" : r === "OPERATOR" ? "Оператор" : "Курьер";
-  const roleColor = (r: string) => r === "COURIER" ? "#10b981" : "#4a7aff";
-  const interlocutor = (c: Conversation) => c.user1.id === currentUserId ? c.user2 : c.user1;
+  const userName = (u?: UserInfo | null) => {
+    if (!u) return "Неизвестный";
+    return [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.email || "Курьер";
+  };
+  const roleLabel = (r?: string) => r === "ADMIN" ? "Админ" : r === "OPERATOR" ? "Оператор" : "Курьер";
+  const roleColor = (r?: string) => r === "COURIER" ? "#10b981" : "#4a7aff";
+  const interlocutor = (c: Conversation) => String(c.user1?.id) === String(currentUserId) ? c.user2 : c.user1;
 
   return (
     <>
@@ -355,14 +370,10 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
         .lightbox { animation: fadeIn 0.2s ease forwards; }
         .spinner { animation: spin 1s linear infinite; }
         
-        /* Скрываем скроллбар в textarea для красоты, оставляя прокрутку */
         .chat-textarea::-webkit-scrollbar { width: 4px; }
         .chat-textarea::-webkit-scrollbar-thumb { background: #dcdcdc; border-radius: 4px; }
-
-        ${isCourier ? '@media (max-width: 768px) { .desktop-chat-btn { display: none !important; } }' : ''}
       `}} />
 
-      {/* ПОЛНОЭКРАННАЯ КАРТИНКА */}
       {fullscreenImage && (
         <div 
           className="lightbox"
@@ -371,7 +382,6 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
         >
           <img src={fullscreenImage} alt="Fullscreen" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8, boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }} />
           <div style={{ position: "absolute", top: 20, right: 20, display: "flex", gap: 10 }}>
-            {/* 🔥 КНОПКА СКАЧАТЬ (ФОРСИРУЕТ СКАЧИВАНИЕ) */}
             <button 
               onClick={(e) => { e.stopPropagation(); forceDownload(fullscreenImage, "image.jpg"); }}
               style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "#fff", padding: "8px 16px", borderRadius: 20, fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
@@ -400,8 +410,13 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
               {view === "dialog" && activeConv && (activeConv.id === "general" ? "🌐 Общий чат" : userName(interlocutor(activeConv)))}
             </span>
             
-            <button onClick={toggleSound} title={soundEnabled ? "Выключить звук" : "Включить звук"} style={{ background: "none", border: "none", color: "#fff", fontSize: 16, cursor: "pointer", padding: "0 4px", opacity: soundEnabled ? 1 : 0.5 }}>
-              {soundEnabled ? "🔔" : "🔕"}
+            {/* 🔥 ПЕРЕКЛЮЧАТЕЛЬ УВЕДОМЛЕНИЙ */}
+            <button 
+              onClick={toggleNotifyMode} 
+              title={notifyMode === "all" ? "Звук + Пуш" : notifyMode === "push" ? "Только Push" : "Без уведомлений"} 
+              style={{ background: "none", border: "none", color: "#fff", fontSize: 16, cursor: "pointer", padding: "0 4px", opacity: notifyMode === "mute" ? 0.5 : 1 }}
+            >
+              {notifyMode === "all" ? "🔊" : notifyMode === "push" ? "🔕" : "🔇"}
             </button>
 
             {view === "list" && (
@@ -411,7 +426,8 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
           </div>
 
           {view === "list" && (
-            <div style={{ flex: 1, overflowY: "auto" }}>
+            /* 🔥 ДОБАВЛЕНЫ СВОЙСТВА ДЛЯ СКРОЛЛА */
+            <div style={{ flex: 1, overflowY: "auto", minHeight: 0, WebkitOverflowScrolling: "touch" }}>
               <div onClick={() => openDialog("general")} style={{ padding: "10px 14px", borderBottom: "1px solid #f0ede8", cursor: "pointer", display: "flex", gap: 10, alignItems: "center", background: "#fcfcfa", transition: "background 0.15s" }}>
                 <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#4a7aff", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 20, flexShrink: 0 }}>🌐</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -427,12 +443,20 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
               
               {conversations.map(c => {
                 const other = interlocutor(c);
-                const last = c.messages[0];
+                if (!other) return null; // 🔥 Защита: пропускаем чат, если собеседника больше нет
+
+                const last = c.messages?.[0]; // 🔥 Защита: ставим ? на случай пустого массива сообщений
+                const initial = (other.firstName?.[0] ?? other.lastName?.[0] ?? other.email?.[0] ?? "?").toUpperCase();
+
                 return (
                   <div key={c.id} onClick={() => openDialog(c)} style={{ padding: "10px 14px", borderBottom: "1px solid #f0ede8", cursor: "pointer", display: "flex", gap: 10, alignItems: "center", background: "#fff", transition: "background 0.15s" }} onMouseEnter={e => (e.currentTarget.style.background = "#f5f4f0")} onMouseLeave={e => (e.currentTarget.style.background = "#fff")}>
-                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: roleColor(other.role), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 15, flexShrink: 0 }}>
-                      {(other.firstName?.[0] ?? other.lastName?.[0] ?? other.email?.[0] ?? "?").toUpperCase()}
-                    </div>
+                    {other.avatarUrl ? (
+                      <img src={other.avatarUrl} alt="ava" style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "1px solid #e8e6df" }} />
+                    ) : (
+                      <div style={{ width: 40, height: 40, borderRadius: "50%", background: roleColor(other.role), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 15, flexShrink: 0 }}>
+                        {initial}
+                      </div>
+                    )}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <span style={{ fontSize: 13, fontWeight: 600, color: "#1a1a18", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{userName(other)}</span>
@@ -459,15 +483,19 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
           )}
 
           {view === "search" && (
-            <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-              <div style={{ padding: "10px 12px", borderBottom: "1px solid #e8e6df" }}>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+              <div style={{ padding: "10px 12px", borderBottom: "1px solid #e8e6df", flexShrink: 0 }}>
                 <input autoFocus value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Имя, телефон или email..." style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #e8e6df", background: "#f5f4f0", outline: "none", fontSize: 13, boxSizing: "border-box" }} />
               </div>
-              <div style={{ flex: 1, overflowY: "auto" }}>
+              <div style={{ flex: 1, overflowY: "auto", minHeight: 0, WebkitOverflowScrolling: "touch" }}>
                 {searchResults.length === 0 && searchQ.length > 0 && <div style={{ fontSize: 12, color: "#a8a49c", textAlign: "center", marginTop: 40 }}>Никого не найдено</div>}
                 {searchResults.map(u => (
                   <div key={u.id} onClick={() => startChat(u)} style={{ padding: "10px 14px", borderBottom: "1px solid #f0ede8", cursor: "pointer", display: "flex", gap: 10, alignItems: "center", background: "#fff", transition: "background 0.1s" }} onMouseEnter={e => (e.currentTarget.style.background = "#f5f4f0")} onMouseLeave={e => (e.currentTarget.style.background = "#fff")}>
-                    <div style={{ width: 36, height: 36, borderRadius: "50%", background: roleColor(u.role), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 13, flexShrink: 0 }}>{(u.firstName?.[0] ?? u.lastName?.[0] ?? u.email?.[0] ?? "?").toUpperCase()}</div>
+                     {u.avatarUrl ? (
+                      <img src={u.avatarUrl} alt="ava" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "1px solid #e8e6df" }} />
+                    ) : (
+                      <div style={{ width: 36, height: 36, borderRadius: "50%", background: roleColor(u.role), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 13, flexShrink: 0 }}>{(u.firstName?.[0] ?? u.lastName?.[0] ?? u.email?.[0] ?? "?").toUpperCase()}</div>
+                    )}
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 600, color: "#1a1a18" }}>{userName(u)}</div>
                       <div style={{ fontSize: 10, color: roleColor(u.role), fontWeight: 600 }}>{roleLabel(u.role)}</div>
@@ -481,7 +509,8 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
           {/* ── Диалог ── */}
           {view === "dialog" && activeConv && (
             <>
-              <div ref={chatBodyRef} style={{ flex: 1, overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 10, background: "#fafaf8", position: "relative" }}>
+              {/* 🔥 ДОБАВЛЕНЫ СВОЙСТВА ДЛЯ СКРОЛЛА */}
+              <div ref={chatBodyRef} style={{ flex: 1, overflowY: "auto", minHeight: 0, WebkitOverflowScrolling: "touch", padding: 12, display: "flex", flexDirection: "column", gap: 10, background: "#fafaf8", position: "relative" }}>
                 
                 {loading && (
                   <div style={{ position: "sticky", top: 10, left: "50%", transform: "translateX(-50%)", background: "rgba(26, 26, 24, 0.8)", color: "#fff", padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 8, zIndex: 100, alignSelf: "center", backdropFilter: "blur(4px)" }}>
@@ -494,13 +523,27 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
                 {messages.map(m => {
                   const isMe = m.sender.id === currentUserId;
                   return (
-                    <div key={m.id} style={{ alignSelf: isMe ? "flex-end" : "flex-start", maxWidth: "85%", display: "flex", flexDirection: "column" }}>
+                    <div key={m.id} style={{ alignSelf: isMe ? "flex-end" : "flex-start", maxWidth: "85%", display: "flex", gap: 8, alignItems: "flex-end" }}>
                       
-                      {activeConv.id === "general" && !isMe && (
-                        <div style={{ fontSize: 11, color: "#a8a49c", marginBottom: 2, marginLeft: 4, fontWeight: 600 }}>{userName(m.sender)}</div>
+                      {/* 🔥 АВАТАРКА ОТПРАВИТЕЛЯ (Только в Общем чате и не от себя) */}
+                      {!isMe && activeConv.id === "general" && (
+                        m.sender.avatarUrl ? (
+                          <img src={m.sender.avatarUrl} alt="ava" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "1px solid #e8e6df" }} />
+                        ) : (
+                          <div style={{ width: 28, height: 28, borderRadius: "50%", background: roleColor(m.sender.role), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
+                            {(m.sender.firstName?.[0] || m.sender.lastName?.[0] || m.sender.email[0]).toUpperCase()}
+                          </div>
+                        )
                       )}
 
-                      <div style={{ background: isMe ? "#1a1a18" : "#fff", color: isMe ? "#fff" : "#1a1a18", padding: "8px 12px", borderRadius: 14, borderBottomRightRadius: isMe ? 4 : 14, borderBottomLeftRadius: isMe ? 14 : 4, border: isMe ? "none" : "1px solid #e8e6df", boxShadow: "0 2px 4px rgba(0,0,0,0.04)" }}>
+                      <div style={{ display: "flex", flexDirection: "column" }}>
+                        
+                        {/* Имя отправителя сверху пузыря (Только в Общем чате) */}
+                        {activeConv.id === "general" && !isMe && (
+                          <div style={{ fontSize: 11, color: "#a8a49c", marginBottom: 2, marginLeft: 4, fontWeight: 600 }}>{userName(m.sender)}</div>
+                        )}
+
+                        <div style={{ background: isMe ? "#1a1a18" : "#fff", color: isMe ? "#fff" : "#1a1a18", padding: "8px 12px", borderRadius: 14, borderBottomRightRadius: isMe ? 4 : 14, borderBottomLeftRadius: isMe ? 14 : 4, border: isMe ? "none" : "1px solid #e8e6df", boxShadow: "0 2px 4px rgba(0,0,0,0.04)" }}>
                         
                         {m.mediaType === "image" && m.mediaUrl && (
                           <img 
@@ -514,7 +557,6 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
                         {m.mediaType === "video" && m.mediaUrl && <video controls src={m.mediaUrl} style={{ width: "100%", borderRadius: 8, marginBottom: m.text ? 6 : 0, maxHeight: 250, backgroundColor: "#000" }} />}
                         {m.mediaType === "audio" && m.mediaUrl && <audio controls src={m.mediaUrl} style={{ height: 36, width: 220, marginBottom: m.text ? 6 : 0 }} />}
                         
-                        {/* 🔥 ДОКУМЕНТ С ПРИНУДИТЕЛЬНЫМ СКАЧИВАНИЕМ */}
                         {m.mediaType === "file" && m.mediaUrl && (
                           <div 
                             onClick={(e) => { e.preventDefault(); forceDownload(m.mediaUrl!, "document"); }}
@@ -539,13 +581,13 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
                           )}
                         </div>
                       </div>
+                      </div>
                     </div>
                   );
                 })}
                 <div ref={endRef} />
               </div>
 
-              {/* 🔥 ОБНОВЛЕННЫЙ БЛОК ВВОДА С TEXTAREA */}
               <div style={{ padding: 10, borderTop: "1px solid #e8e6df", display: "flex", gap: 8, background: "#fff", flexShrink: 0, alignItems: "flex-end" }}>
                 <input type="file" ref={fileInputRef} style={{ display: "none" }} onChange={handleFileUpload} />
                 <button onClick={() => fileInputRef.current?.click()} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", padding: "6px 4px", opacity: loading || isRecording ? 0.5 : 1, transition: "opacity 0.2s" }} disabled={loading || isRecording}>📎</button>
@@ -588,7 +630,8 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
         </div>
       )}
 
-      <button className="desktop-chat-btn" onClick={() => setOpen(v => !v)} style={{ position: "fixed", bottom: 24, right: 24, width: 56, height: 56, borderRadius: "50%", background: "#1a1a18", color: "#fff", border: "none", fontSize: 24, cursor: "pointer", boxShadow: "0 6px 20px rgba(0,0,0,0.25)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, transition: "transform 0.2s" }} onMouseDown={e => e.currentTarget.style.transform = "scale(0.95)"} onMouseUp={e => e.currentTarget.style.transform = "scale(1)"} onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
+      {/* 🔥 КЛАСС desktop-chat-btn ЗАМЕНЕН НА global-chat-btn ЧТОБЫ ВСЕГДА БЫЛО ВИДНО */}
+      <button className="global-chat-btn" onClick={() => setOpen(v => !v)} style={{ position: "fixed", bottom: 24, right: 24, width: 56, height: 56, borderRadius: "50%", background: "#1a1a18", color: "#fff", border: "none", fontSize: 24, cursor: "pointer", boxShadow: "0 6px 20px rgba(0,0,0,0.25)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, transition: "transform 0.2s" }} onMouseDown={e => e.currentTarget.style.transform = "scale(0.95)"} onMouseUp={e => e.currentTarget.style.transform = "scale(1)"} onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}>
         {open ? "×" : "💬"}
         {!open && (totalUnread > 0 || hasNewGlobal) && <span style={{ position: "absolute", top: 4, right: 4, background: "#ef4444", color: "#fff", borderRadius: "50%", minWidth: 20, height: 20, padding: "0 5px", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid #1a1a18" }}>{(totalUnread + (hasNewGlobal ? 1 : 0)) > 9 ? "9+" : (totalUnread + (hasNewGlobal ? 1 : 0))}</span>}
       </button>

@@ -32,22 +32,18 @@ export async function applyUniversalEtaShift(orderId: string, newStatus: string,
     const oldEtaMins = parseTimeStr(order.eta);
     if (oldEtaMins === null) return;
 
-    const currentMins = getCurrentMskMinutes();
     let diffMinutesToShift = 0;
     let updatedCurrentEta = order.eta;
 
     if (newStatus === "IN_DELIVERY") {
       if (explicitEta && explicitEta !== "—") {
-        // 1. Точное время с карты курьера (из Яндекса)
         const newMins = parseTimeStr(explicitEta);
         if (newMins !== null) {
           diffMinutesToShift = newMins - oldEtaMins;
           updatedCurrentEta = explicitEta;
         }
       } else {
-        // 2. Нажали "В пути" вслепую (без Яндекса)
         if (order.routeOrder === 1) {
-          // 🔥 ЭТО ПЕРВАЯ ТОЧКА! Считаем, на сколько курьер опоздал с выездом
           let driveTimeMins = 30; 
           const adviceSource = order.route?.departureAdvice || order.opComment || "";
           const matches = [...adviceSource.matchAll(/Выехать до\s*(\d{1,2}):(\d{2}).*?к\s*(\d{1,2}):(\d{2})/g)];
@@ -59,31 +55,42 @@ export async function applyUniversalEtaShift(orderId: string, newStatus: string,
             driveTimeMins = ((arrMins - depMins) + 1440) % 1440;
           }
           
-          const newEtaMins = currentMins + driveTimeMins;
+          // Для выезда используем pickedUpAt (он никогда не перезаписывается)
+          let baseMins = getCurrentMskMinutes();
+          if (order.pickedUpAt) {
+              const d = new Date(order.pickedUpAt);
+              baseMins = ((d.getUTCHours() + 3) % 24) * 60 + d.getUTCMinutes();
+          }
+
+          const newEtaMins = baseMins + driveTimeMins;
           diffMinutesToShift = newEtaMins - oldEtaMins;
           updatedCurrentEta = formatTimeStr(newEtaMins);
         } else {
-          // 🔥 ЭТО 2, 3 ИЛИ 4 ТОЧКА! Их ETA УЖЕ ИДЕАЛЬНО РАССЧИТАНО!
-          // Ничего не сдвигаем, просто выходим из функции.
-          console.log(`[ETA UNIVERSAL] Точка ${order.routeOrder} переведена 'В пути'. ETA не меняем.`);
-          return;
+          return; // Если это 2, 3 точка - выходим, ничего не трогаем!
         }
       }
 
-      // Перезаписываем ETA для ТЕКУЩЕЙ точки
+      // 🔥 Для IN_DELIVERY разрешаем обновлять План (eta) текущей точки
       if (diffMinutesToShift !== 0) {
-        await prisma.order.update({
-          where: { id: orderId },
-          data: { eta: updatedCurrentEta }
-        });
+        await prisma.order.update({ where: { id: orderId }, data: { eta: updatedCurrentEta } });
       }
 
     } else if (newStatus === "DELIVERED") {
-      // 3. ДОСТАВЛЕН: смотрим, на сколько опоздали/опередили План
-      diffMinutesToShift = currentMins - oldEtaMins;
+      // 🔥 Вычисляем разницу для сдвига будущих точек
+      let deliveredMins = getCurrentMskMinutes();
+      
+      if (explicitEta && explicitEta !== "—") {
+          const parsed = parseTimeStr(explicitEta);
+          if (parsed !== null) deliveredMins = parsed;
+      }
+
+      diffMinutesToShift = deliveredMins - oldEtaMins;
+      
+      // ❌ ЗДЕСЬ БОЛЬШЕ НЕТ prisma.order.update ДЛЯ ТЕКУЩЕГО ЗАКАЗА!
+      // Его `eta` навсегда остается таким, каким был до нажатия "Доставлен".
     }
 
-    // 4. СДВИГАЕМ ВСЕ ОСТАЛЬНЫЕ ТОЧКИ В МАРШРУТЕ
+    // СДВИГАЕМ ВСЕ ОСТАЛЬНЫЕ ТОЧКИ В МАРШРУТЕ
     if (diffMinutesToShift !== 0) {
       const futureOrders = await prisma.order.findMany({
         where: { 
@@ -102,10 +109,6 @@ export async function applyUniversalEtaShift(orderId: string, newStatus: string,
           });
         }
       }
-      console.log(`[ETA UNIVERSAL] Сдвинуто ${futureOrders.length} точек на ${diffMinutesToShift} мин. (Заказ ${orderId}, Статус ${newStatus})`);
     }
-
-  } catch (err) {
-    console.error(`[ETA UNIVERSAL] Ошибка:`, err);
-  }
+  } catch (err) { console.error(`[ETA UNIVERSAL] Ошибка:`, err); }
 }

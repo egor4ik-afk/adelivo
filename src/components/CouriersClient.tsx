@@ -1,7 +1,7 @@
 // src/components/CouriersClient.tsx
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { OrderDetail } from "./OrderDetail";
 import { RouteEditor } from "./RouteEditor";
@@ -73,7 +73,7 @@ export function CouriersClient({ user }: { user: any }) {
   const scheduleDates = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(scheduleWeekStart); d.setDate(d.getDate() + i); return d.toISOString().split("T")[0];
   });
-  const [sortDate, setSortDate] = useState(scheduleDates[1]);
+  const [sortDate, setSortDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }));
 
   const [weekStart, setWeekStart] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() - (d.getDay() === 0 ? 6 : d.getDay() - 1));
@@ -86,6 +86,25 @@ export function CouriersClient({ user }: { user: any }) {
   const [routesDate, setRoutesDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }));
   const [expandedCouriers, setExpandedCouriers] = useState<Record<number, boolean>>({});
 
+  // 1. Создаем реф для контейнера таблицы графика
+  const scheduleScrollRef = useRef<HTMLDivElement>(null);
+
+  // 2. Эффект для авто-скролла к текущему дню
+  useEffect(() => {
+    if (activeTab === "schedule" && scheduleScrollRef.current) {
+      // Получаем сегодняшнюю дату (YYYY-MM-DD)
+      const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" });
+      const todayTh = document.getElementById(`day-${todayStr}`);
+
+      if (todayTh) {
+        // Скроллим вправо: позиция колонки минус ширина зафиксированного столбца с именем (220px)
+        scheduleScrollRef.current.scrollTo({
+          left: todayTh.offsetLeft - 220,
+          behavior: "smooth"
+        });
+      }
+    }
+  }, [activeTab, scheduleWeekStart]);
   const [konsolLoading, setKonsolLoading] = useState(false);
   const [konsolToast, setKonsolToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [konsolStatuses, setKonsolStatuses] = useState<Record<number, { label: string, color: string }[]>>({});
@@ -577,7 +596,7 @@ export function CouriersClient({ user }: { user: any }) {
 
         {/* --- ГРАФИК --- */}
         {activeTab === "schedule" && (
-          <div style={s.tableWrap}>
+          <div style={s.tableWrap} ref={scheduleScrollRef}> {/* <-- ПРИВЯЗЫВАЕМ REF */}
             <div style={{ display: "flex", alignItems: "center", padding: "12px 16px", background: "#fff", borderBottom: "1px solid #e8e6df" }}>
               <button style={s.arrowBtn} onClick={() => setScheduleWeekStart(d => new Date(d.getTime() - 7 * 86400000))}>◀ Неделя</button>
               <span style={{ fontWeight: 700, fontSize: 14, margin: "0 16px", textTransform: "capitalize", color: "#1a1a18" }}>
@@ -587,16 +606,33 @@ export function CouriersClient({ user }: { user: any }) {
             </div>
 
             <table style={s.table}>
-              <thead>
+            <thead>
                 <tr>
-                  <th style={{ ...s.th, width: 220 }}>Курьер</th>
-                  <th style={{ ...s.th, width: 120 }}>Телефон</th>
+                  {/* Угловая ячейка (имя) должна перекрывать и при скролле вниз, и при скролле вправо. Ей нужен максимальный zIndex (20) */}
+                  <th style={{ ...s.th, width: 220, position: "sticky", left: 0, top: 0, zIndex: 20, background: "#fafaf8", boxShadow: "2px 2px 5px -2px rgba(0,0,0,0.1)" }}>Курьер</th>
+                  
+                  {/* Шапка телефона */}
+                  <th style={{ ...s.th, width: 120, position: "sticky", top: 0, zIndex: 10, background: "#fafaf8", boxShadow: "0 2px 5px -2px rgba(0,0,0,0.1)" }}>Телефон</th>
+                  
+                  {/* Шапка дней недели */}
                   {scheduleDates.map((d, i) => {
                     const dObj = new Date(d);
                     const dayStr = `${dObj.toLocaleDateString('ru', { weekday: 'short' }).toUpperCase()} ${dObj.toLocaleDateString('ru', { day: '2-digit', month: '2-digit' })}`;
 
                     return (
-                      <th key={d} style={{ ...s.th, textAlign: "center", cursor: "pointer", color: sortDate === d ? "#4a7aff" : "#a8a49c", background: sortDate === d ? "#eef3ff" : "#fafaf8" }} onClick={() => setSortDate(d)}>
+                      <th 
+                        key={d} 
+                        id={`day-${d}`}
+                        style={{ 
+                          ...s.th, 
+                          textAlign: "center", cursor: "pointer", 
+                          color: sortDate === d ? "#4a7aff" : "#a8a49c", 
+                          background: sortDate === d ? "#eef3ff" : "#fafaf8",
+                          position: "sticky", top: 0, zIndex: 10, /* 👈 ФИКСАЦИЯ СВЕРХУ */
+                          boxShadow: "0 2px 5px -2px rgba(0,0,0,0.1)"
+                        }} 
+                        onClick={() => setSortDate(d)}
+                      >
                         {dayStr}
                       </th>
                     );
@@ -609,7 +645,9 @@ export function CouriersClient({ user }: { user: any }) {
 
                   return (
                     <tr key={c.id} style={{ background: isSortDayWorking ? "#fcfcfc" : "#fff", borderBottom: "1px solid #f0efe9" }}>
-                      <td style={{ ...s.td, fontWeight: 600 }}>
+                      
+                      {/* ФИКСИРУЕМ ЯЧЕЙКУ С ИМЕНЕМ КУРЬЕРА */}
+                      <td style={{ ...s.td, fontWeight: 600, position: "sticky", left: 0, zIndex: 5, background: isSortDayWorking ? "#fcfcfc" : "#fff", boxShadow: "2px 0 5px -2px rgba(0,0,0,0.1)" }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', maxWidth: '190px' }}>
                             <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.fullName}</span>
@@ -693,8 +731,10 @@ export function CouriersClient({ user }: { user: any }) {
 
         {/* --- РАСЧЕТ ЗП --- */}
         {activeTab === "calc" && (
-          <div style={s.tableWrap}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "#fff", borderBottom: "1px solid #e8e6df", flexWrap: "wrap", gap: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            
+            {/* 📌 ТУЛБАР ВЫНЕСЕН ИЗ ТАБЛИЦЫ (всегда на виду) */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", boxShadow: "0 2px 8px rgba(0,0,0,0.02)", flexWrap: "wrap", gap: 10 }}>
 
               <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                 <button style={s.arrowBtn} onClick={() => setWeekStart(d => new Date(d.getTime() - 7 * 86400000))}>◀ Неделя</button>
@@ -760,14 +800,18 @@ export function CouriersClient({ user }: { user: any }) {
                   }}
                 >
                   {loading ? "⏳ Загрузка..." : "💳 Оплатить"}
-                </button>
+                  </button>
               </div>
 
             </div>
-            <table style={s.table}>
+
+            {/* 📌 КОНТЕЙНЕР ДЛЯ СКРОЛЛА САМОЙ ТАБЛИЦЫ */}
+            <div style={s.tableWrap}>
+              <table style={s.table}>
               <thead>
                 <tr>
-                  <th style={{ ...s.th, width: 220, verticalAlign: "top" }}>
+                  {/* ФИКСИРУЕМ УГОЛ: Имя курьера (сверху и слева) */}
+                  <th style={{ ...s.th, width: 220, verticalAlign: "top", position: "sticky", left: 0, top: 0, zIndex: 20, background: "#fafaf8", boxShadow: "2px 2px 5px -2px rgba(0,0,0,0.1)" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <input
                         type="checkbox"
@@ -779,7 +823,8 @@ export function CouriersClient({ user }: { user: any }) {
                       Курьер
                     </div>
                   </th>
-                  {/* 🔥 ПРАВИЛЬНЫЙ ЗАГОЛОВОК С ДАТАМИ (В ОДНУ СТРОКУ) */}
+                  
+                  {/* ФИКСИРУЕМ ШАПКУ: Даты (сверху) */}
                   {calcDates.map(d => {
                     const availableDayKeys = calcSortedAndFiltered.map(c => `${c.id}_${d}`).filter(k => {
                       const cId = Number(k.split('_')[0]);
@@ -795,7 +840,7 @@ export function CouriersClient({ user }: { user: any }) {
                     const dayStr = `${dObj.toLocaleDateString('ru', { weekday: 'short' }).toUpperCase()} ${dObj.toLocaleDateString('ru', { day: '2-digit', month: '2-digit' })}`;
 
                     return (
-                      <th key={d} style={{ ...s.th, textAlign: "center", verticalAlign: "top", whiteSpace: "nowrap" }}>
+                      <th key={d} style={{ ...s.th, textAlign: "center", verticalAlign: "top", whiteSpace: "nowrap", position: "sticky", top: 0, zIndex: 10, background: "#fafaf8", boxShadow: "0 2px 5px -2px rgba(0,0,0,0.1)" }}>
                         {dayStr}
                         <div style={{ marginTop: 6, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
                           <input type="checkbox" checked={isAllDaySelected} onChange={() => toggleDay(d)} style={{ ...s.checkbox, width: 14, height: 14 }} title="Выбрать весь день" />
@@ -806,7 +851,9 @@ export function CouriersClient({ user }: { user: any }) {
                       </th>
                     )
                   })}
-                  <th style={{ ...s.th, textAlign: "right", color: "#10b981", verticalAlign: "top" }}>
+                  
+                  {/* ФИКСИРУЕМ ШАПКУ: Итого (сверху) */}
+                  <th style={{ ...s.th, textAlign: "right", color: "#10b981", verticalAlign: "top", position: "sticky", top: 0, zIndex: 10, background: "#fafaf8", boxShadow: "0 2px 5px -2px rgba(0,0,0,0.1)" }}>
                     Итого
                     {(() => {
                       const grandTotal = selectedPays.reduce((acc, p) => {
@@ -850,7 +897,7 @@ export function CouriersClient({ user }: { user: any }) {
 
                       return (
                         <tr key={c.id} style={{ borderBottom: "1px solid #f0efe9", background: "#fff" }}>
-                          <td style={{ ...s.td, fontWeight: 600 }}>
+                          <td style={{ ...s.td, fontWeight: 600, position: "sticky", left: 0, zIndex: 5, background: "#fff", boxShadow: "2px 0 5px -2px rgba(0,0,0,0.1)" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                               <input
                                 type="checkbox"
@@ -930,6 +977,7 @@ export function CouriersClient({ user }: { user: any }) {
                     })}
               </tbody>
             </table>
+          </div>
           </div>
         )}
 
@@ -1373,7 +1421,7 @@ const s: Record<string, React.CSSProperties> = {
   topbar: { display: "flex", alignItems: "center", gap: 8, padding: "0 16px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0 },
   logo: { fontSize: 15, fontWeight: 600, color: "#1a1a18", display: "flex", alignItems: "center", gap: 7, marginRight: "auto", flexShrink: 0 },
   navBtn: { padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#1a1a18", whiteSpace: "nowrap" },
-  content: { margin: "0 auto", width: "100%", display: "flex", flexDirection: "column", gap: 20, maxWidth: 1200 },
+  content: { margin: "0 auto", width: "100%", display: "flex", flexDirection: "column", gap: 20, maxWidth: "100%" }, // 👈 Расширили на весь экран
   headerRow: { display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 16 },
   title: { fontSize: 24, fontWeight: 700, color: "#1a1a18", margin: "0 0 16px 0" },
   tabActive: { padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: "#4a7aff", color: "#fff", whiteSpace: "nowrap" },
@@ -1382,7 +1430,7 @@ const s: Record<string, React.CSSProperties> = {
   input: { padding: "8px 12px", borderRadius: 8, border: "1px solid #e8e6df", outline: "none", fontSize: 13 },
   syncBtn: { padding: "8px 16px", borderRadius: 8, border: "none", background: "#1a1a18", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" },
   arrowBtn: { padding: "6px 12px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", color: "#6b6860" },
-  tableWrap: { background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflowX: "auto", boxShadow: "0 2px 8px rgba(0,0,0,0.02)", width: "100%" },
+  tableWrap: { background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "auto", maxHeight: "calc(100vh - 160px)", boxShadow: "0 2px 8px rgba(0,0,0,0.02)", width: "100%" }, // 👈 Добавили maxHeight
   table: { width: "100%", minWidth: 800, borderCollapse: "collapse", textAlign: "left" },
   th: { padding: "10px 12px", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.5px", color: "#a8a49c", background: "#fafaf8", borderBottom: "1px solid #e8e6df", fontWeight: 600 },
   td: { padding: "12px", fontSize: 13, color: "#1a1a18", verticalAlign: "middle" },

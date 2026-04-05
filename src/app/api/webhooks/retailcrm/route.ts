@@ -103,29 +103,37 @@ export async function POST(req: Request) {
 
     console.log(`[Webhook] Начинаем обновление заказа #${orderPayload.id} (Внешний ID: ${orderPayload.externalId || 'Нет'})`);
     
-    // 3. Сохраняем в БД
+    // 🔥 3. Запоминаем статус ДО обновления
+    const { prisma } = await import("@/lib/prisma"); 
+    const localOrderBefore = await prisma.order.findUnique({
+      where: { crmId: String(orderPayload.id) },
+      select: { id: true, status: true }
+    });
+
+    // 4. Сохраняем данные в БД
     await upsertOrder(orderPayload);
     
-    // 🔥 ДОБАВЛЯЕМ ВЫЗОВ УНИВЕРСАЛЬНОГО ТРИГГЕРА ETA
+    // 5. Вызов Универсального Триггера (ЗАЩИТА ОТ ДВОЙНОГО СДВИГА)
     try {
-      // Ищем внутренний ID заказа в нашей базе данных по его crmId
-      // (Нужно импортировать prisma вверху файла, если еще не добавил: import { prisma } from "@/lib/prisma";)
-      const { prisma } = await import("@/lib/prisma"); 
-      const localOrder = await prisma.order.findUnique({
-        where: { crmId: String(orderPayload.id) },
-        select: { id: true, status: true }
-      });
+      if (localOrderBefore) {
+        const localOrderAfter = await prisma.order.findUnique({
+          where: { id: localOrderBefore.id },
+          select: { status: true }
+        });
 
-      // Если заказ есть в базе и его статус В ПУТИ или ДОСТАВЛЕН — пересчитываем маршрут
-      if (localOrder && (localOrder.status === "IN_DELIVERY" || localOrder.status === "DELIVERED")) {
-         console.log(`[Webhook] Запускаем пересчет ETA для заказа ${orderPayload.id} (status: ${localOrder.status})`);
-         await applyUniversalEtaShift(localOrder.id, localOrder.status);
+        // Триггер сработает ТОЛЬКО если статус реально переключился на В ПУТИ или ДОСТАВЛЕН
+        if (localOrderAfter && localOrderBefore.status !== localOrderAfter.status) {
+           if (localOrderAfter.status === "IN_DELIVERY" || localOrderAfter.status === "DELIVERED") {
+               console.log(`[Webhook] Смена статуса! Запускаем пересчет ETA для заказа ${orderPayload.id}`);
+               await applyUniversalEtaShift(localOrderBefore.id, localOrderAfter.status);
+           }
+        }
       }
     } catch (err) {
       console.error("[Webhook] Ошибка при вызове триггера ETA:", err);
     }
     
-    // 4. Запускаем фоновое геокодирование
+    // 6. Запускаем фоновое геокодирование
     geocodeNewOrders().catch(console.error);
 
     return NextResponse.json({ ok: true });

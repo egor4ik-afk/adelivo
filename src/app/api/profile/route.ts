@@ -6,14 +6,14 @@ import { z } from "zod";
 import { geocodeAddress } from "@/lib/crm";
 import { findContractorByPhone, inviteContractor } from "@/lib/konsol";
 
-// 🔥 ДОБАВЛЕНО: разрешаем isAuto в схеме валидации Zod
 const updateSchema = z.object({
   firstName:      z.string().min(1).max(50).optional(),
   lastName:       z.string().max(50).optional(),
   phone:          z.string().max(20).optional(),
   homeAddress:    z.string().max(200).optional(),
   konsolPhone:    z.string().optional(),
-  isAuto:         z.boolean().optional(), // <--- ДОБАВИЛИ СЮДА
+  isAuto:         z.boolean().optional(),
+  avatarUrl:      z.string().optional(), // 🔥 ДОБАВЛЕНО: Теперь бэкенд видит и принимает ссылку на фото
   notifyNewOrder: z.boolean().optional(),
   notifyStatus:   z.boolean().optional(),
   notifyCourier:  z.boolean().optional(),
@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
     select: {
       id: true, email: true, role: true,
       firstName: true, lastName: true, phone: true,
+      avatarUrl: true, // 🔥 ДОБАВЛЕНО: Возвращаем фото профиля при загрузке страницы
       lastLoginAt: true, createdAt: true,
       notifyNewOrder: true, notifyStatus: true, notifyCourier: true,
       notifyAddress: true, notifyTime: true, notifyComment: true,
@@ -46,7 +47,7 @@ export async function GET(req: NextRequest) {
   let homeAddress = "";
   let konsolPhone: string | null = null;
   let isLinked = false;
-  let isAuto = false; // 🔥 ДОБАВЛЕНО
+  let isAuto = false;
 
   if (profile.email) {
     const courier = await prisma.courier.findFirst({ where: { email: profile.email } });
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest) {
       homeAddress  = courier.homeAddress || "";
       konsolPhone  = courier.konsolPhone || null;
       isLinked     = !!courier.konsolContractorId;
-      isAuto       = courier.isAuto || false; // 🔥 ЧИТАЕМ ИЗ БД
+      isAuto       = courier.isAuto || false;
 
       if (profile.role === "COURIER") {
         profile.firstName = profile.firstName || courier.firstName || null;
@@ -64,7 +65,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ...profile, homeAddress, konsolPhone, isLinked, isAuto }); // 🔥 ОТДАЕМ НА ФРОНТ
+  return NextResponse.json({ ...profile, homeAddress, konsolPhone, isLinked, isAuto });
 }
 
 // PATCH /api/profile
@@ -74,16 +75,17 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const body = await req.json();
-    // Извлекаем isAuto вместе с остальными
+    // Извлекаем homeAddress, konsolPhone, isAuto, а остальное (включая avatarUrl) уходит в userData
     const { homeAddress, konsolPhone, isAuto, ...userData } = updateSchema.parse(body);
 
     // 1. Обновляем User
     const updated = await prisma.user.update({
       where: { id: user.id },
-      data: userData,
+      data: userData, // 🔥 avatarUrl теперь автоматически сохраняется здесь
       select: {
         id: true, email: true, role: true,
         firstName: true, lastName: true, phone: true,
+        avatarUrl: true, // 🔥 ДОБАВЛЕНО: возвращаем обновленное фото
         notifyNewOrder: true, notifyStatus: true, notifyCourier: true,
         notifyAddress: true, notifyTime: true, notifyComment: true,
         notifyOpComment: true, notifyItems: true,
@@ -97,22 +99,16 @@ export async function PATCH(req: NextRequest) {
 
       if (homeAddress !== undefined) courierData.homeAddress = homeAddress;
       if (userData.phone !== undefined) courierData.phone = userData.phone;
-      
-      // 🔥 ПРАВИЛЬНОЕ СОХРАНЕНИЕ isAuto В courierData
       if (isAuto !== undefined) courierData.isAuto = isAuto; 
 
-      // 🔥 ЛОГИКА КОНСОЛИ
       if (konsolPhone !== undefined) {
         if (konsolPhone === "" || konsolPhone === null) {
-          // Отвязка
           courierData.konsolPhone = null;
           courierData.konsolContractorId = null;
         } else {
-          // Ищем исполнителя по телефону
           const contractorId = await findContractorByPhone(konsolPhone);
 
           if (contractorId) {
-            // ✅ Уже зарегистрирован — просто привязываем
             courierData.konsolPhone = konsolPhone;
             courierData.konsolContractorId = contractorId;
 
@@ -122,7 +118,6 @@ export async function PATCH(req: NextRequest) {
             return NextResponse.json({ ...updated, homeAddress, isAuto, linked: true });
 
           } else {
-            // ❌ Не найден — отправляем приглашение
             const courier = await prisma.courier.findFirst({ where: { email: user.email } });
             const fullName = [courier?.lastName, courier?.firstName, courier?.patronymic]
               .filter(Boolean).join(" ") || `${updated.firstName ?? ""} ${updated.lastName ?? ""}`.trim() || "Исполнитель";
@@ -136,7 +131,6 @@ export async function PATCH(req: NextRequest) {
               );
             }
 
-            // Сохраняем телефон, contractorId пока null — заполнится после регистрации
             courierData.konsolPhone = konsolPhone;
             courierData.konsolContractorId = null;
 
@@ -159,7 +153,6 @@ export async function PATCH(req: NextRequest) {
         }
       }
 
-      // Имя/фамилия для курьера
       if (user.role === "COURIER") {
         if (userData.firstName !== undefined) courierData.firstName = userData.firstName;
         if (userData.lastName  !== undefined) courierData.lastName  = userData.lastName;
@@ -184,7 +177,7 @@ export async function PATCH(req: NextRequest) {
                 data: { homeLat: geo.lat, homeLng: geo.lng },
               });
             }
-          } catch (_) { /* геокодирование не критично */ }
+          } catch (_) {}
         }
       }
     }

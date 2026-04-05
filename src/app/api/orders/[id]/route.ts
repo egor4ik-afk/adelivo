@@ -32,13 +32,20 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       if (body.status === "NEW") {
         updateData.pickedUpAt = null;
         updateData.eta = null;
+        updateData.deliveredAt = null; // Сбрасываем факт
       } else if (body.status === "ASSIGNED") {
         updateData.pickedUpAt = null;
+        updateData.deliveredAt = null; // Сбрасываем факт
+      } else if (body.status === "DELIVERED" && order.status !== "DELIVERED") {
+        updateData.deliveredAt = new Date(); // 🔥 Фиксируем время доставки
       }
     }
     
-    // Ручное сохранение ETA (только если не меняем статус на IN_DELIVERY, иначе триггер сам всё сделает)
-    if (body.eta !== undefined && body.status !== "IN_DELIVERY") updateData.eta = body.eta;
+    // 🔥 ГЛАВНАЯ ПРАВКА:
+    // Разрешаем менять ETA везде (особенно В пути), НО строго запрещаем стирать ETA при статусе Доставлен!
+    if (body.eta !== undefined && body.status !== "DELIVERED") {
+      updateData.eta = body.eta;
+    }
     
     if (body.opComment !== undefined) updateData.opComment = body.opComment;
     if (body.address !== undefined) updateData.address = body.address;
@@ -99,8 +106,16 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         const siblingsCount = await prisma.order.count({ where: { routeId: order.routeId, id: { not: id } }});
         if (siblingsCount === 0) await prisma.route.deleteMany({ where: { id: order.routeId } });
       }
-      const orderDate = order.deliveryDate ? order.deliveryDate.toString().split("T")[0] : new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" });
-      const prefix = `M-${orderDate.split("-")[2]}`;
+      
+     // 🔥 БЕРЕМ ДАТУ ИЗ ЗАКАЗА, А НЕ ТЕКУЩУЮ (Пуленепробиваемый парсинг)
+     const rawDate = order.deliveryDate || order.crmCreatedAt || new Date();
+     // Превращаем всё в Date, а затем в строку YYYY-MM-DD по Москве
+     const orderDate = (rawDate instanceof Date ? rawDate : new Date(rawDate))
+          .toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" });
+
+     const routeDay = orderDate.split("-")[2];
+     const prefix = `M-${routeDay}`;
+
       const routes = await prisma.route.findMany({ where: { name: { startsWith: prefix }, date: orderDate }, select: { name: true }});
       let maxNum = 0;
       for (const r of routes) {
@@ -131,10 +146,12 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       updatedOrder = await prisma.order.update({ where: { id }, data: updateData, include: { route: true } });
     }
 
+   // 🔥 МАГИЯ ПРОИСХОДИТ ЗДЕСЬ (ДЕРГАЕМ УНИВЕРСАЛЬНЫЙ ТРИГГЕР)
     // =========================================================
-    // 🔥 МАГИЯ ПРОИСХОДИТ ЗДЕСЬ (ДЕРГАЕМ УНИВЕРСАЛЬНЫЙ ТРИГГЕР)
-    // =========================================================
-    if (body.status === "IN_DELIVERY" || body.status === "DELIVERED") {
+    // Запускаем пересчет ТОЛЬКО если статус реально изменился на новый!
+    const statusChanged = body.status !== undefined && order.status !== body.status;
+
+    if (statusChanged && (body.status === "IN_DELIVERY" || body.status === "DELIVERED")) {
        await applyUniversalEtaShift(id, body.status, body.eta);
     }
 

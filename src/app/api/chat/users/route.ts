@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
         ],
       } : {}),
     },
-    select: { id: true, firstName: true, lastName: true, email: true, phone: true, role: true },
+    select: { id: true, firstName: true, lastName: true, email: true, phone: true, role: true, avatarUrl: true },
     take: 20,
   });
 
