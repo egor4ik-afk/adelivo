@@ -676,7 +676,10 @@ export function DashboardClient({ user }: { user: User }) {
             if (order.slotFrom) {
               const [hh, mm] = order.slotFrom.split(":").map(Number);
               if (!isNaN(hh) && !isNaN(mm)) {
-                const slotStartMs = new Date().setHours(hh, mm, 0, 0);
+                // ✅ БЕРЕМ ДАТУ ИЗ КАЛЕНДАРЯ
+                const [year, month, day] = filterDate.split("-").map(Number);
+                const slotStartMs = new Date(year, month - 1, day, hh, mm, 0, 0).getTime();
+                
                 earliestDeadline = {
                   externalId: order.externalId ?? order.crmId,
                   slotFrom: order.slotFrom,
@@ -717,10 +720,11 @@ export function DashboardClient({ user }: { user: User }) {
       if (hMatch) ms += parseInt(hMatch[1], 10) * 3600000;
       const mMatch = text.match(/(\d+)\s*мин/);
       if (mMatch) ms += parseInt(mMatch[1], 10) * 60000;
-      return routeType === "auto" ? ms + (12 * 60 * 1000) : ms + (3 * 60 * 1000); // Закладываем время на парковку и поиск двери
+      return routeType === "auto" ? ms + (12 * 60 * 1000) : ms + (3 * 60 * 1000); 
     };
 
-    let currentRunningMs = Date.now();
+    const [year, month, day] = filterDate.split("-").map(Number);
+    let currentRunningMs = new Date(year, month - 1, day, 10, 0, 0, 0).getTime(); // fallback 10:00
     let foundFirstActive = false;
 
     // Проверяем, стартовал ли уже маршрут
@@ -729,18 +733,28 @@ export function DashboardClient({ user }: { user: User }) {
     const actualDepartureMs = pickedUpTimes.length > 0 ? Math.min(...pickedUpTimes.map((d: string) => new Date(d).getTime())) : null;
 
     if (hasStarted && actualDepartureMs) {
-      currentRunningMs = actualDepartureMs; // Начинаем отсчет от времени выезда с базы
+      currentRunningMs = actualDepartureMs; // Фактический старт
     } else if (!hasStarted && selectedRouteOrders.length > 0 && routeLegs.length > 0) {
-      // Маршрут еще не начат (Черновик)
-      const firstOrder = selectedRouteOrders[0];
-      if (firstOrder.slotFrom) {
-        const [hh, mm] = firstOrder.slotFrom.split(":").map(Number);
-        if (!isNaN(hh) && !isNaN(mm)) {
-          const slotStartMs = new Date().setHours(hh, mm, 0, 0);
-          const legToFirstPointMs = parseYandexTimeMs(routeLegs[0]) + (5 * 60 * 1000);
-          const idealStartMs = slotStartMs - legToFirstPointMs;
+      // 🚀 МАРШРУТ ЕЩЕ НЕ НАЧАТ (СЧИТАЕМ ПО ПЛАНУ)
+      
+      const currentRoute = editingRouteId ? existingRoutes.find((r: any) => r.id === editingRouteId) : null;
 
-          currentRunningMs = Math.max(Date.now(), idealStartMs);
+      // 1. Если оператор жестко задал время "На базе в:", считаем от него!
+      if (currentRoute?.baseArrivalTime) {
+        const [bH, bM] = currentRoute.baseArrivalTime.split(':').map(Number);
+        currentRunningMs = new Date(year, month - 1, day, bH, bM, 0, 0).getTime();
+      } else {
+        // 2. Иначе отталкиваемся назад от слота первого заказа
+        const firstOrder = selectedRouteOrders[0];
+        if (firstOrder.slotFrom) {
+          const [hh, mm] = firstOrder.slotFrom.split(":").map(Number);
+          if (!isNaN(hh) && !isNaN(mm)) {
+            const slotStartMs = new Date(year, month - 1, day, hh, mm, 0, 0).getTime();
+            const legToFirstPointMs = parseYandexTimeMs(routeLegs[0]) + (5 * 60 * 1000);
+            
+            // ✅ БОЛЬШЕ НЕТ Math.max(Date.now(), ...). Считаем строго от времени выезда!
+            currentRunningMs = slotStartMs - legToFirstPointMs; 
+          }
         }
       }
     }
@@ -776,8 +790,7 @@ export function DashboardClient({ user }: { user: User }) {
     });
 
     return etas;
-  }, [selectedRouteOrders, routeLegs, routeType]);
-
+  }, [selectedRouteOrders, routeLegs, routeType, filterDate, editingRouteId, existingRoutes]); // Обязательно обновить массив зависимостей
   const generateYandexUrl = (ordersToRoute: DashboardOrder[], type: "auto" | "mt", rtb: boolean) => {
     const validOrders = ordersToRoute.filter(o => o.lat && o.lng && !o.isInvalid);
     if (validOrders.length === 0) return null;
