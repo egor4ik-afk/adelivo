@@ -48,24 +48,15 @@ export default function CourierRoutesPage() {
   }, []);
 
   const handleStatusChange = async (id: string, newStatus: string) => {
-    // 1. Оптимистично меняем статус визуально, чтобы интерфейс не "тупил"
     setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o));
-    
-    try {
-      // 2. Отправляем статус на сервер (там сработает applyUniversalEtaShift)
-      await fetch(`/api/orders/${id}`, {
-        method: "PATCH", 
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      
-      // 3. 🔥 СРАЗУ запрашиваем свежие данные с сервера!
-      // Это мгновенно обновит ETA у всех остальных точек в маршруте на экране курьера.
-      await fetchOrders();
-      
-    } catch (error) {
-      console.error("Ошибка при обновлении статуса:", error);
-    }
+    await fetch(`/api/orders/${id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    });
+  };
+
+  const toggleRoute = (routeId: string) => {
+    setExpandedRoutes(prev => ({ ...prev, [routeId]: !(prev[routeId] ?? true) }));
   };
 
   // 🔥 НОВЫЕ ФУНКЦИИ ВСТАВЛЕНЫ СЮДА
