@@ -17,6 +17,7 @@ interface DbCourier {
   lat?: number | null; lng?: number | null;
   homeLat?: number | null; homeLng?: number | null;
   locationUpdatedAt?: string | null;
+  isAuto?: boolean; // 🔥 ДОБАВЛЕНО
 }
 
 export interface DashboardOrder {
@@ -901,7 +902,10 @@ export function DashboardClient({ user }: { user: User }) {
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16, background: "#f5f4f0", padding: 4, borderRadius: 10 }}>
         <button
-          onClick={() => { setRouteTabMode("new"); setEditingRouteId(null); setBulkSelectedIds([]); setBulkCourier(""); }}
+          onClick={() => {
+            setRouteTabMode("new"); setEditingRouteId(null); setBulkSelectedIds([]); setBulkCourier("");
+            setRouteType("mt");
+          }}
           style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", background: routeTabMode === "new" ? "#fff" : "transparent", color: routeTabMode === "new" ? "#1a1a18" : "#a8a49c", boxShadow: routeTabMode === "new" ? "0 2px 8px rgba(0,0,0,0.05)" : "none", transition: "all 0.2s" }}
         >
           {editingRouteId ? "✏️ Редактирование" : "Новый маршрут"}
@@ -929,8 +933,11 @@ export function DashboardClient({ user }: { user: User }) {
           {existingRoutes.length === 0 && <div style={{ textAlign: "center", color: "#a8a49c", padding: 20 }}>Нет маршрутов на {filterDate}</div>}
           {existingRoutes.map((r: any) => {
             const isDraft = r.isDraft;
+            // 🔥 НАХОДИМ КУРЬЕРА И ОПРЕДЕЛЯЕМ ИКОНКУ ТРАНСПОРТА
+            const rCourier = dbCouriers.find(c => String(c.id) === String(r.courierId));
+            const typeIcon = rCourier?.isAuto ? "🚗" : "🚶‍♂️";
             const courierName = courierOptions.find(c => String(c.value) === String(r.courierId))?.label || "Неизвестен";
-            
+
             // 🔥 Считаем сколько доставлено
             const deliveredCount = r.orders.filter((o: any) => o.status === "DELIVERED").length;
 
@@ -963,10 +970,12 @@ export function DashboardClient({ user }: { user: User }) {
                 setBulkCourier(String(r.courierId));
                 setEditingRouteId(r.id);
                 setRouteTabMode("new");
+                setRouteType(rCourier?.isAuto ? "auto" : "mt");
               }} style={{ background: "#fafaf8", border: "1px solid #e8e6df", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}>
                 <div>
                   <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     {r.name}
+                    {typeIcon} {r.name}
                     {isDraft && <span style={{ background: "#fef3c7", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>Черновик</span>}
 
                     {/* 🔥 БЕЙДЖИК ОПОЗДАНИЯ */}
@@ -979,8 +988,8 @@ export function DashboardClient({ user }: { user: User }) {
                     <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 500 }}>изм. {new Date(r.updatedAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
                   <div style={{ fontSize: 12, color: "#6b6860", marginTop: 4 }}>
-                  Курьер: {courierName} · {deliveredCount}/{r.orders.length} точек
-                </div>
+                    Курьер: {courierName} · {deliveredCount}/{r.orders.length} точек
+                  </div>
 
                   {(actualDepartureMs || finishedMs || r.baseArrivalTime) && (
                     <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
@@ -1067,7 +1076,21 @@ export function DashboardClient({ user }: { user: User }) {
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "stretch" }}>
               <div style={{ flex: "1 1 200px", minWidth: 0 }}>
-                <CourierSearchSelect value={bulkCourier} onChange={setBulkCourier} options={courierOptions.map(c => ({ value: String(c.value), label: c.label }))} />
+                <CourierSearchSelect
+                  value={bulkCourier}
+                  onChange={(newCourierId) => {
+                    setBulkCourier(newCourierId);
+
+                    // 🔥 ПРИ СМЕНЕ КУРЬЕРА АВТОМАТИЧЕСКИ ПЕРЕКЛЮЧАЕМ ТАБ (и запускаем пересчет)
+                    if (newCourierId) {
+                      const courier = dbCouriers.find(c => String(c.id) === String(newCourierId));
+                      if (courier) {
+                        setRouteType(courier.isAuto ? "auto" : "mt");
+                      }
+                    }
+                  }}
+                  options={courierOptions.map(c => ({ value: String(c.value), label: c.label }))}
+                />
               </div>
 
               <button
@@ -1147,28 +1170,28 @@ export function DashboardClient({ user }: { user: User }) {
                             <div style={{ fontSize: 13, fontWeight: 600, color: "#1a1a18", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.address}</div>
 
                             <div style={{ fontSize: 11, color: "#a8a49c", marginTop: 4, display: "flex", flexDirection: "column", gap: 3 }}>
-                          <div>
-                            Слот: <span style={{ color, fontWeight: 700 }}>{o.slotRaw}</span> · {o.externalId ?? o.crmId}
-                          </div>
-                          
-                          {/* Выводим ПЛАН (становится серым после доставки, чтобы не отвлекать внимание) */}
-                          {o.eta && (
-                            <div>
-                              <span style={{ color: o.status === "DELIVERED" ? "#a8a49c" : "#4a7aff", fontWeight: 700 }}>
-                                ⏱ План: {o.eta}
-                              </span>
+                              <div>
+                                Слот: <span style={{ color, fontWeight: 700 }}>{o.slotRaw}</span> · {o.externalId ?? o.crmId}
+                              </div>
+
+                              {/* Выводим ПЛАН (становится серым после доставки, чтобы не отвлекать внимание) */}
+                              {o.eta && (
+                                <div>
+                                  <span style={{ color: o.status === "DELIVERED" ? "#a8a49c" : "#4a7aff", fontWeight: 700 }}>
+                                    ⏱ План: {o.eta}
+                                  </span>
+                                </div>
+                              )}
+
+                              {/* Выводим ФАКТ (появляется только после доставки) */}
+                              {o.status === "DELIVERED" && (
+                                <div>
+                                  <span style={{ color: "#10b981", fontWeight: 700 }}>
+                                    ✓ Факт: {o.deliveredAt ? new Date(o.deliveredAt).toLocaleTimeString("ru", { hour: '2-digit', minute: '2-digit' }) : (o.changedAt ? new Date(o.changedAt).toLocaleTimeString("ru", { hour: '2-digit', minute: '2-digit' }) : "—")}
+                                  </span>
+                                </div>
+                              )}
                             </div>
-                          )}
-                          
-                          {/* Выводим ФАКТ (появляется только после доставки) */}
-                          {o.status === "DELIVERED" && (
-                            <div>
-                              <span style={{ color: "#10b981", fontWeight: 700 }}>
-                                ✓ Факт: {o.deliveredAt ? new Date(o.deliveredAt).toLocaleTimeString("ru", {hour: '2-digit', minute:'2-digit'}) : (o.changedAt ? new Date(o.changedAt).toLocaleTimeString("ru", {hour: '2-digit', minute:'2-digit'}) : "—")}
-                              </span>
-                            </div>
-                          )}
-                        </div>
 
                             {/* 🔥 ОТПРАВКА СТАТУСА С ПЕРЕСЧИТАННЫМ ETA */}
                             <select
@@ -1229,7 +1252,19 @@ export function DashboardClient({ user }: { user: User }) {
           {courierOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
         </select>
         <button
-          onClick={() => { setIsBulkMode(!isBulkMode); setRouteTab("map"); setBulkSelectedIds([]); setSelectedId(null); setIsDetailVisible(false); }}
+          onClick={() => {
+            setIsBulkMode(!isBulkMode);
+            setRouteTab("map");
+            setBulkSelectedIds([]);
+            setSelectedId(null);
+            setIsDetailVisible(false);
+
+            // 🔥 ДОБАВЛЕНО: Полный сброс состояния формы при клике
+            setRouteTabMode("new");       // Принудительно включаем таб "Новый маршрут"
+            setEditingRouteId(null);      // Сбрасываем ID редактируемого маршрута (выходим из режима редактирования)
+            setBulkCourier("");           // Очищаем выбранного курьера
+            setRouteType("mt");           // Возвращаем тип транспорта по дефолту (транспорт)
+          }}
           style={{ ...s.navBtn, background: isBulkMode ? "#1a1a18" : "#fff", color: isBulkMode ? "#fff" : "#1a1a18", border: isBulkMode ? "1px solid #1a1a18" : "1px solid #e8e6df", marginLeft: 8 }}
         >
           {isBulkMode ? "✕ Маршруты" : "📍 Маршруты"}
@@ -1539,16 +1574,16 @@ function OrderCard({ order, selected, isBulkMode, isBulkSelected, onSelect }: an
       <div style={s.cardAddr}>{order.address ?? "—"}</div>
       <div style={s.cardMeta}>
         <span style={{ ...s.slotTag, color }}>{order.slotFrom}–{order.slotTo ?? ""}</span>
-        
+
         {order.status === "DELIVERED" ? (
-           <span style={{ fontSize: 10, color: "#10b981", fontWeight: 700, marginLeft: 6 }}>
-             {order.eta && <span style={{ color: "#a8a49c", textDecoration: "line-through", marginRight: 4 }}>{order.eta}</span>}
-             ✓ {order.deliveredAt ? new Date(order.deliveredAt).toLocaleTimeString("ru", {hour: '2-digit', minute:'2-digit'}) : "—"}
-           </span>
+          <span style={{ fontSize: 10, color: "#10b981", fontWeight: 700, marginLeft: 6 }}>
+            {order.eta && <span style={{ color: "#a8a49c", textDecoration: "line-through", marginRight: 4 }}>{order.eta}</span>}
+            ✓ {order.deliveredAt ? new Date(order.deliveredAt).toLocaleTimeString("ru", { hour: '2-digit', minute: '2-digit' }) : "—"}
+          </span>
         ) : (
-           order.eta && <span style={{ fontSize: 10, color: "#4a7aff", fontWeight: 700, marginLeft: 6 }}>~{order.eta}</span>
+          order.eta && <span style={{ fontSize: 10, color: "#4a7aff", fontWeight: 700, marginLeft: 6 }}>~{order.eta}</span>
         )}
-        
+
         <span style={s.courierTag}>{order.courier ?? "—"}</span>
       </div>
     </div>
