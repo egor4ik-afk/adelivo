@@ -36,9 +36,20 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       } else if (body.status === "ASSIGNED") {
         updateData.pickedUpAt = null;
         updateData.deliveredAt = null; // Сбрасываем факт
-      } else if (body.status === "DELIVERED" && order.status !== "DELIVERED") {
-        updateData.deliveredAt = new Date(); // 🔥 Фиксируем время доставки
+      } else if (body.status === "ASSIGNED") {
+        updateData.pickedUpAt = null;
+        updateData.deliveredAt = null; // Сбрасываем факт
+      } else if (body.status === "DELIVERED") {
+        // 🔥 ИЗМЕНЕНИЕ 1: Гарантируем, что дата запишется, если статус "Доставлен", а даты еще нет в БД
+        if (!order.deliveredAt) {
+          updateData.deliveredAt = new Date(); 
+        }
       }
+    }
+
+    // 🔥 ИЗМЕНЕНИЕ 2: Если интерфейс курьера теперь явно присылает deliveredAt — сохраняем его!
+    if (body.deliveredAt !== undefined) {
+      updateData.deliveredAt = body.deliveredAt ? new Date(body.deliveredAt) : null;
     }
     
     // 🔥 ГЛАВНАЯ ПРАВКА:
