@@ -5,6 +5,19 @@ import { notify } from "@/lib/notifications";
 import { getSession } from "@/lib/auth";
 import { signKonsolAct, autopayKonsolAct, acceptKonsolTask, finalizeKonsolTask } from "@/lib/konsol";
 
+// Вспомогательная функция для проверки статуса акта напрямую
+async function fetchKonsolAct(actId: string) {
+  const res = await fetch(`https://api.konsol.pro/v2/acts/${actId}`, {
+    headers: {
+      "Authorization": `Bearer ${process.env.KONSOL_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    cache: "no-store"
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
 export async function POST(req: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const session = await getSession(req as any);
@@ -24,18 +37,14 @@ export async function POST(req: Request) {
 
     for (const courierId of couriersIds) {
       try {
-        // Собираем даты выбранных смен, чтобы не захватить случайно задание будущей недели
         const courierDates = payments
           .filter((p: any) => p.courierId === courierId)
           .map((p: any) => p.date)
           .sort();
         
-        // Берем последнюю дату из выбранных смен + даем запас пару дней
         const maxDate = new Date(courierDates[courierDates.length - 1]);
         maxDate.setDate(maxDate.getDate() + 2);
 
-        // 🔥 ПРАВКА 1: Добавили SIGNED_BY_US
-        // 🔥 ПРАВКА 2: Ограничили поиск датой (lte: maxDate), чтобы не взять свежий DRAFT новой недели
         const task = await prisma.konsolTask.findFirst({
           where: { 
             courierId, 
@@ -53,7 +62,6 @@ export async function POST(req: Request) {
         let actId = task.konsolActId;
 
         // ── Шаг 1: если акта нет — финализируем на лету ──────────────────
-        // Пропускаем этот шаг, если акт уже подписан
         if (!actId && task.status !== "SIGNED_BY_US") {
           console.log(`[Pay] Финализируем задание ${task.konsolTaskId}...`);
           try { await acceptKonsolTask(task.konsolTaskId); } catch {
@@ -74,25 +82,40 @@ export async function POST(req: Request) {
           actId = String(newActId);
         }
 
-        // ── Шаг 2: подписываем акт (если еще не подписан) ────────────────
+        // ── Шаг 2: подписываем акт (УМНАЯ ПРОВЕРКА) ──────────────────────
         if (task.status !== "SIGNED_BY_US" && actId) {
-          try {
-            await signKonsolAct(actId);
-            console.log(`[Pay] Акт ${actId} подписан ✅`);
-          } catch (signErr: any) {
-            console.error(`[Pay] Ошибка подписания акта ${actId}:`, signErr.message);
-            errorCount++;
-            continue;
+          // 🔥 Проверяем реальный статус акта в Консоли перед подписанием
+          const actData = await fetchKonsolAct(actId);
+          const actStatus = actData?.status;
+          
+          const isAlreadySigned = actStatus === "signed" || actStatus === "paid" || actData?.payment?.status === "paid" || actData?.payment?.status === "pending";
+
+          if (isAlreadySigned) {
+             console.log(`[Pay] Акт ${actId} УЖЕ БЫЛ подписан вручную (статус: ${actStatus}). Пропускаем подписание.`);
+          } else {
+             try {
+               await signKonsolAct(actId);
+               console.log(`[Pay] Акт ${actId} подписан ✅`);
+             } catch (signErr: any) {
+               console.error(`[Pay] Ошибка подписания акта ${actId}:`, signErr.message);
+               // Если 404 - значит акт не найден в пуле ожидающих подписания (вероятно, уже подписан)
+               if (signErr.message.includes("404")) {
+                  console.log(`[Pay] Игнорируем 404: акт ${actId} уже подписан или передан в оплату.`);
+               } else {
+                  errorCount++;
+                  continue; // Прерываем только при реальных ошибках (например, 400 или 500)
+               }
+             }
           }
 
-          // ── Шаг 3: сохраняем SIGNED_BY_US сразу после подписания ─────────
+          // Сохраняем статус
           await prisma.konsolTask.update({
             where: { id: task.id },
             data: { status: "SIGNED_BY_US" },
           });
         }
 
-        // Зелёные кружки в таблице ЗП (отмечаем как оплаченные)
+        // Зелёные кружки в таблице ЗП
         for (const d of courierDates) {
           const existing = await prisma.courierPayment.findUnique({
             where: { courierId_date: { courierId, date: d } },
@@ -117,21 +140,6 @@ export async function POST(req: Request) {
 
         successCount++;
 
-        // Пуш курьеру (отправляем только если это новая оплата, чтобы не спамить при "повторных" попытках)
-        if (task.status !== "SIGNED_BY_US") {
-          const courier = await prisma.courier.findUnique({ where: { id: courierId } });
-          const user = await prisma.user.findFirst({ where: { email: courier?.email || "" } });
-          if (user) {
-            notify({
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              type: "custom" as any,
-              userId: user.id,
-              title: "📝 Акт подписан",
-              body: `Акт на сумму ${task.amount} ₽ подписан. Оплата поступит в ближайшее время.`,
-              url: "https://app.konsol.pro/",
-            }).catch(() => {});
-          }
-        }
       } catch (err: any) {
         console.error(`❌ [Pay] Ошибка курьера ${courierId}:`, err.message || err);
         errorCount++;

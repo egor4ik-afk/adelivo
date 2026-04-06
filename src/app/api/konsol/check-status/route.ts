@@ -18,7 +18,6 @@ async function fetchKonsolTasksByWeek(mondayStr: string, sundayStr: string) {
     method: "POST",
     headers,
     body: JSON.stringify({
-      // 🔥 ДОБАВЛЕН "accepted", чтобы стягивать финализированные задания
       state_code: ["submitted", "confirmed", "auto_confirmed", "checked_in", "accepted"],
       since_date: mondayStr,
       to_date: sundayStr,
@@ -106,11 +105,8 @@ export async function POST(req: Request) {
           const dateStr = task.since_date;
           if (!dateStr) continue;
 
-          // 🔥 ИЩЕМ АКТ: Если у таски есть acts_ids, значит она уже финализирована
           const actsIds = task.acts_ids || task.data?.acts_ids || [];
           const hasActs = actsIds.length > 0;
-          
-          const dbStatus = hasActs ? "SIGNED_BY_US" : "CONFIRMED";
           const actIdToSave = hasActs ? String(actsIds[0]) : null;
 
           const existing = await prisma.konsolTask.findFirst({
@@ -118,16 +114,16 @@ export async function POST(req: Request) {
           });
 
           if (existing) {
-            // Если в БД еще нет инфы об Акте - обновляем!
-            if (existing.status !== "SIGNED_BY_US" && hasActs) {
-              await prisma.konsolTask.update({ 
-                where: { id: existing.id }, 
-                data: { status: dbStatus, konsolActId: actIdToSave } 
-              });
-            } else if (!["SIGNED_BY_US"].includes(existing.status)) {
-              await prisma.konsolTask.update({ where: { id: existing.id }, data: { status: dbStatus } });
+            // 🔥 ЗОЛОТОЕ ПРАВИЛО: НИКОГДА НЕ ПОНИЖАЕМ СТАТУС SIGNED_BY_US
+            if (existing.status !== "SIGNED_BY_US") {
+               const dbStatus = hasActs ? "SIGNED_BY_US" : "CONFIRMED";
+               await prisma.konsolTask.update({ 
+                 where: { id: existing.id }, 
+                 data: { status: dbStatus, konsolActId: actIdToSave || existing.konsolActId } 
+               });
             }
           } else {
+            const dbStatus = hasActs ? "SIGNED_BY_US" : "CONFIRMED";
             await prisma.konsolTask.upsert({
               where: { courierId_date: { courierId: courier.id, date: new Date(`${dateStr}T00:00:00Z`) } },
               update: { konsolTaskId: String(task.id), amount, status: dbStatus, konsolActId: actIdToSave },
@@ -155,7 +151,6 @@ export async function POST(req: Request) {
       if (!statuses[t.courierId]) statuses[t.courierId] = [];
       let currentBadge = null;
 
-      // Если в БД задание еще не числится подписанным, на всякий случай проверим его индивидуально
       if (t.konsolTaskId && t.status !== "SIGNED_BY_US") {
          const remote = await fetchKonsolTask(t.konsolTaskId);
          if (remote) {
@@ -166,7 +161,7 @@ export async function POST(req: Request) {
                   where: { id: t.id },
                   data: { status: "SIGNED_BY_US", konsolActId: newActId }
                });
-               t.status = "SIGNED_BY_US"; // Обновляем "на лету"
+               t.status = "SIGNED_BY_US"; 
                t.konsolActId = newActId;
             } else if (remote.state) {
                const code = remote.state.code;
@@ -175,20 +170,12 @@ export async function POST(req: Request) {
                  await prisma.konsolTask.update({ where: { id: t.id }, data: { status: newDbStatus } });
                  t.status = newDbStatus;
                }
-               
-               // Собираем бейдж, если акта все еще нет
-               if (code === "submitted")      currentBadge = { label: "🟡 Ожидает курьера", color: "#f59e0b" };
-               else if (code === "confirmed" || code === "auto_confirmed") currentBadge = { label: "🔵 В работе", color: "#4a7aff" };
-               else if (code === "checked_in") currentBadge = { label: "🟣 Начата работа", color: "#8b5cf6" };
-               else if (code === "accepted")   currentBadge = { label: "🟢 Выполнено", color: "#10b981" };
-               else currentBadge = { label: `⏳ ${remote.state.title}`, color: "#6b6860" };
             }
          }
       }
 
-      // Отрисовка бейджа для уже подписанных заданий
-      if (t.status === "SIGNED_BY_US") {
-        if (t.konsolActId) {
+      // Отрисовка бейджа 
+      if (t.status === "SIGNED_BY_US" && t.konsolActId) {
           const act = await fetchKonsolAct(t.konsolActId);
           if (act?.payment?.status === "paid") {
             currentBadge = { label: "✅ Оплачено", color: "#10b981" };
@@ -203,12 +190,11 @@ export async function POST(req: Request) {
           } else if (act?.payment?.status === "error") {
             currentBadge = { label: "❌ Ошибка оплаты", color: "#d94040" };
           } else {
-            currentBadge = { label: "✅ Оплачено", color: "#10b981" };
+            currentBadge = { label: "✅ Подписано", color: "#10b981" };
           }
-        } else {
-          currentBadge = { label: "✅ Подписано", color: "#10b981" };
-        }
-      } else if (!currentBadge) {
+      } else if (t.status === "CONFIRMED") {
+         currentBadge = { label: "🔵 В работе", color: "#4a7aff" };
+      } else {
          currentBadge = { label: "⏳ Черновик", color: "#6b6860" };
       }
 
@@ -217,10 +203,9 @@ export async function POST(req: Request) {
       }
     }
 
-    // Очищаем лишние статусы, если есть бейдж оплаты
     for (const courierId in statuses) {
       if (statuses[courierId].length > 1) {
-        statuses[courierId] = statuses[courierId].filter(s => s.label !== "✅ Оплачено");
+        statuses[courierId] = statuses[courierId].filter(s => s.label !== "✅ Оплачено" && s.label !== "✅ Подписано");
       }
     }
 
