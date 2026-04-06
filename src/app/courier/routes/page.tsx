@@ -324,7 +324,7 @@ export default function CourierRoutesPage() {
                                 color: (isDelivered && actualTime) ? "#10b981" : "#1a1a18" 
                               }}>
                                 {(isDelivered && actualTime) 
-                                  ? `Фактически в ${actualTime}` 
+                                  ? `Доставлен в ${actualTime}` 
                                   : (o.slotRaw ?? "Время не указано")}
                               </div>
                               {/* ВЫВОД ETA (Только если не доставлен) */}
@@ -481,7 +481,7 @@ export default function CourierRoutesPage() {
                                 fontWeight: 600, 
                                 color: (isDelivered && actualTime) ? "#10b981" : "#1a1a18" 
                               }}>
-                                {(isDelivered && actualTime) ? `Фактически в ${actualTime}` : (o.slotRaw ?? "Время не указано")}
+                                {(isDelivered && actualTime) ? `Доставлен в ${actualTime}` : (o.slotRaw ?? "Время не указано")}
                             </div>
                           </div>
                           <div style={{ fontSize: 11, background: st.bg, color: st.color, padding: "3px 8px", borderRadius: 6, fontWeight: 700 }}>
