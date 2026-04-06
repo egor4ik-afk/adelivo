@@ -13,9 +13,14 @@ export async function GET() {
   const orders = await prisma.order.findMany({
     where: {
       courierId: courier.id,
-      status: { notIn: ["CANCELLED", "RETURNED"] }
+      status: { notIn: ["CANCELLED", "RETURNED"] },
+      // 🔥 ДОБАВЛЕН ФИЛЬТР: Показывать только если маршрут НЕ черновик (или если маршрута вообще нет)
+      OR: [
+        { route: { isDraft: false } },
+        { routeId: null }
+      ]
     },
-    include: { route: true }, // 🔥 Добавили подгрузку связанной модели Route
+    include: { route: true }, 
     orderBy: [ { routeId: 'asc' }, { routeOrder: 'asc' }, { slotFrom: 'asc' } ]
   });
 
