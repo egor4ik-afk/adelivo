@@ -506,7 +506,55 @@ export async function pollCrmOrders() {
       params.append("limit", "100");
       chunk.forEach(id => params.append("filter[ids][]", id));
       const resUpdate = await axios.get<CrmOrdersResponse>(`${CRM_URL}/api/v5/orders?${params.toString()}`, { timeout: 15_000 });
-      for (const order of resUpdate.data?.orders || []) await upsertOrder(order);
+      
+      const returnedOrders = resUpdate.data?.orders || [];
+      
+      // 1. Обновляем все заказы, которые вернула CRM
+      for (const order of returnedOrders) {
+        await upsertOrder(order);
+      }
+
+      // 🔥 2. ЛОГИКА ПОИСКА УДАЛЕННЫХ ЗАКАЗОВ 🔥
+      // Получаем список ID, которые реально пришли из CRM
+      const returnedIds = returnedOrders.map(o => String(o.id));
+      
+      // Находим те ID, которые мы запрашивали, но CRM их не вернула
+      const deletedIds = chunk.filter(id => !returnedIds.includes(id));
+
+      if (deletedIds.length > 0) {
+        console.log(`[Cron] Внимание! Эти заказы пропали из CRM:`, deletedIds);
+        
+        // Получаем эти заказы из нашей локальной БД
+        const localOrdersToCancel = await prisma.order.findMany({ 
+          where: { crmId: { in: deletedIds } } 
+        });
+
+        for (const localOrder of localOrdersToCancel) {
+          // Если заказ был в маршруте, и он там был последним — удаляем пустой маршрут
+          if (localOrder.routeId) {
+            const siblingsCount = await prisma.order.count({ 
+              where: { routeId: localOrder.routeId, id: { not: localOrder.id } }
+            });
+            if (siblingsCount === 0) {
+              await prisma.route.deleteMany({ where: { id: localOrder.routeId } });
+            }
+          }
+
+          // Переводим заказ в статус CANCELLED, отвязываем от маршрута и пишем причину
+          await prisma.order.update({
+            where: { id: localOrder.id },
+            data: {
+              status: "CANCELLED",
+              opComment: "❌ Удален в CRM (или перенесен в корзину)",
+              routeId: null,
+              routeOrder: null,
+              pickedUpAt: null
+            }
+          });
+          
+          console.log(`[Cron] Локальный заказ ${localOrder.crmId} переведен в статус CANCELLED.`);
+        }
+      }
     }
 
     await prisma.syncState.upsert({ where: { id: 1 }, update: { lastSyncAt: new Date() }, create: { id: 1, lastSyncAt: new Date() } });
