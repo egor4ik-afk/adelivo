@@ -141,12 +141,24 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 
     if (body.photoUrl !== undefined) updateData.photoUrl = body.photoUrl;
 
+    // ====================================================================
+    // 🔥 ОБЩЕЕ ПРАВИЛО СБРОСА ПЛАНА (GENERAL RULE)
+    // Защита: если в итоге заказ стал NEW или остался без курьера — жестко зачищаем ETA
+    // ====================================================================
+    const finalStatus = updateData.status !== undefined ? updateData.status : order.status;
+    const finalCourierId = updateData.courierId !== undefined ? updateData.courierId : order.courierId;
+    
+    if (finalStatus === "NEW" || finalCourierId === null) {
+      updateData.eta = null;
+    }
+
     let updatedOrder = order;
     if (Object.keys(updateData).length > 0) {
       updatedOrder = await prisma.order.update({ where: { id }, data: updateData, include: { route: true } });
     }
 
-   // 🔥 МАГИЯ ПРОИСХОДИТ ЗДЕСЬ (ДЕРГАЕМ УНИВЕРСАЛЬНЫЙ ТРИГГЕР)
+    // 🔥 МАГИЯ ПРОИСХОДИТ ЗДЕСЬ (ДЕРГАЕМ УНИВЕРСАЛЬНЫЙ ТРИГГЕР)
+    // ...
     // =========================================================
     // Запускаем пересчет ТОЛЬКО если статус реально изменился на новый!
     const statusChanged = body.status !== undefined && order.status !== body.status;

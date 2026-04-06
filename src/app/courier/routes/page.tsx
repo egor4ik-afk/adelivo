@@ -12,12 +12,13 @@ interface RouteOrder {
   opComment: string | null;
   routeId: string | null; routeOrder: number | null;
   deliveryDate: string | null;
-  eta?: string | null; // 🔥 ДОБАВЛЕНО: расчетное время прибытия
-  photoUrl?: string | null; // 🔥 ДОБАВЛЕНО
+  deliveredAt?: string | null; // 🔥 ДОБАВЛЕНО: Фактическое время доставки
+  eta?: string | null;
+  photoUrl?: string | null;
   route?: {
     id: string; name: string; link: string | null; date: string;
     departureAdvice: string | null;
-    baseArrivalTime?: string | null; // 🔥 ДОБАВЛЕНО: Время на базе
+    baseArrivalTime?: string | null;
   } | null;
 }
 
@@ -59,7 +60,6 @@ export default function CourierRoutesPage() {
     setExpandedRoutes(prev => ({ ...prev, [routeId]: !(prev[routeId] ?? true) }));
   };
 
-  // 🔥 НОВЫЕ ФУНКЦИИ ВСТАВЛЕНЫ СЮДА
   const handleBaseTimeChange = async (routeId: string, newTime: string) => {
     setOrders(prev => prev.map(o => o.route?.id === routeId
       ? { ...o, route: { ...o.route!, baseArrivalTime: newTime } }
@@ -81,14 +81,11 @@ export default function CourierRoutesPage() {
     await fetch(`/api/routes/${routeId}/pickup-all`, { method: "POST" });
   };
 
-  // 🔥 ФУНКЦИЯ ЗАГРУЗКИ ФОТО (Исправленная под Yandex S3 Presigned URL)
   const handlePhotoUpload = async (orderId: string, file: File) => {
     try {
-      // 1. Сжимаем фото
       const imageCompression = (await import('browser-image-compression')).default;
       const compressedFile = await imageCompression(file, { maxSizeMB: 1, maxWidthOrHeight: 1280 });
 
-      // 2. Получаем одноразовую ссылку (Presigned URL) от твоего сервера
       const signRes = await fetch("/api/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -101,9 +98,8 @@ export default function CourierRoutesPage() {
       if (!signRes.ok) throw new Error("Не удалось получить ссылку от сервера");
       const { uploadUrl, fileUrl } = await signRes.json();
 
-      // 3. Отправляем само фото НАПРЯМУЮ в Yandex Cloud
       const uploadRes = await fetch(uploadUrl, {
-        method: "PUT", // Yandex S3 ожидает именно PUT
+        method: "PUT",
         headers: {
           "Content-Type": compressedFile.type || "image/jpeg",
         },
@@ -112,14 +108,12 @@ export default function CourierRoutesPage() {
 
       if (!uploadRes.ok) throw new Error("Не удалось загрузить файл в Яндекс Облако");
 
-      // 4. Сохраняем ссылку в БД заказа (это запустит уведомление в Telegram)
       await fetch(`/api/orders/${orderId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ photoUrl: fileUrl }),
       });
 
-      // 5. Обновляем интерфейс
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, photoUrl: fileUrl } : o));
       alert("✅ Фото успешно отправлено!");
       
@@ -159,6 +153,16 @@ export default function CourierRoutesPage() {
     pastGrouped[d].push(o);
   });
   const pastDates = Object.keys(pastGrouped).sort((a, b) => b.localeCompare(a));
+
+  // Вспомогательная функция для форматирования времени
+  const formatDeliveredTime = (dateString: string | null) => {
+    if (!dateString) return null;
+    return new Date(dateString).toLocaleTimeString("ru-RU", { 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      timeZone: "Europe/Moscow" 
+    });
+  };
 
   return (
     <div style={{
@@ -202,7 +206,7 @@ export default function CourierRoutesPage() {
                       {delivered}/{total} доставлено
                     </div>
 
-                    {/* 🔥 СОВЕТ ОПЕРАТОРА — ВО СКОЛЬКО ЗАБРАТЬ */}
+                    {/* СОВЕТ ОПЕРАТОРА */}
                     {advice && (
                       <div style={{
                         marginTop: 8, padding: "10px 12px", background: "#fffbeb",
@@ -230,7 +234,7 @@ export default function CourierRoutesPage() {
                   </div>
                 </div>
 
-                {/* 🔥 ПАНЕЛЬ УПРАВЛЕНИЯ МАРШРУТОМ */}
+                {/* ПАНЕЛЬ УПРАВЛЕНИЯ МАРШРУТОМ */}
                 {isExpanded && (
                   <div style={{ display: "flex", gap: 8, alignItems: "center", borderTop: "1px dashed #e8e6df", paddingTop: 12 }} onClick={e => e.stopPropagation()}>
                     <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
@@ -246,14 +250,12 @@ export default function CourierRoutesPage() {
                       >
                         <option value="" disabled>Выбрать...</option>
 
-                        {/* Если время уже было задано нестандартно (например 10:15), оставляем его видимым */}
                         {routeObj?.baseArrivalTime && Number(routeObj.baseArrivalTime.split(':')[1]) % 10 !== 0 && (
                           <option value={routeObj.baseArrivalTime}>{routeObj.baseArrivalTime}</option>
                         )}
 
-                        {/* Генерируем слоты каждые 10 минут с 08:00 до 23:50 (96 вариантов) */}
                         {Array.from({ length: 96 }).map((_, i) => {
-                          const hour = Math.floor(i / 6) + 8; // 6 слотов в часе (6 * 10 = 60 мин)
+                          const hour = Math.floor(i / 6) + 8;
                           const min = (i % 6) * 10;
                           const val = `${hour.toString().padStart(2, "0")}:${min.toString().padStart(2, "0")}`;
 
@@ -286,6 +288,8 @@ export default function CourierRoutesPage() {
                     const phone = o.recipientPhone || "—";
                     const rawOp = o.opComment || "";
                     const opComment = rawOp.split("\n").filter(line => !line.startsWith("💡")).join("\n").trim();
+                    const isDelivered = o.status === "DELIVERED";
+                    const actualTime = formatDeliveredTime(o.deliveredAt || null);
 
                     return (
                       <div
@@ -293,7 +297,7 @@ export default function CourierRoutesPage() {
                         style={{
                           padding: "14px 16px",
                           borderBottom: idx < routePoints.length - 1 ? "1px solid #f0efe9" : "none",
-                          opacity: o.status === "DELIVERED" ? 0.55 : 1,
+                          opacity: isDelivered ? 0.55 : 1,
                           transition: "opacity 0.2s",
                         }}
                       >
@@ -313,11 +317,18 @@ export default function CourierRoutesPage() {
                               {o.externalId ?? o.crmId}
                             </div>
                             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <div style={{ fontSize: 12, fontWeight: 700, color: "#1a1a18" }}>
-                                {o.slotRaw ?? "Время не указано"}
+                              {/* 🔥 ВЫВОД ВРЕМЕНИ ДОСТАВКИ ИЛИ ПЛАНОВОГО ОКНА */}
+                              <div style={{ 
+                                fontSize: 12, 
+                                fontWeight: 700, 
+                                color: (isDelivered && actualTime) ? "#10b981" : "#1a1a18" 
+                              }}>
+                                {(isDelivered && actualTime) 
+                                  ? `Фактически в ${actualTime}` 
+                                  : (o.slotRaw ?? "Время не указано")}
                               </div>
-                              {/* 🔥 ВЫВОД ВРЕМЕНИ ДОСТАВКИ (ETA) */}
-                              {o.eta && (
+                              {/* ВЫВОД ETA (Только если не доставлен) */}
+                              {o.eta && !isDelivered && (
                                 <div style={{
                                   fontSize: 11, background: "#eef3ff", color: "#4a7aff",
                                   padding: "2px 6px", borderRadius: 4, fontWeight: 600
@@ -347,7 +358,7 @@ export default function CourierRoutesPage() {
                           {o.address}
                         </div>
 
-                        {/* 🔥 КНОПКА ЗАГРУЗКИ ФОТО */}
+                        {/* КНОПКА ЗАГРУЗКИ ФОТО */}
                         <div style={{ marginBottom: 10 }}>
                           <label style={{
                             display: "block", background: o.photoUrl ? "#ecfdf5" : "#fff",
@@ -358,7 +369,6 @@ export default function CourierRoutesPage() {
                             <input
                               type="file"
                               accept="image/*"
-                              // 🔥 УБРАЛИ capture="environment", теперь телефон даст выбор: Камера или Галерея
                               style={{ display: "none" }}
                               onChange={(e) => {
                                 if (e.target.files?.[0]) {
@@ -375,7 +385,6 @@ export default function CourierRoutesPage() {
                             </span>
                           </label>
 
-                          {/* 🔥 ПРЕВЬЮ ФОТО ДЛЯ САМОГО КУРЬЕРА */}
                           {o.photoUrl && (
                             <div style={{ marginTop: 8 }}>
                               <a href={o.photoUrl} target="_blank" rel="noopener noreferrer">
@@ -433,6 +442,7 @@ export default function CourierRoutesPage() {
           </div>
         )}
 
+        {/* ПРОШЛЫЕ ЗАКАЗЫ (ЗДЕСЬ ТОЖЕ ДОБАВЛЕН ФАКТИЧЕСКОЕ ВРЕМЯ) */}
         {pastOrders.length > 0 && (
           <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "hidden" }}>
             <div
@@ -457,13 +467,22 @@ export default function CourierRoutesPage() {
                     const phone = o.recipientPhone || "—";
                     const rawOp = o.opComment || "";
                     const opComment = rawOp.split("\n").filter(l => !l.startsWith("💡")).join("\n").trim();
+                    const isDelivered = o.status === "DELIVERED";
+                    const actualTime = formatDeliveredTime(o.deliveredAt || null);
 
                     return (
                       <div key={o.id} style={{ padding: "12px 16px", borderBottom: "1px solid #f0efe9", opacity: 0.7 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                           <div>
                             <div style={{ fontSize: 10, color: "#a8a49c", fontFamily: "monospace" }}>{o.externalId ?? o.crmId}</div>
-                            <div style={{ fontSize: 12, fontWeight: 600, color: "#1a1a18" }}>{o.slotRaw}</div>
+                            {/* 🔥 ВЫВОД ВРЕМЕНИ (ФАКТ ИЛИ ПЛАН) */}
+                            <div style={{ 
+                                fontSize: 12, 
+                                fontWeight: 600, 
+                                color: (isDelivered && actualTime) ? "#10b981" : "#1a1a18" 
+                              }}>
+                                {(isDelivered && actualTime) ? `Фактически в ${actualTime}` : (o.slotRaw ?? "Время не указано")}
+                            </div>
                           </div>
                           <div style={{ fontSize: 11, background: st.bg, color: st.color, padding: "3px 8px", borderRadius: 6, fontWeight: 700 }}>
                             {st.label}

@@ -36,6 +36,73 @@ export interface DashboardOrder {
   recipientPhone?: string | null; // 🔥 ДОБАВИТЬ ЭТУ СТРОКУ
 }
 
+// 🔥 Обновленный parseTime, который принимает undefined
+const parseTime = (timeStr: string | null | undefined, fallback = "00:00") => {
+  const [h, m] = (timeStr || fallback).split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+};
+
+const formatTime = (minutes: number) => {
+  const h = Math.floor(minutes / 60) % 24;
+  const m = Math.floor(minutes % 60);
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+};
+
+function getOptimalDeparture(orders: DashboardOrder[], legsDurations: number[], serviceTime = 5) {
+  if (!orders.length || !legsDurations.length) return null;
+
+  let bestStartMin = parseTime(orders[0].slotFrom) - legsDurations[0];
+  let anchorIndex = 0;
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    let currentMin = bestStartMin;
+    const arrivals: number[] = [];
+
+    for (let i = 0; i < orders.length; i++) {
+      currentMin += legsDurations[i];
+      arrivals.push(currentMin);
+      const slotFrom = parseTime(orders[i].slotFrom);
+      if (currentMin < slotFrom) currentMin = slotFrom;
+      currentMin += serviceTime;
+    }
+
+    currentMin = bestStartMin;
+    for (let i = 0; i < orders.length; i++) {
+      currentMin += legsDurations[i];
+      const slotFrom = parseTime(orders[i].slotFrom);
+      
+      if (currentMin < slotFrom) {
+        const waitTime = slotFrom - currentMin;
+        let maxAllowedShift = waitTime;
+        
+        for (let j = 0; j <= i; j++) {
+          const slotTo = parseTime(orders[j].slotTo, "23:59");
+          const slack = slotTo - arrivals[j];
+          if (slack < maxAllowedShift) maxAllowedShift = Math.max(0, slack);
+        }
+        
+        if (maxAllowedShift > 0) {
+          bestStartMin += maxAllowedShift;
+          anchorIndex = i;
+          changed = true;
+          break;
+        }
+      }
+      if (currentMin < slotFrom) currentMin = slotFrom;
+      currentMin += serviceTime;
+    }
+  }
+
+  return {
+    departureTime: formatTime(bestStartMin),
+    anchorOrder: orders[anchorIndex],
+    anchorIndex: anchorIndex,
+    isShifted: anchorIndex > 0
+  };
+}
+
 let ymapsReady: Promise<void> | null = null;
 function loadYMaps(): Promise<void> {
   if (ymapsReady) return ymapsReady;
@@ -644,6 +711,17 @@ export function DashboardClient({ user }: { user: User }) {
     setIsCalculatingRoute(true); setDepartureAdvice(null);
     let multiRoute: any = null;
 
+    // 🔥 Вспомогательная функция для парсинга времени со страховкой
+    const parseYandexTimeMs = (text: string) => {
+      if (!text || text === "—") return 0;
+      let ms = 0;
+      const hMatch = text.match(/(\d+)\s*ч/);
+      if (hMatch) ms += parseInt(hMatch[1], 10) * 3600000;
+      const mMatch = text.match(/(\d+)\s*мин/);
+      if (mMatch) ms += parseInt(mMatch[1], 10) * 60000;
+      return routeType === "auto" ? ms + (12 * 60 * 1000) : ms + (3 * 60 * 1000); 
+    };
+
     const timer = setTimeout(() => {
       multiRoute = new ymapsAny.multiRouter.MultiRoute({
         referencePoints: points, params: { routingMode: routeType === 'mt' ? 'masstransit' : 'auto' }
@@ -662,40 +740,27 @@ export function DashboardClient({ user }: { user: User }) {
         });
 
         const legsArr: string[] = [];
-        let earliestDeadline: { externalId: string; slotFrom: string; pickupDeadlineMs: number } | null = null;
+        const legDurationsMin: number[] = [];
 
-        activeRoute.getPaths().each((path: any, idx: number) => {
+        activeRoute.getPaths().each((path: any) => {
           const legDuration = path.properties.get("durationInTraffic") || path.properties.get("duration");
-          legsArr.push(cleanHtml(legDuration?.text || "—"));
-
-          if (idx === 0 && validOrders.length > 0) {
-            const order = validOrders[0];
-            const legSeconds = legDuration?.value || 0;
-            const legToFirstPointMs = (legSeconds + 5 * 60) * 1000;
-
-            if (order.slotFrom) {
-              const [hh, mm] = order.slotFrom.split(":").map(Number);
-              if (!isNaN(hh) && !isNaN(mm)) {
-                // ✅ БЕРЕМ ДАТУ ИЗ КАЛЕНДАРЯ
-                const [year, month, day] = filterDate.split("-").map(Number);
-                const slotStartMs = new Date(year, month - 1, day, hh, mm, 0, 0).getTime();
-                
-                earliestDeadline = {
-                  externalId: order.externalId ?? order.crmId,
-                  slotFrom: order.slotFrom,
-                  pickupDeadlineMs: slotStartMs - legToFirstPointMs,
-                };
-              }
-            }
-          }
+          const textStr = cleanHtml(legDuration?.text || "—");
+          legsArr.push(textStr);
+          // 🔥 ИСПОЛЬЗУЕМ СТРАХОВОЧНОЕ ВРЕМЯ (как в ETA), чтобы расчет сдвига был 1 в 1
+          legDurationsMin.push(parseYandexTimeMs(textStr) / 60000);
         });
 
-        if (earliestDeadline) {
-          const ed = earliestDeadline as { externalId: string; slotFrom: string; pickupDeadlineMs: number };
-          const deadlineDate = new Date(ed.pickupDeadlineMs);
-          const hh = String(deadlineDate.getHours()).padStart(2, "0");
-          const mm = String(deadlineDate.getMinutes()).padStart(2, "0");
-          setDepartureAdvice(`Выехать до ${hh}:${mm} — первый заказ к ${ed.slotFrom} (зак. ${ed.externalId})`);
+        const adviceData = getOptimalDeparture(validOrders, legDurationsMin);
+
+        if (adviceData) {
+          const extId = adviceData.anchorOrder.externalId ?? adviceData.anchorOrder.crmId;
+          
+          if (adviceData.isShifted) {
+            // 🔥 Возвращаем правильный умный текст (парсер берет только цифры из "Выехать до HH:MM", так что текст ему не мешает)
+            setDepartureAdvice(`Выехать до ${adviceData.departureTime} — оптимально к началу слота ${adviceData.anchorIndex + 1}-го заказа (зак. #${extId})`);
+          } else {
+            setDepartureAdvice(`Выехать до ${adviceData.departureTime} — первый заказ к ${adviceData.anchorOrder.slotFrom} (зак. ${extId})`);
+          }
         } else {
           setDepartureAdvice("Слоты не строгие — выезд в любое время");
         }
@@ -707,8 +772,7 @@ export function DashboardClient({ user }: { user: User }) {
 
     return () => { clearTimeout(timer); if (multiRoute) multiRoute.destroy(); };
   }, [bulkSelectedIds, routeType, returnToBase, routeTab, isBulkMode, isMobile]);
-
-  // 🔥 ВЫНЕСЕННАЯ ЛОГИКА РАСЧЕТА ETA
+  // 🔥 ВЫНЕСЕННАЯ ЛОГИКА РАСЧЕТА ETA (С УЧЕТОМ ОЖИДАНЙИЯ)
   const calculatedEtas = useMemo(() => {
     const etas: Record<string, { type: string, timeStr: string, color: string }> = {};
     if (selectedRouteOrders.length === 0 || routeLegs.length === 0) return etas;
@@ -724,37 +788,26 @@ export function DashboardClient({ user }: { user: User }) {
     };
 
     const [year, month, day] = filterDate.split("-").map(Number);
-    let currentRunningMs = new Date(year, month - 1, day, 10, 0, 0, 0).getTime(); // fallback 10:00
+    let currentRunningMs = new Date(year, month - 1, day, 10, 0, 0, 0).getTime();
     let foundFirstActive = false;
 
-    // Проверяем, стартовал ли уже маршрут
     const hasStarted = selectedRouteOrders.some((o: any) => o.status === "IN_DELIVERY" || o.status === "DELIVERED");
     const pickedUpTimes = selectedRouteOrders.map((o: any) => o.pickedUpAt).filter(Boolean);
     const actualDepartureMs = pickedUpTimes.length > 0 ? Math.min(...pickedUpTimes.map((d: string) => new Date(d).getTime())) : null;
 
     if (hasStarted && actualDepartureMs) {
-      currentRunningMs = actualDepartureMs; // Фактический старт
+      currentRunningMs = actualDepartureMs; 
     } else if (!hasStarted && selectedRouteOrders.length > 0 && routeLegs.length > 0) {
-      // 🚀 МАРШРУТ ЕЩЕ НЕ НАЧАТ (СЧИТАЕМ ПО ПЛАНУ)
-      
       const currentRoute = editingRouteId ? existingRoutes.find((r: any) => r.id === editingRouteId) : null;
 
-      // 1. Если оператор жестко задал время "На базе в:", считаем от него!
       if (currentRoute?.baseArrivalTime) {
         const [bH, bM] = currentRoute.baseArrivalTime.split(':').map(Number);
         currentRunningMs = new Date(year, month - 1, day, bH, bM, 0, 0).getTime();
-      } else {
-        // 2. Иначе отталкиваемся назад от слота первого заказа
-        const firstOrder = selectedRouteOrders[0];
-        if (firstOrder.slotFrom) {
-          const [hh, mm] = firstOrder.slotFrom.split(":").map(Number);
-          if (!isNaN(hh) && !isNaN(mm)) {
-            const slotStartMs = new Date(year, month - 1, day, hh, mm, 0, 0).getTime();
-            const legToFirstPointMs = parseYandexTimeMs(routeLegs[0]) + (5 * 60 * 1000);
-            
-            // ✅ БОЛЬШЕ НЕТ Math.max(Date.now(), ...). Считаем строго от времени выезда!
-            currentRunningMs = slotStartMs - legToFirstPointMs; 
-          }
+      } else if (departureAdvice) {
+        // 🔥 БЕРЕМ СТАРТОВОЕ ВРЕМЯ НАПРЯМУЮ ИЗ УМНОГО РАСЧЕТА
+        const match = departureAdvice.match(/Выехать до (\d{2}):(\d{2})/);
+        if (match) {
+          currentRunningMs = new Date(year, month - 1, day, Number(match[1]), Number(match[2]), 0, 0).getTime();
         }
       }
     }
@@ -763,7 +816,6 @@ export function DashboardClient({ user }: { user: User }) {
       const legMs = parseYandexTimeMs(routeLegs[index]);
 
       if (o.status === "DELIVERED") {
-        // 🔥 Используем фактическое время доставки, если оно есть
         const t = o.deliveredAt || o.changedAt || o.updatedAt;
         if (t) {
           currentRunningMs = new Date(t).getTime();
@@ -778,10 +830,19 @@ export function DashboardClient({ user }: { user: User }) {
       } else if (o.status === "CANCELLED" || o.status === "RETURNED") {
         etas[o.id] = { type: 'SKIPPED', timeStr: "—", color: "#a8a49c" };
       } else {
-        // Точка активна (В пути или Назначена)
-        // Прибавляем время дороги от базы ИЛИ от предыдущей доставленной точки!
-        currentRunningMs += (!foundFirstActive ? legMs : (4 * 60 * 1000) + legMs);
+        currentRunningMs += (!foundFirstActive ? legMs : (5 * 60 * 1000) + legMs);
         foundFirstActive = true;
+
+        // 🔥 САМАЯ ВАЖНАЯ ЧАСТЬ: ЕСЛИ ПРИЕХАЛИ РАНЬШЕ НАЧАЛА СЛОТА — ЖДЕМ!
+        if (o.slotFrom) {
+          const [sH, sM] = o.slotFrom.split(':').map(Number);
+          if (!isNaN(sH) && !isNaN(sM)) {
+            const slotStartMs = new Date(year, month - 1, day, sH, sM, 0, 0).getTime();
+            if (currentRunningMs < slotStartMs) {
+              currentRunningMs = slotStartMs; // Курьер ждет до начала слота
+            }
+          }
+        }
 
         const timeStr = new Date(currentRunningMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
 
@@ -790,7 +851,8 @@ export function DashboardClient({ user }: { user: User }) {
     });
 
     return etas;
-  }, [selectedRouteOrders, routeLegs, routeType, filterDate, editingRouteId, existingRoutes]); // Обязательно обновить массив зависимостей
+  }, [selectedRouteOrders, routeLegs, routeType, filterDate, editingRouteId, existingRoutes, departureAdvice]); // 🔥 ДОБАВИЛИ departureAdvice В ЗАВИСИМОСТИrouteLegs, routeType, filterDate, editingRouteId, existingRoutes]); // Обязательно обновить массив зависимостей
+  
   const generateYandexUrl = (ordersToRoute: DashboardOrder[], type: "auto" | "mt", rtb: boolean) => {
     const validOrders = ordersToRoute.filter(o => o.lat && o.lng && !o.isInvalid);
     if (validOrders.length === 0) return null;
@@ -987,7 +1049,6 @@ export function DashboardClient({ user }: { user: User }) {
               }} style={{ background: "#fafaf8", border: "1px solid #e8e6df", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}>
                 <div>
                   <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    {r.name}
                     {typeIcon} {r.name}
                     {isDraft && <span style={{ background: "#fef3c7", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>Черновик</span>}
 
