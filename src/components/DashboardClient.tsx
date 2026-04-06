@@ -757,7 +757,7 @@ export function DashboardClient({ user }: { user: User }) {
           
           if (adviceData.isShifted) {
             // 🔥 Возвращаем правильный умный текст (парсер берет только цифры из "Выехать до HH:MM", так что текст ему не мешает)
-            setDepartureAdvice(`Выехать до ${adviceData.departureTime} — оптимально к началу слота ${adviceData.anchorIndex + 1}-го заказа (зак. #${extId})`);
+            setDepartureAdvice(`Выехать до ${adviceData.departureTime} — оптимально к началу слота ${adviceData.anchorIndex + 1}-го заказа (зак. ${extId})`);
           } else {
             setDepartureAdvice(`Выехать до ${adviceData.departureTime} — первый заказ к ${adviceData.anchorOrder.slotFrom} (зак. ${extId})`);
           }
