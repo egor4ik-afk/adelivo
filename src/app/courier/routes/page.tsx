@@ -74,7 +74,7 @@ export default function CourierRoutesPage() {
   const handlePickupAll = async (routeId: string) => {
     if (!window.confirm("Отметить все неначатые заказы в маршруте как «В пути»?")) return;
     setOrders(prev => prev.map(o =>
-      (o.route?.id === routeId && (o.status === "ASSIGNED" || o.status === "NEW"))
+      o.route?.id === routeId&&o.status === "ASSIGNED"
         ? { ...o, status: "IN_DELIVERY" }
         : o
     ));
