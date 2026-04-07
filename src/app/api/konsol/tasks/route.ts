@@ -13,7 +13,24 @@ export async function GET(req: Request) {
   }
 
   try {
+    // 🔥 1. Получаем даты из запроса
+    const { searchParams } = new URL(req.url);
+    const start = searchParams.get("start");
+    const end = searchParams.get("end");
+
+    // 🔥 2. Формируем жесткий фильтр по датам
+    let dateFilter = {};
+    if (start && end) {
+      dateFilter = {
+        date: {
+          gte: new Date(start),
+          lte: new Date(end + "T23:59:59.999Z"),
+        }
+      };
+    }
+
     const tasks = await prisma.konsolTask.findMany({
+      where: dateFilter, // Применяем фильтр!
       include: {
         courier: {
           select: {

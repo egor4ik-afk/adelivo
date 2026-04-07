@@ -29,10 +29,10 @@ if (!initialized && process.env.NODE_ENV !== "test") {
     catch (err) { console.error("[Cron] Poll failed:", err); }
   });
 
-  // // 2. Ежедневная проверка (15:00 UTC = 18:00 МСК)
-  // cron.schedule("0 15 * * *", async () => {
-  //   await callInternalCron("/api/cron/konsol/daily", "Ежедневная проверка (18:00 MSK)");
-  // });
+  // 2. Ежедневная проверка (15:00 UTC = 18:00 МСК)
+  cron.schedule("0 15 * * *", async () => {
+    await callInternalCron("/api/cron/konsol/daily", "Ежедневная проверка (18:00 MSK)");
+  });
   // Проверка опозданий каждые 15 минут
   cron.schedule("*/15 * * * *", async () => {
     await callInternalCron("/api/cron/check-delays", "Проверка опозданий");
