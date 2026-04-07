@@ -45,7 +45,7 @@ function getDist(lat1: number, lng1: number, lat2: number, lng2: number) {
 }
 
 function optimizeCluster(points: any[], startLat: number, startLng: number) {
-  const sorted = [];
+  const sorted: any[] = [];
   const remaining = [...points];
   let curLat = startLat;
   let curLng = startLng;
