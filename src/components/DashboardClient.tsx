@@ -17,7 +17,7 @@ interface DbCourier {
   lat?: number | null; lng?: number | null;
   homeLat?: number | null; homeLng?: number | null;
   locationUpdatedAt?: string | null;
-  isAuto?: boolean; // 🔥 ДОБАВЛЕНО
+  isAuto?: boolean;
 }
 
 export interface DashboardOrder {
@@ -31,12 +31,11 @@ export interface DashboardOrder {
   routeId?: string | null; routeOrder?: number | null; route?: any;
   createdAt?: string; updatedAt?: string; changedAt?: string;
   pickedUpAt?: string | null;
-  deliveredAt?: string | null; // 🔥 ДОБАВИТЬ ЭТУ СТРОКУ
+  deliveredAt?: string | null; 
   eta?: string | null;
-  recipientPhone?: string | null; // 🔥 ДОБАВИТЬ ЭТУ СТРОКУ
+  recipientPhone?: string | null; 
 }
 
-// 🔥 Обновленный parseTime, который принимает undefined
 const parseTime = (timeStr: string | null | undefined, fallback = "00:00") => {
   const [h, m] = (timeStr || fallback).split(':').map(Number);
   return (h || 0) * 60 + (m || 0);
@@ -46,6 +45,25 @@ const formatTime = (minutes: number) => {
   const h = Math.floor(minutes / 60) % 24;
   const m = Math.floor(minutes % 60);
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+};
+
+// 🔥 ФУНКЦИЯ ПРОВЕРКИ ОПОЗДАНИЯ (для Карты и Списка)
+export const isOrderLate = (order: DashboardOrder | any) => {
+  if (["CANCELLED", "RETURNED"].includes(order.status)) return false;
+  if (!order.slotTo) return false;
+  
+  const slotMin = parseTime(order.slotTo, "23:59");
+  
+  if (order.status === "DELIVERED" && order.deliveredAt) {
+     const d = new Date(new Date(order.deliveredAt).toLocaleString("en-US", {timeZone: "Europe/Moscow"}));
+     const dMin = d.getHours() * 60 + d.getMinutes();
+     return dMin > slotMin;
+  }
+  
+  if (order.eta && order.eta !== "—") {
+     return parseTime(order.eta) > slotMin;
+  }
+  return false;
 };
 
 function getOptimalDeparture(orders: DashboardOrder[], legsDurations: number[], serviceTime = 5) {
@@ -333,18 +351,17 @@ export function DashboardClient({ user }: { user: User }) {
   const selected = orders.find(o => o.id === selectedId) ?? null;
   const invalid = dateAndStatusOrders.filter(o => o.isInvalid && !/самовывоз/i.test(o.address || ""));
 
-  // 🔥 ФИЛЬТР "ДРУГИЕ" + ПОИСК (от 3 символов)
   const filtered = useMemo(() => {
     let result = selectedSlots.length === 0 ? dateAndStatusOrders : dateAndStatusOrders.filter(o => {
-      if (!o.slotFrom) return selectedSlots.includes("Другие");
-      const exact = SLOTS.find(s => s.from === o.slotFrom && s.to === o.slotTo);
-      if (exact) return selectedSlots.includes(exact.label);
-      const match = SLOTS.find(s => o.slotFrom! > s.from && o.slotFrom! <= s.to);
-      if (match) return selectedSlots.includes(match.label);
-      return selectedSlots.includes("Другие");
+      if (!o.slotFrom || !o.slotTo) return selectedSlots.includes("Другие");
+      const exactMatch = SLOTS.find(s => s.from === o.slotFrom && s.to === o.slotTo);
+      if (exactMatch) {
+         return selectedSlots.includes(exactMatch.label);
+      } else {
+         return selectedSlots.includes("Другие");
+      }
     });
 
-    // Применяем текстовый поиск, если введено 3+ символа
     if (searchQuery.trim().length >= 3) {
       const lowerQ = searchQuery.toLowerCase();
       result = result.filter(o =>
@@ -406,10 +423,9 @@ export function DashboardClient({ user }: { user: User }) {
       const clusterer = new window.ymaps.Clusterer({
         clusterIconLayout: "default#pieChart",
         clusterIconPieChartRadius: 20,
-        // 🔥 Включаем балун со списком при клике на кластер
         clusterDisableClickZoom: true,
         clusterOpenBalloonOnClick: true,
-        gridSize: 64 // Делаем сетку больше, чтобы близкие точки лучше слипались
+        gridSize: 64 
       });
       map.geoObjects.add(clusterer);
 
@@ -427,7 +443,6 @@ export function DashboardClient({ user }: { user: User }) {
             if (collection && typeof collection.each === 'function') {
               collection.each((obj: any) => {
                 if (obj.geometry) {
-                  // 🔥 Отключаем балуны, подсказки и кликабельность зон
                   obj.options.set({
                     fillOpacity: 0.15,
                     strokeOpacity: 0.7,
@@ -461,7 +476,6 @@ export function DashboardClient({ user }: { user: User }) {
     });
   };
 
-  // 🔥 НОВЫЙ КОД: Слушаем клики из балунов Яндекс Карт (кластеров)
   useEffect(() => {
     const handleMapClick = (e: any) => {
       if (e.detail) {
@@ -479,6 +493,7 @@ export function DashboardClient({ user }: { user: User }) {
     window.addEventListener("OPEN_ORDER_FROM_MAP", handleMapClick);
     return () => window.removeEventListener("OPEN_ORDER_FROM_MAP", handleMapClick);
   }, [isBulkMode, routeTabMode, isMobile]);
+
   const moveBulkItem = (index: number, dir: 'up' | 'down') => {
     setBulkSelectedIds(prev => {
       const arr = [...prev];
@@ -539,11 +554,12 @@ export function DashboardClient({ user }: { user: User }) {
       const lng = isSelected && previewGeo ? previewGeo.lng : order.lng!;
       const color = slotColor(order as any);
 
+      const late = isOrderLate(order); // 🔥 Проверяем на опоздание
+
       const displayTime = showTime && currentZoom >= 13 && !!order.slotRaw && selectedSlots.length === 0;
       const displayName = showCourierNames && !!order.courier;
       const slotLabelText = order.slotRaw ? order.slotRaw.replace("с ", "").replace(" до ", "-") : "";
 
-      // 🔥 УМНАЯ КНОПКА ДЛЯ БАЛУНА: Меняется в зависимости от того, собираем мы маршрут или просто смотрим
       const btnText = (isBulkMode && routeTabMode === "new")
         ? (isBulkSelected ? '❌ Убрать из маршрута' : '➕ Добавить в маршрут')
         : 'Открыть карточку';
@@ -566,15 +582,23 @@ export function DashboardClient({ user }: { user: User }) {
       let pm;
 
       if (displayTime) {
-        let pinColor = isSelected ? (previewGeo ? '#9ca3af' : '#1a1a18') : color; // 1a1a18 - Черный цвет для выбранной точки
+        let pinColor = isSelected ? (previewGeo ? '#9ca3af' : '#1a1a18') : color; 
         if (isBulkMode && routeTabMode === "new") {
           pinColor = isBulkSelected ? '#1a9e5c' : '#d1d5db';
         }
-        const finalSlotLabel = (isBulkMode && routeTabMode === "new" && isBulkSelected) ? `${bulkIndex + 1}. ${slotLabelText}` : slotLabelText;
+        
+        // 🔥 Если заказ опаздывает, красим пин в красный и рисуем часики (если он не выделен)
+        if (late && !isSelected && !(isBulkMode && routeTabMode === "new" && !isBulkSelected)) {
+           pinColor = '#d94040'; 
+        }
+
+        const finalSlotLabel = (isBulkMode && routeTabMode === "new" && isBulkSelected) 
+          ? `${bulkIndex + 1}. ${slotLabelText}` 
+          : (late ? "⏰ " : "") + slotLabelText;
 
         pm = new ymaps.Placemark([lat, lng], {
           balloonContentHeader: order.externalId ?? order.crmId,
-          balloonContentBody: balloonBody, // Вставляем HTML
+          balloonContentBody: balloonBody,
           hintContent: order.address ?? "—",
           pinColor, slotLabel: finalSlotLabel, showLabel: displayName, labelText: order.courier ?? "",
         }, { iconLayout: StretchyLayout, iconShape: { type: "Rectangle", coordinates: [[-40, -40], [40, 20]] }, iconOffset: [-15, -26] });
@@ -586,16 +610,16 @@ export function DashboardClient({ user }: { user: User }) {
           if (isBulkSelected) { preset = 'islands#greenIcon'; iconContent = `${bulkIndex + 1}`; }
           else { preset = 'islands#grayCircleDotIcon'; }
         } else {
-          // 🔥 Делаем активную точку черной (blackDotIcon)
-          if (isSelected) preset = previewGeo ? "islands#grayDotIcon" : "islands#yellowDotIcon";
+          if (isSelected) preset = previewGeo ? "islands#grayDotIcon" : "islands#yellowDotIcon"; // 🔥 Активный черный
+          else if (late) preset = "islands#redIcon"; // 🔥 Опаздывает - красный
         }
 
         pm = new ymaps.Placemark([lat, lng], {
           balloonContentHeader: order.externalId ?? order.crmId,
-          balloonContentBody: balloonBody, // Вставляем HTML
+          balloonContentBody: balloonBody, 
           hintContent: order.address ?? "—",
           iconCaption: (displayName) ? order.courier : undefined, iconContent
-        }, { preset, iconColor: (isBulkMode || isSelected) ? undefined : color });
+        }, { preset, iconColor: (isBulkMode || isSelected || late) ? undefined : color });
       }
 
       pm.events.add("click", () => {
@@ -670,8 +694,8 @@ export function DashboardClient({ user }: { user: User }) {
     return Array.from(routesMap.values()).sort((a, b) => {
       const timeA = new Date(a.updatedAt || 0).getTime();
       const timeB = new Date(b.updatedAt || 0).getTime();
-      if (timeB !== timeA) return timeB - timeA; // Сортировка по времени обновления (от новых к старым)
-      return b.name.localeCompare(a.name); // Если время совпадает, то по имени
+      if (timeB !== timeA) return timeB - timeA; 
+      return b.name.localeCompare(a.name); 
     });
   }, [orders, filterDate]);
 
@@ -711,7 +735,6 @@ export function DashboardClient({ user }: { user: User }) {
     setIsCalculatingRoute(true); setDepartureAdvice(null);
     let multiRoute: any = null;
 
-    // 🔥 Вспомогательная функция для парсинга времени со страховкой
     const parseYandexTimeMs = (text: string) => {
       if (!text || text === "—") return 0;
       let ms = 0;
@@ -746,7 +769,6 @@ export function DashboardClient({ user }: { user: User }) {
           const legDuration = path.properties.get("durationInTraffic") || path.properties.get("duration");
           const textStr = cleanHtml(legDuration?.text || "—");
           legsArr.push(textStr);
-          // 🔥 ИСПОЛЬЗУЕМ СТРАХОВОЧНОЕ ВРЕМЯ (как в ETA), чтобы расчет сдвига был 1 в 1
           legDurationsMin.push(parseYandexTimeMs(textStr) / 60000);
         });
 
@@ -754,9 +776,7 @@ export function DashboardClient({ user }: { user: User }) {
 
         if (adviceData) {
           const extId = adviceData.anchorOrder.externalId ?? adviceData.anchorOrder.crmId;
-          
           if (adviceData.isShifted) {
-            // 🔥 Возвращаем правильный умный текст (парсер берет только цифры из "Выехать до HH:MM", так что текст ему не мешает)
             setDepartureAdvice(`Выехать до ${adviceData.departureTime} — оптимально к началу слота ${adviceData.anchorIndex + 1}-го заказа (зак. ${extId})`);
           } else {
             setDepartureAdvice(`Выехать до ${adviceData.departureTime} — первый заказ к ${adviceData.anchorOrder.slotFrom} (зак. ${extId})`);
@@ -772,7 +792,7 @@ export function DashboardClient({ user }: { user: User }) {
 
     return () => { clearTimeout(timer); if (multiRoute) multiRoute.destroy(); };
   }, [bulkSelectedIds, routeType, returnToBase, routeTab, isBulkMode, isMobile]);
-  // 🔥 ВЫНЕСЕННАЯ ЛОГИКА РАСЧЕТА ETA (С УЧЕТОМ ОЖИДАНЙИЯ)
+
   const calculatedEtas = useMemo(() => {
     const etas: Record<string, { type: string, timeStr: string, color: string }> = {};
     if (selectedRouteOrders.length === 0 || routeLegs.length === 0) return etas;
@@ -804,7 +824,6 @@ export function DashboardClient({ user }: { user: User }) {
         const [bH, bM] = currentRoute.baseArrivalTime.split(':').map(Number);
         currentRunningMs = new Date(year, month - 1, day, bH, bM, 0, 0).getTime();
       } else if (departureAdvice) {
-        // 🔥 БЕРЕМ СТАРТОВОЕ ВРЕМЯ НАПРЯМУЮ ИЗ УМНОГО РАСЧЕТА
         const match = departureAdvice.match(/Выехать до (\d{2}):(\d{2})/);
         if (match) {
           currentRunningMs = new Date(year, month - 1, day, Number(match[1]), Number(match[2]), 0, 0).getTime();
@@ -833,25 +852,23 @@ export function DashboardClient({ user }: { user: User }) {
         currentRunningMs += (!foundFirstActive ? legMs : (5 * 60 * 1000) + legMs);
         foundFirstActive = true;
 
-        // 🔥 САМАЯ ВАЖНАЯ ЧАСТЬ: ЕСЛИ ПРИЕХАЛИ РАНЬШЕ НАЧАЛА СЛОТА — ЖДЕМ!
         if (o.slotFrom) {
           const [sH, sM] = o.slotFrom.split(':').map(Number);
           if (!isNaN(sH) && !isNaN(sM)) {
             const slotStartMs = new Date(year, month - 1, day, sH, sM, 0, 0).getTime();
             if (currentRunningMs < slotStartMs) {
-              currentRunningMs = slotStartMs; // Курьер ждет до начала слота
+              currentRunningMs = slotStartMs; 
             }
           }
         }
 
         const timeStr = new Date(currentRunningMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
-
         etas[o.id] = { type: o.status, timeStr, color: o.status === "IN_DELIVERY" ? "#f59e0b" : "#4a7aff" };
       }
     });
 
     return etas;
-  }, [selectedRouteOrders, routeLegs, routeType, filterDate, editingRouteId, existingRoutes, departureAdvice]); // 🔥 ДОБАВИЛИ departureAdvice В ЗАВИСИМОСТИrouteLegs, routeType, filterDate, editingRouteId, existingRoutes]); // Обязательно обновить массив зависимостей
+  }, [selectedRouteOrders, routeLegs, routeType, filterDate, editingRouteId, existingRoutes, departureAdvice]);
   
   const generateYandexUrl = (ordersToRoute: DashboardOrder[], type: "auto" | "mt", rtb: boolean) => {
     const validOrders = ordersToRoute.filter(o => o.lat && o.lng && !o.isInvalid);
@@ -935,7 +952,6 @@ export function DashboardClient({ user }: { user: User }) {
     if (!bulkCourier || bulkSelectedIds.length === 0) return;
     setBulkSaving(true);
 
-    // 🔥 Отправляем ETA на бэкенд
     const etasPayload: Record<string, string> = {};
     for (const id of bulkSelectedIds) {
       if (calculatedEtas[id] && calculatedEtas[id].timeStr !== "—") {
@@ -951,7 +967,7 @@ export function DashboardClient({ user }: { user: User }) {
           courierId: bulkCourier,
           routeType, returnToBase, oldRouteId: editingRouteId, departureAdvice, isDraft,
           routeEtas: etasPayload,
-          routeDate: filterDate // 🔥 ТЕПЕРЬ ДАТА ПЕРЕДАЕТСЯ ИЗ КАЛЕНДАРЯ
+          routeDate: filterDate
         })
       });
       if (!res.ok) throw new Error("Ошибка сервера");
@@ -1008,12 +1024,10 @@ export function DashboardClient({ user }: { user: User }) {
           {existingRoutes.length === 0 && <div style={{ textAlign: "center", color: "#a8a49c", padding: 20 }}>Нет маршрутов на {filterDate}</div>}
           {existingRoutes.map((r: any) => {
             const isDraft = r.isDraft;
-            // 🔥 НАХОДИМ КУРЬЕРА И ОПРЕДЕЛЯЕМ ИКОНКУ ТРАНСПОРТА
             const rCourier = dbCouriers.find(c => String(c.id) === String(r.courierId));
             const typeIcon = rCourier?.isAuto ? "🚗" : "🚶‍♂️";
             const courierName = courierOptions.find(c => String(c.value) === String(r.courierId))?.label || "Неизвестен";
 
-            // 🔥 Считаем сколько доставлено
             const deliveredCount = r.orders.filter((o: any) => o.status === "DELIVERED").length;
 
             const pickedUpTimes = r.orders.map((o: any) => o.pickedUpAt).filter(Boolean);
@@ -1052,7 +1066,6 @@ export function DashboardClient({ user }: { user: User }) {
                     {typeIcon} {r.name}
                     {isDraft && <span style={{ background: "#fef3c7", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>Черновик</span>}
 
-                    {/* 🔥 БЕЙДЖИК ОПОЗДАНИЯ */}
                     {delaysCount > 0 && (
                       <span style={{ background: "#fef2f2", color: "#d94040", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #fecaca" }}>
                         ⚠️ Опаздывает ({delaysCount})
@@ -1072,7 +1085,6 @@ export function DashboardClient({ user }: { user: User }) {
                           📦 Выехал: {new Date(actualDepartureMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       )}
-                      {/* 🔥 ВРЕМЯ НА БАЗЕ */}
                       {r.baseArrivalTime && (
                         <span style={{ fontSize: 11, background: "#eef3ff", color: "#4a7aff", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #bfdbfe" }}>
                           🏠 На базе: {r.baseArrivalTime}
@@ -1154,8 +1166,6 @@ export function DashboardClient({ user }: { user: User }) {
                   value={bulkCourier}
                   onChange={(newCourierId) => {
                     setBulkCourier(newCourierId);
-
-                    // 🔥 ПРИ СМЕНЕ КУРЬЕРА АВТОМАТИЧЕСКИ ПЕРЕКЛЮЧАЕМ ТАБ (и запускаем пересчет)
                     if (newCourierId) {
                       const courier = dbCouriers.find(c => String(c.id) === String(newCourierId));
                       if (courier) {
@@ -1219,14 +1229,18 @@ export function DashboardClient({ user }: { user: User }) {
                     const color = slotColor(o);
                     const st = ROUTE_STATUS_MAP[o.status] || ROUTE_STATUS_MAP.NEW;
                     const etaInfo = calculatedEtas[o.id] || { type: "NEW", timeStr: "—", color: "#4a7aff" };
+                    
+                    // 🔥 ПРОВЕРКА: Опаздывает ли этот заказ прямо сейчас в текущем маршруте?
+                    const isLateCalc = o.slotTo && etaInfo.timeStr !== "—" && parseTime(etaInfo.timeStr) > parseTime(o.slotTo);
+                    const displayColor = isLateCalc ? "#d94040" : etaInfo.color;
 
                     return (
                       <React.Fragment key={o.id}>
                         {routeLegs[index] && (
-                          <div style={{ fontSize: 12, color: etaInfo.color, paddingLeft: 46, paddingBottom: 6, fontWeight: 700 }}>
+                          <div style={{ fontSize: 12, color: displayColor, paddingLeft: 46, paddingBottom: 6, fontWeight: 700 }}>
                             {etaInfo.type === 'DELIVERED' ? `✅ Доставлен в ${etaInfo.timeStr}` :
                               etaInfo.type === 'SKIPPED' ? `❌ Отменен / Возврат` :
-                                `↓ Ожидается в ${etaInfo.timeStr} (в пути ${routeLegs[index]})`}
+                                (isLateCalc ? `⏰ Опаздывает (будет в ${etaInfo.timeStr})` : `↓ Ожидается в ${etaInfo.timeStr} (в пути ${routeLegs[index]})`)}
                           </div>
                         )}
 
@@ -1248,16 +1262,14 @@ export function DashboardClient({ user }: { user: User }) {
                                 Слот: <span style={{ color, fontWeight: 700 }}>{o.slotRaw}</span> · {o.externalId ?? o.crmId}
                               </div>
 
-                              {/* Выводим ПЛАН (становится серым после доставки, чтобы не отвлекать внимание) */}
                               {o.eta && (
                                 <div>
-                                  <span style={{ color: o.status === "DELIVERED" ? "#a8a49c" : "#4a7aff", fontWeight: 700 }}>
-                                    ⏱ План: {o.eta}
+                                  <span style={{ color: o.status === "DELIVERED" ? "#a8a49c" : (isLateCalc ? "#d94040" : "#4a7aff"), fontWeight: 700 }}>
+                                    {isLateCalc ? "⏰ " : "⏱ "}План: {o.eta}
                                   </span>
                                 </div>
                               )}
 
-                              {/* Выводим ФАКТ (появляется только после доставки) */}
                               {o.status === "DELIVERED" && (
                                 <div>
                                   <span style={{ color: "#10b981", fontWeight: 700 }}>
@@ -1267,7 +1279,6 @@ export function DashboardClient({ user }: { user: User }) {
                               )}
                             </div>
 
-                            {/* 🔥 ОТПРАВКА СТАТУСА С ПЕРЕСЧИТАННЫМ ETA */}
                             <select
                               value={o.status}
                               onChange={(e) => handleQuickStatusChange(o.id, e.target.value, etaInfo.timeStr)}
@@ -1333,11 +1344,10 @@ export function DashboardClient({ user }: { user: User }) {
             setSelectedId(null);
             setIsDetailVisible(false);
 
-            // 🔥 ДОБАВЛЕНО: Полный сброс состояния формы при клике
-            setRouteTabMode("new");       // Принудительно включаем таб "Новый маршрут"
-            setEditingRouteId(null);      // Сбрасываем ID редактируемого маршрута (выходим из режима редактирования)
-            setBulkCourier("");           // Очищаем выбранного курьера
-            setRouteType("mt");           // Возвращаем тип транспорта по дефолту (транспорт)
+            setRouteTabMode("new");       
+            setEditingRouteId(null);      
+            setBulkCourier("");           
+            setRouteType("mt");           
           }}
           style={{ ...s.navBtn, background: isBulkMode ? "#1a1a18" : "#fff", color: isBulkMode ? "#fff" : "#1a1a18", border: isBulkMode ? "1px solid #1a1a18" : "1px solid #e8e6df", marginLeft: 8 }}
         >
@@ -1347,7 +1357,6 @@ export function DashboardClient({ user }: { user: User }) {
           <div style={s.slotBar}>
             <SlotBtn label="Все" active={selectedSlots.length === 0} color="#4a7aff" onClick={() => toggleSlot("all")} />
             {SLOTS.map(sl => <SlotBtn key={sl.label} label={sl.label} active={selectedSlots.includes(sl.label)} color={sl.color} onClick={() => toggleSlot(sl.label)} />)}
-            {/* 🔥 КНОПКА ДРУГИЕ */}
             <SlotBtn label="Другие" active={selectedSlots.includes("Другие")} color="#6b6860" onClick={() => toggleSlot("Другие")} />
           </div>
         )}
@@ -1420,12 +1429,10 @@ export function DashboardClient({ user }: { user: User }) {
                 {isListVisible && (
                   <div style={{ ...s.cardsSection, flex: (isDetailVisible && selected) ? "0 0 50%" : 1, borderBottom: (isDetailVisible && selected) ? "1px solid #e8e6df" : "none" }}>
 
-                    {/* 🔥 КОМПАКТНЫЙ ЗАГОЛОВОК С ВСТРОЕННЫМ ПОИСКОМ */}
                     <div style={s.sectionHeader}>
                       <span style={s.sectionTitle}>Заказы</span>
                       <span style={s.countBadge}>{filtered.length}</span>
 
-                      {/* Поле поиска, растягивающееся на свободное место */}
                       <div style={{ flex: 1, position: "relative", margin: "0 8px" }}>
                         <input
                           type="text"
@@ -1562,18 +1569,19 @@ export function DashboardClient({ user }: { user: User }) {
                 <tbody>
                   {tableOrders.map((o, i) => {
                     const color = slotColor(o as any);
+                    const late = isOrderLate(o);
                     return (
                       <tr id={`row-${o.id}`} key={o.id} style={{ background: selectedId === o.id ? "#eef3ff" : i % 2 === 0 ? "#fff" : "#fafaf8", cursor: "pointer" }} onClick={() => { setSelectedId(o.id); setIsListVisible(true); setIsDetailVisible(true); }}>
-                        <td style={{ ...s.td, whiteSpace: "nowrap" }}><span style={{ ...s.statusDot, background: color }} /><span style={{ fontFamily: "monospace", fontSize: 10, color: "#a8a49c" }}>{o.externalId ?? o.crmId}</span></td>
-                        <td style={{ ...s.td, whiteSpace: "nowrap", color }}>{o.slotRaw ?? "—"}</td>
+                        <td style={{ ...s.td, whiteSpace: "nowrap" }}><span style={{ ...s.statusDot, background: late ? "#d94040" : color }} /><span style={{ fontFamily: "monospace", fontSize: 10, color: "#a8a49c" }}>{o.externalId ?? o.crmId}</span></td>
+                        <td style={{ ...s.td, whiteSpace: "nowrap", color: late ? "#d94040" : color }}>{late ? "⏰ " : ""}{o.slotRaw ?? "—"}</td>
                         <td style={{ ...s.td, whiteSpace: "nowrap" }}>
                           {o.status === "DELIVERED" ? (
                             <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
                               {o.eta && <span style={{ fontSize: 10, color: '#a8a49c', textDecoration: 'line-through' }}>{o.eta}</span>}
-                              <span style={{ color: '#10b981', fontWeight: 700 }}>✓ {o.deliveredAt ? new Date(o.deliveredAt).toLocaleTimeString("ru", { hour: '2-digit', minute: '2-digit' }) : "—"}</span>
+                              <span style={{ color: late ? '#d94040' : '#10b981', fontWeight: 700 }}>{late ? "⏰ " : "✓ "}{o.deliveredAt ? new Date(o.deliveredAt).toLocaleTimeString("ru", { hour: '2-digit', minute: '2-digit' }) : "—"}</span>
                             </div>
                           ) : (
-                            <span style={{ color: "#4a7aff", fontWeight: 700 }}>{o.eta ?? "—"}</span>
+                            <span style={{ color: late ? "#d94040" : "#4a7aff", fontWeight: 700 }}>{late ? "⏰ " : ""}{o.eta ?? "—"}</span>
                           )}
                         </td>
                         <td style={{ ...s.td, minWidth: 160, maxWidth: 220 }}>{o.address ?? "—"}</td>
@@ -1637,25 +1645,27 @@ function SlotBtn({ label, active, color, onClick }: any) {
 
 function OrderCard({ order, selected, isBulkMode, isBulkSelected, onSelect }: any) {
   const color = slotColor(order);
+  const late = isOrderLate(order); // 🔥 Проверяем опаздывает ли
+
   return (
     <div id={`card-${order.id}`} style={{ ...s.card, ...(selected || isBulkSelected ? s.cardSelected : {}), ...(order.isInvalid ? s.cardInvalid : {}) }} onClick={onSelect}>
       <div style={s.cardRow1}>
         {isBulkMode && <input type="checkbox" checked={isBulkSelected} readOnly style={{ marginRight: 6, pointerEvents: "none", accentColor: "#4a7aff" }} />}
-        <span style={{ ...s.statusDot, background: color }} />
+        <span style={{ ...s.statusDot, background: late ? "#d94040" : color }} />
         <span style={s.extId}>{order.externalId ?? order.crmId}</span>
         <span style={{ ...s.statusTag, background: `${color}18`, color }}>{STATUS_LABELS[order.status] ?? order.status}</span>
       </div>
       <div style={s.cardAddr}>{order.address ?? "—"}</div>
       <div style={s.cardMeta}>
-        <span style={{ ...s.slotTag, color }}>{order.slotFrom}–{order.slotTo ?? ""}</span>
+        <span style={{ ...s.slotTag, color: late ? "#d94040" : color }}>{late ? "⏰ " : ""}{order.slotFrom}–{order.slotTo ?? ""}</span>
 
         {order.status === "DELIVERED" ? (
-          <span style={{ fontSize: 10, color: "#10b981", fontWeight: 700, marginLeft: 6 }}>
+          <span style={{ fontSize: 10, color: late ? "#d94040" : "#10b981", fontWeight: 700, marginLeft: 6 }}>
             {order.eta && <span style={{ color: "#a8a49c", textDecoration: "line-through", marginRight: 4 }}>{order.eta}</span>}
-            ✓ {order.deliveredAt ? new Date(order.deliveredAt).toLocaleTimeString("ru", { hour: '2-digit', minute: '2-digit' }) : "—"}
+            {late ? "⏰ " : "✓ "}{order.deliveredAt ? new Date(order.deliveredAt).toLocaleTimeString("ru", { hour: '2-digit', minute: '2-digit' }) : "—"}
           </span>
         ) : (
-          order.eta && <span style={{ fontSize: 10, color: "#4a7aff", fontWeight: 700, marginLeft: 6 }}>~{order.eta}</span>
+          order.eta && <span style={{ fontSize: 10, color: late ? "#d94040" : "#4a7aff", fontWeight: 700, marginLeft: 6 }}>{late ? "⏰ " : "~"}{order.eta}</span>
         )}
 
         <span style={s.courierTag}>{order.courier ?? "—"}</span>

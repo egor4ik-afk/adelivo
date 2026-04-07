@@ -4,10 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { SLOTS } from "@/lib/constants";
 import OpenAI from "openai";
 
-// === НАСТРОЙКИ AI (Yandex Cloud) ===
 const YANDEX_CLOUD_FOLDER = process.env.YANDEX_CATALOG_ID || "b1gcr5m4ptniag2qpsqm";
 const YANDEX_CLOUD_API_KEY = process.env.YANDEX_LLM_API_KEY;
 const YANDEX_CLOUD_MODEL = "aliceai-llm/latest";
+// 🔥 КЛЮЧ ДЛЯ МАТРИЦЫ РАССТОЯНИЙ
+const YANDEX_ROUTING_KEY = process.env.YANDEX_ROUTING_KEY; 
 
 const client = new OpenAI({
   apiKey: YANDEX_CLOUD_API_KEY,
@@ -20,23 +21,50 @@ const client = new OpenAI({
 const STORE_LAT = 55.749511;
 const STORE_LNG = 37.596205;
 
-// Вспомогательная функция для расчета расстояния
+// === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
+
+async function getDistanceMatrix(points: { id: string, lat: number, lng: number }[], mode: 'auto' | 'transit') {
+  if (!YANDEX_ROUTING_KEY) {
+      console.warn("Нет ключа YANDEX_ROUTING_KEY, возвращаем заглушку (по прямой)");
+      return null;
+  }
+  try {
+      const origins = points.map(p => `${p.lat},${p.lng}`).join('|');
+      const destinations = origins;
+      const res = await fetch(`https://api.routing.yandex.net/v2/distancematrix?apikey=${YANDEX_ROUTING_KEY}&origins=${origins}&destinations=${destinations}&mode=${mode}`);
+      if (!res.ok) return null;
+      return await res.json();
+  } catch (e) {
+      console.error("Ошибка получения матрицы:", e);
+      return null;
+  }
+}
+
 function getDist(lat1: number, lng1: number, lat2: number, lng2: number) {
   return Math.sqrt(Math.pow(lat1 - lat2, 2) + Math.pow(lng1 - lng2, 2));
 }
 
-// 🔥 Локальная оптимизация (Упорядочивает точки внутри кластера)
 function optimizeCluster(points: any[], startLat: number, startLng: number) {
   const sorted = [];
   const remaining = [...points];
   let curLat = startLat;
   let curLng = startLng;
-  while(remaining.length > 0) {
-     remaining.sort((a,b) => getDist(curLat, curLng, a.lat!, a.lng!) - getDist(curLat, curLng, b.lat!, b.lng!));
-     const next = remaining.shift();
-     sorted.push(next);
-     curLat = next.lat!; curLng = next.lng!;
-  }
+
+  const highPriority = remaining.filter(p => p.aiPriority === "HIGH");
+  const normalPriority = remaining.filter(p => p.aiPriority !== "HIGH");
+
+  const buildRoute = (pool: any[]) => {
+      while(pool.length > 0) {
+          pool.sort((a,b) => getDist(curLat, curLng, a.lat!, a.lng!) - getDist(curLat, curLng, b.lat!, b.lng!));
+          const next = pool.shift();
+          sorted.push(next);
+          curLat = next.lat!; curLng = next.lng!;
+      }
+  };
+
+  buildRoute(highPriority);
+  buildRoute(normalPriority);
+
   return sorted;
 }
 
@@ -48,7 +76,6 @@ export async function POST(req: Request) {
     const startOfDay = new Date(`${routeDate}T00:00:00.000Z`);
     const endOfDay = new Date(`${routeDate}T23:59:59.999Z`);
 
-    // 1. Получаем все нераспределенные заказы
     const orders = await prisma.order.findMany({
       where: { 
         status: "NEW", 
@@ -67,17 +94,17 @@ export async function POST(req: Request) {
     let targetOrders = orders;
     if (selectedSlots && selectedSlots.length > 0) {
       targetOrders = orders.filter(o => {
-        if (!o.slotFrom) return false;
+        if (!o.slotFrom) return selectedSlots.includes("Другие");
         const exact = SLOTS.find(s => s.from === o.slotFrom && s.to === o.slotTo);
         if (exact) return selectedSlots.includes(exact.label);
         const match = SLOTS.find(s => o.slotFrom! > s.from && o.slotFrom! <= s.to);
-        return match ? selectedSlots.includes(match.label) : false;
+        if (match) return selectedSlots.includes(match.label);
+        return selectedSlots.includes("Другие");
       });
     }
 
     if (targetOrders.length === 0) return NextResponse.json({ error: "В выбранных слотах нет свободных заказов" }, { status: 400 });
 
-    // 2. Получаем активных курьеров
     const activeCouriers = await prisma.courier.findMany({
       where: { isActive: true },
       include: { shifts: { where: { date: routeDate } } }
@@ -86,24 +113,21 @@ export async function POST(req: Request) {
     let availableCouriers = activeCouriers.filter(c => c.shifts.length > 0);
     if (availableCouriers.length === 0) return NextResponse.json({ error: "Нет курьеров на смене" }, { status: 400 });
 
-    // 🔥 ПРАВИЛО: Если точек меньше 15, отключаем АВТО курьеров
     if (targetOrders.length < 15) {
         availableCouriers = availableCouriers.filter(c => !c.isAuto);
     }
-
-    // 🔥 Сортируем курьеров по рейтингу (чтобы AI отдавал предпочтение лучшим)
     availableCouriers.sort((a, b) => (b.priority || 3) - (a.priority || 3));
+    if (availableCouriers.length === 0) return NextResponse.json({ error: "Курьеры не подошли под критерии" }, { status: 400 });
 
-    if (availableCouriers.length === 0) return NextResponse.json({ error: "Курьеры не подошли под критерии (например, остались только авто, а заказов < 15)" }, { status: 400 });
+    const pointsForMatrix = [{ id: "STORE", lat: STORE_LAT, lng: STORE_LNG }, ...targetOrders.map(o => ({ id: o.id, lat: o.lat!, lng: o.lng! }))];
+    const distanceMatrix = await getDistanceMatrix(pointsForMatrix, 'transit'); 
 
-    // ============================================================================
-    // 🧠 БЛОК ИСКУССТВЕННОГО ИНТЕЛЛЕКТА (Сборка оптимальных маршрутов)
-    // ============================================================================
-    
     const promptOrders = targetOrders.map(o => ({
         id: o.id,
         address: o.address, 
         slot: `${o.slotFrom}-${o.slotTo}`,
+        items: o.items,
+        comment: o.comment,
         lat: o.lat, lng: o.lng
     }));
 
@@ -111,151 +135,100 @@ export async function POST(req: Request) {
         id: c.id,
         type: c.isAuto ? "auto" : "walking",
         rating: c.priority || 3,
-        shift: `${c.shifts[0].startTime}-${c.shifts[0].endTime}`
     }));
 
-    // 🔥 УСИЛЕННЫЙ ПРОМПТ
-    const systemPrompt = `Ты главный логистический AI-диспетчер. Твоя задача — сгруппировать заказы в маршруты и назначить их на курьеров.
-    КРИТИЧЕСКИЕ ПРАВИЛА:
-    1. РАСПРЕДЕЛИ ВСЕ ЗАКАЗЫ до единого. Ни один id из списка заказов не должен остаться без курьера.
-    2. РАВНОМЕРНОСТЬ: Максимально задействуй всех доступных курьеров. Не отдавай все заказы одному курьеру, если есть другие свободные.
-    3. ОДИН КУРЬЕР = ОДИН МАРШРУТ (строго один объект в JSON). Собери все заказы для одного курьера в единый массив orderIds. Категорически запрещено дублировать один и тот же courierId в разных объектах JSON.
-    4. ВМЕСТИМОСТЬ: пеший (walking) берет до 6-7 заказов за раз, авто (auto) до 10-15 заказов. 
-    5. ЛОГИКА: Группируй заказы по близости адресов (address) и временным слотам (slot).
+    const systemPrompt = `Ты — продвинутый AI-логист. Твоя задача — разбить заказы на компактные маршруты для курьеров.
     
-    ВЕРНИ СТРОГО JSON-МАССИВ. Пример ответа:
+    КРИТИЧЕСКИЕ ПРАВИЛА СОЗДАНИЯ МАРШРУТОВ:
+    1. ОБЪЕМ: Для пешего курьера (walking) создавай маршруты СТРОГО по 3-5 точек! Для авто (auto) — по 6-10 точек. Не перегружай пеших!
+    2. ПРИОРИТЕТ ГРУЗА: Анализируй поле 'items' и 'comment'. 
+       - Если это быстро увядающие цветы (например: розы, тюльпаны, букеты без аквабокса) или тяжелый/объемный заказ (много позиций), помечай этот заказ как "HIGH" приоритет.
+       - Остальное (стойкие цветы в аквабоксах, мелкие подарки, если долго хранятся) — "NORMAL".
+    3. ГЕОГРАФИЯ: Собирай точки в ОДНОМ районе (кластере). Используй координаты (lat, lng), чтобы точки в одном массиве были близко друг к другу.
+    4. Если заказов много, ОДНОМУ курьеру можно создать НЕСКОЛЬКО маршрутов (массивов orderIds), но каждый массив должен быть небольшим (3-5 точек для пешего).
+    
+    Формат ответа СТРОГО JSON:
     [
-      { "courierId": 123, "orderIds": ["uuid-1", "uuid-2", "uuid-3"] },
-      { "courierId": 456, "orderIds": ["uuid-4", "uuid-5"] }
+      { 
+        "courierId": 123, 
+        "routes": [
+          {
+            "orderIds": ["uuid-1", "uuid-2"],
+            "priorities": { "uuid-1": "HIGH", "uuid-2": "NORMAL" }
+          }
+        ]
+      }
     ]`;
 
-    let aiParsedData: { courierId: number, orderIds: string[] }[] = [];
-
+    let aiParsedData: any[] = [];
     try {
         const response = await client.chat.completions.create({
             model: `gpt://${YANDEX_CLOUD_FOLDER}/${YANDEX_CLOUD_MODEL}`,
             messages: [
               { role: "system", content: systemPrompt },
-              { role: "user", content: `Заказы: ${JSON.stringify(promptOrders)}\nКурьеры: ${JSON.stringify(promptCouriers)}` }
+              { role: "user", content: `Матрица расстояний (минуты): ${JSON.stringify(distanceMatrix?.rows?.map((r:any) => r.elements.map((e:any)=> Math.round(e.duration.value/60))) || "Недоступна")}\nЗаказы: ${JSON.stringify(promptOrders)}\nКурьеры: ${JSON.stringify(promptCouriers)}` }
             ],
             temperature: 0.1, 
         });
 
         let content = response.choices[0]?.message?.content?.trim() || "[]";
-        if (content.startsWith("```")) {
-            content = content.replace(/^```json/g, "").replace(/^```/g, "").replace(/```$/g, "").trim();
-        }
-
+        if (content.startsWith("```")) content = content.replace(/^```json/g, "").replace(/^```/g, "").replace(/```$/g, "").trim();
         aiParsedData = JSON.parse(content);
-        if (!Array.isArray(aiParsedData)) throw new Error("AI вернул не массив");
     } catch (e) {
-        console.error("Ошибка AI распределения:", e);
-        return NextResponse.json({ error: "Не удалось сгенерировать маршруты через AI. Попробуйте снова." }, { status: 500 });
+        console.error("Ошибка AI:", e);
+        return NextResponse.json({ error: "AI не справился с расчетом" }, { status: 500 });
     }
-
-    // ============================================================================
-    // 🛡 ЗАЩИТА ОТ ОШИБОК AI (Слияние дублей и спасение "потеряшек")
-    // ============================================================================
-    
-    // 1. Принудительно склеиваем дубли, если AI всё-таки создал 2 маршрута одному курьеру
-    const mergedAssignments: Record<number, string[]> = {};
-    for (const routeAssignment of aiParsedData) {
-        const { courierId, orderIds } = routeAssignment;
-        const courierExists = availableCouriers.some(c => c.id === courierId);
-        
-        if (!courierExists || !orderIds || orderIds.length === 0) continue;
-        
-        if (!mergedAssignments[courierId]) {
-            mergedAssignments[courierId] = [];
-        }
-        
-        for (const id of orderIds) {
-            if (targetOrders.some(o => o.id === id) && !mergedAssignments[courierId].includes(id)) {
-                mergedAssignments[courierId].push(id);
-            }
-        }
-    }
-
-    // 2. Спасатель "потерянных" заказов
-    const assignedOrderIds = new Set(Object.values(mergedAssignments).flat());
-    const leftOverOrders = targetOrders.filter(o => !assignedOrderIds.has(o.id));
-
-    if (leftOverOrders.length > 0 && Object.keys(mergedAssignments).length > 0) {
-        // Если AI забыл заказы, мы принудительно отдаем их в географически ближайший готовый маршрут
-        for (const lostOrder of leftOverOrders) {
-            let bestCourierId: number | null = null;
-            let minDistance = Infinity;
-
-            for (const [cId, oIds] of Object.entries(mergedAssignments)) {
-                for (const oId of oIds) {
-                    const existingOrder = targetOrders.find(o => o.id === oId);
-                    if (existingOrder && existingOrder.lat && existingOrder.lng && lostOrder.lat && lostOrder.lng) {
-                        const dist = getDist(lostOrder.lat, lostOrder.lng, existingOrder.lat, existingOrder.lng);
-                        if (dist < minDistance) {
-                            minDistance = dist;
-                            bestCourierId = Number(cId);
-                        }
-                    }
-                }
-            }
-            
-            if (bestCourierId) {
-                mergedAssignments[bestCourierId].push(lostOrder.id);
-            }
-        }
-    } else if (leftOverOrders.length > 0 && availableCouriers.length > 0) {
-        // Если AI упал или вернул пустоту, отдаем фоллбэком лучшему курьеру
-        mergedAssignments[availableCouriers[0].id] = leftOverOrders.map(o => o.id);
-    }
-
-    // ============================================================================
-    // 🚚 ПРИМЕНЕНИЕ МАРШРУТОВ ОТ AI К БАЗЕ ДАННЫХ
-    // ============================================================================
 
     let routesCreated = 0;
     let ordersAssigned = 0;
     const routeDay = routeDate.split('-')[2];
     const prefix = `AI-${routeDay}-`;
 
-    for (const [courierIdStr, orderIds] of Object.entries(mergedAssignments)) {
-        const courierId = Number(courierIdStr);
+    const assignedSet = new Set<string>();
+
+    // Применение маршрутов
+    for (const assignment of aiParsedData) {
+        const courierId = Number(assignment.courierId);
         const courier = availableCouriers.find(c => c.id === courierId);
-        if (!courier || orderIds.length === 0) continue;
+        if (!courier || !assignment.routes) continue;
 
-        const routeOrders = orderIds.map(id => targetOrders.find(o => o.id === id)).filter(Boolean) as typeof targetOrders;
-        if (routeOrders.length === 0) continue;
+        for (const routeCluster of assignment.routes) {
+             const orderIds = routeCluster.orderIds || [];
+             const priorities = routeCluster.priorities || {};
 
-        // 🔥 ПРОГОНЯЕМ ЧЕРЕЗ АЛГОРИТМ БЛИЖАЙШЕГО СОСЕДА: 
-        // AI собрал классный кластер, мы выстраиваем внутри него идеальную очередь!
-        const optimizedRoute = optimizeCluster(routeOrders, STORE_LAT, STORE_LNG);
+             const validOrders = orderIds.map((id:string) => targetOrders.find(o => o.id === id && !assignedSet.has(o.id))).filter(Boolean);
+             if (validOrders.length === 0) continue;
 
-        const routeName = `${prefix}${courier.id}-${Math.floor(Math.random() * 1000)}`;
-        const link = `https://yandex.ru/maps/?rtext=${STORE_LAT},${STORE_LNG}~${optimizedRoute.map(o => `${o.lat},${o.lng}`).join("~")}&rtt=${courier.isAuto ? 'auto' : 'mt'}`;
+             validOrders.forEach((o:any) => { 
+                 o.aiPriority = priorities[o.id] || "NORMAL"; 
+                 assignedSet.add(o.id); 
+             });
 
-        const newRoute = await prisma.route.create({
-            data: { name: routeName, link, date: routeDate, courierId: courier.id, isDraft: true }
-        });
+             // Оптимизируем внутри микро-маршрута с учетом High Priority
+             const optimizedRoute = optimizeCluster(validOrders, STORE_LAT, STORE_LNG);
 
-        for (let i = 0; i < optimizedRoute.length; i++) {
-            await prisma.order.update({
-                where: { id: optimizedRoute[i].id },
-                data: { 
-                    courierId: courier.id, 
-                    courier: courier.fullName, 
-                    routeId: newRoute.id, 
-                    routeOrder: i + 1, 
-                    status: "ASSIGNED" 
-                }
-            });
+             const routeName = `${prefix}${courier.id}-${Math.floor(Math.random() * 1000)}`;
+             const link = `https://yandex.ru/maps/?rtext=${STORE_LAT},${STORE_LNG}~${optimizedRoute.map(o => `${o.lat},${o.lng}`).join("~")}&rtt=${courier.isAuto ? 'auto' : 'mt'}`;
+
+             const newRoute = await prisma.route.create({
+                 data: { name: routeName, link, date: routeDate, courierId: courier.id, isDraft: true }
+             });
+
+             for (let i = 0; i < optimizedRoute.length; i++) {
+                 await prisma.order.update({
+                     where: { id: optimizedRoute[i].id },
+                     data: { courierId: courier.id, courier: courier.fullName, routeId: newRoute.id, routeOrder: i + 1, status: "ASSIGNED" }
+                 });
+             }
+             routesCreated++;
+             ordersAssigned += optimizedRoute.length;
         }
-        
-        routesCreated++;
-        ordersAssigned += optimizedRoute.length;
     }
 
-    const leftOver = targetOrders.length - ordersAssigned;
+    // Подсчитываем сколько точек ИИ оставил без внимания
+    const leftOverOrders = targetOrders.filter(o => !assignedSet.has(o.id));
 
-    return NextResponse.json({ success: true, routesCreated, ordersAssigned, leftOver });
+    return NextResponse.json({ success: true, routesCreated, ordersAssigned, leftOver: leftOverOrders.length });
 
   } catch (e: any) {
     console.error("Общая ошибка auto-generate:", e);
