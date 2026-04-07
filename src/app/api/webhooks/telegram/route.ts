@@ -11,6 +11,11 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SOURCE_CHAT_ID = process.env.TELEGRAM_SOURCE_CHAT_ID; // Группа-донор
 const ADMIN_CHAT_ID = process.env.TELEGRAM_ADMIN_CHAT_ID;   // Твой личный чат
 
+// 💡 НАСТРОЙКА ПАПОК: Укажи здесь ID папок, которые нужно слушать. 
+// Сейчас бот будет обрабатывать сообщения из папок 2 и 3. 
+// Если захочешь только 3, сделай так: ["3"]
+const ALLOWED_THREAD_IDS = ["2", "3"];
+
 const client = new OpenAI({
   apiKey: YANDEX_CLOUD_API_KEY,
   baseURL: "https://ai.api.cloud.yandex.net/v1",
@@ -34,24 +39,45 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
+    // 💡 БЛОК ЛОГИРОВАНИЯ: Поможет нам всё проверить
+    console.log("\n👀 ПРИШЛО НОВОЕ СООБЩЕНИЕ ИЗ ТЕЛЕГРАМА:");
+    console.log("👉 Chat ID (Группа):", body.message?.chat?.id);
+    console.log("👉 Thread ID (Папка):", body.message?.message_thread_id || "Главная тема");
+    console.log("👉 Текст сообщения:", body.message?.text);
+    console.log("------------------------------------\n");
+
     if (!body.message || !body.message.text) {
       return NextResponse.json({ status: "ignored" });
     }
 
     const chatId = String(body.message.chat.id);
     const text = body.message.text;
+    
+    // Получаем ID папки (темы)
+    const messageThreadId = body.message.message_thread_id 
+      ? String(body.message.message_thread_id) 
+      : null;
 
     // 1. БЛОКИРОВКА: Читаем только из разрешенной группы-донора
     if (SOURCE_CHAT_ID && chatId !== SOURCE_CHAT_ID) {
+      console.log("❌ Игнорируем: сообщение не из группы-донора.");
       return NextResponse.json({ status: "ignored_wrong_chat" });
+    }
+
+    // 1.1 БЛОКИРОВКА ПО ПАПКЕ: Проверяем, есть ли ID папки в нашем списке разрешенных
+    if (messageThreadId && !ALLOWED_THREAD_IDS.includes(messageThreadId)) {
+      console.log(`❌ Игнорируем: папка ${messageThreadId} не входит в список разрешенных ${ALLOWED_THREAD_IDS}.`);
+      return NextResponse.json({ status: "ignored_wrong_topic" });
     }
 
     // 2. Отсеиваем спам (если нет цифр или слов "заказ", "#")
     if (!/\d{5,}/.test(text) && !text.toLowerCase().includes("заказ") && !text.toLowerCase().includes("#")) {
+      console.log("❌ Игнорируем: похоже на спам или обычное общение.");
       return NextResponse.json({ status: "ignored" });
     }
 
     // 3. ПАРСИМ ТЕКСТ ЧЕРЕЗ ИИ
+    console.log("🤖 Отправляем текст в Яндекс ИИ...");
     const systemPrompt = `Ты — AI-ассистент логиста. Вытащи из текста сообщения данные для доставки.
     Внимательно найди:
     - Номер заказа (без символа #, только буквы и цифры).
@@ -80,6 +106,7 @@ export async function POST(req: Request) {
     if (content.startsWith("```")) content = content.replace(/^```json/g, "").replace(/^```/g, "").replace(/```$/g, "").trim();
     
     const parsedData = JSON.parse(content);
+    console.log("🧠 ИИ вернул данные:", parsedData);
     const { orderId, name, phone, address } = parsedData;
 
     // Если нет номера заказа и адреса — ИИ не понял, что это
@@ -118,12 +145,15 @@ export async function POST(req: Request) {
 
     // Если заказ не нашли в базе — уведомляем тебя в личку
     if (!targetOrder) {
+      console.log("⚠️ Заказ не найден в базе.");
       await sendNotificationToAdmin(`⚠️ В группе-доноре пришел заказ, но я не нашел его в нашей базе.\nИскал по: ${orderId ? `#${orderId}` : `адресу "${address?.substring(0, 20)}..."`}`);
       return NextResponse.json({ status: "order_not_found" });
     }
 
     // 5. ОБНОВЛЯЕМ БАЗУ ДАННЫХ
+    // 💡 Здесь мы склеиваем Имя и Телефон, чтобы сохранить их вместе
     const updatedPhone = name ? `${name} ${phone || ""}`.trim() : phone;
+    console.log(`💾 Обновляем базу... Пишем контакт: ${updatedPhone}`);
     
     await prisma.order.update({
       where: { id: targetOrder.id },
@@ -132,8 +162,9 @@ export async function POST(req: Request) {
 
     // 6. ОТПРАВЛЯЕМ УСПЕШНЫЙ ОТЧЕТ ТЕБЕ В ЛИЧКУ
     const foundByText = orderId ? `#${orderId}` : `(найден по адресу)`;
-    await sendNotificationToAdmin(`✅ Шпион-бот обновил заказ ${foundByText}\n📞 Контакты: ${updatedPhone}\n📍 Адрес: ${targetOrder.address}`);
+    await sendNotificationToAdmin(`✅ Шпион-бот обновил заказ ${foundByText}\n👤 Имя: ${name || "Не указано"}\n📞 Телефон: ${phone || "Не указан"}\n📍 Адрес: ${targetOrder.address}`);
 
+    console.log("🎉 Успешно завершено!");
     return NextResponse.json({ success: true });
 
   } catch (error) {
