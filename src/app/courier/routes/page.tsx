@@ -179,7 +179,7 @@ export default function CourierRoutesPage() {
           </div>
         </div>
 
-        {/* 🔥 РЕКЛАМНЫЙ БЛОК / ЛОГОТИП */}
+        {/* РЕКЛАМНЫЙ БЛОК / ЛОГОТИП */}
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", opacity: 0.5 }}>
           <img src="/favicon.svg" alt="App Logo" style={{ width: 24, height: 24 }} />
           <span style={{ fontSize: 9, fontWeight: 800, color: "#1a1a18", marginTop: 2, textTransform: "uppercase", letterSpacing: "0.5px" }}>EventWave</span>
@@ -289,23 +289,10 @@ export default function CourierRoutesPage() {
                 <div style={{ display: "flex", flexDirection: "column" }}>
                   {routePoints.map((o, idx) => {
                     const st = STATUS_MAP[o.status] || STATUS_MAP.ASSIGNED;
-                    const phone = o.recipientPhone || "—";
                     const rawOp = o.opComment || "";
                     const opComment = rawOp.split("\n").filter(line => !line.startsWith("💡")).join("\n").trim();
                     const isDelivered = o.status === "DELIVERED";
                     const actualTime = formatDeliveredTime(o.deliveredAt || null);
-
-                    const cleanPhoneForTg = phone !== "—" ? phone.replace(/[^\d+]/g, "") : "";
-                    
-                    let timeText = "в ближайшее время";
-                    if (o.eta) {
-                      timeText = `примерно в ${o.eta}`;
-                    } else if (o.slotRaw) {
-                      timeText = o.slotRaw;
-                    }
-                    
-                    const messageText = `Добрый день 😊 это курьер цветочного, буду у вас ${timeText}`;
-                    const encodedMsg = encodeURIComponent(messageText);
 
                     return (
                       <div
@@ -417,59 +404,12 @@ export default function CourierRoutesPage() {
                           )}
                         </div>
 
-                        {/* БЛОК ПОЛУЧАТЕЛЯ */}
-                        <div style={{ background: "#f5f4f0", borderRadius: 8, padding: 10, marginBottom: opComment ? 8 : 0 }}>
-                          <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 4 }}>
-                            Получатель
+                        {/* 🔥 КОММЕНТАРИЙ КЛИЕНТА (ОСТАВЛЕН, ЧТОБЫ КУРЬЕР ЗНАЛ ДОМОФОН) */}
+                        {o.comment && (
+                          <div style={{ fontSize: 13, color: "#d94040", marginBottom: 8, fontWeight: 600 }}>
+                            ⚠ Комментарий: {o.comment}
                           </div>
-                          
-                          {o.name && (
-                            <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a18", marginBottom: 4 }}>
-                              👤 {o.name}
-                            </div>
-                          )}
-
-                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                            <div style={{ fontSize: 13, fontWeight: 600 }}>
-                              {phone !== "—"
-                                ? <a href={`tel:${phone}`} style={{ color: "#4a7aff", textDecoration: "none" }}>📞 {phone}</a>
-                                : <span style={{ color: "#1a1a18" }}>—</span>}
-                            </div>
-
-                            {/* КНОПКА ТЕЛЕГРАМ И КНОПКА SMS */}
-                            {cleanPhoneForTg && (
-                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <a 
-                                  href={`https://t.me/${cleanPhoneForTg}?text=${encodedMsg}`} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  title="Написать в Telegram"
-                                  style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#2AABEE", width: 28, height: 28, borderRadius: "50%", textDecoration: "none", boxShadow: "0 2px 4px rgba(42, 171, 238, 0.3)" }}
-                                >
-                                  <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff">
-                                    <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z"/>
-                                  </svg>
-                                </a>
-
-                                <a 
-                                  href={`sms:${cleanPhoneForTg}?body=${encodedMsg}`}
-                                  title="Отправить SMS"
-                                  style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#34C759", width: 28, height: 28, borderRadius: "50%", textDecoration: "none", boxShadow: "0 2px 4px rgba(52, 199, 89, 0.3)" }}
-                                >
-                                  <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff">
-                                    <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
-                                  </svg>
-                                </a>
-                              </div>
-                            )}
-                          </div>
-
-                          {o.comment && (
-                            <div style={{ fontSize: 12, color: "#d94040", marginTop: 6, fontWeight: 500 }}>
-                              ⚠ {o.comment}
-                            </div>
-                          )}
-                        </div>
+                        )}
 
                         {opComment && (
                           <div style={{
@@ -521,7 +461,6 @@ export default function CourierRoutesPage() {
                   .sort((a, b) => (a.routeOrder || 0) - (b.routeOrder || 0))
                   .map(o => {
                     const st = STATUS_MAP[o.status] || STATUS_MAP.ASSIGNED;
-                    const phone = o.recipientPhone || "—";
                     const opComment = (o.opComment || "").split("\n").filter(l => !l.startsWith("💡")).join("\n").trim();
                     const isDelivered = o.status === "DELIVERED";
                     const actualTime = formatDeliveredTime(o.deliveredAt || null);
@@ -542,9 +481,14 @@ export default function CourierRoutesPage() {
                           </div>
                         </div>
                         <div style={{ fontSize: 13, color: "#1a1a18", marginBottom: 4 }}>{o.address}</div>
-                        {phone !== "—" && (
-                          <a href={`tel:${phone}`} style={{ fontSize: 12, color: "#4a7aff", textDecoration: "none" }}>📞 {phone}</a>
+                        
+                        {/* Комментарий клиента в прошлых заказах тоже оставим, вдруг курьеру надо вспомнить этаж */}
+                        {o.comment && (
+                          <div style={{ fontSize: 12, color: "#d94040", marginTop: 4, fontWeight: 500 }}>
+                            ⚠ {o.comment}
+                          </div>
                         )}
+
                         {opComment && (
                           <div style={{ fontSize: 11, color: "#78350f", background: "#fffbeb", padding: "4px 8px", borderRadius: 6, marginTop: 6 }}>
                             📋 {opComment}
