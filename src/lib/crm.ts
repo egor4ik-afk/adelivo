@@ -484,10 +484,18 @@ export async function pollCrmOrders() {
     });
     for (const order of resNew.data?.orders || []) await upsertOrder(order);
 
+    // 🔥 Исключаем магазины Meura
+    const MEURA_SHOPS = ['kaktusfiori', 'meura-flowers'];
+
+    // 🔥 Выбираем только активные заказы Bunch
     const activeOrders = await prisma.order.findMany({
-      where: { status: { notIn: ["DELIVERED", "CANCELLED", "RETURNED"] } },
+      where: { 
+        status: { notIn: ["DELIVERED", "CANCELLED", "RETURNED"] },
+        shop: { notIn: MEURA_SHOPS } 
+      },
       select: { crmId: true },
     });
+    
     const activeIds = activeOrders.map(o => o.crmId);
 
     for (let i = 0; i < activeIds.length; i += 50) {
@@ -508,10 +516,14 @@ export async function pollCrmOrders() {
       const deletedIds = chunk.filter(id => !returnedIds.includes(id));
 
       if (deletedIds.length > 0) {
-        console.log(`[Cron] Внимание! Эти заказы пропали из CRM:`, deletedIds);
+        console.log(`[Cron Bunch] Внимание! Эти заказы пропали из CRM:`, deletedIds);
         
+        // 🔥 Двойная защита при отмене
         const localOrdersToCancel = await prisma.order.findMany({ 
-          where: { crmId: { in: deletedIds } } 
+          where: { 
+            crmId: { in: deletedIds },
+            shop: { notIn: MEURA_SHOPS }
+          } 
         });
 
         for (const localOrder of localOrdersToCancel) {
@@ -528,14 +540,29 @@ export async function pollCrmOrders() {
             where: { id: localOrder.id },
             data: {
               status: "CANCELLED",
-              opComment: "❌ Удален в CRM (или перенесен в корзину)",
+              opComment: "❌ Удален в CRM Bunch (или перенесен в корзину)",
               routeId: null,
               routeOrder: null,
               pickedUpAt: null
             }
           });
           
-          console.log(`[Cron] Локальный заказ ${localOrder.crmId} переведен в статус CANCELLED.`);
+          console.log(`[Cron Bunch] Локальный заказ ${localOrder.crmId} переведен в статус CANCELLED.`);
+        }
+
+        // 🔥 ОТПРАВКА СООБЩЕНИЯ В ТЕЛЕГРАМ 🔥
+        const tgToken = process.env.TELEGRAM_BOT_TOKEN;
+        const tgChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
+        
+        if (tgToken && tgChatId && localOrdersToCancel.length > 0) {
+          const cancelledIdsStr = localOrdersToCancel.map(o => o.crmId).join(", ");
+          const msg = `⚠️ *Внимание! Удаление в CRM Bunch*\n\nСледующие заказы пропали из RetailCRM (удалили или перенесли в корзину) и были автоматически отменены в базе курьеров:\n📦 ${cancelledIdsStr}`;
+          
+          fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: tgChatId, text: msg, parse_mode: "Markdown" }),
+          }).catch(e => console.error("[TG] Ошибка отправки уведомления об удалении:", e));
         }
       }
     }
@@ -543,7 +570,7 @@ export async function pollCrmOrders() {
     await prisma.syncState.upsert({ where: { id: 1 }, update: { lastSyncAt: new Date() }, create: { id: 1, lastSyncAt: new Date() } });
     geocodeNewOrders().catch(console.error);
   } catch (err) {
-    console.error("[Cron] Error polling CRM:", err);
+    console.error("[Cron Bunch] Error polling CRM:", err);
   }
 }
 
