@@ -9,14 +9,15 @@ export type NotificationEvent =
   | { type: "address.invalid"; orders: InvalidOrderPayload[] }
   | { type: "route.assigned"; userId: string; routeId: string; pointsCount: number }
   | { type: "custom"; userId: string; title: string; body: string; url?: string }
-  // 🔥 ДОБАВЛЕНО: Два новых типа для чатов
   | { type: "chat.private"; senderName: string; text: string; targetUserId: string; conversationId: string }
   | { type: "chat.global"; senderName: string; text: string; senderId: string };
+
 interface OrderPayload {
   id: string;
   crmId: string;
   externalId: string | null;
-  courierId?: number | null;   // ← нужно чтобы матчить курьера
+  shop?: string | null;         // 🔥 ДОБАВЛЕНО: Магазин для иконки
+  courierId?: number | null;
   address: string | null;
   slotRaw: string | null;
   courier: string | null;
@@ -24,7 +25,7 @@ interface OrderPayload {
   status: string;
   comment?: string | null;
   opComment?: string | null;
-  recipientPhone?: string | null; // 🔥 ДОБАВЛЕНО для уведомлений о смене номера
+  recipientPhone?: string | null;
 }
 
 interface InvalidOrderPayload {
@@ -44,6 +45,13 @@ const STATUS_LABELS: Record<string, string> = {
 
 function statusLabel(s: string) {
   return STATUS_LABELS[s] ?? s;
+}
+
+// Умная иконка магазина для Пушей
+function getShopPrefix(shop?: string | null) {
+  if (shop === 'kaktusfiori' || shop === 'meura-flowers') return "🌸 Meura";
+  if (shop === 'bunch') return "📦 Bunch";
+  return "📦"; // По умолчанию
 }
 
 function initWebPush(): boolean {
@@ -77,7 +85,6 @@ async function log(type: string, channel: string, payload: object, success: bool
 async function sendIndividualPushes(event: NotificationEvent) {
   if (!initWebPush()) return;
 
-  // 🔥 ОБРАБОТКА CUSTOM УВЕДОМЛЕНИЙ (например, от Консоли)
   if (event.type === "custom") {
     const user = await prisma.user.findUnique({
       where: { id: event.userId },
@@ -99,17 +106,15 @@ async function sendIndividualPushes(event: NotificationEvent) {
       try {
         await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload);
       } catch (e: any) {
-        if (e.statusCode === 410 || e.statusCode === 404) {
-          expiredEndpoints.push(sub.endpoint);
-        }
+        if (e.statusCode === 410 || e.statusCode === 404) expiredEndpoints.push(sub.endpoint);
       }
     }
     if (expiredEndpoints.length > 0) {
       await prisma.pushSubscription.deleteMany({ where: { endpoint: { in: expiredEndpoints } } });
     }
-    return; // Завершаем функцию, так как custom-пуш отправлен
+    return;
   }
-  // 🔥 ОБРАБОТКА ЛИЧНЫХ СООБЩЕНИЙ ЧАТА (Отправляем только одному пользователю)
+
   if (event.type === "chat.private") {
     const targetUser = await prisma.user.findUnique({
       where: { id: event.targetUserId },
@@ -121,9 +126,9 @@ async function sendIndividualPushes(event: NotificationEvent) {
     const payload = JSON.stringify({
       title: `💬 Сообщение от: ${event.senderName}`,
       body: event.text,
-      url: `/`, // Можно перенаправить на нужную страницу (например, в дашборд)
+      url: `/`,
       role: targetUser.role,
-      orderId: null, // orderId тут не нужен
+      orderId: null,
       timestamp: Date.now(),
     });
 
@@ -141,10 +146,7 @@ async function sendIndividualPushes(event: NotificationEvent) {
     return;
   }
 
-  const users = await prisma.user.findMany({
-    include: { pushSubscriptions: true },
-  });
-
+  const users = await prisma.user.findMany({ include: { pushSubscriptions: true } });
   const expiredEndpoints: string[] = [];
 
   for (const user of users) {
@@ -154,18 +156,17 @@ async function sendIndividualPushes(event: NotificationEvent) {
     let title = "";
     const bodyTexts: string[] = [];
     let targetUrl: string | null = null;
-    const role = user.role; // "COURIER" | "OPERATOR" | "ADMIN"
+    const role = user.role;
 
-    // ════════════════════════════════════════════════════════════
     // ── ОПЕРАТОРЫ и АДМИНЫ ──
-    // ════════════════════════════════════════════════════════════
     if (user.role === "OPERATOR" || user.role === "ADMIN") {
-      targetUrl = "/dashboard"; // оператор всегда идёт в дашборд
+      targetUrl = "/dashboard";
 
       if (event.type === "order.new") {
         if (user.notifyNewOrder) {
           shouldSend = true;
-          title = `🌸 Новый заказ: ${event.order.externalId ?? event.order.crmId}`;
+          // 🔥 ИСПОЛЬЗУЕМ ПРЕФИКС МАГАЗИНА
+          title = `${getShopPrefix(event.order.shop)}: Новый заказ ${event.order.externalId ?? event.order.crmId}`;
           bodyTexts.push(event.order.address ?? "Без адреса");
           targetUrl = `/dashboard?orderId=${event.order.id}`;
         }
@@ -202,13 +203,13 @@ async function sendIndividualPushes(event: NotificationEvent) {
           shouldSend = true;
           bodyTexts.push(`Состав изменён`);
         }
-        // 🔥 ДОБАВЛЕНО: Уведомление о смене номера телефона получателя
         if (event.changes.recipientPhoneChanged) {
           shouldSend = true;
           bodyTexts.push(`Телефон получателя изменен`);
         }
         if (shouldSend) {
-          title = `📦 Заказ ${event.order.externalId ?? event.order.crmId} обновлён`;
+          // 🔥 ИСПОЛЬЗУЕМ ПРЕФИКС МАГАЗИНА
+          title = `${getShopPrefix(event.order.shop)}: Изменения в ${event.order.externalId ?? event.order.crmId}`;
           targetUrl = `/dashboard?orderId=${event.order.id}`;
         }
       } else if (event.type === "address.invalid") {
@@ -219,9 +220,7 @@ async function sendIndividualPushes(event: NotificationEvent) {
       }
     }
 
-    // ════════════════════════════════════════════════════════════
     // ── КУРЬЕРЫ ──
-    // ════════════════════════════════════════════════════════════
     if (user.role === "COURIER") {
       targetUrl = "/courier/routes";
 
@@ -268,7 +267,6 @@ async function sendIndividualPushes(event: NotificationEvent) {
             shouldSend = true;
             bodyTexts.push(`Состав заказа изменён`);
           }
-          // 🔥 ДОБАВЛЕНО: Уведомление о смене номера телефона получателя для курьера
           if (event.changes.recipientPhoneChanged) {
             shouldSend = true;
             bodyTexts.push(`Новый телефон получателя: ${event.order.recipientPhone ?? "Удален"}`);
@@ -280,15 +278,14 @@ async function sendIndividualPushes(event: NotificationEvent) {
         }
       }
     }
-    // ── ГЛОБАЛЬНЫЙ ЧАТ (Для всех, кроме отправителя) ──
-    // ════════════════════════════════════════════════════════════
+
     if (event.type === "chat.global" && user.id !== event.senderId) {
       shouldSend = true;
       title = `🌐 Общий чат: ${event.senderName}`;
       bodyTexts.push(event.text);
-      targetUrl = "/"; // Или "/dashboard"
+      targetUrl = "/"; 
     }
-    // ── Отправляем push если есть что отправить ──
+
     if (shouldSend && title) {
       const payload = JSON.stringify({
         title,
@@ -304,10 +301,7 @@ async function sendIndividualPushes(event: NotificationEvent) {
 
       for (const sub of user.pushSubscriptions) {
         try {
-          await webpush.sendNotification(
-            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-            payload
-          );
+          await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (e: any) {
           if (e.statusCode === 410 || e.statusCode === 404) {
@@ -320,7 +314,6 @@ async function sendIndividualPushes(event: NotificationEvent) {
     }
   }
 
-  // Чистим протухшие подписки
   if (expiredEndpoints.length > 0) {
     await prisma.pushSubscription.deleteMany({
       where: { endpoint: { in: expiredEndpoints } },
@@ -330,14 +323,14 @@ async function sendIndividualPushes(event: NotificationEvent) {
 }
 
 export async function notify(event: NotificationEvent) {
+  // 🔥 ПУШИ СНОВА ВКЛЮЧЕНЫ И РАБОТАЮТ!
   await sendIndividualPushes(event).catch(console.error);
 
-  // Email-уведомления (без изменений)
   switch (event.type) {
     case "order.new": {
       const { order } = event;
       try {
-        await sendNewOrderAlert(order as any); // Приведение типа для mailer'а
+        await sendNewOrderAlert(order as any);
         await log("order.new", "email", order, true);
       } catch (e) {
         await log("order.new", "email", order, false, String(e));

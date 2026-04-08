@@ -1,16 +1,139 @@
 // src/app/api/webhooks/retailcrm/route.ts
 import { NextResponse } from "next/server";
+import { upsertOrder, geocodeNewOrders, type CrmOrder } from "@/lib/crm";
+import axios from "axios";
+import { applyUniversalEtaShift } from "@/lib/eta";
+
+const CRM_URL = process.env.RETAILCRM_API_URL;
+
+// Умный поиск заказа с ретраями по ОБОИМ ключам (Bunch и Meura)
+async function fetchOrderFromCrm(orderId: string, retryCount = 0): Promise<CrmOrder | null> {
+  const keys = [
+    process.env.RETAILCRM_API_KEY,        // Ключ Bunch
+    process.env.RETAILCRM_API_KEY_MEURA   // Ключ Meura
+  ].filter(Boolean); // Убираем пустые, если ключа нет
+
+  if (!CRM_URL || keys.length === 0) return null;
+
+  const searchTypes = ["id", "externalId", "number"];
+
+  // Перебираем оба ключа (сначала Bunch, потом Meura)
+  for (const key of keys) {
+    for (const byType of searchTypes) {
+      try {
+        const res = await axios.get(`${CRM_URL}/api/v5/orders/${orderId}`, {
+          params: { apiKey: key, by: byType },
+          timeout: 8000,
+        });
+        if (res.data?.success && res.data?.order) {
+          return res.data.order; // Нашли заказ! Возвращаем его
+        }
+      } catch (e: unknown) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if ((e as any).response?.status !== 404) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          console.error(`[Webhook] Ошибка CRM API (${byType}):`, (e as any).message);
+        }
+      }
+    }
+  }
+
+  // Если ни по одному ключу не найдено, возможно это задержка базы данных самой CRM
+  if (retryCount < 2) {
+    console.log(`[Webhook] Заказ ${orderId} пока не доступен в API. Ждем 3 сек (попытка ${retryCount + 1})...`);
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    return fetchOrderFromCrm(orderId, retryCount + 1);
+  }
+
+  return null;
+}
 
 export async function GET() {
   // RetailCRM пингует эндпоинт перед активацией
-  return NextResponse.json({ ok: true, service: "EventWave webhook (Disabled)" });
+  return NextResponse.json({ ok: true, service: "EventWave webhook" });
 }
 
-export async function POST() {
-  // 🔥 ВЕБХУК ПОЛНОСТЬЮ ОТКЛЮЧЕН 🔥
-  // Мы перевели всю работу на Cron (раз в 10 минут), чтобы избежать
-  // конфликтов между магазинами Bunch и Meura и перезаписи телефонов.
-  // Возвращаем 200 OK, чтобы CRM не спамила ошибками.
-  
-  return NextResponse.json({ ok: true, message: "Webhook is intentionally disabled. Polling is handled by cron." });
+export async function POST(req: Request) {
+  try {
+    const contentType = req.headers.get("content-type") ?? "";
+    const rawText = await req.text();
+
+    console.log("[Webhook] Получен сигнал от CRM. Content-Type:", contentType);
+
+    let orderId: string | null = null;
+    let orderPayload: CrmOrder | null = null;
+
+    if (contentType.includes("application/json") || rawText.startsWith("{")) {
+      try {
+        const body = JSON.parse(rawText);
+        orderId = body.orderId ?? body.crm_id ?? body.order?.id ?? null;
+      } catch (e) {
+        console.error("[Webhook] Ошибка парсинга JSON:", e);
+      }
+    } else {
+      const params = new URLSearchParams(rawText);
+      orderId = 
+        params.get("order[id]") ?? 
+        params.get("events[0][order][id]") ?? 
+        params.get("orderId") ?? 
+        null;
+
+      if (!orderId) {
+        const match = rawText.match(/events%5B\d+%5D%5Border%5D%5Bid%5D=(\d+)/);
+        if (match) orderId = match[1];
+      }
+    }
+
+    if (!orderId) {
+      console.warn("[Webhook] Не найден ID заказа в запросе.");
+      return NextResponse.json({ ok: false, reason: "missing orderId" });
+    }
+
+    console.log(`[Webhook] Запрашиваем актуальные данные заказа #${orderId} из CRM...`);
+    
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    
+    orderPayload = await fetchOrderFromCrm(orderId);
+
+    if (!orderPayload?.id) {
+      console.warn(`[Webhook] Данные для заказа #${orderId} окончательно не получены (404).`);
+      return NextResponse.json({ ok: false, reason: "order fetch failed" });
+    }
+
+    const shopLabel = orderPayload.site === 'kaktusfiori' || orderPayload.site === 'meura-flowers' ? "MEURA" : "BUNCH";
+    console.log(`[Webhook] Начинаем обновление заказа #${orderPayload.id} [${shopLabel}] (Внешний ID: ${orderPayload.externalId || 'Нет'})`);
+    
+    const { prisma } = await import("@/lib/prisma"); 
+    const localOrderBefore = await prisma.order.findUnique({
+      where: { crmId: String(orderPayload.id) },
+      select: { id: true, status: true }
+    });
+
+    await upsertOrder(orderPayload);
+    
+    try {
+      if (localOrderBefore) {
+        const localOrderAfter = await prisma.order.findUnique({
+          where: { id: localOrderBefore.id },
+          select: { status: true }
+        });
+
+        if (localOrderAfter && localOrderBefore.status !== localOrderAfter.status) {
+           if (localOrderAfter.status === "IN_DELIVERY" || localOrderAfter.status === "DELIVERED") {
+               console.log(`[Webhook] Смена статуса! Запускаем пересчет ETA для заказа ${orderPayload.id}`);
+               await applyUniversalEtaShift(localOrderBefore.id, localOrderAfter.status);
+           }
+        }
+      }
+    } catch (err) {
+      console.error("[Webhook] Ошибка при вызове триггера ETA:", err);
+    }
+    
+    geocodeNewOrders().catch(console.error);
+    return NextResponse.json({ ok: true });
+
+  } catch (e) {
+    console.error("[Webhook] Критическая ошибка:", e);
+    return NextResponse.json({ ok: false, error: String(e) }, { status: 500 });
+  }
 }
