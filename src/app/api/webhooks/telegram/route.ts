@@ -9,7 +9,7 @@ const YANDEX_CLOUD_MODEL = "aliceai-llm/latest";
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SOURCE_CHAT_ID = process.env.TELEGRAM_SOURCE_CHAT_ID; // Группа-донор
-const ADMIN_CHAT_ID = process.env.TELEGRAM_ADMIN_CHAT_ID;   // Твой личный чат
+const ADMIN_CHAT_ID = process.env.TELEGRAM_CHAT_ID;   // Твой личный чат
 
 const client = new OpenAI({
   apiKey: YANDEX_CLOUD_API_KEY,
@@ -17,6 +17,7 @@ const client = new OpenAI({
   defaultHeaders: { "OpenAI-Project": YANDEX_CLOUD_FOLDER },
 });
 
+// Функция отправки отчетов тебе
 async function sendNotificationToAdmin(text: string) {
   if (!TELEGRAM_BOT_TOKEN || !ADMIN_CHAT_ID) return;
   await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
@@ -29,26 +30,24 @@ async function sendNotificationToAdmin(text: string) {
   });
 }
 
-// 🔥 УМНАЯ МАСКА ДЛЯ ТЕЛЕФОНА
+// Умная маска для телефона
 function normalizePhone(rawPhone: string | null): string | null {
   if (!rawPhone) return null;
   
-  // Оставляем только цифры
   let digits = rawPhone.replace(/\D/g, "");
   
-  // Если ИИ вернул с лишней семеркой/восьмеркой (11 или 12 цифр) - отрезаем код страны
+  // Отрезаем лишний код страны, если ИИ прислал 11 или 12 цифр
   if ((digits.startsWith("7") || digits.startsWith("8")) && digits.length === 11) {
     digits = digits.slice(1);
   } else if ((digits.startsWith("77") || digits.startsWith("78")) && digits.length === 12) {
     digits = digits.slice(2);
   }
 
-  // Если у нас ровно 10 цифр (чистый номер без кода страны), применяем красивую маску
+  // Красивый формат для российских номеров
   if (digits.length === 10) {
     return `+7 (${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 8)}-${digits.slice(8, 10)}`;
   }
 
-  // Если формат странный (например иностранный номер), возвращаем как есть, добавив +
   return rawPhone.startsWith("+") ? rawPhone : `+${digits}`;
 }
 
@@ -56,28 +55,33 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    console.log("\n👀 ПРИШЛО НОВОЕ СООБЩЕНИЕ ИЗ ТЕЛЕГРАМА:");
-    console.log("👉 Chat ID (Группа):", body.message?.chat?.id);
-    console.log("👉 Текст сообщения:", body.message?.text);
-    console.log("------------------------------------\n");
-
-    if (!body.message || !body.message.text) {
-      return NextResponse.json({ status: "ignored" });
+    if (!body.message) {
+      return NextResponse.json({ status: "ignored_no_message" });
     }
 
+    // Читаем и обычный текст, и подписи к пересланным фото
+    const text = body.message.text || body.message.caption;
     const chatId = String(body.message.chat.id);
-    const text = body.message.text;
 
-    // 1. БЛОКИРОВКА: Читаем только из группы-донора
+    console.log("\n👀 ПРИШЛО СООБЩЕНИЕ ИЗ ТЕЛЕГРАМА:");
+    console.log(`👉 Chat ID: [${chatId}]`);
+    console.log(`👉 Текст: ${text ? text.substring(0, 50) + "..." : "Без текста"}`);
+    console.log("------------------------------------\n");
+
+    if (!text) {
+      return NextResponse.json({ status: "ignored_no_text" });
+    }
+
+    // 1. СТРОГАЯ БЛОКИРОВКА: Читаем только из ОДНОГО чата
     if (SOURCE_CHAT_ID && chatId !== SOURCE_CHAT_ID) {
-      console.log("❌ Игнорируем: сообщение не из группы-донора.");
+      console.log(`❌ Игнорируем чат [${chatId}]. Ждем сообщения только из [${SOURCE_CHAT_ID}]`);
       return NextResponse.json({ status: "ignored_wrong_chat" });
     }
 
-    // 2. Отсеиваем спам
+    // 2. Фильтр от спама (ищем цифры, слово заказ или решетку)
     if (!/\d{5,}/.test(text) && !text.toLowerCase().includes("заказ") && !text.toLowerCase().includes("#")) {
-      console.log("❌ Игнорируем: похоже на спам.");
-      return NextResponse.json({ status: "ignored" });
+      console.log("❌ Игнорируем: похоже на обычное общение.");
+      return NextResponse.json({ status: "ignored_spam" });
     }
 
     // 3. ПАРСИМ ТЕКСТ ЧЕРЕЗ ИИ
@@ -152,9 +156,8 @@ export async function POST(req: Request) {
     }
 
     // 5. ОБНОВЛЯЕМ БАЗУ ДАННЫХ
-    // 🔥 Форматируем телефон и используем раздельные поля
     const formattedPhone = normalizePhone(phone);
-    console.log(`💾 Пишем в базу -> Имя: ${name || "нет"}, Телефон: ${formattedPhone || "нет"}`);
+    console.log(`💾 Пишем в базу [Заказ ${targetOrder.crmId}] -> Имя: ${name || "нет"}, Телефон: ${formattedPhone || "нет"}`);
     
     await prisma.order.update({
       where: { id: targetOrder.id },
@@ -164,7 +167,7 @@ export async function POST(req: Request) {
       }
     });
 
-    // 6. ОТПРАВЛЯЕМ УСПЕШНЫЙ ОТЧЕТ ТЕБЕ В ЛИЧКУ
+    // 6. ОТПРАВЛЯЕМ УСПЕШНЫЙ ОТЧЕТ АДМИНУ
     const foundByText = orderId ? `#${orderId}` : `(найден по адресу)`;
     await sendNotificationToAdmin(`✅ Шпион-бот обновил заказ ${foundByText}\n👤 Имя: ${name || "—"}\n📞 Тел: ${formattedPhone || "—"}\n📍 Адрес: ${targetOrder.address}`);
 
