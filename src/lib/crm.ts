@@ -140,9 +140,8 @@ export async function mapCrmOrder(order: CrmOrder) {
     parsedDate = new Date(rawDate.getTime() - 5 * 60 * 60 * 1000);
   }
 
-  // 🔥 БЕРЕМ ТОЛЬКО ПОЛУЧАТЕЛЯ (из кастомных полей, если они есть). Заказчика ИГНОРИРУЕМ!
+  // 🔥 ПОЛНОСТЬЮ ВЫРЕЗАНО УПОМИНАНИЕ recipientPhone
   const recipientName = cFields.recipient_name || cFields.receiver_name || cFields.imya_poluchatelya || null;
-  const recipientPhone = cFields.recipient_phone || cFields.receiver_phone || cFields.telefon_poluchatelya || null;
 
   return {
     crmId: String(order.id),
@@ -151,8 +150,7 @@ export async function mapCrmOrder(order: CrmOrder) {
     status: mapCrmStatus(order.status),
     
     shop: order.site || "bunch", 
-    name: recipientName,            // 🔥 Никакого order.firstName
-    recipientPhone: recipientPhone, // 🔥 Никакого order.phone
+    name: recipientName, 
 
     address: order.delivery?.address?.text ?? null,
     deliveryDate: order.delivery?.date ?? null,
@@ -329,8 +327,6 @@ export async function geocodeNewOrders() {
         continue;
       }
 
-      // ✅ Геокод точный — считаем базовую цену зоны (500/900/1300)
-      // Если курьер уже назначен и авто — сразу +100
       const basePrice = calcBaseDeliveryPrice(geo.lat, geo.lng);
       let finalPrice = basePrice;
       if (order.courierId) {
@@ -342,26 +338,6 @@ export async function geocodeNewOrders() {
         where: { id: order.id },
         data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: false, invalidReason: null, price: finalPrice },
       });
-
-      // Уведомление если цена в CRM отличается от рассчитанной по зонам
-      const crmPrice = order.price ?? 0;
-      if (crmPrice !== finalPrice) {
-        const tgToken = process.env.TELEGRAM_BOT_TOKEN;
-        if (tgToken) {
-          const msg = [
-            `⚠️ *Расхождение цены доставки*`,
-            ``,
-            `📦 *Заказ:* ${order.externalId || order.crmId}`,
-            `💰 *Цена в CRM:* ${crmPrice} ₽`,
-            `✅ *Фактическая цена доставки:* ${finalPrice} ₽`,
-          ].join("\n");
-          fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chat_id: process.env.TELEGRAM_ADMIN_CHAT_ID, text: msg, parse_mode: "Markdown" }),
-          }).catch(e => console.error("[TG] Ошибка уведомления о цене:", e));
-        }
-      }
 
     } catch (_) {
       await prisma.order.update({
@@ -445,10 +421,9 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       }
     }
 
-    // 🔥 АБСОЛЮТНАЯ ЗАЩИТА КОНТАКТОВ ПОЛУЧАТЕЛЯ
-    // Если CRM прислала null, мы оставляем то, что заботливо сохранил Телеграм-бот!
+    // 🔥 ПОЛНОСТЬЮ ВЫРЕЗАНО УПОМИНАНИЕ updateFields.recipientPhone
+    // Мы обновляем только имя, если оно пришло, телефон вообще не трогаем.
     updateFields.name = data.name || existing.name;
-    updateFields.recipientPhone = data.recipientPhone || existing.recipientPhone;
 
     const hasCoreChanges =
       (existing.crmStatus ?? "") !== (updateFields.crmStatus ?? "") ||
@@ -463,10 +438,34 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     if (hasCoreChanges) updateFields.changedAt = new Date();
   }
 
+  // 🔥 При создании (create) мы не передаем recipientPhone
+  // Поэтому если заказ сначала создается через CRM, телефон будет пустым (что правильно, ждем бота).
   const order = await prisma.order.upsert({
     where: { crmId: data.crmId },
     update: updateFields,
-    create: { ...data, isInvalid: false, geocoded: false },
+    create: { 
+      crmId: data.crmId,
+      externalId: data.externalId,
+      crmStatus: data.crmStatus,
+      status: data.status,
+      shop: data.shop,
+      name: data.name,
+      address: data.address,
+      deliveryDate: data.deliveryDate,
+      courierId: data.courierId,
+      courier: data.courier,
+      price: data.price,
+      comment: data.comment,
+      opComment: data.opComment,
+      items: data.items,
+      slotFrom: data.slotFrom,
+      slotTo: data.slotTo,
+      slotRaw: data.slotRaw,
+      deliveryType: data.deliveryType,
+      crmCreatedAt: data.crmCreatedAt,
+      isInvalid: false, 
+      geocoded: false 
+    },
   });
 
   if (!existing) {
@@ -480,7 +479,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       commentChanged:   (existing.comment   ?? "") !== (order.comment   ?? ""),
       opCommentChanged: (existing.opComment ?? "") !== (order.opComment ?? ""),
       itemsChanged:     (existing.items     ?? "") !== (order.items     ?? ""),
-      recipientPhoneChanged: (existing.recipientPhone ?? "") !== (order.recipientPhone ?? ""),
+      // Убрана проверка recipientPhoneChanged, так как CRM его больше не меняет
       shopChanged:      (existing.shop      ?? "") !== (order.shop      ?? ""),
       nameChanged:      (existing.name      ?? "") !== (order.name      ?? "")
     };
@@ -509,7 +508,7 @@ export async function pollCrmOrders() {
     const activeOrders = await prisma.order.findMany({
       where: {
         status: { notIn: ["DELIVERED", "CANCELLED", "RETURNED"] },
-        shop: { notIn: MEURA_SHOPS }, // 🔥 БЕРЕМ ТОЛЬКО BUNCH
+        shop: { notIn: MEURA_SHOPS }, 
       },
       select: { crmId: true },
     });
@@ -537,7 +536,7 @@ export async function pollCrmOrders() {
         const localOrdersToCancel = await prisma.order.findMany({ 
           where: { 
             crmId: { in: deletedIds },
-            shop: { notIn: MEURA_SHOPS }, // Защита
+            shop: { notIn: MEURA_SHOPS }, 
           }
         });
 
@@ -595,7 +594,7 @@ export async function pollMeuraOrders() {
     const activeMeuraOrders = await prisma.order.findMany({
       where: {
         status: { notIn: ["DELIVERED", "CANCELLED", "RETURNED"] },
-        shop: { in: MEURA_SHOPS }, // 🔥 БЕРЕМ ТОЛЬКО MEURA
+        shop: { in: MEURA_SHOPS }, 
       },
       select: { crmId: true },
     });
@@ -746,7 +745,7 @@ export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: numb
 }
 
 export interface CrmOrder {
-  id: number; number?: string; externalId?: string; status?: string; site?: string; // 🔥 ВОЗВРАЩЕНО
+  id: number; number?: string; externalId?: string; status?: string; site?: string; 
   createdAt?: string; customerComment?: string; managerComment?: string;
   firstName?: string; lastName?: string; phone?: string; email?: string;
   customer?: {
@@ -767,6 +766,7 @@ export interface CrmOrder {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   customFields?: any;
 }
+
 export interface CrmOrdersResponse {
   orders: CrmOrder[];
   pagination: { currentPage: number; totalPageCount: number };
