@@ -190,7 +190,9 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     if (finalPrice !== undefined && order.crmId) await updateCrmOrderDeliveryPrice(order.crmId, finalPrice);
     let crmStatus = body.status ?? updateData.status;
     if (crmStatus === "ASSIGNED") crmStatus = undefined;
-    await updateCrmOrder(order.crmId, { status: crmStatus as OrderStatus | undefined, courier: updateData.courier ?? body.courier, opComment: body.opComment, address: body.address, recipientPhone: body.recipientPhone });
+    
+    // 🔥 Убрали передачу recipientPhone в CRM
+    await updateCrmOrder(order.crmId, { status: crmStatus as OrderStatus | undefined, courier: updateData.courier ?? body.courier, opComment: body.opComment, address: body.address });
 
     return NextResponse.json(updatedOrder);
   } catch (e) {
