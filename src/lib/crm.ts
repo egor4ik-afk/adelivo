@@ -1,4 +1,3 @@
-
 // src/lib/crm.ts
 import axios from "axios";
 import fs from "fs";
@@ -19,7 +18,6 @@ async function resolveCourierId(name: string): Promise<number | null> {
 }
 
 export function parseSlot(raw: unknown) {
-  console.log("[parseSlot] raw =", JSON.stringify(raw));
   if (!raw) return { from: null, to: null, text: null };
   if (typeof raw === "object" && raw !== null) {
     const r = raw as Record<string, string>;
@@ -214,8 +212,6 @@ function loadZonesFromKml(): typeof _zonesCache {
     if (points.length > 3) zones.push({ name: zoneName, polygon: points });
   }
 
-  console.log(`[zones] Загружено: ${zones.length} →`, zones.map(z => z.name).join(", "));
-
   return {
     zone0:  zones.find(z => z.name.startsWith("0"))  ?? null,
     zone10: zones.find(z => z.name.startsWith("10")) ?? null,
@@ -321,8 +317,6 @@ export async function geocodeNewOrders() {
         continue;
       }
 
-      // ✅ Геокод точный — считаем базовую цену зоны (500/900/1300)
-      // Если курьер уже назначен и авто — сразу +100
       const basePrice = calcBaseDeliveryPrice(geo.lat, geo.lng);
       let finalPrice = basePrice;
       if (order.courierId) {
@@ -375,8 +369,6 @@ export async function geocodeNewOrders() {
 export async function upsertOrder(crmOrder: CrmOrder) {
   const data = await mapCrmOrder(crmOrder);
 
-  // ❌ "Перехват на лету" УДАЛЁН — цена теперь считается в geocodeNewOrders по KML-зонам
-
   const existing = await prisma.order.findUnique({ where: { crmId: data.crmId } });
 
   const updateFields: typeof data & {
@@ -412,7 +404,6 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       updateFields.status = existing.status;
     }
 
-    // АБСОЛЮТНАЯ ЗАЩИТА ЦЕНЫ: если в нашей БД уже есть цена — не трогаем
     if (existing.price && existing.price > 0) {
       updateFields.price = existing.price;
     } else if (data.price && data.price > 0) {
@@ -469,8 +460,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       addressChanged:   (existing.address   ?? "") !== (order.address   ?? ""),
       commentChanged:   (existing.comment   ?? "") !== (order.comment   ?? ""),
       opCommentChanged: (existing.opComment ?? "") !== (order.opComment ?? ""),
-      itemsChanged:     (existing.items     ?? "") !== (order.items     ?? ""),
-      recipientPhoneChanged: (existing.recipientPhone ?? "") !== (order.recipientPhone ?? ""),
+      itemsChanged:     (existing.items     ?? "") !== (order.items     ?? "")
     };
     if (Object.values(changes).some(Boolean)) {
       notify({ type: "order.updated", order, previousStatus: changes.statusChanged ? existing.status : undefined, changes }).catch(console.error);
@@ -510,28 +500,21 @@ export async function pollCrmOrders() {
       
       const returnedOrders = resUpdate.data?.orders || [];
       
-      // 1. Обновляем все заказы, которые вернула CRM
       for (const order of returnedOrders) {
         await upsertOrder(order);
       }
 
-      // 🔥 2. ЛОГИКА ПОИСКА УДАЛЕННЫХ ЗАКАЗОВ 🔥
-      // Получаем список ID, которые реально пришли из CRM
       const returnedIds = returnedOrders.map(o => String(o.id));
-      
-      // Находим те ID, которые мы запрашивали, но CRM их не вернула
       const deletedIds = chunk.filter(id => !returnedIds.includes(id));
 
       if (deletedIds.length > 0) {
         console.log(`[Cron] Внимание! Эти заказы пропали из CRM:`, deletedIds);
         
-        // Получаем эти заказы из нашей локальной БД
         const localOrdersToCancel = await prisma.order.findMany({ 
           where: { crmId: { in: deletedIds } } 
         });
 
         for (const localOrder of localOrdersToCancel) {
-          // Если заказ был в маршруте, и он там был последним — удаляем пустой маршрут
           if (localOrder.routeId) {
             const siblingsCount = await prisma.order.count({ 
               where: { routeId: localOrder.routeId, id: { not: localOrder.id } }
@@ -541,7 +524,6 @@ export async function pollCrmOrders() {
             }
           }
 
-          // Переводим заказ в статус CANCELLED, отвязываем от маршрута и пишем причину
           await prisma.order.update({
             where: { id: localOrder.id },
             data: {
@@ -566,7 +548,7 @@ export async function pollCrmOrders() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ОБНОВЛЕНИЕ ЗАКАЗА В CRM (статус, курьер, адрес — без цены)
+// ОБНОВЛЕНИЕ ЗАКАЗА В CRM
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function updateCrmOrder(
@@ -577,10 +559,10 @@ export async function updateCrmOrder(
     opComment?: string;
     address?: string;
     deliveryType?: string | null;
-    recipientPhone?: string;
   }
 ) {
   if (!CRM_URL || !CRM_KEY) return;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const orderPayload: any = {};
 
@@ -589,9 +571,6 @@ export async function updateCrmOrder(
   if (data.address !== undefined) {
     orderPayload.delivery = orderPayload.delivery ?? {};
     orderPayload.delivery.address = { text: data.address };
-  }
-  if (data.recipientPhone !== undefined) {
-    orderPayload.phone = data.recipientPhone.replace(/[^\d+]/g, "");
   }
 
   if (data.courier !== undefined) {
@@ -635,10 +614,6 @@ export async function updateCrmOrder(
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// СЕБЕСТОИМОСТЬ В CRM — вызываешь сам когда нужно
-// ─────────────────────────────────────────────────────────────────────────────
-
 export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: number) {
   if (!CRM_URL || !CRM_KEY) return;
 
@@ -662,10 +637,6 @@ export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: numb
     console.error(`[CRM] Ошибка обновления себестоимости:`, err?.response?.data ?? err.message);
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ТИПЫ
-// ─────────────────────────────────────────────────────────────────────────────
 
 export interface CrmOrder {
   id: number; number?: string; externalId?: string; status?: string;
