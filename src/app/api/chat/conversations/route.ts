@@ -10,7 +10,7 @@ export async function GET() {
   const convs = await prisma.conversation.findMany({
     where: {
       OR: [{ user1Id: session.id }, { user2Id: session.id }],
-      messages: { some: {} } // 🔥 Дополнительная защита: не отдаем в список пустые чаты (если они там застряли)
+      messages: { some: {} },
     },
     include: {
       user1: { select: { id: true, firstName: true, lastName: true, role: true, avatarUrl: true } },
@@ -24,17 +24,26 @@ export async function GET() {
     orderBy: { updatedAt: "desc" },
   });
 
-  const result = await Promise.all(convs.map(async (c) => {
-    const unread = await prisma.message.count({
-      where: {
-        conversationId: c.id,
-        senderId: { not: session.id },
-        readAt: null,
-      },
-    });
-    return { ...c, unread };
-  }));
+  if (convs.length === 0) return NextResponse.json([]);
 
+  // 🔥 Один запрос вместо N — считаем непрочитанные для всех диалогов сразу
+  const convIds = convs.map(c => c.id);
+  const unreadCounts = await prisma.message.groupBy({
+    by: ["conversationId"],
+    where: {
+      conversationId: { in: convIds },
+      senderId: { not: session.id },
+      readAt: null,
+    },
+    _count: { id: true },
+  });
+
+  const unreadMap: Record<string, number> = {};
+  for (const row of unreadCounts) {
+    unreadMap[row.conversationId] = row._count.id;
+  }
+
+  const result = convs.map(c => ({ ...c, unread: unreadMap[c.id] ?? 0 }));
   return NextResponse.json(result);
 }
 
@@ -45,7 +54,6 @@ export async function POST(req: Request) {
   const { targetUserId } = await req.json();
   const [user1Id, user2Id] = [session.id, targetUserId].sort();
 
-  // 1. Пытаемся найти СУЩЕСТВУЮЩИЙ диалог
   const existingConv = await prisma.conversation.findUnique({
     where: { user1Id_user2Id: { user1Id, user2Id } },
     include: {
@@ -54,23 +62,18 @@ export async function POST(req: Request) {
     },
   });
 
-  if (existingConv) {
-    return NextResponse.json(existingConv);
-  }
+  if (existingConv) return NextResponse.json(existingConv);
 
-  // 2. 🔥 БАГФИКС: Если диалога нет, мы его НЕ СОЗДАЕМ в базе!
-  // Вместо этого отдаем "виртуальный" диалог. Он создастся в БД только при отправке сообщения.
-  const user1 = await prisma.user.findUnique({ where: { id: user1Id }, select: { id: true, firstName: true, lastName: true, role: true, avatarUrl: true } });
-  const user2 = await prisma.user.findUnique({ where: { id: user2Id }, select: { id: true, firstName: true, lastName: true, role: true, avatarUrl: true } });
+  // Виртуальный диалог — создаётся в БД только при первом сообщении
+  const [user1, user2] = await Promise.all([
+    prisma.user.findUnique({ where: { id: user1Id }, select: { id: true, firstName: true, lastName: true, role: true, avatarUrl: true } }),
+    prisma.user.findUnique({ where: { id: user2Id }, select: { id: true, firstName: true, lastName: true, role: true, avatarUrl: true } }),
+  ]);
 
   return NextResponse.json({
-    id: `virtual_${targetUserId}`, // <-- Фейковый маркер вместо реального ID
-    user1Id,
-    user2Id,
-    user1,
-    user2,
-    messages: [],
-    unread: 0,
-    updatedAt: new Date().toISOString()
+    id: `virtual_${targetUserId}`,
+    user1Id, user2Id, user1, user2,
+    messages: [], unread: 0,
+    updatedAt: new Date().toISOString(),
   });
 }
