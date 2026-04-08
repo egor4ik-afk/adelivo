@@ -6,7 +6,8 @@ import { notify } from "./notifications";
 import { OrderStatus } from "@prisma/client";
 
 const CRM_URL = process.env.RETAILCRM_API_URL;
-const CRM_KEY = process.env.RETAILCRM_API_KEY;
+const CRM_KEY = process.env.RETAILCRM_API_KEY; 
+const CRM_KEY_MEURA = process.env.RETAILCRM_API_KEY_MEURA; // 🔥 Добавили
 const GEO_KEY = process.env.YANDEX_GEOCODER_KEY;
 
 async function resolveCourierId(name: string): Promise<number | null> {
@@ -579,7 +580,15 @@ export async function updateCrmOrder(
     recipientPhone?: string;
   }
 ) {
-  if (!CRM_URL || !CRM_KEY) return;
+  if (!CRM_URL) return;
+
+  // 🔥 УЗНАЕМ МАГАЗИН ЗАКАЗА, ЧТОБЫ ВЫБРАТЬ КЛЮЧ
+  const orderInDb = await prisma.order.findUnique({ where: { crmId }, select: { shop: true } });
+  const isMeura = orderInDb?.shop === 'kaktusfiori' || orderInDb?.shop === 'meura-flowers';
+  const apiKeyToUse = isMeura ? CRM_KEY_MEURA : CRM_KEY;
+
+  if (!apiKeyToUse) return;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const orderPayload: any = {};
 
@@ -606,7 +615,7 @@ export async function updateCrmOrder(
       orderPayload.customFields = { courier: courierName, kurier: courierName };
     } else {
       const resetParams = new URLSearchParams();
-      resetParams.append("apiKey", CRM_KEY);
+      resetParams.append("apiKey", apiKeyToUse);
       resetParams.append("order", JSON.stringify({ delivery: { code: "self-delivery" } }));
       resetParams.append("by", "id");
       await axios.post(`${CRM_URL}/api/v5/orders/${crmId}/edit`, resetParams.toString(), {
@@ -620,7 +629,7 @@ export async function updateCrmOrder(
   if (Object.keys(orderPayload).length === 0) return;
 
   const params = new URLSearchParams();
-  params.append("apiKey", CRM_KEY);
+  params.append("apiKey", apiKeyToUse);
   params.append("order", JSON.stringify(orderPayload));
   params.append("by", "id");
 
@@ -636,10 +645,15 @@ export async function updateCrmOrder(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // СЕБЕСТОИМОСТЬ В CRM — вызываешь сам когда нужно
-// ─────────────────────────────────────────────────────────────────────────────
-
 export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: number) {
-  if (!CRM_URL || !CRM_KEY) return;
+  if (!CRM_URL) return;
+
+  // 🔥 ВЫБИРАЕМ КЛЮЧ
+  const orderInDb = await prisma.order.findUnique({ where: { crmId }, select: { shop: true } });
+  const isMeura = orderInDb?.shop === 'kaktusfiori' || orderInDb?.shop === 'meura-flowers';
+  const apiKeyToUse = isMeura ? CRM_KEY_MEURA : CRM_KEY;
+
+  if (!apiKeyToUse) return;
 
   const NET_COST_MAP: Record<number, number> = {
     500: 732, 600: 838, 900: 1157, 1000: 1264, 1300: 1583, 1400: 1689,
@@ -647,7 +661,7 @@ export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: numb
   const calculatedNetCost = NET_COST_MAP[basePrice] || basePrice;
 
   const params = new URLSearchParams();
-  params.append("apiKey", CRM_KEY);
+  params.append("apiKey", apiKeyToUse);
   params.append("order", JSON.stringify({ delivery: { netCost: calculatedNetCost } }));
   params.append("by", "id");
 
@@ -655,13 +669,40 @@ export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: numb
     await axios.post(`${CRM_URL}/api/v5/orders/${crmId}/edit`, params.toString(), {
       headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 5000,
     });
-    console.log(`[CRM] netCost заказа ${crmId} → ${calculatedNetCost} ₽`);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
     console.error(`[CRM] Ошибка обновления себестоимости:`, err?.response?.data ?? err.message);
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// POLLING ДЛЯ MEURA (раз в 10 минут)
+// ─────────────────────────────────────────────────────────────────────────────
+export async function pollMeuraOrders() {
+  if (!CRM_URL || !CRM_KEY_MEURA) return;
+
+  try {
+    // Берем заказы за последние 3 дня
+    const dateFrom = new Date(Date.now() - 3 * 24 * 3_600_000).toISOString().split("T")[0];
+    
+    const params = new URLSearchParams();
+    params.append("apiKey", CRM_KEY_MEURA);
+    params.append("filter[createdAtFrom]", dateFrom);
+    params.append("filter[sites][]", "kaktusfiori");
+    params.append("filter[sites][]", "meura-flowers");
+    params.append("limit", "50");
+
+    const res = await axios.get<CrmOrdersResponse>(`${CRM_URL}/api/v5/orders?${params.toString()}`, { timeout: 15_000 });
+    
+    const orders = res.data?.orders || [];
+    for (const order of orders) {
+      await upsertOrder(order);
+    }
+    
+    console.log(`[Cron Meura] Синхронизировано ${orders.length} заказов.`);
+  } catch (err) {
+    console.error("[Cron Meura] Ошибка синхронизации:", err);
+  }
+}
 // ─────────────────────────────────────────────────────────────────────────────
 // ТИПЫ
 // ─────────────────────────────────────────────────────────────────────────────

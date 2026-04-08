@@ -159,7 +159,7 @@ model Order {
   lat           Float?
   lng           Float?
   price         Float?
-  costPrice      Int?      // 🔥 НОВОЕ ПОЛЕ: Наша себестоимость доставки
+  costPrice     Int?      // 🔥 НОВОЕ ПОЛЕ: Наша себестоимость доставки
   courierId     Int?        
   courier       String?
   pickedUpAt    DateTime? // 🔥 Время выезда с базы
@@ -184,7 +184,8 @@ model Order {
   updatedAt     DateTime    @updatedAt
   changedAt     DateTime?
   courierManual Boolean     @default(false)
-
+  name          String?   // Имя получателя
+  shop          String?   // Код магазина (например, "kaktusfiori" или "bunch")
   recipientPhone String? 
   routeId        String? 
   route          Route?  @relation(fields: [routeId], references: [id], onDelete: SetNull)

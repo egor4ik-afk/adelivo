@@ -7,6 +7,9 @@ interface Order {
   crmId: string;
   externalId: string | null;
   status: string;
+  shop: string | null;           // 🔥 ДОБАВЛЕНО: Магазин
+  name: string | null;           // 🔥 ДОБАВЛЕНО: Имя получателя
+  recipientPhone: string | null; // 🔥 ДОБАВЛЕНО: Телефон получателя
   address: string | null;
   lat: number | null;
   lng: number | null;
@@ -60,10 +63,8 @@ export default function OrdersPage() {
   const [fCourier, setFCourier] = useState("ALL");
   const [fSearch, setFSearch] = useState("");
 
-  // 🔥 Стейт для сортировки
   const [sortConfig, setSortConfig] = useState<{ key: SortKey | null, direction: 'asc' | 'desc' }>({ key: 'changedAt', direction: 'desc' });
 
-  // 🔥 Стейт для редактирования (inline)
   const [editingCell, setEditingCell] = useState<{ id: string, field: 'price' | 'costPrice' } | null>(null);
   const [editValue, setEditValue] = useState("");
 
@@ -129,24 +130,20 @@ export default function OrdersPage() {
     }
   };
 
-  // 🔥 Логика включения редактирования
   const handleEditClick = (id: string, field: 'price' | 'costPrice', currentValue: number | null) => {
     setEditingCell({ id, field });
     setEditValue(currentValue ? String(currentValue) : "");
   };
 
-  // 🔥 Логика сохранения инлайн-редактирования
   const handleEditSave = async () => {
     if (!editingCell) return;
     const { id, field } = editingCell;
     const val = editValue === "" ? null : parseFloat(editValue.replace(",", "."));
     
-    // Оптимистичное обновление UI
     setOrders(prev => prev.map(o => o.id === id ? { ...o, [field]: val } : o));
     setEditingCell(null);
 
     try {
-      // Отправляем PATCH на сервер
       await fetch(`/api/orders/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -180,13 +177,14 @@ export default function OrdersPage() {
         const q = fSearch.toLowerCase();
         return (o.externalId || "").toLowerCase().includes(q) ||
           (o.address || "").toLowerCase().includes(q) ||
-          (o.courier || "").toLowerCase().includes(q);
+          (o.courier || "").toLowerCase().includes(q) ||
+          (o.name || "").toLowerCase().includes(q) ||          // 🔥 Поиск по имени
+          (o.recipientPhone || "").toLowerCase().includes(q);  // 🔥 Поиск по телефону
       }
       return true;
     });
   }, [dateOrders, fStatus, fCourier, fSearch]);
 
-  // 🔥 СОРТИРОВКА ТАБЛИЦЫ
   const sortedAndFiltered = useMemo(() => {
     let result = [...filtered];
     if (sortConfig.key) {
@@ -194,7 +192,6 @@ export default function OrdersPage() {
         let aVal: any = a[sortConfig.key as keyof Order];
         let bVal: any = b[sortConfig.key as keyof Order];
 
-        // Обработка специальных полей
         if (sortConfig.key === "costPriceDisplay") {
           aVal = a.costPrice || localCosts[a.id] || 0;
           bVal = b.costPrice || localCosts[b.id] || 0;
@@ -207,7 +204,7 @@ export default function OrdersPage() {
         }
 
         if (aVal === bVal) return 0;
-        if (aVal == null) return 1; // Пустые значения всегда в конце
+        if (aVal == null) return 1;
         if (bVal == null) return -1;
 
         if (typeof aVal === 'string' && typeof bVal === 'string') {
@@ -243,11 +240,14 @@ export default function OrdersPage() {
 
   const isAllSelected = sortedAndFiltered.length > 0 && selectedIds.size === sortedAndFiltered.length;
 
-  // Конфигурация столбцов для кликабельных заголовков
+  // 🔥 Расширенные заголовки таблицы
   const HEADERS: { label: string, key: SortKey | null }[] = [
     { label: "ID", key: "externalId" },
+    { label: "Магазин", key: "shop" },            // 🔥 Добавили колонку
     { label: "Статус", key: "status" },
     { label: "Курьер", key: "courier" },
+    { label: "Имя", key: "name" },                // 🔥 Добавили колонку
+    { label: "Телефон", key: "recipientPhone" },  // 🔥 Добавили колонку
     { label: "Адрес", key: "address" },
     { label: "Слот", key: "slotRaw" },
     { label: "Себ-ть", key: "costPriceDisplay" },
@@ -278,7 +278,7 @@ export default function OrdersPage() {
       {/* Фильтры */}
       <div style={{ padding: "16px 24px", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={inputStyle} />
-        <input placeholder="Поиск по ID, адресу..." value={fSearch} onChange={e => setFSearch(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 220 }} />
+        <input placeholder="Поиск по ID, адресу, имени..." value={fSearch} onChange={e => setFSearch(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 220 }} />
         <select value={fStatus} onChange={e => setFStatus(e.target.value)} style={inputStyle}>
           <option value="ALL">Все статусы</option>
           {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -319,7 +319,7 @@ export default function OrdersPage() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={10} style={{ padding: 32, textAlign: "center", color: "#a8a49c" }}>Загрузка...</td></tr>
+                  <tr><td colSpan={12} style={{ padding: 32, textAlign: "center", color: "#a8a49c" }}>Загрузка...</td></tr>
                 ) : sortedAndFiltered.map((o, i) => {
                   const statusColor = STATUS_COLORS[o.status] ?? "#a8a49c";
                   const isSelected = selectedIds.has(o.id);
@@ -331,16 +331,29 @@ export default function OrdersPage() {
                         <input type="checkbox" checked={isSelected} onChange={() => toggleSelectOne(o.id)} style={{ cursor: "pointer" }} />
                       </td>
                       <td style={{ padding: "10px 14px", fontFamily: "monospace", color: "#6b6860" }}>{o.externalId ?? o.crmId}</td>
+                      
+                      {/* 🔥 ЯЧЕЙКА: МАГАЗИН */}
+                      <td style={{ padding: "10px 14px", fontWeight: 600 }}>
+                        {o.shop === 'kaktusfiori' || o.shop === 'meura-flowers' 
+                          ? <span style={{ color: "#d63384" }}>🌸 Meura</span> 
+                          : <span style={{ color: "#0d6efd" }}>📦 Bunch</span>
+                        }
+                      </td>
+
                       <td style={{ padding: "10px 14px" }}>
                         <span style={{ padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 600, background: `${statusColor}18`, color: statusColor }}>
                           {STATUS_LABELS[o.status] || o.status}
                         </span>
                       </td>
                       <td style={{ padding: "10px 14px", color: o.courier ? "#1a1a18" : "#d94040" }}>{o.courier || "—"}</td>
+                      
+                      {/* 🔥 ЯЧЕЙКИ: ИМЯ И ТЕЛЕФОН */}
+                      <td style={{ padding: "10px 14px", fontWeight: 500 }}>{o.name || "—"}</td>
+                      <td style={{ padding: "10px 14px", whiteSpace: "nowrap", fontFamily: "monospace", color: "#4a7aff" }}>{o.recipientPhone || "—"}</td>
+
                       <td style={{ padding: "10px 14px", maxWidth: 260 }}>{o.address || "—"}</td>
                       <td style={{ padding: "10px 14px", color: "#6b6860" }}>{o.slotRaw || "—"}</td>
                       
-                      {/* 🔥 ЯЧЕЙКА СЕБЕСТОИМОСТИ (Кликабельная) */}
                       <td style={{ padding: "10px 14px", minWidth: 90 }}>
                         {editingCell?.id === o.id && editingCell?.field === "costPrice" ? (
                           <input
@@ -373,7 +386,6 @@ export default function OrdersPage() {
                         )}
                       </td>
 
-                      {/* 🔥 ЯЧЕЙКА СУММЫ/ЦЕНЫ (Кликабельная) */}
                       <td style={{ padding: "10px 14px", fontWeight: 600, minWidth: 80 }} >
                         {editingCell?.id === o.id && editingCell?.field === "price" ? (
                           <input
@@ -409,7 +421,7 @@ export default function OrdersPage() {
         </div>
       </div>
 
-      {/* 🔥 ПАНЕЛЬ МАССОВЫХ ДЕЙСТВИЙ */}
+      {/* ПАНЕЛЬ МАССОВЫХ ДЕЙСТВИЙ */}
       {selectedIds.size > 0 && (
         <div style={floatingPanelStyle}>
           <div style={{ fontSize: 13, fontWeight: 600 }}>Выбрано: {selectedIds.size}</div>
@@ -433,8 +445,8 @@ const navBtn = { padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6d
 const syncBtn = { padding: "6px 14px", color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer" };
 const inputStyle = { padding: "7px 10px", borderRadius: 7, border: "1px solid #e0dfd7", fontSize: 12, outline: "none", color: "#1a1a18", background: "#fff", maxWidth: 160 };
 const inlineInputStyle = { width: "100%", padding: "4px 6px", borderRadius: 4, border: "1px solid #4a7aff", outline: "none", fontWeight: 600, fontSize: 12 };
-const thStyle = { padding: "10px 14px", textAlign: "left" as const, fontSize: 10, fontWeight: 700, color: "#a8a49c", textTransform: "uppercase" as const, letterSpacing: ".4px" };
-const openBtnStyle = { color: "#1a1a18", textDecoration: "none", fontSize: 11, fontWeight: 600, background: "#f5f4f0", border: "1px solid #e8e6df", padding: "4px 8px", borderRadius: 6 };
+const thStyle = { padding: "10px 14px", textAlign: "left" as const, fontSize: 10, fontWeight: 700, color: "#a8a49c", textTransform: "uppercase" as const, letterSpacing: ".4px", whiteSpace: "nowrap" as const };
+const openBtnStyle = { color: "#1a1a18", textDecoration: "none", fontSize: 11, fontWeight: 600, background: "#f5f4f0", border: "1px solid #e8e6df", padding: "4px 8px", borderRadius: 6, whiteSpace: "nowrap" as const };
 const calcBtnStyle = (disabled: boolean) => ({ padding: "4px 8px", fontSize: 10, borderRadius: 5, border: "1px solid #e8e6df", background: "#fff", cursor: disabled ? "not-allowed" : "pointer", fontWeight: 600, color: disabled ? "#a8a49c" : "#1a1a18" });
 const floatingPanelStyle = { position: "fixed" as const, bottom: 24, left: "50%", transform: "translateX(-50%)", background: "#1a1a18", padding: "12px 24px", borderRadius: 12, display: "flex", alignItems: "center", gap: 20, zIndex: 100, color: "#fff", boxShadow: "0 8px 32px rgba(0,0,0,0.3)" };
 const actionBtnStyle = { color: "#fff", border: "none", padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600 };
