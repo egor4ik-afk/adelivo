@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { usePushNotifications } from "@/components/usePushNotifications";
 import { IMaskInput } from "react-imask";
-import imageCompression from "browser-image-compression"; // 🔥 Добавили для сжатия
+import imageCompression from "browser-image-compression";
 
 interface Profile {
   id: string; 
@@ -13,7 +13,7 @@ interface Profile {
   phone: string | null;
   homeAddress: string | null; 
   isAuto: boolean;
-  avatarUrl?: string | null; // 🔥 Добавлено поле аватарки
+  avatarUrl?: string | null;
 }
 
 interface Stats {
@@ -108,7 +108,6 @@ export default function CourierProfilePage() {
   const [saving, setSaving] = useState(false);
   const [myShifts, setMyShifts] = useState<any[]>([]);
 
-  // 🔥 Загрузка аватарки
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
@@ -159,7 +158,6 @@ export default function CourierProfilePage() {
     return () => window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
   }, []);
 
-  // 🔥 Логика загрузки фото
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !profile) return;
@@ -332,6 +330,12 @@ export default function CourierProfilePage() {
           <p style={{ margin: 0, fontSize: 13, color: "#a8a49c", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             Курьер • {profile.email}
           </p>
+        </div>
+
+        {/* 🔥 РЕКЛАМНЫЙ БЛОК / ЛОГОТИП */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", opacity: 0.5, flexShrink: 0 }}>
+          <img src="/favicon.svg" alt="App Logo" style={{ width: 24, height: 24 }} />
+          <span style={{ fontSize: 9, fontWeight: 800, color: "#1a1a18", marginTop: 2, textTransform: "uppercase", letterSpacing: "0.5px" }}>EventWave</span>
         </div>
       </div>
 

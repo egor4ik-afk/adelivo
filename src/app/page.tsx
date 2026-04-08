@@ -12,7 +12,7 @@ export default async function RootPage() {
 
   // 2. Если это курьер — отправляем в его мобильный интерфейс
   if (user.role === "COURIER") {
-    redirect("/courier/points");
+    redirect("/courier/routes");
   }
 
   // 3. Операторов и админов отправляем в дашборд

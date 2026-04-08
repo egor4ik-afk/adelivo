@@ -171,10 +171,18 @@ export default function CourierRoutesPage() {
     }}>
 
       {/* Шапка */}
-      <div style={{ padding: "16px", background: "#fff", borderBottom: "1px solid #e8e6df", position: "sticky", top: 0, zIndex: 10 }}>
-        <h1 style={{ margin: 0, fontSize: 18, color: "#1a1a18" }}>Мои маршруты</h1>
-        <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 4 }}>
-          На сегодня: {todayOrders.length} точек
+      <div style={{ padding: "16px", background: "#fff", borderBottom: "1px solid #e8e6df", position: "sticky", top: 0, zIndex: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 18, color: "#1a1a18" }}>Мои маршруты</h1>
+          <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 4 }}>
+            На сегодня: {todayOrders.length} точек
+          </div>
+        </div>
+
+        {/* 🔥 РЕКЛАМНЫЙ БЛОК / ЛОГОТИП */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", opacity: 0.5 }}>
+          <img src="/favicon.svg" alt="App Logo" style={{ width: 24, height: 24 }} />
+          <span style={{ fontSize: 9, fontWeight: 800, color: "#1a1a18", marginTop: 2, textTransform: "uppercase", letterSpacing: "0.5px" }}>EventWave</span>
         </div>
       </div>
 
@@ -287,7 +295,6 @@ export default function CourierRoutesPage() {
                     const isDelivered = o.status === "DELIVERED";
                     const actualTime = formatDeliveredTime(o.deliveredAt || null);
 
-                    // 🔥 УМНЫЙ ТЕКСТ ДЛЯ СООБЩЕНИЯ
                     const cleanPhoneForTg = phone !== "—" ? phone.replace(/[^\d+]/g, "") : "";
                     
                     let timeText = "в ближайшее время";
@@ -429,7 +436,7 @@ export default function CourierRoutesPage() {
                                 : <span style={{ color: "#1a1a18" }}>—</span>}
                             </div>
 
-                            {/* 🔥 КНОПКА ТЕЛЕГРАМ И КНОПКА SMS */}
+                            {/* КНОПКА ТЕЛЕГРАМ И КНОПКА SMS */}
                             {cleanPhoneForTg && (
                               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                 <a 
