@@ -701,6 +701,11 @@ export async function updateCrmOrder(
 
   const params = new URLSearchParams();
   params.append("apiKey", apiKeyToUse);
+
+  // 🔥 ДОБАВЛЯЕМ ПАРАМЕТР МАГАЗИНА, ЧТОБЫ CRM НЕ РУГАЛАСЬ
+  if (orderInDb?.shop) {
+    params.append("site", orderInDb.shop); 
+  }
   params.append("order", JSON.stringify(orderPayload));
   params.append("by", "id");
 
@@ -732,6 +737,12 @@ export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: numb
 
   const params = new URLSearchParams();
   params.append("apiKey", apiKeyToUse);
+  
+  // 🔥 ДОБАВЛЯЕМ ПАРАМЕТР МАГАЗИНА ЗДЕСЬ ТОЖЕ
+  if (orderInDb?.shop) {
+    params.append("site", orderInDb.shop); 
+  }
+
   params.append("order", JSON.stringify({ delivery: { netCost: calculatedNetCost } }));
   params.append("by", "id");
 
@@ -743,7 +754,6 @@ export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: numb
     console.error(`[CRM] Ошибка обновления себестоимости:`, err?.response?.data ?? err.message);
   }
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // POLLING ДЛЯ MEURA
 // ─────────────────────────────────────────────────────────────────────────────
