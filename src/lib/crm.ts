@@ -213,7 +213,7 @@ function loadZonesFromKml(): typeof _zonesCache {
   }
 
   return {
-    zone0:  zones.find(z => z.name.startsWith("0"))  ?? null,
+    zone0: zones.find(z => z.name.startsWith("0")) ?? null,
     zone10: zones.find(z => z.name.startsWith("10")) ?? null,
     zone20: zones.find(z => z.name.startsWith("20")) ?? null,
   };
@@ -231,12 +231,12 @@ export function calcBaseDeliveryPrice(lat: number, lng: number): number {
   const { zone0, zone10, zone20 } = getZones();
   const pt: [number, number] = [lng, lat];
 
-  if (zone0  && isPointInPolygon(pt, zone0.polygon))  return 500;
+  if (zone0 && isPointInPolygon(pt, zone0.polygon)) return 500;
   if (zone10 && isPointInPolygon(pt, zone10.polygon)) return 900;
   if (zone20 && isPointInPolygon(pt, zone20.polygon)) return 1300;
 
   if (distFromMkad > 10) return 1300;
-  if (distFromMkad > 0)  return 900;
+  if (distFromMkad > 0) return 900;
   return 500;
 }
 
@@ -353,7 +353,7 @@ export async function geocodeNewOrders() {
       await prisma.order.update({
         where: { id: order.id },
         data: { geocoded: true, isInvalid: true, invalidReason: "Ошибка геокодирования" },
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }
 
@@ -385,18 +385,18 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     const crmAddr = data.address?.trim() || "";
 
     if (dbAddr !== crmAddr) {
-      updateFields.address       = crmAddr || null;
-      updateFields.geocoded      = false;
-      updateFields.lat           = null;
-      updateFields.lng           = null;
-      updateFields.isInvalid     = false;
+      updateFields.address = crmAddr || null;
+      updateFields.geocoded = false;
+      updateFields.lat = null;
+      updateFields.lng = null;
+      updateFields.isInvalid = false;
       updateFields.invalidReason = null;
     } else {
-      updateFields.address       = existing.address;
-      updateFields.lat           = existing.lat;
-      updateFields.lng           = existing.lng;
-      updateFields.geocoded      = existing.geocoded;
-      updateFields.isInvalid     = existing.isInvalid;
+      updateFields.address = existing.address;
+      updateFields.lat = existing.lat;
+      updateFields.lng = existing.lng;
+      updateFields.geocoded = existing.geocoded;
+      updateFields.isInvalid = existing.isInvalid;
       updateFields.invalidReason = existing.invalidReason;
     }
 
@@ -433,12 +433,12 @@ export async function upsertOrder(crmOrder: CrmOrder) {
 
     const hasCoreChanges =
       (existing.crmStatus ?? "") !== (updateFields.crmStatus ?? "") ||
-      (existing.courierId ?? 0)  !== (updateFields.courierId ?? 0)  ||
-      (existing.courier   ?? "") !== (updateFields.courier   ?? "") ||
-      (existing.items     ?? "") !== (updateFields.items     ?? "") ||
-      (existing.slotFrom  ?? "") !== (updateFields.slotFrom  ?? "") ||
-      (existing.slotTo    ?? "") !== (updateFields.slotTo    ?? "") ||
-      (existing.price     ?? 0)  !== (updateFields.price     ?? 0)  ||
+      (existing.courierId ?? 0) !== (updateFields.courierId ?? 0) ||
+      (existing.courier ?? "") !== (updateFields.courier ?? "") ||
+      (existing.items ?? "") !== (updateFields.items ?? "") ||
+      (existing.slotFrom ?? "") !== (updateFields.slotFrom ?? "") ||
+      (existing.slotTo ?? "") !== (updateFields.slotTo ?? "") ||
+      (existing.price ?? 0) !== (updateFields.price ?? 0) ||
       dbAddr !== crmAddr;
 
     if (hasCoreChanges) updateFields.changedAt = new Date();
@@ -454,13 +454,13 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     notify({ type: "order.new", order }).catch(console.error);
   } else {
     const changes = {
-      statusChanged:    (existing.crmStatus ?? "") !== (order.crmStatus ?? ""),
-      courierChanged:   (existing.courierId ?? 0)  !== (order.courierId ?? 0),
-      slotChanged:      (existing.slotRaw   ?? "") !== (order.slotRaw   ?? ""),
-      addressChanged:   (existing.address   ?? "") !== (order.address   ?? ""),
-      commentChanged:   (existing.comment   ?? "") !== (order.comment   ?? ""),
+      statusChanged: (existing.crmStatus ?? "") !== (order.crmStatus ?? ""),
+      courierChanged: (existing.courierId ?? 0) !== (order.courierId ?? 0),
+      slotChanged: (existing.slotRaw ?? "") !== (order.slotRaw ?? ""),
+      addressChanged: (existing.address ?? "") !== (order.address ?? ""),
+      commentChanged: (existing.comment ?? "") !== (order.comment ?? ""),
       opCommentChanged: (existing.opComment ?? "") !== (order.opComment ?? ""),
-      itemsChanged:     (existing.items     ?? "") !== (order.items     ?? "")
+      itemsChanged: (existing.items ?? "") !== (order.items ?? "")
     };
     if (Object.values(changes).some(Boolean)) {
       notify({ type: "order.updated", order, previousStatus: changes.statusChanged ? existing.status : undefined, changes }).catch(console.error);
@@ -485,7 +485,7 @@ export async function pollCrmOrders() {
       params: { apiKey: CRM_KEY, "filter[createdAtFrom]": dateFrom, limit: 100 },
       timeout: 15_000,
     });
-    
+
     // 1. ОБРАБОТКА НОВЫХ ЗАКАЗОВ (Только Bunch!)
     for (const order of resNew.data?.orders || []) {
       const site = order.site ? order.site.toLowerCase() : "";
@@ -495,13 +495,13 @@ export async function pollCrmOrders() {
 
     // 2. ВЫБИРАЕМ АКТИВНЫЕ ЗАКАЗЫ (Только Bunch!)
     const activeOrders = await prisma.order.findMany({
-      where: { 
+      where: {
         status: { notIn: ["DELIVERED", "CANCELLED", "RETURNED"] },
         shop: { notIn: MEURA_SHOPS } // ⛔ ИГНОР МЕУРЫ В БД
       },
       select: { crmId: true },
     });
-    
+
     const activeIds = activeOrders.map(o => o.crmId);
 
     for (let i = 0; i < activeIds.length; i += 50) {
@@ -511,9 +511,9 @@ export async function pollCrmOrders() {
       params.append("limit", "100");
       chunk.forEach(id => params.append("filter[ids][]", id));
       const resUpdate = await axios.get<CrmOrdersResponse>(`${CRM_URL}/api/v5/orders?${params.toString()}`, { timeout: 15_000 });
-      
+
       const returnedOrders = resUpdate.data?.orders || [];
-      
+
       // 3. ОБРАБОТКА ОБНОВЛЕНИЙ (Только Bunch!)
       for (const order of returnedOrders) {
         const site = order.site ? order.site.toLowerCase() : "";
@@ -526,18 +526,18 @@ export async function pollCrmOrders() {
 
       if (deletedIds.length > 0) {
         console.log(`[Cron Bunch] Внимание! Эти заказы пропали из CRM:`, deletedIds);
-        
+
         // 🔥 Двойная защита при отмене
-        const localOrdersToCancel = await prisma.order.findMany({ 
-          where: { 
+        const localOrdersToCancel = await prisma.order.findMany({
+          where: {
             crmId: { in: deletedIds },
             shop: { notIn: MEURA_SHOPS } // ⛔ НИКОГДА НЕ ОТМЕНЯЕМ МЕУРУ
-          } 
+          }
         });
 
         for (const localOrder of localOrdersToCancel) {
           if (localOrder.routeId) {
-            const siblingsCount = await prisma.order.count({ 
+            const siblingsCount = await prisma.order.count({
               where: { routeId: localOrder.routeId, id: { not: localOrder.id } }
             });
             if (siblingsCount === 0) {
@@ -555,18 +555,18 @@ export async function pollCrmOrders() {
               pickedUpAt: null
             }
           });
-          
+
           console.log(`[Cron Bunch] Локальный заказ ${localOrder.crmId} переведен в статус CANCELLED.`);
         }
 
         // 🔥 ОТПРАВКА СООБЩЕНИЯ В ТЕЛЕГРАМ 🔥
         const tgToken = process.env.TELEGRAM_BOT_TOKEN;
         const tgChatId = process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID; // Поддержка обеих переменных
-        
+
         if (tgToken && tgChatId && localOrdersToCancel.length > 0) {
           const cancelledIdsStr = localOrdersToCancel.map(o => o.crmId).join(", ");
           const msg = `⚠️ *Внимание! Удаление в CRM Bunch*\n\nСледующие заказы пропали из RetailCRM (удалили или перенесли в корзину) и были автоматически отменены в базе курьеров:\n📦 ${cancelledIdsStr}`;
-          
+
           fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -582,7 +582,6 @@ export async function pollCrmOrders() {
     console.error("[Cron Bunch] Error polling CRM:", err);
   }
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // ОБНОВЛЕНИЕ ЗАКАЗА В CRM
 // ─────────────────────────────────────────────────────────────────────────────
@@ -627,7 +626,7 @@ export async function updateCrmOrder(
       resetParams.append("by", "id");
       await axios.post(`${CRM_URL}/api/v5/orders/${crmId}/edit`, resetParams.toString(), {
         headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 5000,
-      }).catch(() => {});
+      }).catch(() => { });
       orderPayload.delivery = { code: "logisty", typeId: 5 };
       orderPayload.customFields = { courier: null, kurier: null };
     }
@@ -644,7 +643,7 @@ export async function updateCrmOrder(
     await axios.post(`${CRM_URL}/api/v5/orders/${crmId}/edit`, params.toString(), {
       headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 5000,
     });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
     console.error(`[CRM] Ошибка обновления заказа ${crmId}:`, err?.response?.data ?? err.message);
   }
@@ -668,14 +667,14 @@ export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: numb
       headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 5000,
     });
     console.log(`[CRM] netCost заказа ${crmId} → ${calculatedNetCost} ₽`);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
     console.error(`[CRM] Ошибка обновления себестоимости:`, err?.response?.data ?? err.message);
   }
 }
 
 export interface CrmOrder {
-  id: number; number?: string; externalId?: string; status?: string;
+  id: number; number?: string; externalId?: string; status?: string; site?: string;
   createdAt?: string; customerComment?: string; managerComment?: string;
   firstName?: string; lastName?: string; phone?: string; email?: string;
   customer?: {
