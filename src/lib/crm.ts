@@ -477,21 +477,27 @@ export async function upsertOrder(crmOrder: CrmOrder) {
 export async function pollCrmOrders() {
   if (!CRM_URL || !CRM_KEY) return;
   try {
+    // 🔥 Магазины, которые мы ВООБЩЕ не трогаем в этом кроне
+    const MEURA_SHOPS = ['kaktusfiori', 'meura-flowers'];
+
     const dateFrom = new Date(Date.now() - 2 * 24 * 3_600_000).toISOString().split("T")[0];
     const resNew = await axios.get<CrmOrdersResponse>(`${CRM_URL}/api/v5/orders`, {
       params: { apiKey: CRM_KEY, "filter[createdAtFrom]": dateFrom, limit: 100 },
       timeout: 15_000,
     });
-    for (const order of resNew.data?.orders || []) await upsertOrder(order);
+    
+    // 1. ОБРАБОТКА НОВЫХ ЗАКАЗОВ (Только Bunch!)
+    for (const order of resNew.data?.orders || []) {
+      const site = order.site ? order.site.toLowerCase() : "";
+      if (MEURA_SHOPS.includes(site)) continue; // ⛔ АБСОЛЮТНЫЙ ИГНОР МЕУРЫ
+      await upsertOrder(order);
+    }
 
-    // 🔥 Исключаем магазины Meura
-    const MEURA_SHOPS = ['kaktusfiori', 'meura-flowers'];
-
-    // 🔥 Выбираем только активные заказы Bunch
+    // 2. ВЫБИРАЕМ АКТИВНЫЕ ЗАКАЗЫ (Только Bunch!)
     const activeOrders = await prisma.order.findMany({
       where: { 
         status: { notIn: ["DELIVERED", "CANCELLED", "RETURNED"] },
-        shop: { notIn: MEURA_SHOPS } 
+        shop: { notIn: MEURA_SHOPS } // ⛔ ИГНОР МЕУРЫ В БД
       },
       select: { crmId: true },
     });
@@ -508,7 +514,10 @@ export async function pollCrmOrders() {
       
       const returnedOrders = resUpdate.data?.orders || [];
       
+      // 3. ОБРАБОТКА ОБНОВЛЕНИЙ (Только Bunch!)
       for (const order of returnedOrders) {
+        const site = order.site ? order.site.toLowerCase() : "";
+        if (MEURA_SHOPS.includes(site)) continue; // ⛔ АБСОЛЮТНЫЙ ИГНОР МЕУРЫ
         await upsertOrder(order);
       }
 
@@ -522,7 +531,7 @@ export async function pollCrmOrders() {
         const localOrdersToCancel = await prisma.order.findMany({ 
           where: { 
             crmId: { in: deletedIds },
-            shop: { notIn: MEURA_SHOPS }
+            shop: { notIn: MEURA_SHOPS } // ⛔ НИКОГДА НЕ ОТМЕНЯЕМ МЕУРУ
           } 
         });
 
@@ -552,7 +561,7 @@ export async function pollCrmOrders() {
 
         // 🔥 ОТПРАВКА СООБЩЕНИЯ В ТЕЛЕГРАМ 🔥
         const tgToken = process.env.TELEGRAM_BOT_TOKEN;
-        const tgChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
+        const tgChatId = process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID; // Поддержка обеих переменных
         
         if (tgToken && tgChatId && localOrdersToCancel.length > 0) {
           const cancelledIdsStr = localOrdersToCancel.map(o => o.crmId).join(", ");
