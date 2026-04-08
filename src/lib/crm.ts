@@ -483,6 +483,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
 // ─────────────────────────────────────────────────────────────────────────────
 // POLLING CRM
 // ─────────────────────────────────────────────────────────────────────────────
+// ЗАМЕНИ функцию pollCrmOrders в src/lib/crm.ts на эту версию
 
 export async function pollCrmOrders() {
   if (!CRM_URL || !CRM_KEY) return;
@@ -494,9 +495,18 @@ export async function pollCrmOrders() {
     });
     for (const order of resNew.data?.orders || []) await upsertOrder(order);
 
+    // 🔥 Берём только активные заказы НЕ из Meura-магазинов
+    // Meura-заказы обрабатываются отдельно в pollMeuraOrders()
+    // и не должны проверяться через Bunch-ключ — иначе CRM их "не находит" и мы их отменяем
+    const MEURA_SHOPS = ['kaktusfiori', 'meura-flowers'];
+
     const activeOrders = await prisma.order.findMany({
-      where: { status: { notIn: ["DELIVERED", "CANCELLED", "RETURNED"] } },
-      select: { crmId: true },
+      where: {
+        status: { notIn: ["DELIVERED", "CANCELLED", "RETURNED"] },
+        // 🔥 ИСКЛЮЧАЕМ Meura-заказы из проверки через Bunch-ключ
+        shop: { notIn: MEURA_SHOPS },
+      },
+      select: { crmId: true, shop: true },
     });
     const activeIds = activeOrders.map(o => o.crmId);
 
@@ -509,29 +519,25 @@ export async function pollCrmOrders() {
       const resUpdate = await axios.get<CrmOrdersResponse>(`${CRM_URL}/api/v5/orders?${params.toString()}`, { timeout: 15_000 });
       
       const returnedOrders = resUpdate.data?.orders || [];
-      
-      // 1. Обновляем все заказы, которые вернула CRM
       for (const order of returnedOrders) {
         await upsertOrder(order);
       }
 
-      // 🔥 2. ЛОГИКА ПОИСКА УДАЛЕННЫХ ЗАКАЗОВ 🔥
-      // Получаем список ID, которые реально пришли из CRM
       const returnedIds = returnedOrders.map(o => String(o.id));
-      
-      // Находим те ID, которые мы запрашивали, но CRM их не вернула
       const deletedIds = chunk.filter(id => !returnedIds.includes(id));
 
       if (deletedIds.length > 0) {
         console.log(`[Cron] Внимание! Эти заказы пропали из CRM:`, deletedIds);
         
-        // Получаем эти заказы из нашей локальной БД
         const localOrdersToCancel = await prisma.order.findMany({ 
-          where: { crmId: { in: deletedIds } } 
+          where: { 
+            crmId: { in: deletedIds },
+            // 🔥 Двойная защита: не трогаем Meura даже если вдруг сюда попали
+            shop: { notIn: MEURA_SHOPS },
+          }
         });
 
         for (const localOrder of localOrdersToCancel) {
-          // Если заказ был в маршруте, и он там был последним — удаляем пустой маршрут
           if (localOrder.routeId) {
             const siblingsCount = await prisma.order.count({ 
               where: { routeId: localOrder.routeId, id: { not: localOrder.id } }
@@ -541,7 +547,6 @@ export async function pollCrmOrders() {
             }
           }
 
-          // Переводим заказ в статус CANCELLED, отвязываем от маршрута и пишем причину
           await prisma.order.update({
             where: { id: localOrder.id },
             data: {
@@ -565,6 +570,77 @@ export async function pollCrmOrders() {
   }
 }
 
+// ТАКЖЕ замени pollMeuraOrders на эту версию — добавлена аналогичная проверка удалённых
+
+export async function pollMeuraOrders() {
+  if (!CRM_URL || !CRM_KEY_MEURA) return;
+
+  try {
+    const dateFrom = new Date(Date.now() - 3 * 24 * 3_600_000).toISOString().split("T")[0];
+    
+    // 1. Тянем свежие заказы
+    const params = new URLSearchParams();
+    params.append("apiKey", CRM_KEY_MEURA);
+    params.append("filter[createdAtFrom]", dateFrom);
+    params.append("filter[sites][]", "kaktusfiori");
+    params.append("filter[sites][]", "meura-flowers");
+    params.append("limit", "50");
+
+    const res = await axios.get<CrmOrdersResponse>(`${CRM_URL}/api/v5/orders?${params.toString()}`, { timeout: 15_000 });
+    const orders = res.data?.orders || [];
+    for (const order of orders) {
+      await upsertOrder(order);
+    }
+    console.log(`[Cron Meura] Синхронизировано ${orders.length} заказов.`);
+
+    // 🔥 2. Проверяем активные Meura-заказы на удаление (через Meura-ключ)
+    const MEURA_SHOPS = ['kaktusfiori', 'meura-flowers'];
+    const activeMeuraOrders = await prisma.order.findMany({
+      where: {
+        status: { notIn: ["DELIVERED", "CANCELLED", "RETURNED"] },
+        shop: { in: MEURA_SHOPS },
+      },
+      select: { crmId: true },
+    });
+
+    const activeMeuraIds = activeMeuraOrders.map(o => o.crmId);
+
+    for (let i = 0; i < activeMeuraIds.length; i += 50) {
+      const chunk = activeMeuraIds.slice(i, i + 50);
+      const checkParams = new URLSearchParams();
+      checkParams.append("apiKey", CRM_KEY_MEURA);
+      checkParams.append("limit", "100");
+      chunk.forEach(id => checkParams.append("filter[ids][]", id));
+
+      const resCheck = await axios.get<CrmOrdersResponse>(`${CRM_URL}/api/v5/orders?${checkParams.toString()}`, { timeout: 15_000 });
+      const returnedOrders = resCheck.data?.orders || [];
+      for (const order of returnedOrders) {
+        await upsertOrder(order);
+      }
+
+      const returnedIds = returnedOrders.map(o => String(o.id));
+      const deletedMeuraIds = chunk.filter(id => !returnedIds.includes(id));
+
+      if (deletedMeuraIds.length > 0) {
+        console.log(`[Cron Meura] Пропали из CRM:`, deletedMeuraIds);
+        const toCancel = await prisma.order.findMany({ where: { crmId: { in: deletedMeuraIds } } });
+        for (const localOrder of toCancel) {
+          if (localOrder.routeId) {
+            const siblings = await prisma.order.count({ where: { routeId: localOrder.routeId, id: { not: localOrder.id } } });
+            if (siblings === 0) await prisma.route.deleteMany({ where: { id: localOrder.routeId } });
+          }
+          await prisma.order.update({
+            where: { id: localOrder.id },
+            data: { status: "CANCELLED", opComment: "❌ Удален в CRM Meura", routeId: null, routeOrder: null, pickedUpAt: null }
+          });
+        }
+      }
+    }
+
+  } catch (err) {
+    console.error("[Cron Meura] Ошибка синхронизации:", err);
+  }
+}
 // ─────────────────────────────────────────────────────────────────────────────
 // ОБНОВЛЕНИЕ ЗАКАЗА В CRM (статус, курьер, адрес — без цены)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -674,37 +750,7 @@ export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: numb
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POLLING ДЛЯ MEURA (раз в 10 минут)
-// ─────────────────────────────────────────────────────────────────────────────
-export async function pollMeuraOrders() {
-  if (!CRM_URL || !CRM_KEY_MEURA) return;
 
-  try {
-    // Берем заказы за последние 3 дня
-    const dateFrom = new Date(Date.now() - 3 * 24 * 3_600_000).toISOString().split("T")[0];
-    
-    const params = new URLSearchParams();
-    params.append("apiKey", CRM_KEY_MEURA);
-    params.append("filter[createdAtFrom]", dateFrom);
-    params.append("filter[sites][]", "kaktusfiori");
-    params.append("filter[sites][]", "meura-flowers");
-    params.append("limit", "50");
-
-    const res = await axios.get<CrmOrdersResponse>(`${CRM_URL}/api/v5/orders?${params.toString()}`, { timeout: 15_000 });
-    
-    const orders = res.data?.orders || [];
-    for (const order of orders) {
-      await upsertOrder(order);
-    }
-    
-    console.log(`[Cron Meura] Синхронизировано ${orders.length} заказов.`);
-  } catch (err) {
-    console.error("[Cron Meura] Ошибка синхронизации:", err);
-  }
-}
-// ─────────────────────────────────────────────────────────────────────────────
-// ТИПЫ
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface CrmOrder {
