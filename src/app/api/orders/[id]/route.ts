@@ -1,10 +1,17 @@
 // src/app/api/orders/[id]/route.ts
+// 
+// ИЗМЕНЕНИЯ:
+// 1. Добавлен импорт notify
+// 2. После prisma.order.update вызывается notify({ type: "order.updated", ... })
+//    с теми же полями что и в upsertOrder — чтобы пуши шли и при ручных правках
+
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { updateCrmOrder, updateCrmOrderDeliveryPrice } from "@/lib/crm";
 import { OrderStatus } from "@prisma/client";
 import { applyUniversalEtaShift } from "@/lib/eta";
+import { notify } from "@/lib/notifications"; // 🔥 ДОБАВЛЕНО
 
 const STORE_COORDS = "55.749511,37.596205";
 
@@ -32,28 +39,21 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       if (body.status === "NEW") {
         updateData.pickedUpAt = null;
         updateData.eta = null;
-        updateData.deliveredAt = null; // Сбрасываем факт
+        updateData.deliveredAt = null;
       } else if (body.status === "ASSIGNED") {
         updateData.pickedUpAt = null;
-        updateData.deliveredAt = null; // Сбрасываем факт
-      } else if (body.status === "ASSIGNED") {
-        updateData.pickedUpAt = null;
-        updateData.deliveredAt = null; // Сбрасываем факт
+        updateData.deliveredAt = null;
       } else if (body.status === "DELIVERED") {
-        // 🔥 ИЗМЕНЕНИЕ 1: Гарантируем, что дата запишется, если статус "Доставлен", а даты еще нет в БД
         if (!order.deliveredAt) {
           updateData.deliveredAt = new Date(); 
         }
       }
     }
 
-    // 🔥 ИЗМЕНЕНИЕ 2: Если интерфейс курьера теперь явно присылает deliveredAt — сохраняем его!
     if (body.deliveredAt !== undefined) {
       updateData.deliveredAt = body.deliveredAt ? new Date(body.deliveredAt) : null;
     }
     
-    // 🔥 ГЛАВНАЯ ПРАВКА:
-    // Разрешаем менять ETA везде (особенно В пути), НО строго запрещаем стирать ETA при статусе Доставлен!
     if (body.eta !== undefined && body.status !== "DELIVERED") {
       updateData.eta = body.eta;
     }
@@ -118,14 +118,11 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         if (siblingsCount === 0) await prisma.route.deleteMany({ where: { id: order.routeId } });
       }
       
-     // 🔥 БЕРЕМ ДАТУ ИЗ ЗАКАЗА, А НЕ ТЕКУЩУЮ (Пуленепробиваемый парсинг)
-     const rawDate = order.deliveryDate || order.crmCreatedAt || new Date();
-     // Превращаем всё в Date, а затем в строку YYYY-MM-DD по Москве
-     const orderDate = (rawDate instanceof Date ? rawDate : new Date(rawDate))
-          .toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" });
-
-     const routeDay = orderDate.split("-")[2];
-     const prefix = `M-${routeDay}`;
+      const rawDate = order.deliveryDate || order.crmCreatedAt || new Date();
+      const orderDate = (rawDate instanceof Date ? rawDate : new Date(rawDate))
+           .toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" });
+      const routeDay = orderDate.split("-")[2];
+      const prefix = `M-${routeDay}`;
 
       const routes = await prisma.route.findMany({ where: { name: { startsWith: prefix }, date: orderDate }, select: { name: true }});
       let maxNum = 0;
@@ -152,10 +149,6 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 
     if (body.photoUrl !== undefined) updateData.photoUrl = body.photoUrl;
 
-    // ====================================================================
-    // 🔥 ОБЩЕЕ ПРАВИЛО СБРОСА ПЛАНА (GENERAL RULE)
-    // Защита: если в итоге заказ стал NEW или остался без курьера — жестко зачищаем ETA
-    // ====================================================================
     const finalStatus = updateData.status !== undefined ? updateData.status : order.status;
     const finalCourierId = updateData.courierId !== undefined ? updateData.courierId : order.courierId;
     
@@ -168,12 +161,31 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       updatedOrder = await prisma.order.update({ where: { id }, data: updateData, include: { route: true } });
     }
 
-    // 🔥 МАГИЯ ПРОИСХОДИТ ЗДЕСЬ (ДЕРГАЕМ УНИВЕРСАЛЬНЫЙ ТРИГГЕР)
-    // ...
-    // =========================================================
-    // Запускаем пересчет ТОЛЬКО если статус реально изменился на новый!
-    const statusChanged = body.status !== undefined && order.status !== body.status;
+    // ─────────────────────────────────────────────────────────────────────
+    // 🔥 NOTIFY: отправляем пуши при любых ручных изменениях через дашборд
+    // ─────────────────────────────────────────────────────────────────────
+    const changes = {
+      statusChanged:         order.status         !== updatedOrder.status,
+      courierChanged:        (order.courierId ?? 0) !== (updatedOrder.courierId ?? 0),
+      slotChanged:           (order.slotRaw    ?? "") !== (updatedOrder.slotRaw    ?? ""),
+      addressChanged:        (order.address    ?? "") !== (updatedOrder.address    ?? ""),
+      commentChanged:        (order.comment    ?? "") !== (updatedOrder.comment    ?? ""),
+      opCommentChanged:      (order.opComment  ?? "") !== (updatedOrder.opComment  ?? ""),
+      itemsChanged:          (order.items      ?? "") !== (updatedOrder.items      ?? ""),
+      recipientPhoneChanged: (order.recipientPhone ?? "") !== (updatedOrder.recipientPhone ?? ""),
+    };
 
+    if (Object.values(changes).some(Boolean)) {
+      notify({
+        type: "order.updated",
+        order: updatedOrder as any,
+        previousStatus: changes.statusChanged ? order.status : undefined,
+        changes,
+      }).catch(console.error);
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
+    const statusChanged = body.status !== undefined && order.status !== body.status;
     if (statusChanged && (body.status === "IN_DELIVERY" || body.status === "DELIVERED")) {
        await applyUniversalEtaShift(id, body.status, body.eta);
     }
@@ -191,7 +203,6 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     let crmStatus = body.status ?? updateData.status;
     if (crmStatus === "ASSIGNED") crmStatus = undefined;
     
-    // 🔥 Убрали передачу recipientPhone в CRM
     await updateCrmOrder(order.crmId, { status: crmStatus as OrderStatus | undefined, courier: updateData.courier ?? body.courier, opComment: body.opComment, address: body.address });
 
     return NextResponse.json(updatedOrder);

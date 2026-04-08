@@ -424,6 +424,14 @@ export async function geocodeNewOrders() {
 // UPSERT ЗАКАЗА
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ПАТЧ для src/lib/crm.ts
+// Заменить ТОЛЬКО функцию upsertOrder — остальное не трогать
+// 
+// Исправления:
+// 1. recipientPhoneChanged добавлен в changes (был убран в v6)
+// 2. hasCoreChanges теперь включает recipientPhoneChanged
+// 3. Защита от дублей webhook: сравниваем crmStatus ДО перезаписи updateFields
+
 export async function upsertOrder(crmOrder: CrmOrder) {
   const data = await mapCrmOrder(crmOrder);
 
@@ -439,19 +447,13 @@ export async function upsertOrder(crmOrder: CrmOrder) {
   } = { ...data };
 
   if (existing) {
-    // 🔥 БРОНЯ ДЛЯ TELEGRAM БОТА (Bunch) и поля Магазина
-    if (!updateFields.name && existing.name) {
-      updateFields.name = existing.name;
-    }
-    if (!updateFields.recipientPhone && existing.recipientPhone) {
-      updateFields.recipientPhone = existing.recipientPhone;
-    }
-    if (!updateFields.shop && existing.shop) {
-      updateFields.shop = existing.shop;
-    }
+    // 🔥 БРОНЯ полей
+    if (!updateFields.name && existing.name) updateFields.name = existing.name;
+    if (!updateFields.recipientPhone && existing.recipientPhone) updateFields.recipientPhone = existing.recipientPhone;
+    if (!updateFields.shop && existing.shop) updateFields.shop = existing.shop;
 
-    const dbAddr = existing.address?.trim() || "";
-    const crmAddr = updateFields.address?.trim() || "";
+    const dbAddr  = existing.address?.trim() || "";
+    const crmAddr = (data.address ?? "").trim();  // берём из data, не из updateFields
 
     if (dbAddr !== crmAddr) {
       updateFields.address       = crmAddr || null;
@@ -485,30 +487,39 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     if (updateFields.status === OrderStatus.IN_DELIVERY && existing.status !== OrderStatus.IN_DELIVERY) {
       if (!existing.pickedUpAt) updateFields.pickedUpAt = new Date();
     }
-    if ((updateFields.status === OrderStatus.NEW || updateFields.status === OrderStatus.ASSIGNED) && existing.status !== updateFields.status) {
+    if (
+      (updateFields.status === OrderStatus.NEW || updateFields.status === OrderStatus.ASSIGNED) &&
+      existing.status !== updateFields.status
+    ) {
       updateFields.pickedUpAt = null;
     }
 
-    const isCancelledOrReturned = updateFields.status === OrderStatus.CANCELLED || updateFields.status === OrderStatus.RETURNED;
+    const isCancelledOrReturned =
+      updateFields.status === OrderStatus.CANCELLED || updateFields.status === OrderStatus.RETURNED;
     const isPickup = updateFields.address?.toLowerCase().includes("самовывоз");
 
     if (isCancelledOrReturned || isPickup) {
       if (existing.routeId && updateFields.routeId !== null) {
-        const siblingsCount = await prisma.order.count({ where: { routeId: existing.routeId, id: { not: existing.id } } });
+        const siblingsCount = await prisma.order.count({
+          where: { routeId: existing.routeId, id: { not: existing.id } },
+        });
         if (siblingsCount === 0) await prisma.route.deleteMany({ where: { id: existing.routeId } });
-        updateFields.routeId = null;
+        updateFields.routeId    = null;
         updateFields.routeOrder = null;
       }
     }
 
+    // 🔥 ИСПРАВЛЕНО: строим changes ДО upsert, на основе existing vs data
+    // (не из результата upsert — там уже перезаписано)
     const hasCoreChanges =
-      (existing.crmStatus ?? "") !== (updateFields.crmStatus ?? "") ||
-      (existing.courierId ?? 0)  !== (updateFields.courierId ?? 0)  ||
-      (existing.courier   ?? "") !== (updateFields.courier   ?? "") ||
-      (existing.items     ?? "") !== (updateFields.items     ?? "") ||
-      (existing.slotFrom  ?? "") !== (updateFields.slotFrom  ?? "") ||
-      (existing.slotTo    ?? "") !== (updateFields.slotTo    ?? "") ||
-      (existing.price     ?? 0)  !== (updateFields.price     ?? 0)  ||
+      (existing.crmStatus       ?? "") !== (data.crmStatus       ?? "") ||
+      (existing.courierId       ?? 0)  !== (data.courierId       ?? 0)  ||
+      (existing.courier         ?? "") !== (data.courier         ?? "") ||
+      (existing.items           ?? "") !== (data.items           ?? "") ||
+      (existing.slotFrom        ?? "") !== (data.slotFrom        ?? "") ||
+      (existing.slotTo          ?? "") !== (data.slotTo          ?? "") ||
+      (existing.price           ?? 0)  !== (updateFields.price   ?? 0)  ||
+      (existing.recipientPhone  ?? "") !== (data.recipientPhone  ?? "") || // 🔥 ВОЗВРАЩЕНО
       dbAddr !== crmAddr;
 
     if (hasCoreChanges) updateFields.changedAt = new Date();
@@ -523,23 +534,30 @@ export async function upsertOrder(crmOrder: CrmOrder) {
   if (!existing) {
     notify({ type: "order.new", order }).catch(console.error);
   } else {
+    // 🔥 ИСПРАВЛЕНО: changes строим из existing vs order (после upsert — финальные значения)
     const changes = {
-      statusChanged:    (existing.crmStatus ?? "") !== (order.crmStatus ?? ""),
-      courierChanged:   (existing.courierId ?? 0)  !== (order.courierId ?? 0),
-      slotChanged:      (existing.slotRaw   ?? "") !== (order.slotRaw   ?? ""),
-      addressChanged:   (existing.address   ?? "") !== (order.address   ?? ""),
-      commentChanged:   (existing.comment   ?? "") !== (order.comment   ?? ""),
-      opCommentChanged: (existing.opComment ?? "") !== (order.opComment ?? ""),
-      itemsChanged:     (existing.items     ?? "") !== (order.items     ?? ""),
+      statusChanged:         (existing.crmStatus      ?? "") !== (order.crmStatus      ?? ""),
+      courierChanged:        (existing.courierId       ?? 0)  !== (order.courierId       ?? 0),
+      slotChanged:           (existing.slotRaw         ?? "") !== (order.slotRaw         ?? ""),
+      addressChanged:        (existing.address         ?? "") !== (order.address         ?? ""),
+      commentChanged:        (existing.comment         ?? "") !== (order.comment         ?? ""),
+      opCommentChanged:      (existing.opComment       ?? "") !== (order.opComment       ?? ""),
+      itemsChanged:          (existing.items           ?? "") !== (order.items           ?? ""),
+      recipientPhoneChanged: (existing.recipientPhone  ?? "") !== (order.recipientPhone  ?? ""), // 🔥 ВОЗВРАЩЕНО
     };
+
     if (Object.values(changes).some(Boolean)) {
-      notify({ type: "order.updated", order, previousStatus: changes.statusChanged ? existing.status : undefined, changes }).catch(console.error);
+      notify({
+        type: "order.updated",
+        order,
+        previousStatus: changes.statusChanged ? existing.status : undefined,
+        changes,
+      }).catch(console.error);
     }
   }
 
   return order;
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // POLLING BUNCH
 // ─────────────────────────────────────────────────────────────────────────────
