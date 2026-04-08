@@ -10,7 +10,6 @@ const CRM_KEY = process.env.RETAILCRM_API_KEY;
 const CRM_KEY_MEURA = process.env.RETAILCRM_API_KEY_MEURA;
 const GEO_KEY = process.env.YANDEX_GEOCODER_KEY;
 
-// 🔥 Общая константа магазинов Meura
 const MEURA_SHOPS = ['kaktusfiori', 'meura-flowers'];
 
 async function resolveCourierId(name: string): Promise<number | null> {
@@ -108,7 +107,7 @@ export async function mapCrmOrder(order: CrmOrder) {
   }).join("; ");
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const cFields = (order as any).customFields || {};
+  const cFields = (order as any).customFields as any;
 
   let parsedCourier: string | null = null;
   let finalCourierId: number | null = null;
@@ -139,15 +138,15 @@ export async function mapCrmOrder(order: CrmOrder) {
     parsedDate = new Date(rawDate.getTime() - 5 * 60 * 60 * 1000);
   }
 
-  // 🔥 ПОЛНОСТЬЮ УБРАЛИ ПОЛЯ name И recipientPhone ИЗ СИНХРОНИЗАЦИИ CRM!
-  // CRM больше НИКОГДА не будет пытаться их обновить.
-
   return {
     crmId: String(order.id),
     externalId: order.externalId ?? order.number ?? null,
     crmStatus: order.status ?? null,
     status: mapCrmStatus(order.status),
+    
+    // 🔥 Магазин нужен, чтобы правильно делить заказы и ключи
     shop: order.site || "bunch", 
+
     address: order.delivery?.address?.text ?? null,
     deliveryDate: order.delivery?.date ?? null,
     courierId: finalCourierId,
@@ -230,6 +229,10 @@ export function calcBaseDeliveryPrice(lat: number, lng: number): number {
   if (distFromMkad > 0)  return 900;
   return 500;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ГЕОКОДИРОВАНИЕ
+// ─────────────────────────────────────────────────────────────────────────────
 
 function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371;
@@ -361,8 +364,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     if (hasCoreChanges) updateFields.changedAt = new Date();
   }
 
-  // 🔥 ПОЛНОСТЬЮ ИСКЛЮЧИЛИ name И recipientPhone ИЗ ОБНОВЛЕНИЯ И СОЗДАНИЯ!
-  // Теперь Prisma берет их исключительно из того, что записал бот.
+  // При создании мы записываем только то, что маппит функция выше (адреса, цены, курьеры)
   const order = await prisma.order.upsert({
     where: { crmId: data.crmId },
     update: updateFields,
@@ -400,8 +402,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       addressChanged:   (existing.address   ?? "") !== (order.address   ?? ""),
       commentChanged:   (existing.comment   ?? "") !== (order.comment   ?? ""),
       opCommentChanged: (existing.opComment ?? "") !== (order.opComment ?? ""),
-      itemsChanged:     (existing.items     ?? "") !== (order.items     ?? ""),
-      shopChanged:      (existing.shop      ?? "") !== (order.shop      ?? ""),
+      itemsChanged:     (existing.items     ?? "") !== (order.items     ?? "")
     };
     if (Object.values(changes).some(Boolean)) {
       notify({ type: "order.updated", order, previousStatus: changes.statusChanged ? existing.status : undefined, changes }).catch(console.error);
@@ -524,6 +525,9 @@ export async function updateCrmOrder(crmId: string, data: { status?: OrderStatus
   if (data.status && STATUS_TO_CRM[data.status]) orderPayload.status = STATUS_TO_CRM[data.status];
   if (data.opComment !== undefined) orderPayload.managerComment = data.opComment;
   if (data.address !== undefined) { orderPayload.delivery = orderPayload.delivery ?? {}; orderPayload.delivery.address = { text: data.address }; }
+
+  // Мы можем передавать телефон в CRM обратно, если мы хотим, чтобы он туда уходил. 
+  // Но если не хотим, чтобы он там был, можем и это закомментировать. Оставляю для обратной связи.
   if (data.recipientPhone !== undefined) { orderPayload.phone = data.recipientPhone.replace(/[^\d+]/g, ""); }
 
   if (data.courier !== undefined) {
