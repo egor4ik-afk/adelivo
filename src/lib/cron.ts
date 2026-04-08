@@ -1,6 +1,6 @@
 // src/lib/cron.ts
 import cron from "node-cron";
-import { pollCrmOrders } from "./crm"; // 🔥 ДОБАВИЛИ ИМПОРТ pollMeuraOrders
+import { pollCrmOrders, pollMeuraOrders } from "./crm"; // 🔥 ИСПРАВЛЕНО: добавили саму функцию в импорт
 
 let initialized = false;
 
@@ -30,13 +30,13 @@ if (!initialized && process.env.NODE_ENV !== "test") {
   });
 
   // 🔥 1.5 RetailCRM: Сеть Meura (каждые 10 минут) 🔥
-  // cron.schedule("*/10 * * * *", async () => {
-  //   try { 
-  //     console.log("[Cron] Запуск поллинга Meura...");
-  //     await pollMeuraOrders(); 
-  //   } 
-  //   catch (err) { console.error("[Cron] Poll Meura failed:", err); }
-  // });
+  cron.schedule("*/10 * * * *", async () => {
+    try { 
+      console.log("[Cron] Запуск поллинга Meura...");
+      await pollMeuraOrders(); 
+    } 
+    catch (err) { console.error("[Cron] Poll Meura failed:", err); }
+  });
 
   // 2. Ежедневная проверка (15:00 UTC = 18:00 МСК)
   cron.schedule("0 15 * * *", async () => {

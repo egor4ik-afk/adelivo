@@ -22,7 +22,6 @@ async function resolveCourierId(name: string): Promise<number | null> {
 }
 
 export function parseSlot(raw: unknown) {
-  console.log("[parseSlot] raw =", JSON.stringify(raw));
   if (!raw) return { from: null, to: null, text: null };
   if (typeof raw === "object" && raw !== null) {
     const r = raw as Record<string, string>;
@@ -102,6 +101,45 @@ function parseCourierFromDelivery(delivery: CrmOrder["delivery"]): { id: number 
   return { id: null, name: null };
 }
 
+// 🔥 УМНЫЙ ПАРСЕР АДРЕСА (вырезает Имя и Телефон)
+function parseMeuraAddress(rawAddress: string | null) {
+  if (!rawAddress) return { cleanAddress: null, name: null, phone: null };
+
+  const phoneRegex = /(\+?[78][-\s]?\(?\d{3}\)?[-\s]?\d{3}[-\s]?\d{2}[-\s]?\d{2})/;
+  const phoneMatch = rawAddress.match(phoneRegex);
+  const phone = phoneMatch ? phoneMatch[1].replace(/[^\d+]/g, '') : null;
+
+  let cleanAddress = rawAddress;
+  let name = null;
+
+  if (phoneMatch) {
+    cleanAddress = cleanAddress.replace(phoneMatch[0], '');
+
+    const parts = rawAddress.split(phoneMatch[0]);
+    if (parts[1] && parts[1].trim()) {
+       const tailMatch = parts[1].trim().match(/[А-ЯЁа-яёA-Za-z]+/);
+       if (tailMatch) {
+           name = tailMatch[0];
+           cleanAddress = cleanAddress.replace(parts[1], '');
+       }
+    }
+    
+    if (!name) {
+       const endNameRegex = /[\s,]+([А-ЯЁ][а-яёA-Za-z]+)\s*$/;
+       const matchName = cleanAddress.match(endNameRegex);
+       if (matchName && !['этаж', 'кв', 'подъезд', 'д'].includes(matchName[1].toLowerCase())) {
+           name = matchName[1];
+           cleanAddress = cleanAddress.replace(endNameRegex, '');
+       }
+    }
+  }
+
+  cleanAddress = cleanAddress.replace(/,\s*$/, '').trim();
+  cleanAddress = cleanAddress.replace(/^,\s*/, '').trim(); 
+  
+  return { cleanAddress, name, phone };
+}
+
 export async function mapCrmOrder(order: CrmOrder) {
   const slot = parseSlot(order.delivery?.time);
   const items = order.items?.map(i => {
@@ -141,12 +179,29 @@ export async function mapCrmOrder(order: CrmOrder) {
     parsedDate = new Date(rawDate.getTime() - 5 * 60 * 60 * 1000);
   }
 
+  // 🔥 РАЗДЕЛЕНИЕ ЛОГИКИ ПО МАГАЗИНАМ
+  const shopCode = order.site ?? null;
+  const rawAddress = order.delivery?.address?.text ?? null;
+  let finalAddress = rawAddress;
+  let recipientName = null;
+  let recipientPhone = null;
+
+  if (shopCode === 'kaktusfiori' || shopCode === 'meura-flowers') {
+    const parsed = parseMeuraAddress(rawAddress);
+    finalAddress = parsed.cleanAddress;
+    recipientName = parsed.name;
+    recipientPhone = parsed.phone;
+  }
+
   return {
     crmId: String(order.id),
     externalId: order.externalId ?? order.number ?? null,
+    shop: shopCode,
+    name: recipientName,
+    recipientPhone: recipientPhone,
     crmStatus: order.status ?? null,
     status: mapCrmStatus(order.status),
-    address: order.delivery?.address?.text ?? null,
+    address: finalAddress,
     deliveryDate: order.delivery?.date ?? null,
     courierId: finalCourierId,
     courier: parsedCourier,
@@ -217,8 +272,6 @@ function loadZonesFromKml(): typeof _zonesCache {
     if (points.length > 3) zones.push({ name: zoneName, polygon: points });
   }
 
-  console.log(`[zones] Загружено: ${zones.length} →`, zones.map(z => z.name).join(", "));
-
   return {
     zone0:  zones.find(z => z.name.startsWith("0"))  ?? null,
     zone10: zones.find(z => z.name.startsWith("10")) ?? null,
@@ -231,7 +284,6 @@ function getZones(): { zone0: Zone | null; zone10: Zone | null; zone20: Zone | n
   return _zonesCache ?? { zone0: null, zone10: null, zone20: null };
 }
 
-// Базовая цена зоны (500 / 900 / 1300) — без надбавки авто
 export function calcBaseDeliveryPrice(lat: number, lng: number): number {
   const distFromCenter = getDistanceFromLatLonInKm(55.755864, 37.617698, lat, lng);
   const distFromMkad = Math.max(distFromCenter - 17, 0);
@@ -324,8 +376,6 @@ export async function geocodeNewOrders() {
         continue;
       }
 
-      // ✅ Геокод точный — считаем базовую цену зоны (500/900/1300)
-      // Если курьер уже назначен и авто — сразу +100
       const basePrice = calcBaseDeliveryPrice(geo.lat, geo.lng);
       let finalPrice = basePrice;
       if (order.courierId) {
@@ -338,7 +388,6 @@ export async function geocodeNewOrders() {
         data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: false, invalidReason: null, price: finalPrice },
       });
 
-      // Уведомление если цена в CRM отличается от рассчитанной по зонам
       const crmPrice = order.price ?? 0;
       if (crmPrice !== finalPrice) {
         const tgToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -378,8 +427,6 @@ export async function geocodeNewOrders() {
 export async function upsertOrder(crmOrder: CrmOrder) {
   const data = await mapCrmOrder(crmOrder);
 
-  // ❌ "Перехват на лету" УДАЛЁН — цена теперь считается в geocodeNewOrders по KML-зонам
-
   const existing = await prisma.order.findUnique({ where: { crmId: data.crmId } });
 
   const updateFields: typeof data & {
@@ -392,8 +439,19 @@ export async function upsertOrder(crmOrder: CrmOrder) {
   } = { ...data };
 
   if (existing) {
+    // 🔥 БРОНЯ ДЛЯ TELEGRAM БОТА (Bunch) и поля Магазина
+    if (!updateFields.name && existing.name) {
+      updateFields.name = existing.name;
+    }
+    if (!updateFields.recipientPhone && existing.recipientPhone) {
+      updateFields.recipientPhone = existing.recipientPhone;
+    }
+    if (!updateFields.shop && existing.shop) {
+      updateFields.shop = existing.shop;
+    }
+
     const dbAddr = existing.address?.trim() || "";
-    const crmAddr = data.address?.trim() || "";
+    const crmAddr = updateFields.address?.trim() || "";
 
     if (dbAddr !== crmAddr) {
       updateFields.address       = crmAddr || null;
@@ -415,7 +473,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       updateFields.status = existing.status;
     }
 
-    // АБСОЛЮТНАЯ ЗАЩИТА ЦЕНЫ: если в нашей БД уже есть цена — не трогаем
+    // АБСОЛЮТНАЯ ЗАЩИТА ЦЕНЫ
     if (existing.price && existing.price > 0) {
       updateFields.price = existing.price;
     } else if (data.price && data.price > 0) {
@@ -499,7 +557,7 @@ export async function pollCrmOrders() {
     const activeOrders = await prisma.order.findMany({
       where: { 
         status: { notIn: ["DELIVERED", "CANCELLED", "RETURNED"] },
-        shop: { notIn: MEURA_SHOPS } // 🔥 ЗАЩИТА: Не трогаем Meura
+        shop: { notIn: MEURA_SHOPS } 
       },
       select: { crmId: true },
     });
@@ -528,7 +586,7 @@ export async function pollCrmOrders() {
         const localOrdersToCancel = await prisma.order.findMany({ 
           where: { 
             crmId: { in: deletedIds },
-            shop: { notIn: MEURA_SHOPS } // 🔥 Двойная защита
+            shop: { notIn: MEURA_SHOPS } 
           } 
         });
 
@@ -556,9 +614,8 @@ export async function pollCrmOrders() {
           console.log(`[Cron Bunch] Локальный заказ ${localOrder.crmId} переведен в статус CANCELLED.`);
         }
 
-        // 🔥 ОТПРАВКА СООБЩЕНИЯ В ТЕЛЕГРАМ 🔥
         const tgToken = process.env.TELEGRAM_BOT_TOKEN;
-        const tgChatId = process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID; // Поддержка обеих переменных
+        const tgChatId = process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID;
 
         if (tgToken && tgChatId && localOrdersToCancel.length > 0) {
           const cancelledIdsStr = localOrdersToCancel.map(o => o.crmId).join(", ");
@@ -597,7 +654,6 @@ export async function updateCrmOrder(
 ) {
   if (!CRM_URL) return;
 
-  // 🔥 УЗНАЕМ МАГАЗИН ЗАКАЗА, ЧТОБЫ ВЫБРАТЬ КЛЮЧ
   const orderInDb = await prisma.order.findUnique({ where: { crmId }, select: { shop: true } });
   const isMeura = orderInDb?.shop === 'kaktusfiori' || orderInDb?.shop === 'meura-flowers';
   const apiKeyToUse = isMeura ? CRM_KEY_MEURA : CRM_KEY;
@@ -659,11 +715,10 @@ export async function updateCrmOrder(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// СЕБЕСТОИМОСТЬ В CRM — вызываешь сам когда нужно
+// СЕБЕСТОИМОСТЬ В CRM
 export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: number) {
   if (!CRM_URL) return;
 
-  // 🔥 ВЫБИРАЕМ КЛЮЧ
   const orderInDb = await prisma.order.findUnique({ where: { crmId }, select: { shop: true } });
   const isMeura = orderInDb?.shop === 'kaktusfiori' || orderInDb?.shop === 'meura-flowers';
   const apiKeyToUse = isMeura ? CRM_KEY_MEURA : CRM_KEY;
@@ -690,13 +745,12 @@ export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: numb
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POLLING ДЛЯ MEURA (раз в 10 минут)
+// POLLING ДЛЯ MEURA
 // ─────────────────────────────────────────────────────────────────────────────
 export async function pollMeuraOrders() {
   if (!CRM_URL || !CRM_KEY_MEURA) return;
 
   try {
-    // Берем заказы за последние 3 дня
     const dateFrom = new Date(Date.now() - 3 * 24 * 3_600_000).toISOString().split("T")[0];
     
     const params = new URLSearchParams();
@@ -718,12 +772,14 @@ export async function pollMeuraOrders() {
     console.error("[Cron Meura] Ошибка синхронизации:", err);
   }
 }
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ТИПЫ
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface CrmOrder {
   id: number; number?: string; externalId?: string; status?: string;
+  site?: string; // 🔥 Добавлено
   createdAt?: string; customerComment?: string; managerComment?: string;
   firstName?: string; lastName?: string; phone?: string; email?: string;
   customer?: {
