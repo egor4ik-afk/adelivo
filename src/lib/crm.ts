@@ -7,8 +7,11 @@ import { OrderStatus } from "@prisma/client";
 
 const CRM_URL = process.env.RETAILCRM_API_URL;
 const CRM_KEY = process.env.RETAILCRM_API_KEY; 
-const CRM_KEY_MEURA = process.env.RETAILCRM_API_KEY_MEURA; // 🔥 Добавили
+const CRM_KEY_MEURA = process.env.RETAILCRM_API_KEY_MEURA;
 const GEO_KEY = process.env.YANDEX_GEOCODER_KEY;
+
+// 🔥 Общая константа магазинов Meura
+const MEURA_SHOPS = ['kaktusfiori', 'meura-flowers'];
 
 async function resolveCourierId(name: string): Promise<number | null> {
   if (!name) return null;
@@ -19,7 +22,6 @@ async function resolveCourierId(name: string): Promise<number | null> {
 }
 
 export function parseSlot(raw: unknown) {
-  console.log("[parseSlot] raw =", JSON.stringify(raw));
   if (!raw) return { from: null, to: null, text: null };
   if (typeof raw === "object" && raw !== null) {
     const r = raw as Record<string, string>;
@@ -107,7 +109,7 @@ export async function mapCrmOrder(order: CrmOrder) {
   }).join("; ");
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const cFields = (order as any).customFields as any;
+  const cFields = (order as any).customFields || {};
 
   let parsedCourier: string | null = null;
   let finalCourierId: number | null = null;
@@ -138,11 +140,20 @@ export async function mapCrmOrder(order: CrmOrder) {
     parsedDate = new Date(rawDate.getTime() - 5 * 60 * 60 * 1000);
   }
 
+  // 🔥 БЕРЕМ ТОЛЬКО ПОЛУЧАТЕЛЯ (из кастомных полей, если они есть). Заказчика ИГНОРИРУЕМ!
+  const recipientName = cFields.recipient_name || cFields.receiver_name || cFields.imya_poluchatelya || null;
+  const recipientPhone = cFields.recipient_phone || cFields.receiver_phone || cFields.telefon_poluchatelya || null;
+
   return {
     crmId: String(order.id),
     externalId: order.externalId ?? order.number ?? null,
     crmStatus: order.status ?? null,
     status: mapCrmStatus(order.status),
+    
+    shop: order.site || "bunch", 
+    name: recipientName,            // 🔥 Никакого order.firstName
+    recipientPhone: recipientPhone, // 🔥 Никакого order.phone
+
     address: order.delivery?.address?.text ?? null,
     deliveryDate: order.delivery?.date ?? null,
     courierId: finalCourierId,
@@ -214,8 +225,6 @@ function loadZonesFromKml(): typeof _zonesCache {
     if (points.length > 3) zones.push({ name: zoneName, polygon: points });
   }
 
-  console.log(`[zones] Загружено: ${zones.length} →`, zones.map(z => z.name).join(", "));
-
   return {
     zone0:  zones.find(z => z.name.startsWith("0"))  ?? null,
     zone10: zones.find(z => z.name.startsWith("10")) ?? null,
@@ -228,7 +237,6 @@ function getZones(): { zone0: Zone | null; zone10: Zone | null; zone20: Zone | n
   return _zonesCache ?? { zone0: null, zone10: null, zone20: null };
 }
 
-// Базовая цена зоны (500 / 900 / 1300) — без надбавки авто
 export function calcBaseDeliveryPrice(lat: number, lng: number): number {
   const distFromCenter = getDistanceFromLatLonInKm(55.755864, 37.617698, lat, lng);
   const distFromMkad = Math.max(distFromCenter - 17, 0);
@@ -375,8 +383,6 @@ export async function geocodeNewOrders() {
 export async function upsertOrder(crmOrder: CrmOrder) {
   const data = await mapCrmOrder(crmOrder);
 
-  // ❌ "Перехват на лету" УДАЛЁН — цена теперь считается в geocodeNewOrders по KML-зонам
-
   const existing = await prisma.order.findUnique({ where: { crmId: data.crmId } });
 
   const updateFields: typeof data & {
@@ -412,7 +418,6 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       updateFields.status = existing.status;
     }
 
-    // АБСОЛЮТНАЯ ЗАЩИТА ЦЕНЫ: если в нашей БД уже есть цена — не трогаем
     if (existing.price && existing.price > 0) {
       updateFields.price = existing.price;
     } else if (data.price && data.price > 0) {
@@ -439,6 +444,11 @@ export async function upsertOrder(crmOrder: CrmOrder) {
         updateFields.routeOrder = null;
       }
     }
+
+    // 🔥 АБСОЛЮТНАЯ ЗАЩИТА КОНТАКТОВ ПОЛУЧАТЕЛЯ
+    // Если CRM прислала null, мы оставляем то, что заботливо сохранил Телеграм-бот!
+    updateFields.name = data.name || existing.name;
+    updateFields.recipientPhone = data.recipientPhone || existing.recipientPhone;
 
     const hasCoreChanges =
       (existing.crmStatus ?? "") !== (updateFields.crmStatus ?? "") ||
@@ -471,6 +481,8 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       opCommentChanged: (existing.opComment ?? "") !== (order.opComment ?? ""),
       itemsChanged:     (existing.items     ?? "") !== (order.items     ?? ""),
       recipientPhoneChanged: (existing.recipientPhone ?? "") !== (order.recipientPhone ?? ""),
+      shopChanged:      (existing.shop      ?? "") !== (order.shop      ?? ""),
+      nameChanged:      (existing.name      ?? "") !== (order.name      ?? "")
     };
     if (Object.values(changes).some(Boolean)) {
       notify({ type: "order.updated", order, previousStatus: changes.statusChanged ? existing.status : undefined, changes }).catch(console.error);
@@ -483,7 +495,6 @@ export async function upsertOrder(crmOrder: CrmOrder) {
 // ─────────────────────────────────────────────────────────────────────────────
 // POLLING CRM
 // ─────────────────────────────────────────────────────────────────────────────
-// ЗАМЕНИ функцию pollCrmOrders в src/lib/crm.ts на эту версию
 
 export async function pollCrmOrders() {
   if (!CRM_URL || !CRM_KEY) return;
@@ -495,18 +506,12 @@ export async function pollCrmOrders() {
     });
     for (const order of resNew.data?.orders || []) await upsertOrder(order);
 
-    // 🔥 Берём только активные заказы НЕ из Meura-магазинов
-    // Meura-заказы обрабатываются отдельно в pollMeuraOrders()
-    // и не должны проверяться через Bunch-ключ — иначе CRM их "не находит" и мы их отменяем
-    const MEURA_SHOPS = ['kaktusfiori', 'meura-flowers'];
-
     const activeOrders = await prisma.order.findMany({
       where: {
         status: { notIn: ["DELIVERED", "CANCELLED", "RETURNED"] },
-        // 🔥 ИСКЛЮЧАЕМ Meura-заказы из проверки через Bunch-ключ
-        shop: { notIn: MEURA_SHOPS },
+        shop: { notIn: MEURA_SHOPS }, // 🔥 БЕРЕМ ТОЛЬКО BUNCH
       },
-      select: { crmId: true, shop: true },
+      select: { crmId: true },
     });
     const activeIds = activeOrders.map(o => o.crmId);
 
@@ -527,13 +532,12 @@ export async function pollCrmOrders() {
       const deletedIds = chunk.filter(id => !returnedIds.includes(id));
 
       if (deletedIds.length > 0) {
-        console.log(`[Cron] Внимание! Эти заказы пропали из CRM:`, deletedIds);
+        console.log(`[Cron Bunch] Внимание! Эти заказы пропали из CRM:`, deletedIds);
         
         const localOrdersToCancel = await prisma.order.findMany({ 
           where: { 
             crmId: { in: deletedIds },
-            // 🔥 Двойная защита: не трогаем Meura даже если вдруг сюда попали
-            shop: { notIn: MEURA_SHOPS },
+            shop: { notIn: MEURA_SHOPS }, // Защита
           }
         });
 
@@ -551,14 +555,12 @@ export async function pollCrmOrders() {
             where: { id: localOrder.id },
             data: {
               status: "CANCELLED",
-              opComment: "❌ Удален в CRM (или перенесен в корзину)",
+              opComment: "❌ Удален в CRM Bunch (или корзина)",
               routeId: null,
               routeOrder: null,
               pickedUpAt: null
             }
           });
-          
-          console.log(`[Cron] Локальный заказ ${localOrder.crmId} переведен в статус CANCELLED.`);
         }
       }
     }
@@ -566,11 +568,9 @@ export async function pollCrmOrders() {
     await prisma.syncState.upsert({ where: { id: 1 }, update: { lastSyncAt: new Date() }, create: { id: 1, lastSyncAt: new Date() } });
     geocodeNewOrders().catch(console.error);
   } catch (err) {
-    console.error("[Cron] Error polling CRM:", err);
+    console.error("[Cron Bunch] Error polling CRM:", err);
   }
 }
-
-// ТАКЖЕ замени pollMeuraOrders на эту версию — добавлена аналогичная проверка удалённых
 
 export async function pollMeuraOrders() {
   if (!CRM_URL || !CRM_KEY_MEURA) return;
@@ -578,7 +578,6 @@ export async function pollMeuraOrders() {
   try {
     const dateFrom = new Date(Date.now() - 3 * 24 * 3_600_000).toISOString().split("T")[0];
     
-    // 1. Тянем свежие заказы
     const params = new URLSearchParams();
     params.append("apiKey", CRM_KEY_MEURA);
     params.append("filter[createdAtFrom]", dateFrom);
@@ -593,12 +592,10 @@ export async function pollMeuraOrders() {
     }
     console.log(`[Cron Meura] Синхронизировано ${orders.length} заказов.`);
 
-    // 🔥 2. Проверяем активные Meura-заказы на удаление (через Meura-ключ)
-    const MEURA_SHOPS = ['kaktusfiori', 'meura-flowers'];
     const activeMeuraOrders = await prisma.order.findMany({
       where: {
         status: { notIn: ["DELIVERED", "CANCELLED", "RETURNED"] },
-        shop: { in: MEURA_SHOPS },
+        shop: { in: MEURA_SHOPS }, // 🔥 БЕРЕМ ТОЛЬКО MEURA
       },
       select: { crmId: true },
     });
@@ -641,8 +638,9 @@ export async function pollMeuraOrders() {
     console.error("[Cron Meura] Ошибка синхронизации:", err);
   }
 }
+
 // ─────────────────────────────────────────────────────────────────────────────
-// ОБНОВЛЕНИЕ ЗАКАЗА В CRM (статус, курьер, адрес — без цены)
+// ОБНОВЛЕНИЕ ЗАКАЗА В CRM
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function updateCrmOrder(
@@ -658,7 +656,6 @@ export async function updateCrmOrder(
 ) {
   if (!CRM_URL) return;
 
-  // 🔥 УЗНАЕМ МАГАЗИН ЗАКАЗА, ЧТОБЫ ВЫБРАТЬ КЛЮЧ
   const orderInDb = await prisma.order.findUnique({ where: { crmId }, select: { shop: true } });
   const isMeura = orderInDb?.shop === 'kaktusfiori' || orderInDb?.shop === 'meura-flowers';
   const apiKeyToUse = isMeura ? CRM_KEY_MEURA : CRM_KEY;
@@ -719,12 +716,9 @@ export async function updateCrmOrder(
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// СЕБЕСТОИМОСТЬ В CRM — вызываешь сам когда нужно
 export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: number) {
   if (!CRM_URL) return;
 
-  // 🔥 ВЫБИРАЕМ КЛЮЧ
   const orderInDb = await prisma.order.findUnique({ where: { crmId }, select: { shop: true } });
   const isMeura = orderInDb?.shop === 'kaktusfiori' || orderInDb?.shop === 'meura-flowers';
   const apiKeyToUse = isMeura ? CRM_KEY_MEURA : CRM_KEY;
@@ -745,16 +739,14 @@ export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: numb
     await axios.post(`${CRM_URL}/api/v5/orders/${crmId}/edit`, params.toString(), {
       headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 5000,
     });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
     console.error(`[CRM] Ошибка обновления себестоимости:`, err?.response?.data ?? err.message);
   }
 }
 
-
-// ─────────────────────────────────────────────────────────────────────────────
-
 export interface CrmOrder {
-  id: number; number?: string; externalId?: string; status?: string;
+  id: number; number?: string; externalId?: string; status?: string; site?: string; // 🔥 ВОЗВРАЩЕНО
   createdAt?: string; customerComment?: string; managerComment?: string;
   firstName?: string; lastName?: string; phone?: string; email?: string;
   customer?: {
@@ -775,8 +767,7 @@ export interface CrmOrder {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   customFields?: any;
 }
-
-interface CrmOrdersResponse {
+export interface CrmOrdersResponse {
   orders: CrmOrder[];
   pagination: { currentPage: number; totalPageCount: number };
 }
