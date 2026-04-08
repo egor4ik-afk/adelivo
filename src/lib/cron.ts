@@ -1,6 +1,6 @@
 // src/lib/cron.ts
 import cron from "node-cron";
-import { pollCrmOrders, pollMeuraOrders } from "./crm"; // 🔥 ДОБАВИЛИ ИМПОРТ pollMeuraOrders
+import { pollCrmOrders } from "./crm"; // 🔥 ДОБАВИЛИ ИМПОРТ pollMeuraOrders
 
 let initialized = false;
 
