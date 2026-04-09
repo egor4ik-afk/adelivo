@@ -566,10 +566,18 @@ export async function pollCrmOrders() {
   if (!CRM_URL || !CRM_KEY) return;
   try {
     const dateFrom = new Date(Date.now() - 2 * 24 * 3_600_000).toISOString().split("T")[0];
-    const resNew = await axios.get<CrmOrdersResponse>(`${CRM_URL}/api/v5/orders`, {
-      params: { apiKey: CRM_KEY, "filter[createdAtFrom]": dateFrom, limit: 100 },
+    
+    // 🔥 ИСПРАВЛЕНИЕ: Жестко фильтруем по сайту "bunch" (Московский)
+    const paramsNew = new URLSearchParams();
+    paramsNew.append("apiKey", CRM_KEY);
+    paramsNew.append("filter[createdAtFrom]", dateFrom);
+    paramsNew.append("filter[sites][]", "bunch"); // ⛔ Отсекаем bunch-ekb и прочие
+    paramsNew.append("limit", "100");
+
+    const resNew = await axios.get<CrmOrdersResponse>(`${CRM_URL}/api/v5/orders?${paramsNew.toString()}`, {
       timeout: 15_000,
     });
+    
     for (const order of resNew.data?.orders || []) await upsertOrder(order);
 
     const activeOrders = await prisma.order.findMany({
@@ -583,11 +591,12 @@ export async function pollCrmOrders() {
 
     for (let i = 0; i < activeIds.length; i += 50) {
       const chunk = activeIds.slice(i, i + 50);
-      const params = new URLSearchParams();
-      params.append("apiKey", CRM_KEY);
-      params.append("limit", "100");
-      chunk.forEach(id => params.append("filter[ids][]", id));
-      const resUpdate = await axios.get<CrmOrdersResponse>(`${CRM_URL}/api/v5/orders?${params.toString()}`, { timeout: 15_000 });
+      const paramsUpdate = new URLSearchParams();
+      paramsUpdate.append("apiKey", CRM_KEY);
+      paramsUpdate.append("limit", "100");
+      chunk.forEach(id => paramsUpdate.append("filter[ids][]", id));
+      
+      const resUpdate = await axios.get<CrmOrdersResponse>(`${CRM_URL}/api/v5/orders?${paramsUpdate.toString()}`, { timeout: 15_000 });
       
       const returnedOrders = resUpdate.data?.orders || [];
       
@@ -654,7 +663,6 @@ export async function pollCrmOrders() {
     console.error("[Cron] Error polling CRM:", err);
   }
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // ОБНОВЛЕНИЕ ЗАКАЗА В CRM (статус, курьер, адрес — без цены)
 // ─────────────────────────────────────────────────────────────────────────────

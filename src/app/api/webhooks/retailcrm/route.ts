@@ -94,7 +94,20 @@ export async function POST(req: Request) {
     await new Promise((resolve) => setTimeout(resolve, 3000));
     
     orderPayload = await fetchOrderFromCrm(orderId);
+    if (!orderPayload?.id) {
+      console.warn(`[Webhook] Данные для заказа #${orderId} окончательно не получены (404).`);
+      return NextResponse.json({ ok: false, reason: "order fetch failed" });
+    }
 
+    // 🔥 ЖЕСТКИЙ ФИЛЬТР МАГАЗИНОВ (ЗАЩИТА ОТ ДРУГИХ ГОРОДОВ)
+    const ALLOWED_SHOPS = ['bunch', 'kaktusfiori', 'meura-flowers'];
+    
+    // Если заказ пришел с любого другого магазина (например, bunch-ekb, bunch-spb)
+    if (orderPayload.site && !ALLOWED_SHOPS.includes(orderPayload.site)) {
+      console.log(`[Webhook] 🛑 Игнорируем заказ #${orderPayload.id}. Причина: чужой магазин (${orderPayload.site})`);
+      // Отвечаем CRM "ok: true", чтобы она успокоилась и не слала его повторно
+      return NextResponse.json({ ok: true, ignored: "unsupported_site" });
+    }
     if (!orderPayload?.id) {
       console.warn(`[Webhook] Данные для заказа #${orderId} окончательно не получены (404).`);
       return NextResponse.json({ ok: false, reason: "order fetch failed" });
