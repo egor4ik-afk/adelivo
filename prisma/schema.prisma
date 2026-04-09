@@ -259,7 +259,7 @@ model Message {
   
   senderId       String
   sender         User         @relation("SentMessages", fields: [senderId], references: [id])
-  reactions      Json?        @default("[]") // 🔥 ДОБАВЛЕНО ДЛЯ РЕАКЦИЙ
+  reactions  Json?   // 🔥 нужно добавить если нет
   
   readAt         DateTime?    
   createdAt      DateTime     @default(now())
@@ -276,7 +276,7 @@ model GlobalMessage {
   
   senderId    String
   sender      User         @relation("SentGlobalMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  reactions      Json?        @default("[]") // 🔥 ДОБАВЛЕНО ДЛЯ РЕАКЦИЙ
+  reactions  Json?   // 🔥 нужно добавить если нет
   createdAt   DateTime     @default(now())
 
   @@index([createdAt])

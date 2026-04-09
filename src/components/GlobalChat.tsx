@@ -79,16 +79,16 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
   const startLongPress = (msgId: string) => { longPressTimer.current = setTimeout(() => setPickerMsgId(msgId), 400); };
   const cancelLongPress = () => { if (longPressTimer.current) clearTimeout(longPressTimer.current); };
 
-  const [notifyMode, setNotifyMode] = useState<"all" | "push" | "mute">("all");
+  const [notifyMode, setNotifyMode] = useState<"sound" | "mute">("sound");
   useEffect(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("chat_notify_mode");
-      if (saved === "push" || saved === "mute") setNotifyMode(saved as any);
+      if (saved === "mute") setNotifyMode("mute");
     }
   }, []);
   const toggleNotifyMode = () => {
     setNotifyMode(prev => {
-      const next = prev === "all" ? "push" : prev === "push" ? "mute" : "all";
+      const next = prev === "sound" ? "mute" : "sound";
       localStorage.setItem("chat_notify_mode", next);
       return next;
     });
@@ -99,7 +99,7 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const prevUnreadRef = useRef(0);
+  const prevUnreadRef = useRef(-1); // -1 = не инициализирован
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
@@ -132,20 +132,16 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
     try { const audio = new Audio('/message.mp3'); audio.play().catch(() => {}); } catch (e) {}
   }, []);
 
-  const forceDownload = async (url: string, filename: string) => {
-    try {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error("Network response was not ok");
-      const blob = await response.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = blobUrl; link.download = filename || "download";
-      document.body.appendChild(link); link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
-    } catch (error) {
-      window.open(url, "_blank");
-    }
+  const forceDownload = (url: string, filename: string) => {
+    // Используем серверный proxy чтобы форсировать скачивание
+    // (S3 отдаёт файлы с Content-Disposition: inline — браузер открывает вместо скачивания)
+    const proxyUrl = `/api/download?url=${encodeURIComponent(url)}&name=${encodeURIComponent(filename || "file")}`;
+    const link = document.createElement("a");
+    link.href = proxyUrl;
+    link.download = filename || "file";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const fetchConversations = useCallback(async () => {
@@ -156,13 +152,13 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
         setConversations(data);
         const unreadCount = data.reduce((s, c) => s + c.unread, 0);
         setTotalUnread(unreadCount);
-        if (unreadCount > prevUnreadRef.current) {
-          if (notifyMode === "all") playNotificationSound();
-          if (notifyMode !== "mute" && "Notification" in window && Notification.permission === "granted" && !open) {
-            new Notification("Новое личное сообщение", { icon: "/favicon-96x96.png" });
-          }
+        // 🔥 Звук только если unread реально вырос (не при первой загрузке)
+        if (unreadCount > prevUnreadRef.current && prevUnreadRef.current !== -1) {
+          if (notifyMode === "sound") playNotificationSound();
         }
-        prevUnreadRef.current = unreadCount;
+        // -1 = первая загрузка, не считать как "новые"
+        if (prevUnreadRef.current === -1) prevUnreadRef.current = unreadCount;
+        else prevUnreadRef.current = unreadCount;
       }
       const gRes = await fetch("/api/chat/general");
       if (gRes.ok) {
@@ -172,10 +168,7 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
           const lastSeen = localStorage.getItem("last_global_msg");
           if (lastSeen !== latest.id && latest.senderId !== currentUserId) {
             setHasNewGlobal(true);
-            if (notifyMode === "all") playNotificationSound();
-            if (notifyMode !== "mute" && "Notification" in window && Notification.permission === "granted" && !open) {
-              new Notification("Новое сообщение в Общем чате", { icon: "/favicon-96x96.png" });
-            }
+            if (notifyMode === "sound") playNotificationSound();
             localStorage.setItem("last_global_msg", latest.id);
           }
         }
@@ -507,8 +500,8 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
               {view === "search" && "🔍 Новый чат"}
               {view === "dialog" && activeConv && (activeConv.id === "general" ? "🌐 Общий чат" : userName(interlocutor(activeConv)))}
             </span>
-            <button onClick={toggleNotifyMode} title={notifyMode === "all" ? "Звук + Пуш" : notifyMode === "push" ? "Только Push" : "Без уведомлений"} style={{ background: "none", border: "none", color: "#fff", fontSize: 16, cursor: "pointer", padding: "0 4px", opacity: notifyMode === "mute" ? 0.5 : 1 }}>
-              {notifyMode === "all" ? "🔊" : notifyMode === "push" ? "🔕" : "🔇"}
+            <button onClick={toggleNotifyMode} title={notifyMode === "sound" ? "Звук включён" : "Без звука"} style={{ background: "none", border: "none", color: "#fff", fontSize: 16, cursor: "pointer", padding: "0 4px", opacity: notifyMode === "mute" ? 0.45 : 1 }}>
+              {notifyMode === "sound" ? "🔔" : "🔕"}
             </button>
             {view === "list" && (
               <button onClick={() => { setView("search"); setSearchQ(""); }} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: 8, padding: "4px 10px", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>+ Новый</button>
@@ -650,45 +643,60 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
                         )
                       )}
                       <div style={{ display: "flex", flexDirection: "column" }}>
-                        {isGeneral && !isMe && (
-                          <div style={{ fontSize: 11, color: "#a8a49c", marginBottom: 2, marginLeft: 4, fontWeight: 600 }}>{userName(m.sender)}</div>
-                        )}
-                        {/* Пикер реакций */}
-                        {pickerMsgId === m.id && (
-                          <div style={{ position: "absolute", bottom: "100%", [isMe ? "right" : "left"]: 0, background: "#fff", border: "1px solid #e8e6df", borderRadius: 24, padding: "6px 10px", display: "flex", gap: 6, boxShadow: "0 4px 16px rgba(0,0,0,0.15)", zIndex: 200, marginBottom: 6 }}>
-                            {QUICK_EMOJIS.map(emoji => (
-                              <button key={emoji} onClick={() => handleReact(m.id, emoji, isGeneral)}
-                                style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", padding: "2px 4px", borderRadius: 8, transition: "transform 0.1s" }}
-                                onMouseEnter={e => (e.currentTarget.style.transform = "scale(1.3)")}
-                                onMouseLeave={e => (e.currentTarget.style.transform = "scale(1)")}
-                              >{emoji}</button>
-                            ))}
-                          </div>
-                        )}
-                        <div
-                          onMouseDown={() => startLongPress(m.id)}
-                          onMouseUp={cancelLongPress}
-                          onMouseLeave={cancelLongPress}
+                        {/* 🔥 Имя отправителя: во всех чатах — чужое имя, своё = "Я" */}
+                        <div style={{ fontSize: 11, marginBottom: 2, marginLeft: isMe ? 0 : 4, marginRight: isMe ? 4 : 0, fontWeight: 600, color: isMe ? "#a8a49c" : roleColor(m.sender.role), textAlign: isMe ? "right" : "left" }}>
+                          {isMe ? "Я" : userName(m.sender)}
+                        </div>
+
+                        {/* Пикер реакций — на десктопе через hover-кнопку 😊, на мобиле — longpress */}
+                        <div style={{ position: "relative" }}
                           onTouchStart={() => startLongPress(m.id)}
                           onTouchEnd={cancelLongPress}
                           onTouchCancel={cancelLongPress}
-                          style={{ background: isMe ? "#1a1a18" : "#fff", color: isMe ? "#fff" : "#1a1a18", padding: "8px 12px", borderRadius: 14, borderBottomRightRadius: isMe ? 4 : 14, borderBottomLeftRadius: isMe ? 14 : 4, border: isMe ? "none" : "1px solid #e8e6df", boxShadow: "0 2px 4px rgba(0,0,0,0.04)", cursor: "default", userSelect: "none" }}>
-                          {m.mediaType === "image" && m.mediaUrl && <img src={m.mediaUrl} alt="Фото" onClick={() => setFullscreenImage(m.mediaUrl!)} style={{ width: "100%", borderRadius: 8, marginBottom: m.text ? 6 : 0, cursor: "zoom-in", display: "block" }} />}
-                          {m.mediaType === "video" && m.mediaUrl && <video controls src={m.mediaUrl} style={{ width: "100%", borderRadius: 8, marginBottom: m.text ? 6 : 0, maxHeight: 250, backgroundColor: "#000" }} />}
-                          {m.mediaType === "audio" && m.mediaUrl && <audio controls src={m.mediaUrl} style={{ height: 36, width: 220, marginBottom: m.text ? 6 : 0 }} />}
-                          {m.mediaType === "file" && m.mediaUrl && (
-                            <div onClick={(e) => { e.preventDefault(); forceDownload(m.mediaUrl!, "document"); }} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 10, background: isMe ? "rgba(255,255,255,0.15)" : "#f5f4f0", padding: "8px 12px", borderRadius: 8, color: isMe ? "#fff" : "#1a1a18", marginBottom: m.text ? 6 : 0 }}>
-                              <span style={{ fontSize: 24, flexShrink: 0 }}>📄</span>
-                              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                                <span style={{ fontSize: 13, fontWeight: 600 }}>Документ / Файл</span>
-                                <span style={{ fontSize: 11, opacity: 0.8, textDecoration: "underline", color: isMe ? "#a5c2ff" : "#4a7aff" }}>Скачать файл</span>
-                              </div>
+                          onMouseEnter={() => setPickerMsgId(m.id)}
+                          onMouseLeave={() => setPickerMsgId(null)}
+                        >
+                          {pickerMsgId === m.id && (
+                            <div
+                              onClick={e => e.stopPropagation()}
+                              style={{ position: "absolute", bottom: "100%", [isMe ? "right" : "left"]: 0, background: "#fff", border: "1px solid #e8e6df", borderRadius: 24, padding: "6px 10px", display: "flex", gap: 6, boxShadow: "0 4px 16px rgba(0,0,0,0.15)", zIndex: 200, marginBottom: 4, whiteSpace: "nowrap" }}>
+                              {QUICK_EMOJIS.map(emoji => (
+                                <button key={emoji}
+                                  onClick={e => { e.stopPropagation(); handleReact(m.id, emoji, isGeneral); }}
+                                  style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", padding: "2px 4px", borderRadius: 8, transition: "transform 0.1s" }}
+                                  onMouseEnter={e => (e.currentTarget.style.transform = "scale(1.3)")}
+                                  onMouseLeave={e => (e.currentTarget.style.transform = "scale(1)")}
+                                >{emoji}</button>
+                              ))}
                             </div>
                           )}
-                          {m.text && <div style={{ fontSize: 14, lineHeight: 1.4, wordBreak: "break-word", whiteSpace: "pre-wrap" }}>{m.text}</div>}
-                          <div style={{ fontSize: 10, display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 4, marginTop: 4, color: isMe ? "rgba(255,255,255,0.5)" : "#a8a49c" }}>
-                            <span>{new Date(m.createdAt).toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })}</span>
-                            {isMe && !isGeneral && <span style={{ color: m.readAt ? "#4a7aff" : "inherit", fontSize: 11 }}>{m.readAt ? "✓✓" : "✓"}</span>}
+                          <div style={{ background: isMe ? "#1a1a18" : "#fff", color: isMe ? "#fff" : "#1a1a18", padding: "8px 12px", borderRadius: 14, borderBottomRightRadius: isMe ? 4 : 14, borderBottomLeftRadius: isMe ? 14 : 4, border: isMe ? "none" : "1px solid #e8e6df", boxShadow: "0 2px 4px rgba(0,0,0,0.04)" }}>
+                            {/* 🔥 Фото с кнопкой скачать */}
+                            {m.mediaType === "image" && m.mediaUrl && (
+                              <div style={{ position: "relative", marginBottom: m.text ? 6 : 0 }}>
+                                <img src={m.mediaUrl} alt="Фото" onClick={() => setFullscreenImage(m.mediaUrl!)} style={{ width: "100%", borderRadius: 8, cursor: "zoom-in", display: "block" }} />
+                                <button
+                                  onClick={e => { e.stopPropagation(); forceDownload(m.mediaUrl!, "photo.jpg"); }}
+                                  style={{ position: "absolute", top: 6, right: 6, background: "rgba(0,0,0,0.5)", border: "none", borderRadius: 8, color: "#fff", fontSize: 12, padding: "3px 8px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}
+                                >📥</button>
+                              </div>
+                            )}
+                            {m.mediaType === "video" && m.mediaUrl && <video controls src={m.mediaUrl} style={{ width: "100%", borderRadius: 8, marginBottom: m.text ? 6 : 0, maxHeight: 250, backgroundColor: "#000" }} />}
+                            {m.mediaType === "audio" && m.mediaUrl && <audio controls src={m.mediaUrl} style={{ height: 36, width: 220, marginBottom: m.text ? 6 : 0 }} />}
+                            {m.mediaType === "file" && m.mediaUrl && (
+                              <div onClick={e => { e.preventDefault(); forceDownload(m.mediaUrl!, "document"); }} style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 10, background: isMe ? "rgba(255,255,255,0.15)" : "#f5f4f0", padding: "8px 12px", borderRadius: 8, color: isMe ? "#fff" : "#1a1a18", marginBottom: m.text ? 6 : 0 }}>
+                                <span style={{ fontSize: 24, flexShrink: 0 }}>📄</span>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                                  <span style={{ fontSize: 13, fontWeight: 600 }}>Документ / Файл</span>
+                                  <span style={{ fontSize: 11, opacity: 0.8, textDecoration: "underline", color: isMe ? "#a5c2ff" : "#4a7aff" }}>Скачать файл</span>
+                                </div>
+                              </div>
+                            )}
+                            {m.text && <div style={{ fontSize: 14, lineHeight: 1.4, wordBreak: "break-word", whiteSpace: "pre-wrap" }}>{m.text}</div>}
+                            <div style={{ fontSize: 10, display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 4, marginTop: 4, color: isMe ? "rgba(255,255,255,0.5)" : "#a8a49c" }}>
+                              <span>{new Date(m.createdAt).toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })}</span>
+                              {isMe && !isGeneral && <span style={{ color: m.readAt ? "#4a7aff" : "inherit", fontSize: 11 }}>{m.readAt ? "✓✓" : "✓"}</span>}
+                            </div>
                           </div>
                         </div>
                         {/* Реакции под пузырём */}
