@@ -642,7 +642,7 @@ export async function pollCrmOrders() {
         }
 
         const tgToken = process.env.TELEGRAM_BOT_TOKEN;
-        const tgChatId = process.env.TELEGRAM_ADMIN_CHAT_ID || process.env.TELEGRAM_CHAT_ID;
+        const tgChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
 
         if (tgToken && tgChatId && localOrdersToCancel.length > 0) {
           const cancelledIdsStr = localOrdersToCancel.map(o => o.crmId).join(", ");

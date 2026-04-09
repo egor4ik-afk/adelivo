@@ -7,7 +7,8 @@ import { usePathname } from "next/navigation";
 type UserInfo = { id: string; firstName?: string | null; lastName?: string | null; email: string; phone?: string | null; role: string; avatarUrl?: string | null };
 type LastMessage = { id: string; text?: string | null; mediaType?: string | null; createdAt: string; senderId: string; readAt?: string | null };
 type Conversation = { id: string; user1: UserInfo; user2: UserInfo; messages: LastMessage[]; unread: number; updatedAt: string };
-type Message = { id: string; text?: string | null; mediaType?: string | null; mediaUrl?: string | null; createdAt: string; sender: UserInfo; readAt?: string | null };
+type Reaction = { userId: string; emoji: string };
+type Message = { id: string; text?: string | null; mediaType?: string | null; mediaUrl?: string | null; createdAt: string; sender: UserInfo; readAt?: string | null; reactions?: Reaction[] | null };
 
 const MSG_LIMIT = 30;
 
@@ -59,6 +60,25 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
   const [loadingMore, setLoadingMore] = useState(false);
   const oldestMsgIdRef = useRef<string | null>(null);
 
+  // Реакции
+  const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "👎", "🔥"];
+  const [pickerMsgId, setPickerMsgId] = useState<string | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleReact = async (msgId: string, emoji: string, isGeneral: boolean) => {
+    setPickerMsgId(null);
+    const url = isGeneral ? "/api/chat/general/react" : "/api/chat/messages/react";
+    try {
+      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageId: msgId, emoji }) });
+      if (!res.ok) return;
+      const updated = await res.json();
+      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, reactions: updated.reactions } : m));
+    } catch (e) { console.error(e); }
+  };
+
+  const startLongPress = (msgId: string) => { longPressTimer.current = setTimeout(() => setPickerMsgId(msgId), 400); };
+  const cancelLongPress = () => { if (longPressTimer.current) clearTimeout(longPressTimer.current); };
+
   const [notifyMode, setNotifyMode] = useState<"all" | "push" | "mute">("all");
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -93,6 +113,14 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
     document.title = (totalUnread > 0 || hasNewGlobal) ? `(Новое) KAMRIKA` : "KAMRIKA";
     window.dispatchEvent(new CustomEvent("chat-unread", { detail: totalUnread + (hasNewGlobal ? 1 : 0) }));
   }, [totalUnread, hasNewGlobal]);
+
+  // Закрываем пикер при клике вне
+  useEffect(() => {
+    if (!pickerMsgId) return;
+    const close = () => setPickerMsgId(null);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [pickerMsgId]);
 
   useEffect(() => {
     const handleOpenChat = () => setOpen(true);
@@ -601,9 +629,18 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
                   }
                   const m = item as Message;
                   const isMe = m.sender.id === currentUserId;
+                  const isGeneral = activeConv.id === "general";
+                  // Группируем реакции по emoji
+                  const reactionGroups: Record<string, string[]> = {};
+                  if (m.reactions) {
+                    for (const r of m.reactions) {
+                      if (!reactionGroups[r.emoji]) reactionGroups[r.emoji] = [];
+                      reactionGroups[r.emoji].push(r.userId);
+                    }
+                  }
                   return (
-                    <div key={m.id} style={{ alignSelf: isMe ? "flex-end" : "flex-start", maxWidth: "85%", display: "flex", gap: 8, alignItems: "flex-end" }}>
-                      {!isMe && activeConv.id === "general" && (
+                    <div key={m.id} style={{ alignSelf: isMe ? "flex-end" : "flex-start", maxWidth: "85%", display: "flex", gap: 8, alignItems: "flex-end", position: "relative" }}>
+                      {!isMe && isGeneral && (
                         m.sender.avatarUrl ? (
                           <img src={m.sender.avatarUrl} alt="ava" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
                         ) : (
@@ -613,10 +650,29 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
                         )
                       )}
                       <div style={{ display: "flex", flexDirection: "column" }}>
-                        {activeConv.id === "general" && !isMe && (
+                        {isGeneral && !isMe && (
                           <div style={{ fontSize: 11, color: "#a8a49c", marginBottom: 2, marginLeft: 4, fontWeight: 600 }}>{userName(m.sender)}</div>
                         )}
-                        <div style={{ background: isMe ? "#1a1a18" : "#fff", color: isMe ? "#fff" : "#1a1a18", padding: "8px 12px", borderRadius: 14, borderBottomRightRadius: isMe ? 4 : 14, borderBottomLeftRadius: isMe ? 14 : 4, border: isMe ? "none" : "1px solid #e8e6df", boxShadow: "0 2px 4px rgba(0,0,0,0.04)" }}>
+                        {/* Пикер реакций */}
+                        {pickerMsgId === m.id && (
+                          <div style={{ position: "absolute", bottom: "100%", [isMe ? "right" : "left"]: 0, background: "#fff", border: "1px solid #e8e6df", borderRadius: 24, padding: "6px 10px", display: "flex", gap: 6, boxShadow: "0 4px 16px rgba(0,0,0,0.15)", zIndex: 200, marginBottom: 6 }}>
+                            {QUICK_EMOJIS.map(emoji => (
+                              <button key={emoji} onClick={() => handleReact(m.id, emoji, isGeneral)}
+                                style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", padding: "2px 4px", borderRadius: 8, transition: "transform 0.1s" }}
+                                onMouseEnter={e => (e.currentTarget.style.transform = "scale(1.3)")}
+                                onMouseLeave={e => (e.currentTarget.style.transform = "scale(1)")}
+                              >{emoji}</button>
+                            ))}
+                          </div>
+                        )}
+                        <div
+                          onMouseDown={() => startLongPress(m.id)}
+                          onMouseUp={cancelLongPress}
+                          onMouseLeave={cancelLongPress}
+                          onTouchStart={() => startLongPress(m.id)}
+                          onTouchEnd={cancelLongPress}
+                          onTouchCancel={cancelLongPress}
+                          style={{ background: isMe ? "#1a1a18" : "#fff", color: isMe ? "#fff" : "#1a1a18", padding: "8px 12px", borderRadius: 14, borderBottomRightRadius: isMe ? 4 : 14, borderBottomLeftRadius: isMe ? 14 : 4, border: isMe ? "none" : "1px solid #e8e6df", boxShadow: "0 2px 4px rgba(0,0,0,0.04)", cursor: "default", userSelect: "none" }}>
                           {m.mediaType === "image" && m.mediaUrl && <img src={m.mediaUrl} alt="Фото" onClick={() => setFullscreenImage(m.mediaUrl!)} style={{ width: "100%", borderRadius: 8, marginBottom: m.text ? 6 : 0, cursor: "zoom-in", display: "block" }} />}
                           {m.mediaType === "video" && m.mediaUrl && <video controls src={m.mediaUrl} style={{ width: "100%", borderRadius: 8, marginBottom: m.text ? 6 : 0, maxHeight: 250, backgroundColor: "#000" }} />}
                           {m.mediaType === "audio" && m.mediaUrl && <audio controls src={m.mediaUrl} style={{ height: 36, width: 220, marginBottom: m.text ? 6 : 0 }} />}
@@ -632,9 +688,23 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
                           {m.text && <div style={{ fontSize: 14, lineHeight: 1.4, wordBreak: "break-word", whiteSpace: "pre-wrap" }}>{m.text}</div>}
                           <div style={{ fontSize: 10, display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 4, marginTop: 4, color: isMe ? "rgba(255,255,255,0.5)" : "#a8a49c" }}>
                             <span>{new Date(m.createdAt).toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" })}</span>
-                            {isMe && activeConv.id !== "general" && <span style={{ color: m.readAt ? "#4a7aff" : "inherit", fontSize: 11 }}>{m.readAt ? "✓✓" : "✓"}</span>}
+                            {isMe && !isGeneral && <span style={{ color: m.readAt ? "#4a7aff" : "inherit", fontSize: 11 }}>{m.readAt ? "✓✓" : "✓"}</span>}
                           </div>
                         </div>
+                        {/* Реакции под пузырём */}
+                        {Object.keys(reactionGroups).length > 0 && (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4, justifyContent: isMe ? "flex-end" : "flex-start" }}>
+                            {Object.entries(reactionGroups).map(([emoji, users]) => {
+                              const iMine = users.includes(currentUserId);
+                              return (
+                                <button key={emoji} onClick={() => handleReact(m.id, emoji, isGeneral)}
+                                  style={{ background: iMine ? "#eef3ff" : "#f5f4f0", border: iMine ? "1px solid #4a7aff" : "1px solid #e8e6df", borderRadius: 12, padding: "2px 8px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, color: "#1a1a18" }}>
+                                  {emoji} <span style={{ fontSize: 11, fontWeight: 600 }}>{users.length}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
