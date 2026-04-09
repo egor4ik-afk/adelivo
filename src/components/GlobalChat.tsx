@@ -132,16 +132,27 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
     try { const audio = new Audio('/message.mp3'); audio.play().catch(() => {}); } catch (e) {}
   }, []);
 
-  const forceDownload = (url: string, filename: string) => {
-    // Используем серверный proxy чтобы форсировать скачивание
-    // (S3 отдаёт файлы с Content-Disposition: inline — браузер открывает вместо скачивания)
-    const proxyUrl = `/api/download?url=${encodeURIComponent(url)}&name=${encodeURIComponent(filename || "file")}`;
-    const link = document.createElement("a");
-    link.href = proxyUrl;
-    link.download = filename || "file";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const forceDownload = async (url: string, filename: string) => {
+    try {
+      // Вырезаем key из CDN URL: cdn.relaxdev.ru/chat/123.jpg → chat/123.jpg
+      const key = new URL(url).pathname.replace(/^\//, "");
+
+      // Дёргаем iziposta для получения presigned download URL
+      const IZIPOSTA_URL = "https://izipost.ru";
+      const res = await fetch(`${IZIPOSTA_URL}/api/files/download?key=${encodeURIComponent(key)}&name=${encodeURIComponent(filename || "file")}`);
+      if (!res.ok) throw new Error("failed");
+      const data = await res.json();
+      if (!data.url) throw new Error("no url");
+
+      const link = document.createElement("a");
+      link.href = data.url;
+      link.download = filename || "file";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch {
+      window.open(url, "_blank");
+    }
   };
 
   const fetchConversations = useCallback(async () => {
