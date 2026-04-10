@@ -21,11 +21,26 @@ function getMoscowDateStr(): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+// Вспомогательная функция для правильной нормализации номера
+function formatKonsolPhone(phone: string): string {
+  let digits = phone.replace(/[^\d]/g, "");
+  // Если номер начинается с 8 и его длина 11 цифр (стандартный РФ), меняем 8 на 7
+  if (digits.startsWith("8") && digits.length === 11) {
+    digits = "7" + digits.slice(1);
+  }
+  return "+" + digits;
+}
+
 // ✅ Поиск исполнителя по телефону
 export async function findContractorByPhone(phone: string): Promise<string | null> {
-  const cleanPhone = "+" + phone.replace(/[^\d]/g, "");
-  const res = await fetch(`${KONSOL_V2}/contractors?phone=${cleanPhone}`, { headers });
+  const cleanPhone = formatKonsolPhone(phone);
+  
+  // ВАЖНО: Используем encodeURIComponent, чтобы '+' не превратился в пробел
+  const url = `${KONSOL_V2}/contractors?phone=${encodeURIComponent(cleanPhone)}`;
+  
+  const res = await fetch(url, { headers });
   if (!res.ok) return null;
+  
   const data = await res.json();
   const list = Array.isArray(data) ? data : data.data ?? [];
   return list.length > 0 ? String(list[0].id) : null;
@@ -33,20 +48,24 @@ export async function findContractorByPhone(phone: string): Promise<string | nul
 
 // ✅ Приглашение нового исполнителя
 export async function inviteContractor(name: string, phone: string): Promise<{ id: number; onboarding_url: string | null } | null> {
+  const cleanPhone = formatKonsolPhone(phone);
+
   const res = await fetch(`${KONSOL_V2}/contractor_invites`, {
     method: "POST",
     headers,
     body: JSON.stringify({
       name,
-      phone: "+" + phone.replace(/[^\d]/g, ""),
-      scenario_id: SCENARIO_ID,
+      phone: cleanPhone,
+      scenario_id: SCENARIO_ID, // Проверьте, чтобы переменная была доступна
       skip_notification: false,
     }),
   });
+  
   if (!res.ok) {
     console.error("[Konsol] Ошибка приглашения:", await res.text());
     return null;
   }
+  
   return res.json();
 }
 

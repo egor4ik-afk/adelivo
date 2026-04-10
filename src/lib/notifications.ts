@@ -122,22 +122,29 @@ async function sendIndividualPushes(event: NotificationEvent) {
     });
     
     if (!targetUser || !targetUser.pushSubscriptions.length) return;
-
+ 
     const payload = JSON.stringify({
-      title: `💬 Сообщение от: ${event.senderName}`,
+      title: `💬 ${event.senderName}`,
       body: event.text,
-      url: `/`,
+      // 🔥 Ведём на нужную страницу в зависимости от роли
+      url: targetUser.role === "COURIER" ? "/courier/routes" : "/dashboard",
       role: targetUser.role,
       orderId: null,
+      // 🔥 Уникальный tag — каждый диалог своё уведомление, не схлопываются
+      tag: `chat-conv-${event.conversationId}`,
       timestamp: Date.now(),
     });
-
+ 
     const expiredEndpoints: string[] = [];
     for (const sub of targetUser.pushSubscriptions) {
       try {
-        await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload);
+        await webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+          payload
+        );
       } catch (e: any) {
         if (e.statusCode === 410 || e.statusCode === 404) expiredEndpoints.push(sub.endpoint);
+        else console.error(`[Push] chat.private error:`, e.statusCode, e.body);
       }
     }
     if (expiredEndpoints.length > 0) {
@@ -279,25 +286,37 @@ async function sendIndividualPushes(event: NotificationEvent) {
       }
     }
 
-    if (event.type === "chat.global" && user.id !== event.senderId) {
-      shouldSend = true;
-      title = `🌐 Общий чат: ${event.senderName}`;
-      bodyTexts.push(event.text);
-      targetUrl = "/"; 
-    }
+    // ── 2. ЗАМЕНИТЬ блок chat.global (найди по "chat.global" в цикле users) ──
+// Заменить этот кусок внутри цикла for (const user of users):
+ 
+if (event.type === "chat.global" && user.id !== event.senderId) {
+  shouldSend = true;
+  title = `💬 Общий чат: ${event.senderName}`;
+  bodyTexts.push(event.text);
+  targetUrl = user.role === "COURIER" ? "/courier/routes" : "/dashboard";
+}
 
-    if (shouldSend && title) {
-      const payload = JSON.stringify({
-        title,
-        body: bodyTexts.join("\n") || " ",
-        url: targetUrl,       
-        role,                 
-        orderId: event.type !== "address.invalid" && event.type !== "route.assigned"
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ? (event as any).order?.id ?? null
-          : null,
-        timestamp: Date.now(),
-      });
+// ── 3. ЗАМЕНИТЬ формирование payload в конце цикла (найди "if (shouldSend && title)") ──
+// Добавить уникальный tag:
+
+if (shouldSend && title) {
+  const isChat = event.type === "chat.global";
+  const payload = JSON.stringify({
+    title,
+    body: bodyTexts.join("\n") || " ",
+    url: targetUrl,       
+    role,                 
+    orderId: event.type !== "address.invalid" && event.type !== "route.assigned" && !isChat
+      ? (event as any).order?.id ?? null
+      : null,
+    // 🔥 Уникальный tag: чат-глобал по senderId+времени, заказы по orderId
+    tag: isChat
+      ? `chat-global-${event.senderId}`
+      : (event as any).order?.id
+        ? `order-${(event as any).order.id}`
+        : "eventwave",
+    timestamp: Date.now(),
+  });
 
       for (const sub of user.pushSubscriptions) {
         try {
