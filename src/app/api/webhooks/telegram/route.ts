@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SOURCE_CHAT_ID = process.env.TELEGRAM_SOURCE_CHAT_ID;
-const ADMIN_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+const ADMIN_CHAT_ID = process.env.TELEGRAM_SPAM_ID;
 
 async function sendNotificationToAdmin(text: string) {
   if (!TELEGRAM_BOT_TOKEN || !ADMIN_CHAT_ID) return;
