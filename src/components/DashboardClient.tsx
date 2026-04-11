@@ -23,7 +23,7 @@ interface DbCourier {
 export interface DashboardOrder {
   id: string; crmId: string; externalId?: string | null; status: string;
   address?: string | null; lat?: number | null; lng?: number | null;
-  price?: number | null; courierId?: number | null; courier?: string | null;
+  price?: number | null; wrongPrice?: boolean; courierId?: number | null; courier?: string | null;
   comment?: string | null; opComment?: string | null; items?: string | null;
   slotFrom?: string | null; slotTo?: string | null; slotRaw?: string | null;
   deliveryDate?: string | null; crmCreatedAt?: string | null;
@@ -679,6 +679,7 @@ export function DashboardClient({ user }: { user: User }) {
             isDraft: o.route.isDraft,
             orders: [],
             courierId: o.courierId,
+            createdAt: o.route.createdAt,
             updatedAt: o.route.updatedAt || o.changedAt || o.createdAt,
             baseArrivalTime: o.route.baseArrivalTime
           });
@@ -692,8 +693,9 @@ export function DashboardClient({ user }: { user: User }) {
     });
 
     return Array.from(routesMap.values()).sort((a, b) => {
-      const timeA = new Date(a.updatedAt || 0).getTime();
-      const timeB = new Date(b.updatedAt || 0).getTime();
+      // 🔥 Сортируем по дате создания маршрута (новые сверху)
+      const timeA = new Date(a.createdAt || a.updatedAt || 0).getTime();
+      const timeB = new Date(b.createdAt || b.updatedAt || 0).getTime();
       if (timeB !== timeA) return timeB - timeA; 
       return b.name.localeCompare(a.name); 
     });
@@ -793,9 +795,10 @@ export function DashboardClient({ user }: { user: User }) {
     return () => { clearTimeout(timer); if (multiRoute) multiRoute.destroy(); };
   }, [bulkSelectedIds, routeType, returnToBase, routeTab, isBulkMode, isMobile]);
 
-  const calculatedEtas = useMemo(() => {
+  const calculatedEtasData = useMemo(() => {
     const etas: Record<string, { type: string, timeStr: string, color: string }> = {};
-    if (selectedRouteOrders.length === 0 || routeLegs.length === 0) return etas;
+    let baseReturnTime = "—";
+    if (selectedRouteOrders.length === 0 || routeLegs.length === 0) return { etas, baseReturnTime };
 
     const parseYandexTimeMs = (text: string) => {
       if (!text || text === "—") return 0;
@@ -865,10 +868,18 @@ export function DashboardClient({ user }: { user: User }) {
         const timeStr = new Date(currentRunningMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
         etas[o.id] = { type: o.status, timeStr, color: o.status === "IN_DELIVERY" ? "#f59e0b" : "#4a7aff" };
       }
+
+      // 🔥 Считаем время возврата на базу после последней точки
+      if (index === selectedRouteOrders.length - 1 && returnToBase && routeLegs[selectedRouteOrders.length]) {
+        const returnLegMs = parseYandexTimeMs(routeLegs[selectedRouteOrders.length]);
+        baseReturnTime = new Date(currentRunningMs + returnLegMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
+      }
     });
 
-    return etas;
-  }, [selectedRouteOrders, routeLegs, routeType, filterDate, editingRouteId, existingRoutes, departureAdvice]);
+    return { etas, baseReturnTime };
+  }, [selectedRouteOrders, routeLegs, routeType, filterDate, editingRouteId, existingRoutes, departureAdvice, returnToBase]);
+
+  const calculatedEtas = calculatedEtasData.etas;
   
   const generateYandexUrl = (ordersToRoute: DashboardOrder[], type: "auto" | "mt", rtb: boolean) => {
     const validOrders = ordersToRoute.filter(o => o.lat && o.lng && !o.isInvalid);
@@ -1034,10 +1045,29 @@ export function DashboardClient({ user }: { user: User }) {
             const actualDepartureMs = pickedUpTimes.length > 0 ? Math.min(...pickedUpTimes.map((d: string) => new Date(d).getTime())) : null;
 
             const isAllDelivered = r.orders.length > 0 && r.orders.every((o: any) => o.status === "DELIVERED");
+            
+            // 🔥 Исправлен баг со временем (используем deliveredAt)
             let finishedMs: number | null = null;
             if (isAllDelivered) {
-              const deliveryTimes = r.orders.map((o: any) => new Date(o.changedAt || o.updatedAt).getTime()).filter((t: number) => !isNaN(t));
+              const deliveryTimes = r.orders.map((o: any) => o.deliveredAt ? new Date(o.deliveredAt).getTime() : new Date(o.changedAt || o.updatedAt).getTime()).filter((t: number) => !isNaN(t));
               finishedMs = deliveryTimes.length > 0 ? Math.max(...deliveryTimes) : null;
+            }
+
+            // 🔥 Приблизительный расчет времени возврата на базу для списка (так как Яндекс недоступен снаружи для всех сразу)
+            let estimatedBaseReturn = null;
+            if (r.orders.length > 0 && returnToBase) {
+               const lastOrder = r.orders[r.orders.length - 1];
+               if (lastOrder.status === "DELIVERED" && lastOrder.deliveredAt) {
+                   const d = new Date(lastOrder.deliveredAt);
+                   d.setMinutes(d.getMinutes() + 30); // ~30 мин на возврат
+                   estimatedBaseReturn = d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
+               } else if (lastOrder.eta && lastOrder.eta !== "—") {
+                   const [h, m] = lastOrder.eta.split(':').map(Number);
+                   if (!isNaN(h)) {
+                      const d = new Date(); d.setHours(h, m + 30);
+                      estimatedBaseReturn = d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
+                   }
+               }
             }
 
             // 🔥 Считаем количество опозданий в маршруте
@@ -1078,7 +1108,7 @@ export function DashboardClient({ user }: { user: User }) {
                     Курьер: {courierName} · {deliveredCount}/{r.orders.length} точек
                   </div>
 
-                  {(actualDepartureMs || finishedMs || r.baseArrivalTime) && (
+                  {(actualDepartureMs || finishedMs || r.baseArrivalTime || estimatedBaseReturn) && (
                     <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
                       {actualDepartureMs && (
                         <span style={{ fontSize: 11, background: "#fffbeb", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #fde68a" }}>
@@ -1093,6 +1123,11 @@ export function DashboardClient({ user }: { user: User }) {
                       {finishedMs && (
                         <span style={{ fontSize: 11, background: "#ecfdf5", color: "#10b981", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #a7f3d0" }}>
                           ✅ Завершил: {new Date(finishedMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
+                      {!finishedMs && estimatedBaseReturn && (
+                        <span style={{ fontSize: 11, background: "#f5f4f0", color: "#a8a49c", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #e8e6df" }}>
+                          🏠 Возврат: ~{estimatedBaseReturn}
                         </span>
                       )}
                     </div>
@@ -1303,8 +1338,8 @@ export function DashboardClient({ user }: { user: User }) {
             })()}
 
             {routeLegs[selectedRouteOrders.length] && returnToBase && (
-              <div style={{ fontSize: 11, color: "#a8a49c", paddingLeft: 46, paddingBottom: 6, paddingTop: 4 }}>
-                ↓ {routeLegs[selectedRouteOrders.length]} возврат на базу
+              <div style={{ fontSize: 11, color: "#a8a49c", paddingLeft: 46, paddingBottom: 6, paddingTop: 4, fontWeight: 600 }}>
+                ↓ {routeLegs[selectedRouteOrders.length]} возврат на базу (Прибытие: {calculatedEtasData.baseReturnTime})
               </div>
             )}
             {selectedRouteOrders.length === 0 && <div style={{ fontSize: 13, color: "#a8a49c", textAlign: "center", padding: 20 }}>Отметьте точки на карте</div>}
@@ -1586,7 +1621,7 @@ export function DashboardClient({ user }: { user: User }) {
                         </td>
                         <td style={{ ...s.td, minWidth: 160, maxWidth: 220 }}>{o.address ?? "—"}</td>
                         <td style={{ ...s.td, whiteSpace: "nowrap", fontWeight: 600 }}>{o.courier ?? <span style={{ color: "#d94040" }}>—</span>}</td>
-                        <td style={{ ...s.td, whiteSpace: "nowrap" }}>{o.price ? `${o.price} ₽` : "—"}</td>
+                        <td style={{ ...s.td, whiteSpace: "nowrap", color: o.wrongPrice ? "#d94040" : "inherit", fontWeight: o.wrongPrice ? 700 : 500 }}>{o.price ? `${o.price} ₽` : "—"}</td>
                         <td style={{ ...s.td, whiteSpace: "nowrap" }}><span style={{ padding: "2px 7px", borderRadius: 10, fontSize: 10, fontWeight: 500, background: `${color}18`, color }}>{STATUS_LABELS[o.status] ?? o.status}</span></td>
                         <td style={{ ...s.td, minWidth: 140, maxWidth: 200, color: "#6b6860" }}>{o.comment ?? "—"}</td>
                         <td style={{ ...s.td, minWidth: 120, maxWidth: 180, color: "#4a7aff" }}>{o.opComment ?? "—"}</td>
@@ -1645,7 +1680,7 @@ function SlotBtn({ label, active, color, onClick }: any) {
 
 function OrderCard({ order, selected, isBulkMode, isBulkSelected, onSelect }: any) {
   const color = slotColor(order);
-  const late = isOrderLate(order); // 🔥 Проверяем опаздывает ли
+  const late = isOrderLate(order);
 
   return (
     <div id={`card-${order.id}`} style={{ ...s.card, ...(selected || isBulkSelected ? s.cardSelected : {}), ...(order.isInvalid ? s.cardInvalid : {}) }} onClick={onSelect}>

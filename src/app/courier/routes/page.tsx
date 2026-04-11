@@ -8,7 +8,7 @@ interface RouteOrder {
   name: string | null; 
   slotRaw: string | null; slotFrom: string | null; slotTo: string | null;
   recipientPhone: string | null;
-  price: number | null; items: string | null;
+  price: number | null; wrongPrice?: boolean; items: string | null;
   comment: string | null;
   opComment: string | null;
   routeId: string | null; routeOrder: number | null;
@@ -20,6 +20,7 @@ interface RouteOrder {
     id: string; name: string; link: string | null; date: string;
     departureAdvice: string | null;
     baseArrivalTime?: string | null;
+    createdAt?: string;
   } | null;
 }
 
@@ -146,7 +147,15 @@ export default function CourierRoutesPage() {
     if (!todayGrouped[key]) todayGrouped[key] = [];
     todayGrouped[key].push(o);
   });
-  const todayRouteKeys = Object.keys(todayGrouped).sort();
+  
+  // 🔥 Сортировка маршрутов: новые сверху
+  const todayRouteKeys = Object.keys(todayGrouped).sort((a, b) => {
+    const routeA = todayGrouped[a][0]?.route;
+    const routeB = todayGrouped[b][0]?.route;
+    const timeA = routeA?.createdAt ? new Date(routeA.createdAt).getTime() : 0;
+    const timeB = routeB?.createdAt ? new Date(routeB.createdAt).getTime() : 0;
+    return timeB - timeA; 
+  });
 
   const pastGrouped: Record<string, RouteOrder[]> = {};
   pastOrders.forEach(o => {
@@ -190,7 +199,6 @@ export default function CourierRoutesPage() {
 
         {todayRouteKeys.map((rId) => {
           const routePoints = todayGrouped[rId].sort((a, b) => (a.routeOrder || 0) - (b.routeOrder || 0));
-          const isExpanded = expandedRoutes[rId] ?? true;
           const routeObj = routePoints[0]?.route;
           const routeName = routeObj ? routeObj.name : "Без маршрута";
           const routeLink = routeObj?.link ?? null;
@@ -198,6 +206,13 @@ export default function CourierRoutesPage() {
 
           const delivered = routePoints.filter(o => o.status === "DELIVERED").length;
           const total = routePoints.length;
+          const isAllDelivered = delivered === total && total > 0; 
+          
+          // 🔥 По дефолту сворачиваем завершенные маршруты
+          const isExpanded = expandedRoutes[rId] ?? !isAllDelivered;
+
+          // 🔥 Считаем общую стоимость маршрута
+          const routePriceTotal = routePoints.reduce((sum, o) => sum + (o.price || 0), 0);
 
           // Скрываем совет, если курьер уже начал маршрут
           const firstOrderStatus = routePoints[0]?.status;
@@ -211,7 +226,7 @@ export default function CourierRoutesPage() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", cursor: "pointer", marginBottom: isExpanded ? 12 : 0 }} onClick={() => toggleRoute(rId)}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18" }}>
-                      Маршрут {routeName}
+                      Маршрут {routeName} <span style={{fontSize: 12, color: "#a8a49c", fontWeight: 500}}>({routePriceTotal} ₽)</span>
                     </div>
                     <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 2 }}>
                       {delivered}/{total} доставлено
@@ -365,8 +380,16 @@ export default function CourierRoutesPage() {
                           </select>
                         </div>
 
-                        <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", marginBottom: 10, lineHeight: 1.3 }}>
-                          {o.address}
+                        {/* 🔥 БЛОК АДРЕСА И ЦЕНЫ */}
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 10 }}>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", lineHeight: 1.3 }}>
+                            {o.address}
+                          </div>
+                          {o.price !== null && (
+                            <div style={{ fontSize: 12, whiteSpace: "nowrap", color: o.wrongPrice ? "#d94040" : "#a8a49c", fontWeight: o.wrongPrice ? 800 : 600 }}>
+                              {o.price} ₽
+                            </div>
+                          )}
                         </div>
 
                         {/* БЛОК ФОТО */}

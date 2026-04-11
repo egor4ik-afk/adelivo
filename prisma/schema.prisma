@@ -191,7 +191,7 @@ model Order {
   route          Route?  @relation(fields: [routeId], references: [id], onDelete: SetNull)
   routeOrder     Int?    
   courierLink    String? @db.Text  
-
+  wrongPrice     Boolean     @default(false) // 🔥 НОВОЕ: Метка несовпадения цены
   @@index([createdAt])
   @@index([slotFrom, slotTo])
   @@index([status])

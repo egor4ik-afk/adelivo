@@ -383,13 +383,23 @@ export async function geocodeNewOrders() {
         if (courier?.isAuto) finalPrice = basePrice + 100;
       }
 
+      const crmPrice = order.price ?? 0;
+      const isPriceWrong = crmPrice !== finalPrice;
+
+      // 🔥 Измененный блок: обновляем только геоданные и ставим флаг wrongPrice, но не перезаписываем цену
       await prisma.order.update({
         where: { id: order.id },
-        data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: false, invalidReason: null, price: finalPrice },
+        data: { 
+          lat: geo.lat, 
+          lng: geo.lng, 
+          geocoded: true, 
+          isInvalid: false, 
+          invalidReason: null, 
+          wrongPrice: isPriceWrong // Ставим флаг при расхождении цен
+        },
       });
 
-      const crmPrice = order.price ?? 0;
-      if (crmPrice !== finalPrice) {
+      if (isPriceWrong) {
         const tgToken = process.env.TELEGRAM_BOT_TOKEN;
         if (tgToken) {
           const msg = [
@@ -397,7 +407,7 @@ export async function geocodeNewOrders() {
             ``,
             `📦 *Заказ:* ${order.externalId || order.crmId}`,
             `💰 *Цена в CRM:* ${crmPrice} ₽`,
-            `✅ *Фактическая цена доставки:* ${finalPrice} ₽`,
+            `✅ *Фактическая цена по карте:* ${finalPrice} ₽`,
           ].join("\n");
           fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
             method: "POST",
@@ -423,14 +433,6 @@ export async function geocodeNewOrders() {
 // ─────────────────────────────────────────────────────────────────────────────
 // UPSERT ЗАКАЗА
 // ─────────────────────────────────────────────────────────────────────────────
-
-// ПАТЧ для src/lib/crm.ts
-// Заменить ТОЛЬКО функцию upsertOrder — остальное не трогать
-// 
-// Исправления:
-// 1. recipientPhoneChanged добавлен в changes (был убран в v6)
-// 2. hasCoreChanges теперь включает recipientPhoneChanged
-// 3. Защита от дублей webhook: сравниваем crmStatus ДО перезаписи updateFields
 
 export async function upsertOrder(crmOrder: CrmOrder) {
   const data = await mapCrmOrder(crmOrder);
@@ -509,8 +511,6 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       }
     }
 
-    // 🔥 ИСПРАВЛЕНО: строим changes ДО upsert, на основе existing vs data
-    // (не из результата upsert — там уже перезаписано)
     const hasCoreChanges =
       (existing.crmStatus       ?? "") !== (data.crmStatus       ?? "") ||
       (existing.courierId       ?? 0)  !== (data.courierId       ?? 0)  ||
@@ -519,7 +519,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       (existing.slotFrom        ?? "") !== (data.slotFrom        ?? "") ||
       (existing.slotTo          ?? "") !== (data.slotTo          ?? "") ||
       (existing.price           ?? 0)  !== (updateFields.price   ?? 0)  ||
-      (existing.recipientPhone  ?? "") !== (data.recipientPhone  ?? "") || // 🔥 ВОЗВРАЩЕНО
+      (existing.recipientPhone  ?? "") !== (data.recipientPhone  ?? "") ||
       dbAddr !== crmAddr;
 
     if (hasCoreChanges) updateFields.changedAt = new Date();
@@ -534,7 +534,6 @@ export async function upsertOrder(crmOrder: CrmOrder) {
   if (!existing) {
     notify({ type: "order.new", order }).catch(console.error);
   } else {
-    // 🔥 ИСПРАВЛЕНО: changes строим из existing vs order (после upsert — финальные значения)
     const changes = {
       statusChanged:         (existing.crmStatus      ?? "") !== (order.crmStatus      ?? ""),
       courierChanged:        (existing.courierId       ?? 0)  !== (order.courierId       ?? 0),
@@ -543,7 +542,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       commentChanged:        (existing.comment         ?? "") !== (order.comment         ?? ""),
       opCommentChanged:      (existing.opComment       ?? "") !== (order.opComment       ?? ""),
       itemsChanged:          (existing.items           ?? "") !== (order.items           ?? ""),
-      recipientPhoneChanged: (existing.recipientPhone  ?? "") !== (order.recipientPhone  ?? ""), // 🔥 ВОЗВРАЩЕНО
+      recipientPhoneChanged: (existing.recipientPhone  ?? "") !== (order.recipientPhone  ?? ""),
     };
 
     if (Object.values(changes).some(Boolean)) {
@@ -558,6 +557,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
 
   return order;
 }
+
 // ─────────────────────────────────────────────────────────────────────────────
 // POLLING BUNCH
 // ─────────────────────────────────────────────────────────────────────────────
@@ -663,6 +663,7 @@ export async function pollCrmOrders() {
     console.error("[Cron] Error polling CRM:", err);
   }
 }
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ОБНОВЛЕНИЕ ЗАКАЗА В CRM (статус, курьер, адрес — без цены)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -780,6 +781,7 @@ export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: numb
     console.error(`[CRM] Ошибка обновления себестоимости:`, err?.response?.data ?? err.message);
   }
 }
+
 // ─────────────────────────────────────────────────────────────────────────────
 // POLLING ДЛЯ MEURA
 // ─────────────────────────────────────────────────────────────────────────────
