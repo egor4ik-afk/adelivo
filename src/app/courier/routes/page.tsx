@@ -304,7 +304,7 @@ export default function CourierRoutesPage() {
                       timeText = o.slotRaw;
                     }
                     
-                    const messageText = `Добрый день 😊 это курьер цветочного, буду у вас ${timeText}`;
+                    const messageText = `Добрый день 😊 это курьер из цветочного🌸, буду у вас ${timeText}`;
                     const encodedMsg = encodeURIComponent(messageText);
 
                     return (
