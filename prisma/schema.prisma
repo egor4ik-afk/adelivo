@@ -225,6 +225,7 @@ model Route {
   courierId       Int
   courier         Courier  @relation(fields: [courierId], references: [id])
   baseArrivalTime String?  // 🔥 ДОБАВЛЕНО: Время, когда курьер планирует быть на базе
+  estimatedReturnTime String?  // 🔥 НОВОЕ ПОЛЕ: Плановое прибытие обратно на базу
   orders    Order[]
   isDraft         Boolean  @default(false) // 🔥 ДОБАВЛЕНО
   createdAt DateTime @default(now())

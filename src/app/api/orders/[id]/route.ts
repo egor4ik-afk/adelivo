@@ -3,7 +3,7 @@
 // ИЗМЕНЕНИЯ:
 // 1. Добавлен импорт notify
 // 2. После prisma.order.update вызывается notify({ type: "order.updated", ... })
-//    с теми же полями что и в upsertOrder — чтобы пуши шли и при ручных правках
+// 3. 🔥 ДОБАВЛЕНО: Обновление `estimatedReturnTime` у маршрута (Route) при получении его в body
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -11,7 +11,7 @@ import { getSession } from "@/lib/auth";
 import { updateCrmOrder, updateCrmOrderDeliveryPrice } from "@/lib/crm";
 import { OrderStatus } from "@prisma/client";
 import { applyUniversalEtaShift } from "@/lib/eta";
-import { notify } from "@/lib/notifications"; // 🔥 ДОБАВЛЕНО
+import { notify } from "@/lib/notifications"; 
 
 const STORE_COORDS = "55.749511,37.596205";
 
@@ -159,6 +159,16 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     let updatedOrder = order;
     if (Object.keys(updateData).length > 0) {
       updatedOrder = await prisma.order.update({ where: { id }, data: updateData, include: { route: true } });
+    }
+
+    // 🔥 НОВОЕ: ОБНОВЛЕНИЕ ПЛАНОВОГО ВРЕМЕНИ ВОЗВРАТА
+    // Если фронтенд передал estimatedReturnTime, мы обновляем маршрут, 
+    // к которому привязан этот заказ. Это позволяет времени "двигаться" вслед за ETA заказов.
+    if (body.estimatedReturnTime !== undefined && updatedOrder.routeId) {
+      await prisma.route.update({
+        where: { id: updatedOrder.routeId },
+        data: { estimatedReturnTime: body.estimatedReturnTime }
+      });
     }
 
     // ─────────────────────────────────────────────────────────────────────

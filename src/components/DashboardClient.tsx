@@ -201,38 +201,50 @@ export function DashboardClient({ user }: { user: User }) {
   const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
   const [departureAdvice, setDepartureAdvice] = useState<string | null>(null);
 
-  const handleQuickStatusChange = async (id: string, newStatus: string, calculatedEta?: string) => {
-    setOrders((prev: any[]) =>
-      prev.map(o => o.id === id ? {
-        ...o,
-        status: newStatus,
-        changedAt: new Date().toISOString(),
-        pickedUpAt: newStatus === "IN_DELIVERY" && !o.pickedUpAt ? new Date().toISOString() : o.pickedUpAt,
-        eta: (newStatus === "IN_DELIVERY" && calculatedEta && calculatedEta !== "—")
-          ? calculatedEta
-          : (newStatus === "NEW" || newStatus === "ASSIGNED" ? null : o.eta)
-      } : o)
-    );
+  // Находим функцию handleQuickStatusChange и заменяем её целиком
+const handleQuickStatusChange = async (id: string, newStatus: string, calculatedEta?: string) => {
+  // Получаем текущее время возврата на базу из нашего useMemo (calculatedEtasData)
+  // Это то самое время, которое пересчитывается Яндексом или формулой внутри
+  const newBaseReturnTime = calculatedEtasData.baseReturnTime;
 
-    try {
-      const body: any = { status: newStatus };
-      if (newStatus === "IN_DELIVERY" && calculatedEta && calculatedEta !== "—") {
-        body.eta = calculatedEta;
-      }
+  setOrders((prev: any[]) =>
+    prev.map(o => o.id === id ? {
+      ...o,
+      status: newStatus,
+      changedAt: new Date().toISOString(),
+      pickedUpAt: newStatus === "IN_DELIVERY" && !o.pickedUpAt ? new Date().toISOString() : o.pickedUpAt,
+      eta: (newStatus === "IN_DELIVERY" && calculatedEta && calculatedEta !== "—")
+        ? calculatedEta
+        : (newStatus === "NEW" || newStatus === "ASSIGNED" ? null : o.eta)
+    } : o)
+  );
 
-      const res = await fetch(`/api/orders/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-      });
-
-      if (!res.ok) throw new Error("Ошибка обновления статуса");
-      fetchData();
-    } catch (e) {
-      alert("Ошибка изменения статуса");
-      fetchData();
+  try {
+    const body: any = { 
+      status: newStatus,
+      // 🔥 Передаем новое время возврата на базу, чтобы обновить Route
+      estimatedReturnTime: newBaseReturnTime !== "—" ? newBaseReturnTime : null 
+    };
+    
+    if (newStatus === "IN_DELIVERY" && calculatedEta && calculatedEta !== "—") {
+      body.eta = calculatedEta;
     }
-  };
+
+    const res = await fetch(`/api/orders/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) throw new Error("Ошибка обновления статуса");
+    
+    // Обновляем данные, чтобы плашки снаружи синхронизировались
+    fetchData();
+  } catch (e) {
+    console.error("Ошибка изменения статуса:", e);
+    fetchData();
+  }
+};
 
   useEffect(() => {
     const fd = localStorage.getItem("fo_filterDate");
