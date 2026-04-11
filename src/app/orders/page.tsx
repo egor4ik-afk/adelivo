@@ -7,13 +7,14 @@ interface Order {
   crmId: string;
   externalId: string | null;
   status: string;
-  shop: string | null;           // 🔥 ДОБАВЛЕНО: Магазин
-  name: string | null;           // 🔥 ДОБАВЛЕНО: Имя получателя
-  recipientPhone: string | null; // 🔥 ДОБАВЛЕНО: Телефон получателя
+  shop: string | null;           
+  name: string | null;           
+  recipientPhone: string | null; 
   address: string | null;
   lat: number | null;
   lng: number | null;
   price: number | null;
+  wrongPrice?: boolean;          // 🔥 ДОБАВЛЕНО: Метка ошибочной цены
   costPrice: number | null;
   courier: string | null;
   comment: string | null;
@@ -140,7 +141,12 @@ export default function OrdersPage() {
     const { id, field } = editingCell;
     const val = editValue === "" ? null : parseFloat(editValue.replace(",", "."));
     
-    setOrders(prev => prev.map(o => o.id === id ? { ...o, [field]: val } : o));
+    // 🔥 Оптимистичное обновление: сразу сбрасываем wrongPrice локально, если правим цену
+    setOrders(prev => prev.map(o => o.id === id ? { 
+      ...o, 
+      [field]: val,
+      ...(field === 'price' ? { wrongPrice: false } : {})
+    } : o));
     setEditingCell(null);
 
     try {
@@ -178,8 +184,8 @@ export default function OrdersPage() {
         return (o.externalId || "").toLowerCase().includes(q) ||
           (o.address || "").toLowerCase().includes(q) ||
           (o.courier || "").toLowerCase().includes(q) ||
-          (o.name || "").toLowerCase().includes(q) ||          // 🔥 Поиск по имени
-          (o.recipientPhone || "").toLowerCase().includes(q);  // 🔥 Поиск по телефону
+          (o.name || "").toLowerCase().includes(q) ||          
+          (o.recipientPhone || "").toLowerCase().includes(q);  
       }
       return true;
     });
@@ -240,14 +246,13 @@ export default function OrdersPage() {
 
   const isAllSelected = sortedAndFiltered.length > 0 && selectedIds.size === sortedAndFiltered.length;
 
-  // 🔥 Расширенные заголовки таблицы
   const HEADERS: { label: string, key: SortKey | null }[] = [
     { label: "ID", key: "externalId" },
-    { label: "Магазин", key: "shop" },            // 🔥 Добавили колонку
+    { label: "Магазин", key: "shop" },            
     { label: "Статус", key: "status" },
     { label: "Курьер", key: "courier" },
-    { label: "Имя", key: "name" },                // 🔥 Добавили колонку
-    { label: "Телефон", key: "recipientPhone" },  // 🔥 Добавили колонку
+    { label: "Имя", key: "name" },                
+    { label: "Телефон", key: "recipientPhone" },  
     { label: "Адрес", key: "address" },
     { label: "Слот", key: "slotRaw" },
     { label: "Себ-ть", key: "costPriceDisplay" },
@@ -319,7 +324,7 @@ export default function OrdersPage() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={12} style={{ padding: 32, textAlign: "center", color: "#a8a49c" }}>Загрузка...</td></tr>
+                  <tr><td colSpan={13} style={{ padding: 32, textAlign: "center", color: "#a8a49c" }}>Загрузка...</td></tr>
                 ) : sortedAndFiltered.map((o, i) => {
                   const statusColor = STATUS_COLORS[o.status] ?? "#a8a49c";
                   const isSelected = selectedIds.has(o.id);
@@ -332,7 +337,6 @@ export default function OrdersPage() {
                       </td>
                       <td style={{ padding: "10px 14px", fontFamily: "monospace", color: "#6b6860" }}>{o.externalId ?? o.crmId}</td>
                       
-                      {/* 🔥 ЯЧЕЙКА: МАГАЗИН */}
                       <td style={{ padding: "10px 14px", fontWeight: 600 }}>
                         {o.shop === 'kaktusfiori' || o.shop === 'meura-flowers' 
                           ? <span style={{ color: "#d63384" }}>🌸 Meura</span> 
@@ -347,7 +351,6 @@ export default function OrdersPage() {
                       </td>
                       <td style={{ padding: "10px 14px", color: o.courier ? "#1a1a18" : "#d94040" }}>{o.courier || "—"}</td>
                       
-                      {/* 🔥 ЯЧЕЙКИ: ИМЯ И ТЕЛЕФОН */}
                       <td style={{ padding: "10px 14px", fontWeight: 500 }}>{o.name || "—"}</td>
                       <td style={{ padding: "10px 14px", whiteSpace: "nowrap", fontFamily: "monospace", color: "#4a7aff" }}>{o.recipientPhone || "—"}</td>
 
@@ -386,7 +389,8 @@ export default function OrdersPage() {
                         )}
                       </td>
 
-                      <td style={{ padding: "10px 14px", fontWeight: 600, minWidth: 80 }} >
+                      {/* 🔥 ЯЧЕЙКА: СУММА ЗАКАЗА (с подсветкой ошибки) */}
+                      <td style={{ padding: "10px 14px", fontWeight: o.wrongPrice ? 800 : 600, color: o.wrongPrice ? "#d94040" : "inherit", minWidth: 80 }} >
                         {editingCell?.id === o.id && editingCell?.field === "price" ? (
                           <input
                             autoFocus
@@ -395,15 +399,15 @@ export default function OrdersPage() {
                             onChange={e => setEditValue(e.target.value)}
                             onBlur={handleEditSave}
                             onKeyDown={handleKeyDown}
-                            style={inlineInputStyle}
+                            style={{ ...inlineInputStyle, borderColor: o.wrongPrice ? "#d94040" : "#4a7aff" }}
                           />
                         ) : (
                           <span 
                             onClick={() => handleEditClick(o.id, "price", o.price)}
-                            title="Нажмите, чтобы изменить" 
-                            style={{ borderBottom: "1px dashed #a8a49c", cursor: "pointer", display: "inline-block", minHeight: 20 }}
+                            title={o.wrongPrice ? "⚠️ Цена не совпадает с расчетной! Нажмите для ред." : "Нажмите, чтобы изменить"} 
+                            style={{ borderBottom: o.wrongPrice ? "1px dashed #d94040" : "1px dashed #a8a49c", cursor: "pointer", display: "inline-block", minHeight: 20 }}
                           >
-                            {o.price ? `${o.price} ₽` : "—"}
+                            {o.wrongPrice && "⚠️ "}{o.price ? `${o.price} ₽` : "—"}
                           </span>
                         )}
                       </td>
