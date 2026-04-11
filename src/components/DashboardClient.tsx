@@ -554,7 +554,7 @@ export function DashboardClient({ user }: { user: User }) {
       const lng = isSelected && previewGeo ? previewGeo.lng : order.lng!;
       const color = slotColor(order as any);
 
-      const late = isOrderLate(order); // 🔥 Проверяем на опоздание
+      const late = isOrderLate(order); 
 
       const displayTime = showTime && currentZoom >= 13 && !!order.slotRaw && selectedSlots.length === 0;
       const displayName = showCourierNames && !!order.courier;
@@ -587,7 +587,6 @@ export function DashboardClient({ user }: { user: User }) {
           pinColor = isBulkSelected ? '#1a9e5c' : '#d1d5db';
         }
         
-        // 🔥 Если заказ опаздывает, красим пин в красный и рисуем часики (если он не выделен)
         if (late && !isSelected && !(isBulkMode && routeTabMode === "new" && !isBulkSelected)) {
            pinColor = '#d94040'; 
         }
@@ -610,8 +609,8 @@ export function DashboardClient({ user }: { user: User }) {
           if (isBulkSelected) { preset = 'islands#greenIcon'; iconContent = `${bulkIndex + 1}`; }
           else { preset = 'islands#grayCircleDotIcon'; }
         } else {
-          if (isSelected) preset = previewGeo ? "islands#grayDotIcon" : "islands#yellowDotIcon"; // 🔥 Активный черный
-          else if (late) preset = "islands#redIcon"; // 🔥 Опаздывает - красный
+          if (isSelected) preset = previewGeo ? "islands#grayDotIcon" : "islands#yellowDotIcon"; 
+          else if (late) preset = "islands#redIcon"; 
         }
 
         pm = new ymaps.Placemark([lat, lng], {
@@ -693,7 +692,6 @@ export function DashboardClient({ user }: { user: User }) {
     });
 
     return Array.from(routesMap.values()).sort((a, b) => {
-      // 🔥 Сортируем по дате создания маршрута (новые сверху)
       const timeA = new Date(a.createdAt || a.updatedAt || 0).getTime();
       const timeB = new Date(b.createdAt || b.updatedAt || 0).getTime();
       if (timeB !== timeA) return timeB - timeA; 
@@ -744,7 +742,8 @@ export function DashboardClient({ user }: { user: User }) {
       if (hMatch) ms += parseInt(hMatch[1], 10) * 3600000;
       const mMatch = text.match(/(\d+)\s*мин/);
       if (mMatch) ms += parseInt(mMatch[1], 10) * 60000;
-      return routeType === "auto" ? ms + (12 * 60 * 1000) : ms + (3 * 60 * 1000); 
+      // 🔥 Теперь пешему прибавляем 1 минуту на точку
+      return routeType === "auto" ? ms + (12 * 60 * 1000) : ms + (4 * 60 * 1000); 
     };
 
     const timer = setTimeout(() => {
@@ -807,7 +806,8 @@ export function DashboardClient({ user }: { user: User }) {
       if (hMatch) ms += parseInt(hMatch[1], 10) * 3600000;
       const mMatch = text.match(/(\d+)\s*мин/);
       if (mMatch) ms += parseInt(mMatch[1], 10) * 60000;
-      return routeType === "auto" ? ms + (12 * 60 * 1000) : ms + (3 * 60 * 1000); 
+      // 🔥 Теперь пешему прибавляем 1 минуту на точку
+      return routeType === "auto" ? ms + (12 * 60 * 1000) : ms + (4 * 60 * 1000); 
     };
 
     const [year, month, day] = filterDate.split("-").map(Number);
@@ -869,7 +869,6 @@ export function DashboardClient({ user }: { user: User }) {
         etas[o.id] = { type: o.status, timeStr, color: o.status === "IN_DELIVERY" ? "#f59e0b" : "#4a7aff" };
       }
 
-      // 🔥 Считаем время возврата на базу после последней точки
       if (index === selectedRouteOrders.length - 1 && returnToBase && routeLegs[selectedRouteOrders.length]) {
         const returnLegMs = parseYandexTimeMs(routeLegs[selectedRouteOrders.length]);
         baseReturnTime = new Date(currentRunningMs + returnLegMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
@@ -1046,31 +1045,14 @@ export function DashboardClient({ user }: { user: User }) {
 
             const isAllDelivered = r.orders.length > 0 && r.orders.every((o: any) => o.status === "DELIVERED");
             
-            // 🔥 Исправлен баг со временем (используем deliveredAt)
+            // 1. Считаем время завершения маршрута
             let finishedMs: number | null = null;
             if (isAllDelivered) {
               const deliveryTimes = r.orders.map((o: any) => o.deliveredAt ? new Date(o.deliveredAt).getTime() : new Date(o.changedAt || o.updatedAt).getTime()).filter((t: number) => !isNaN(t));
               finishedMs = deliveryTimes.length > 0 ? Math.max(...deliveryTimes) : null;
             }
 
-            // 🔥 Приблизительный расчет времени возврата на базу для списка (так как Яндекс недоступен снаружи для всех сразу)
-            let estimatedBaseReturn = null;
-            if (r.orders.length > 0 && returnToBase) {
-               const lastOrder = r.orders[r.orders.length - 1];
-               if (lastOrder.status === "DELIVERED" && lastOrder.deliveredAt) {
-                   const d = new Date(lastOrder.deliveredAt);
-                   d.setMinutes(d.getMinutes() + 30); // ~30 мин на возврат
-                   estimatedBaseReturn = d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
-               } else if (lastOrder.eta && lastOrder.eta !== "—") {
-                   const [h, m] = lastOrder.eta.split(':').map(Number);
-                   if (!isNaN(h)) {
-                      const d = new Date(); d.setHours(h, m + 30);
-                      estimatedBaseReturn = d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
-                   }
-               }
-            }
-
-            // 🔥 Считаем количество опозданий в маршруте
+            // 🔥 2. ВОТ ТОТ САМЫЙ delaysCount, который потерялся
             const delaysCount = r.orders.filter((o: any) => {
               if (["DELIVERED", "RETURNED", "CANCELLED"].includes(o.status)) return false;
               if (o.eta && o.slotTo) {
@@ -1082,6 +1064,61 @@ export function DashboardClient({ user }: { user: User }) {
               }
               return false;
             }).length;
+
+            // 🔥 3. ДИНАМИЧЕСКИЙ РАСЧЕТ ВОЗВРАТА (Обновляется и учитывает задержки)
+            let estimatedBaseReturn = null;
+            if (r.orders.length > 0 && !isAllDelivered) {
+               const lastOrder = r.orders[r.orders.length - 1];
+               let baseReturnMs = 0;
+               
+               if (lastOrder.eta && lastOrder.eta !== "—") {
+                   const [h, m] = lastOrder.eta.split(':').map(Number);
+                   if (!isNaN(h)) {
+                       const d = new Date(); 
+                       d.setHours(h, m + 35, 0, 0); // План последней точки + 35 мин на базу
+                       baseReturnMs = d.getTime();
+                   }
+               }
+
+               // Считаем фактическое опоздание по последней доставленной точке
+               let delayMs = 0;
+               const deliveredOrders = r.orders.filter((o: any) => o.status === "DELIVERED" && o.deliveredAt && o.eta && o.eta !== "—");
+               if (deliveredOrders.length > 0) {
+                   const lastDel = deliveredOrders[deliveredOrders.length - 1];
+                   const dAct = new Date(lastDel.deliveredAt).getTime();
+                   const [h, m] = lastDel.eta.split(':').map(Number);
+                   const dPlan = new Date(lastDel.deliveredAt);
+                   dPlan.setHours(h, m, 0, 0);
+                   if (dAct > dPlan.getTime()) delayMs = dAct - dPlan.getTime();
+               } else if (actualDepartureMs) {
+                   // Или опоздание при выезде
+                   const firstOrder = r.orders[0];
+                   if (firstOrder && firstOrder.eta && firstOrder.eta !== "—") {
+                       const [h, m] = firstOrder.eta.split(':').map(Number);
+                       const dPlan = new Date();
+                       dPlan.setHours(h, m, 0, 0);
+                       const plannedDep = dPlan.getTime() - (40 * 60000); 
+                       if (actualDepartureMs > plannedDep) delayMs = actualDepartureMs - plannedDep;
+                   }
+               }
+               
+               if (baseReturnMs > 0) baseReturnMs += delayMs;
+
+               // Гарантируем, что время возврата не "зависнет" в прошлом, если курьер застрял
+               const now = new Date().getTime();
+               const remainingOrders = r.orders.filter((o: any) => ["NEW", "ASSIGNED", "IN_DELIVERY"].includes(o.status)).length;
+               
+               // Минимум: текущее время + (оставшиеся точки * 25 мин) + 35 мин возврат
+               const minPossibleReturnMs = now + (remainingOrders * 25 * 60000) + (35 * 60000);
+               
+               if (baseReturnMs < minPossibleReturnMs) {
+                   baseReturnMs = minPossibleReturnMs;
+               }
+               
+               if (baseReturnMs > 0) {
+                   estimatedBaseReturn = new Date(baseReturnMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
+               }
+            }
 
             return (
               <div key={r.id} onClick={() => {
@@ -1110,26 +1147,32 @@ export function DashboardClient({ user }: { user: User }) {
 
                   {(actualDepartureMs || finishedMs || r.baseArrivalTime || estimatedBaseReturn) && (
                     <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                      
                       {actualDepartureMs && (
                         <span style={{ fontSize: 11, background: "#fffbeb", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #fde68a" }}>
                           📦 Выехал: {new Date(actualDepartureMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       )}
+                      
                       {r.baseArrivalTime && (
                         <span style={{ fontSize: 11, background: "#eef3ff", color: "#4a7aff", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #bfdbfe" }}>
                           🏠 На базе: {r.baseArrivalTime}
                         </span>
                       )}
+                      
                       {finishedMs && (
                         <span style={{ fontSize: 11, background: "#ecfdf5", color: "#10b981", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #a7f3d0" }}>
                           ✅ Завершил: {new Date(finishedMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       )}
+                      
+                      {/* 🔥 Возврат наружу */}
                       {!finishedMs && estimatedBaseReturn && (
                         <span style={{ fontSize: 11, background: "#f5f4f0", color: "#a8a49c", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #e8e6df" }}>
                           🏠 Возврат: ~{estimatedBaseReturn}
                         </span>
                       )}
+                      
                     </div>
                   )}
                 </div>
@@ -1265,7 +1308,6 @@ export function DashboardClient({ user }: { user: User }) {
                     const st = ROUTE_STATUS_MAP[o.status] || ROUTE_STATUS_MAP.NEW;
                     const etaInfo = calculatedEtas[o.id] || { type: "NEW", timeStr: "—", color: "#4a7aff" };
                     
-                    // 🔥 ПРОВЕРКА: Опаздывает ли этот заказ прямо сейчас в текущем маршруте?
                     const isLateCalc = o.slotTo && etaInfo.timeStr !== "—" && parseTime(etaInfo.timeStr) > parseTime(o.slotTo);
                     const displayColor = isLateCalc ? "#d94040" : etaInfo.color;
 

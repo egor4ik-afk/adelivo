@@ -148,7 +148,6 @@ export default function CourierRoutesPage() {
     todayGrouped[key].push(o);
   });
   
-  // 🔥 Сортировка маршрутов: новые сверху
   const todayRouteKeys = Object.keys(todayGrouped).sort((a, b) => {
     const routeA = todayGrouped[a][0]?.route;
     const routeB = todayGrouped[b][0]?.route;
@@ -183,12 +182,12 @@ export default function CourierRoutesPage() {
       <div style={{ padding: "16px", background: "#fff", borderBottom: "1px solid #e8e6df", position: "sticky", top: 0, zIndex: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 18, color: "#1a1a18" }}>Мои маршруты</h1>
+          {/* 🔥 Сумма на сегодня */}
           <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 4 }}>
-            На сегодня: {todayOrders.length} точек
+            На сегодня: {todayOrders.length} точек на сумму <span style={{fontWeight: 700, color: "#1a1a18"}}>{todayOrders.reduce((sum, o) => sum + (o.price || 0), 0)} ₽</span>
           </div>
         </div>
 
-        {/* 🔥 РЕКЛАМНЫЙ БЛОК / ЛОГОТИП */}
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", opacity: 0.5 }}>
           <img src="/favicon.svg" alt="App Logo" style={{ width: 24, height: 24 }} />
           <span style={{ fontSize: 9, fontWeight: 800, color: "#1a1a18", marginTop: 2, textTransform: "uppercase", letterSpacing: "0.5px" }}>EventWave</span>
@@ -208,20 +207,19 @@ export default function CourierRoutesPage() {
           const total = routePoints.length;
           const isAllDelivered = delivered === total && total > 0; 
           
-          // 🔥 По дефолту сворачиваем завершенные маршруты
           const isExpanded = expandedRoutes[rId] ?? !isAllDelivered;
 
-          // 🔥 Считаем общую стоимость маршрута
           const routePriceTotal = routePoints.reduce((sum, o) => sum + (o.price || 0), 0);
 
-          // Скрываем совет, если курьер уже начал маршрут
           const firstOrderStatus = routePoints[0]?.status;
           const showAdvice = firstOrderStatus === "ASSIGNED" || firstOrderStatus === "NEW";
+
+          // 🔥 БАЗОВЫЕ КООРДИНАТЫ (для мини-маршрутов)
+          const STORE_COORDS = "55.749511,37.596205";
 
           return (
             <div key={rId} style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
 
-              {/* Заголовок маршрута */}
               <div style={{ padding: "14px 16px", background: "#fafaf8", borderBottom: isExpanded ? "1px solid #e8e6df" : "none" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", cursor: "pointer", marginBottom: isExpanded ? 12 : 0 }} onClick={() => toggleRoute(rId)}>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -232,7 +230,6 @@ export default function CourierRoutesPage() {
                       {delivered}/{total} доставлено
                     </div>
 
-                    {/* СОВЕТ ОПЕРАТОРА */}
                     {advice && showAdvice && (
                       <div style={{
                         marginTop: 8, padding: "10px 12px", background: "#fffbeb",
@@ -260,7 +257,6 @@ export default function CourierRoutesPage() {
                   </div>
                 </div>
 
-                {/* ПАНЕЛЬ УПРАВЛЕНИЯ МАРШРУТОМ */}
                 {isExpanded && (
                   <div style={{ display: "flex", gap: 8, alignItems: "center", borderTop: "1px dashed #e8e6df", paddingTop: 12 }} onClick={e => e.stopPropagation()}>
                     <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
@@ -319,8 +315,14 @@ export default function CourierRoutesPage() {
                       timeText = o.slotRaw;
                     }
                     
-                    const messageText = `Добрый день 😊 это курьер из цветочного🌸, буду у вас ${timeText}`;
+                    const messageText = `Добрый день 😊 это курьер цветочного, буду у вас ${timeText}`;
                     const encodedMsg = encodeURIComponent(messageText);
+
+                    // 🔥 МИНИ-МАРШРУТЫ
+                    const isFirst = idx === 0;
+                    const isLast = idx === routePoints.length - 1;
+                    const prevAddress = isFirst ? STORE_COORDS : routePoints[idx - 1].address;
+                    const currentAddress = o.address;
 
                     return (
                       <div
@@ -380,10 +382,33 @@ export default function CourierRoutesPage() {
                           </select>
                         </div>
 
-                        {/* 🔥 БЛОК АДРЕСА И ЦЕНЫ */}
+                        {/* БЛОК АДРЕСА, ЦЕНЫ И МИНИ-МАРШРУТОВ */}
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 10 }}>
-                          <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", lineHeight: 1.3 }}>
-                            {o.address}
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", lineHeight: 1.3 }}>
+                              {o.address}
+                            </div>
+                            
+                            {/* 🔥 КНОПКИ МИНИ-МАРШРУТОВ */}
+                            <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                              <a 
+                                href={`https://yandex.ru/maps/?rtext=${encodeURIComponent(prevAddress)}~${encodeURIComponent(currentAddress)}`} 
+                                target="_blank" 
+                                style={{ fontSize: 11, background: "#eef3ff", color: "#4a7aff", padding: "4px 10px", borderRadius: 6, textDecoration: "none", fontWeight: 700, display: "inline-flex", alignItems: "center" }}
+                              >
+                                📍 От {isFirst ? "базы" : "пред. точки"} сюда
+                              </a>
+                              {isLast && (
+                                <a 
+                                  href={`https://yandex.ru/maps/?rtext=${encodeURIComponent(currentAddress)}~${STORE_COORDS}`} 
+                                  target="_blank" 
+                                  style={{ fontSize: 11, background: "#f5f4f0", color: "#6b6860", padding: "4px 10px", borderRadius: 6, textDecoration: "none", fontWeight: 700, display: "inline-flex", alignItems: "center" }}
+                                >
+                                  🏠 На базу
+                                </a>
+                              )}
+                            </div>
+
                           </div>
                           {o.price !== null && (
                             <div style={{ fontSize: 12, whiteSpace: "nowrap", color: o.wrongPrice ? "#d94040" : "#a8a49c", fontWeight: o.wrongPrice ? 800 : 600 }}>
