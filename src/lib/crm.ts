@@ -7,9 +7,10 @@ import { OrderStatus } from "@prisma/client";
 
 const CRM_URL = process.env.RETAILCRM_API_URL;
 const CRM_KEY = process.env.RETAILCRM_API_KEY; 
-const CRM_KEY_MEURA = process.env.RETAILCRM_API_KEY_MEURA; 
+const CRM_KEY_MEURA = process.env.RETAILCRM_API_KEY_MEURA; // 🔥 Добавили
 const GEO_KEY = process.env.YANDEX_GEOCODER_KEY;
 
+// 🔥 БРОНЕЖИЛЕТ ДЛЯ MEURA
 const MEURA_SHOPS = ['kaktusfiori', 'meura-flowers'];
 
 async function resolveCourierId(name: string): Promise<number | null> {
@@ -100,6 +101,7 @@ function parseCourierFromDelivery(delivery: CrmOrder["delivery"]): { id: number 
   return { id: null, name: null };
 }
 
+// 🔥 УМНЫЙ ПАРСЕР АДРЕСА (вырезает Имя и Телефон)
 function parseMeuraAddress(rawAddress: string | null) {
   if (!rawAddress) return { cleanAddress: null, name: null, phone: null };
 
@@ -177,6 +179,7 @@ export async function mapCrmOrder(order: CrmOrder) {
     parsedDate = new Date(rawDate.getTime() - 5 * 60 * 60 * 1000);
   }
 
+  // 🔥 РАЗДЕЛЕНИЕ ЛОГИКИ ПО МАГАЗИНАМ
   const shopCode = order.site ?? null;
   const rawAddress = order.delivery?.address?.text ?? null;
   let finalAddress = rawAddress;
@@ -340,71 +343,61 @@ export async function geocodeNewOrders() {
     take: 20,
   });
   if (orders.length === 0) return;
-
+ 
   const invalidOrders: Array<{ externalId: string | null; address: string | null; reason: string }> = [];
-
+ 
   for (const order of orders) {
     if (!order.address) continue;
-
+ 
     if (order.address.toLowerCase().includes("самовывоз")) {
       await prisma.order.update({ where: { id: order.id }, data: { geocoded: true, isInvalid: false } });
       continue;
     }
-
+ 
     try {
       const geo = await geocodeAddress(order.address);
-
+ 
       if (!geo) {
         await prisma.order.update({ where: { id: order.id }, data: { geocoded: true, isInvalid: true, invalidReason: "Адрес не найден" } });
         invalidOrders.push({ externalId: order.externalId, address: order.address, reason: "Адрес не найден" });
         continue;
       }
-
+ 
       if (geo.distanceKm > 75) {
         const reason = `Вне зоны доставки (найдено в ${Math.round(geo.distanceKm)} км от МСК)`;
         await prisma.order.update({ where: { id: order.id }, data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: true, invalidReason: reason } });
         invalidOrders.push({ externalId: order.externalId, address: order.address, reason });
         continue;
       }
-
+ 
       if (!geo.isExact) {
         await prisma.order.update({ where: { id: order.id }, data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: true, invalidReason: `Неточный геокод: ${geo.precision}` } });
         invalidOrders.push({ externalId: order.externalId, address: order.address, reason: `Неточный геокод: ${geo.precision}` });
         continue;
       }
-
-      // 🔥 ПЕРЕСЧЕТ СТОИМОСТИ (ПРИ ИНИЦИАЛИЗАЦИИ)
+ 
+      // 🔥 Считаем ожидаемую цену по зоне — только для сравнения, не для записи
       const basePrice = calcBaseDeliveryPrice(geo.lat, geo.lng);
-      let isAuto = false;
-      if (order.courierId) {
-        const courier = await prisma.courier.findUnique({ where: { id: order.courierId }, select: { isAuto: true } });
-        isAuto = !!courier?.isAuto;
-      }
-      const expectedPrice = basePrice + (isAuto ? 100 : 0);
-
-      let newPrice = order.price;
-      // Меняем цену только если её не было ИЛИ если она является системной
-      if (!order.price || order.price === basePrice || order.price === basePrice + 100) {
-        newPrice = expectedPrice;
-      }
-
       const crmPrice = order.price ?? 0;
-      const isPriceWrong = crmPrice > 0 && crmPrice !== basePrice && crmPrice !== (basePrice + 100);
-
+ 
+      // Флаг: цена в CRM не совпадает ни с базовой, ни с базовой+100 (авто)
+      const wrongPrice = crmPrice > 0 && crmPrice !== basePrice && crmPrice !== basePrice + 100;
+ 
       await prisma.order.update({
         where: { id: order.id },
-        data: { 
-          lat: geo.lat, 
-          lng: geo.lng, 
-          geocoded: true, 
-          isInvalid: false, 
-          invalidReason: null, 
-          price: newPrice, 
-          wrongPrice: isPriceWrong // Записываем исправленную логику
+        data: {
+          lat: geo.lat,
+          lng: geo.lng,
+          geocoded: true,
+          isInvalid: false,
+          invalidReason: null,
+          wrongPrice,
+          // 🔥 price НЕ трогаем — остаётся как пришла из CRM
         },
       });
-
-      if (isPriceWrong) {
+ 
+      // Уведомление в TG если цена не та
+      if (wrongPrice) {
         const tgToken = process.env.TELEGRAM_BOT_TOKEN;
         if (tgToken) {
           const msg = [
@@ -412,7 +405,7 @@ export async function geocodeNewOrders() {
             ``,
             `📦 *Заказ:* ${order.externalId || order.crmId}`,
             `💰 *Цена в CRM:* ${crmPrice} ₽`,
-            `✅ *Фактическая цена по карте:* ${newPrice} ₽`,
+            `🗺 *Цена по зоне:* ${basePrice} ₽`,
           ].join("\n");
           fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
             method: "POST",
@@ -421,7 +414,7 @@ export async function geocodeNewOrders() {
           }).catch(e => console.error("[TG] Ошибка уведомления о цене:", e));
         }
       }
-
+ 
     } catch (_) {
       await prisma.order.update({
         where: { id: order.id },
@@ -429,15 +422,22 @@ export async function geocodeNewOrders() {
       }).catch(() => {});
     }
   }
-
+ 
   if (invalidOrders.length > 0) {
     notify({ type: "address.invalid", orders: invalidOrders }).catch(console.error);
   }
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // UPSERT ЗАКАЗА
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ПАТЧ для src/lib/crm.ts
+// Заменить ТОЛЬКО функцию upsertOrder — остальное не трогать
+// 
+// Исправления:
+// 1. recipientPhoneChanged добавлен в changes (был убран в v6)
+// 2. hasCoreChanges теперь включает recipientPhoneChanged
+// 3. Защита от дублей webhook: сравниваем crmStatus ДО перезаписи updateFields
 
 export async function upsertOrder(crmOrder: CrmOrder) {
   const data = await mapCrmOrder(crmOrder);
@@ -451,7 +451,6 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     routeId?: string | null;
     routeOrder?: number | null;
     pickedUpAt?: Date | null;
-    wrongPrice?: boolean; // 🔥 Добавляем в тип
   } = { ...data };
 
   if (existing) {
@@ -461,7 +460,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     if (!updateFields.shop && existing.shop) updateFields.shop = existing.shop;
 
     const dbAddr  = existing.address?.trim() || "";
-    const crmAddr = (data.address ?? "").trim(); 
+    const crmAddr = (data.address ?? "").trim();  // берём из data, не из updateFields
 
     if (dbAddr !== crmAddr) {
       updateFields.address       = crmAddr || null;
@@ -483,38 +482,15 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       updateFields.status = existing.status;
     }
 
-    // 🔥 УМНЫЙ ПЕРЕСЧЕТ СТОИМОСТИ ПРИ ЛЮБЫХ ИЗМЕНЕНИЯХ (в т.ч. сброс 100 рублей)
-    let newPrice = existing.price || null;
-
-    if (updateFields.lat && updateFields.lng) {
-      const basePrice = calcBaseDeliveryPrice(updateFields.lat, updateFields.lng);
-      
-      let isAuto = false;
-      if (updateFields.courierId) {
-        const c = await prisma.courier.findUnique({ where: { id: updateFields.courierId }, select: { isAuto: true } });
-        isAuto = !!c?.isAuto;
-      }
-      
-      const expectedPrice = basePrice + (isAuto ? 100 : 0);
-
-      // Если в базе была стандартная цена (с или без 100р), смело сбрасываем её на актуальную
-      if (!existing.price || existing.price === basePrice || existing.price === basePrice + 100) {
-        newPrice = expectedPrice;
-      }
-    } else if (data.price && data.price > 0 && !existing.price) {
-      newPrice = data.price;
-    }
-
-    updateFields.price = newPrice;
-    
-    // Проверяем, отличается ли расчитанная нами цена от той, что стоит в CRM
-    const crmPrice = data.price || 0;
-    if (updateFields.lat && updateFields.lng) {
-        const baseP = calcBaseDeliveryPrice(updateFields.lat, updateFields.lng);
-        updateFields.wrongPrice = (crmPrice > 0 && crmPrice !== baseP && crmPrice !== (baseP + 100));
+    // АБСОЛЮТНАЯ ЗАЩИТА ЦЕНЫ
+    if (existing.price && existing.price > 0) {
+      updateFields.price = existing.price;
+    } else if (data.price && data.price > 0) {
+      updateFields.price = data.price;
     } else {
-        updateFields.wrongPrice = (crmPrice > 0 && newPrice !== null && crmPrice !== newPrice);
+      updateFields.price = existing.price || null;
     }
+
     if (updateFields.status === OrderStatus.IN_DELIVERY && existing.status !== OrderStatus.IN_DELIVERY) {
       if (!existing.pickedUpAt) updateFields.pickedUpAt = new Date();
     }
@@ -540,6 +516,8 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       }
     }
 
+    // 🔥 ИСПРАВЛЕНО: строим changes ДО upsert, на основе existing vs data
+    // (не из результата upsert — там уже перезаписано)
     const hasCoreChanges =
       (existing.crmStatus       ?? "") !== (data.crmStatus       ?? "") ||
       (existing.courierId       ?? 0)  !== (data.courierId       ?? 0)  ||
@@ -548,7 +526,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       (existing.slotFrom        ?? "") !== (data.slotFrom        ?? "") ||
       (existing.slotTo          ?? "") !== (data.slotTo          ?? "") ||
       (existing.price           ?? 0)  !== (updateFields.price   ?? 0)  ||
-      (existing.recipientPhone  ?? "") !== (data.recipientPhone  ?? "") ||
+      (existing.recipientPhone  ?? "") !== (data.recipientPhone  ?? "") || // 🔥 ВОЗВРАЩЕНО
       dbAddr !== crmAddr;
 
     if (hasCoreChanges) updateFields.changedAt = new Date();
@@ -563,6 +541,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
   if (!existing) {
     notify({ type: "order.new", order }).catch(console.error);
   } else {
+    // 🔥 ИСПРАВЛЕНО: changes строим из existing vs order (после upsert — финальные значения)
     const changes = {
       statusChanged:         (existing.crmStatus      ?? "") !== (order.crmStatus      ?? ""),
       courierChanged:        (existing.courierId       ?? 0)  !== (order.courierId       ?? 0),
@@ -571,7 +550,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       commentChanged:        (existing.comment         ?? "") !== (order.comment         ?? ""),
       opCommentChanged:      (existing.opComment       ?? "") !== (order.opComment       ?? ""),
       itemsChanged:          (existing.items           ?? "") !== (order.items           ?? ""),
-      recipientPhoneChanged: (existing.recipientPhone  ?? "") !== (order.recipientPhone  ?? ""),
+      recipientPhoneChanged: (existing.recipientPhone  ?? "") !== (order.recipientPhone  ?? ""), // 🔥 ВОЗВРАЩЕНО
     };
 
     if (Object.values(changes).some(Boolean)) {
@@ -586,7 +565,6 @@ export async function upsertOrder(crmOrder: CrmOrder) {
 
   return order;
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // POLLING BUNCH
 // ─────────────────────────────────────────────────────────────────────────────
@@ -596,10 +574,11 @@ export async function pollCrmOrders() {
   try {
     const dateFrom = new Date(Date.now() - 2 * 24 * 3_600_000).toISOString().split("T")[0];
     
+    // 🔥 ИСПРАВЛЕНИЕ: Жестко фильтруем по сайту "bunch" (Московский)
     const paramsNew = new URLSearchParams();
     paramsNew.append("apiKey", CRM_KEY);
     paramsNew.append("filter[createdAtFrom]", dateFrom);
-    paramsNew.append("filter[sites][]", "bunch"); 
+    paramsNew.append("filter[sites][]", "bunch"); // ⛔ Отсекаем bunch-ekb и прочие
     paramsNew.append("limit", "100");
 
     const resNew = await axios.get<CrmOrdersResponse>(`${CRM_URL}/api/v5/orders?${paramsNew.toString()}`, {
@@ -691,9 +670,8 @@ export async function pollCrmOrders() {
     console.error("[Cron] Error polling CRM:", err);
   }
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
-// ОБНОВЛЕНИЕ ЗАКАЗА В CRM
+// ОБНОВЛЕНИЕ ЗАКАЗА В CRM (статус, курьер, адрес — без цены)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function updateCrmOrder(
@@ -757,6 +735,7 @@ export async function updateCrmOrder(
   const params = new URLSearchParams();
   params.append("apiKey", apiKeyToUse);
 
+  // 🔥 ДОБАВЛЯЕМ ПАРАМЕТР МАГАЗИНА, ЧТОБЫ CRM НЕ РУГАЛАСЬ
   if (orderInDb?.shop) {
     params.append("site", orderInDb.shop); 
   }
@@ -792,6 +771,7 @@ export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: numb
   const params = new URLSearchParams();
   params.append("apiKey", apiKeyToUse);
   
+  // 🔥 ДОБАВЛЯЕМ ПАРАМЕТР МАГАЗИНА ЗДЕСЬ ТОЖЕ
   if (orderInDb?.shop) {
     params.append("site", orderInDb.shop); 
   }
@@ -807,7 +787,6 @@ export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: numb
     console.error(`[CRM] Ошибка обновления себестоимости:`, err?.response?.data ?? err.message);
   }
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // POLLING ДЛЯ MEURA
 // ─────────────────────────────────────────────────────────────────────────────
@@ -843,7 +822,7 @@ export async function pollMeuraOrders() {
 
 export interface CrmOrder {
   id: number; number?: string; externalId?: string; status?: string;
-  site?: string; 
+  site?: string; // 🔥 Добавлено
   createdAt?: string; customerComment?: string; managerComment?: string;
   firstName?: string; lastName?: string; phone?: string; email?: string;
   customer?: {

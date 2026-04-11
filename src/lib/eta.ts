@@ -110,5 +110,16 @@ export async function applyUniversalEtaShift(orderId: string, newStatus: string,
         }
       }
     }
+    if (diffMinutesToShift !== 0 && order.route?.estimatedReturnTime) {
+      const routeMins = parseTimeStr(order.route.estimatedReturnTime);
+      if (routeMins !== null) {
+        await prisma.route.update({
+          where: { id: order.routeId },
+          data: { 
+            estimatedReturnTime: formatTimeStr(routeMins + diffMinutesToShift) 
+          }
+        });
+      }
+    }
   } catch (err) { console.error(`[ETA UNIVERSAL] Ошибка:`, err); }
 }
