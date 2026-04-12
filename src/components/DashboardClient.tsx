@@ -692,7 +692,8 @@ const handleQuickStatusChange = async (id: string, newStatus: string, calculated
             courierId: o.courierId,
             createdAt: o.route.createdAt,
             updatedAt: o.route.updatedAt || o.changedAt || o.createdAt,
-            baseArrivalTime: o.route.baseArrivalTime
+            baseArrivalTime: o.route.baseArrivalTime,
+            estimatedReturnTime: o.route.estimatedReturnTime
           });
         }
         routesMap.get(o.route.id).orders.push(o);
@@ -981,6 +982,9 @@ const handleQuickStatusChange = async (id: string, newStatus: string, calculated
       }
     }
 
+    // 🔥 ДОБАВЛЯЕМ ПОЛУЧЕНИЕ ВРЕМЕНИ ВОЗВРАТА
+    const returnTime = calculatedEtasData.baseReturnTime !== "—" ? calculatedEtasData.baseReturnTime : null;
+
     try {
       const res = await fetch(`/api/routes/assign`, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -989,7 +993,8 @@ const handleQuickStatusChange = async (id: string, newStatus: string, calculated
           courierId: bulkCourier,
           routeType, returnToBase, oldRouteId: editingRouteId, departureAdvice, isDraft,
           routeEtas: etasPayload,
-          routeDate: filterDate
+          routeDate: filterDate,
+          estimatedReturnTime: returnTime // 🔥 ПЕРЕДАЕМ НА БЭКЕНД
         })
       });
       if (!res.ok) throw new Error("Ошибка сервера");
@@ -1080,14 +1085,24 @@ const handleQuickStatusChange = async (id: string, newStatus: string, calculated
             // 🔥 3. ДИНАМИЧЕСКИЙ РАСЧЕТ ВОЗВРАТА (Обновляется и учитывает задержки)
             let estimatedBaseReturn = null;
             if (r.orders.length > 0 && !isAllDelivered) {
-               const lastOrder = r.orders[r.orders.length - 1];
+               
+               // --- ИСПРАВЛЕННЫЙ БЛОК ---
                let baseReturnMs = 0;
                
-               if (lastOrder.eta && lastOrder.eta !== "—") {
-                   const [h, m] = lastOrder.eta.split(':').map(Number);
+               // Сначала проверяем, есть ли время из базы (то самое 18:37)
+               if (r.estimatedReturnTime) {
+                   const [h, m] = r.estimatedReturnTime.split(':').map(Number);
                    if (!isNaN(h)) {
                        const d = new Date(); 
-                       d.setHours(h, m + 35, 0, 0); // План последней точки + 35 мин на базу
+                       d.setHours(h, m, 0, 0);
+                       baseReturnMs = d.getTime();
+                   }
+               } else {
+                   // Если в базе пусто (старые маршруты), считаем по старинке +35 мин
+                   const lastOrder = r.orders[r.orders.length - 1];
+                   if (lastOrder.eta && lastOrder.eta !== "—") {
+                       const [h, m] = lastOrder.eta.split(':').map(Number);
+                       const d = new Date(); d.setHours(h, m + 35, 0, 0);
                        baseReturnMs = d.getTime();
                    }
                }

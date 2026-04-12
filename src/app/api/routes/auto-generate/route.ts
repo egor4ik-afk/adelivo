@@ -211,8 +211,16 @@ export async function POST(req: Request) {
              const link = `https://yandex.ru/maps/?rtext=${STORE_LAT},${STORE_LNG}~${optimizedRoute.map(o => `${o.lat},${o.lng}`).join("~")}&rtt=${courier.isAuto ? 'auto' : 'mt'}`;
 
              const newRoute = await prisma.route.create({
-                 data: { name: routeName, link, date: routeDate, courierId: courier.id, isDraft: true }
-             });
+              data: { 
+                 name: routeName, 
+                 link, 
+                 date: routeDate, 
+                 courierId: courier.id, 
+                 isDraft: true,
+                 // 🔥 ИСПРАВЛЕНО: Убрали body, просто инициализируем как пустое поле
+                 estimatedReturnTime: null 
+              }
+          });
 
              for (let i = 0; i < optimizedRoute.length; i++) {
                  await prisma.order.update({

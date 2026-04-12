@@ -131,7 +131,14 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10));
       }
       const newRoute = await prisma.route.create({
-        data: { name: `${prefix}${(maxNum + 1).toString().padStart(3, "0")}`, link: updateData.courierLink, date: orderDate, courierId: newCourierId },
+        data: { 
+            name: `${prefix}${(maxNum + 1).toString().padStart(3, "0")}`, 
+            link: updateData.courierLink, 
+            date: orderDate, 
+            courierId: newCourierId,
+            // 🔥 ДОБАВЛЕНО: сохраняем, если пришло в body
+            estimatedReturnTime: body.estimatedReturnTime || null
+        },
       });
       updateData.routeId = newRoute.id; updateData.routeOrder = 1;
       if (order.status === "NEW") updateData.status = "ASSIGNED";

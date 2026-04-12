@@ -24,7 +24,11 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     // 2. Обновляем данные маршрута в БД
     const updatedRoute = await prisma.route.update({
       where: { id },
-      data: { baseArrivalTime: body.baseArrivalTime }
+      data: { 
+        baseArrivalTime: body.baseArrivalTime,
+        // 🔥 ДОБАВЛЕНО: теперь поле сохраняется при обновлении маршрута
+        estimatedReturnTime: body.estimatedReturnTime 
+      }
     });
 
     // 3. Отправляем уведомление в Telegram, если время действительно поменялось

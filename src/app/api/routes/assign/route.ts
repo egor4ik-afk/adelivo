@@ -8,8 +8,7 @@ const STORE_COORDS = "55.749511,37.596205"; // База
 
 export async function POST(req: Request) {
   try {
-    const { orderIds, courierId, routeType = "auto", returnToBase = false, routeDate, oldRouteId, departureAdvice, isDraft, routeEtas } = await req.json();
-
+    const { orderIds, courierId, returnToBase = false, routeDate, oldRouteId, departureAdvice, isDraft, routeEtas, estimatedReturnTime } = await req.json();
     let existingRouteName = null;
     if (oldRouteId) {
       const oldRoute = await prisma.route.findUnique({ where: { id: oldRouteId } });
@@ -95,8 +94,13 @@ export async function POST(req: Request) {
 
     const newRoute = await prisma.route.create({
       data: { 
-        name: routeName, link, date: finalRouteDate, departureAdvice: departureAdvice || null, courierId: Number(courierId),
-        isDraft: isDraft || false
+        name: routeName, 
+        link, 
+        date: finalRouteDate, 
+        departureAdvice: departureAdvice || null, 
+        courierId: Number(courierId),
+        isDraft: isDraft || false,
+        estimatedReturnTime: estimatedReturnTime || null // 🔥 ТЕПЕРЬ СОХРАНЯЕТСЯ ПРИ СОЗДАНИИ/СОХРАНЕНИИ!
       }
     });
 

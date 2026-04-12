@@ -109,16 +109,39 @@ export async function applyUniversalEtaShift(orderId: string, newStatus: string,
           });
         }
       }
-    }
-    if (diffMinutesToShift !== 0 && order.route?.estimatedReturnTime) {
-      const routeMins = parseTimeStr(order.route.estimatedReturnTime);
-      if (routeMins !== null) {
-        await prisma.route.update({
-          where: { id: order.routeId },
-          data: { 
-            estimatedReturnTime: formatTimeStr(routeMins + diffMinutesToShift) 
-          }
+
+      // 🔥 ЛОГИКА ДЛЯ МАРШРУТА: Обрабатываем estimatedReturnTime как "дополнительную точку"
+      if (order.route?.estimatedReturnTime) {
+        // Если ETA возврата уже существует, сдвигаем его на ту же самую дельту
+        const routeMins = parseTimeStr(order.route.estimatedReturnTime);
+        if (routeMins !== null) {
+          await prisma.route.update({
+            where: { id: order.routeId },
+            data: { 
+              estimatedReturnTime: formatTimeStr(routeMins + diffMinutesToShift) 
+            }
+          });
+        }
+      } else {
+        // Если его еще нет (сохранение/создание маршрута или выезд на 1 точку), инициализируем.
+        // Ищем самую последнюю точку маршрута.
+        const lastOrderInRoute = await prisma.order.findFirst({
+            where: { routeId: order.routeId },
+            orderBy: { routeOrder: 'desc' }
         });
+
+        // Так как мы уже сдвинули ETA будущих точек в цикле выше, 
+        // у lastOrderInRoute здесь лежит абсолютно точный актуальный ETA.
+        if (lastOrderInRoute && lastOrderInRoute.eta) {
+            const lastMins = parseTimeStr(lastOrderInRoute.eta);
+            if (lastMins !== null) {
+                const RETURN_DRIVE_MINS = 30; // Заложим стандартные 30 минут на дорогу до базы
+                await prisma.route.update({
+                    where: { id: order.routeId },
+                    data: { estimatedReturnTime: formatTimeStr(lastMins + RETURN_DRIVE_MINS) }
+                });
+            }
+        }
       }
     }
   } catch (err) { console.error(`[ETA UNIVERSAL] Ошибка:`, err); }
