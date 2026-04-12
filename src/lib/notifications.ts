@@ -16,7 +16,7 @@ interface OrderPayload {
   id: string;
   crmId: string;
   externalId: string | null;
-  shop?: string | null;         // 🔥 ДОБАВЛЕНО: Магазин для иконки
+  shop?: string | null;
   courierId?: number | null;
   address: string | null;
   slotRaw: string | null;
@@ -47,11 +47,10 @@ function statusLabel(s: string) {
   return STATUS_LABELS[s] ?? s;
 }
 
-// Умная иконка магазина для Пушей
 function getShopPrefix(shop?: string | null) {
   if (shop === 'kaktusfiori' || shop === 'meura-flowers') return "🌸 Meura";
   if (shop === 'bunch') return "📦 Bunch";
-  return "📦"; // По умолчанию
+  return "📦"; 
 }
 
 function initWebPush(): boolean {
@@ -81,7 +80,6 @@ async function log(type: string, channel: string, payload: object, success: bool
     .catch(() => {});
 }
 
-// ── РАССЫЛКА PUSH ──
 async function sendIndividualPushes(event: NotificationEvent) {
   if (!initWebPush()) return;
 
@@ -126,11 +124,9 @@ async function sendIndividualPushes(event: NotificationEvent) {
     const payload = JSON.stringify({
       title: `💬 ${event.senderName}`,
       body: event.text,
-      // 🔥 Ведём на нужную страницу в зависимости от роли
       url: targetUser.role === "COURIER" ? "/courier/routes" : "/dashboard",
       role: targetUser.role,
       orderId: null,
-      // 🔥 Уникальный tag — каждый диалог своё уведомление, не схлопываются
       tag: `chat-conv-${event.conversationId}`,
       timestamp: Date.now(),
     });
@@ -172,7 +168,6 @@ async function sendIndividualPushes(event: NotificationEvent) {
       if (event.type === "order.new") {
         if (user.notifyNewOrder) {
           shouldSend = true;
-          // 🔥 ИСПОЛЬЗУЕМ ПРЕФИКС МАГАЗИНА
           title = `${getShopPrefix(event.order.shop)}: Новый заказ ${event.order.externalId ?? event.order.crmId}`;
           bodyTexts.push(event.order.address ?? "Без адреса");
           targetUrl = `/dashboard?orderId=${event.order.id}`;
@@ -198,13 +193,14 @@ async function sendIndividualPushes(event: NotificationEvent) {
           shouldSend = true;
           bodyTexts.push(`Время: ${event.order.slotRaw || "—"}`);
         }
-        if (user.notifyComment && event.changes.commentChanged) {
+        // 🔥 ИСПРАВЛЕНО: Проверка на пустой комментарий
+        if (user.notifyComment && event.changes.commentChanged && event.order.comment?.trim()) {
           shouldSend = true;
-          bodyTexts.push(`Коммент: ${event.order.comment || "—"}`);
+          bodyTexts.push(`Коммент: ${event.order.comment.trim()}`);
         }
-        if (user.notifyOpComment && event.changes.opCommentChanged) {
+        if (user.notifyOpComment && event.changes.opCommentChanged && event.order.opComment?.trim()) {
           shouldSend = true;
-          bodyTexts.push(`Коммент оператора: ${event.order.opComment || "—"}`);
+          bodyTexts.push(`Коммент оператора: ${event.order.opComment.trim()}`);
         }
         if (user.notifyItems && event.changes.itemsChanged) {
           shouldSend = true;
@@ -215,7 +211,6 @@ async function sendIndividualPushes(event: NotificationEvent) {
           bodyTexts.push(`Телефон получателя изменен`);
         }
         if (shouldSend) {
-          // 🔥 ИСПОЛЬЗУЕМ ПРЕФИКС МАГАЗИНА
           title = `${getShopPrefix(event.order.shop)}: Изменения в ${event.order.externalId ?? event.order.crmId}`;
           targetUrl = `/dashboard?orderId=${event.order.id}`;
         }
@@ -242,15 +237,16 @@ async function sendIndividualPushes(event: NotificationEvent) {
         const courierRecord = await prisma.courier.findFirst({
           where: { email: user.email ?? undefined },
         });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const eventCourierId = (event.order as any).courierId;
 
         if (courierRecord && eventCourierId === courierRecord.id) {
+          // 🔥 ИСПРАВЛЕНО: Блокируем спам при первичном назначении (NEW -> ASSIGNED)
           if (event.changes.statusChanged) {
-            shouldSend = true;
             const oldLabel = event.previousStatus ? statusLabel(event.previousStatus) : "—";
             const newLabel = statusLabel(event.order.status);
-            if (oldLabel !== newLabel) {
+            
+            if (oldLabel !== newLabel && !(event.previousStatus === "NEW" && event.order.status === "ASSIGNED")) {
+              shouldSend = true;
               bodyTexts.push(`Статус: ${oldLabel} ➔ ${newLabel}`);
             }
           }
@@ -262,13 +258,14 @@ async function sendIndividualPushes(event: NotificationEvent) {
             shouldSend = true;
             bodyTexts.push(`Новое время: ${event.order.slotRaw ?? "—"}`);
           }
-          if (event.changes.commentChanged) {
+          // 🔥 ИСПРАВЛЕНО: Проверка на пустой комментарий
+          if (event.changes.commentChanged && event.order.comment?.trim()) {
             shouldSend = true;
-            bodyTexts.push(`Коммент клиента: ${event.order.comment ?? "—"}`);
+            bodyTexts.push(`Коммент клиента: ${event.order.comment.trim()}`);
           }
-          if (event.changes.opCommentChanged) {
+          if (event.changes.opCommentChanged && event.order.opComment?.trim()) {
             shouldSend = true;
-            bodyTexts.push(`Коммент оператора: ${event.order.opComment ?? "—"}`);
+            bodyTexts.push(`Коммент оператора: ${event.order.opComment.trim()}`);
           }
           if (event.changes.itemsChanged) {
             shouldSend = true;
@@ -286,42 +283,34 @@ async function sendIndividualPushes(event: NotificationEvent) {
       }
     }
 
-    // ── 2. ЗАМЕНИТЬ блок chat.global (найди по "chat.global" в цикле users) ──
-// Заменить этот кусок внутри цикла for (const user of users):
- 
-if (event.type === "chat.global" && user.id !== event.senderId) {
-  shouldSend = true;
-  title = `💬 Общий чат: ${event.senderName}`;
-  bodyTexts.push(event.text);
-  targetUrl = user.role === "COURIER" ? "/courier/routes" : "/dashboard";
-}
+    if (event.type === "chat.global" && user.id !== event.senderId) {
+      shouldSend = true;
+      title = `💬 Общий чат: ${event.senderName}`;
+      bodyTexts.push(event.text);
+      targetUrl = user.role === "COURIER" ? "/courier/routes" : "/dashboard";
+    }
 
-// ── 3. ЗАМЕНИТЬ формирование payload в конце цикла (найди "if (shouldSend && title)") ──
-// Добавить уникальный tag:
-
-if (shouldSend && title) {
-  const isChat = event.type === "chat.global";
-  const payload = JSON.stringify({
-    title,
-    body: bodyTexts.join("\n") || " ",
-    url: targetUrl,       
-    role,                 
-    orderId: event.type !== "address.invalid" && event.type !== "route.assigned" && !isChat
-      ? (event as any).order?.id ?? null
-      : null,
-    // 🔥 Уникальный tag: чат-глобал по senderId+времени, заказы по orderId
-    tag: isChat
-      ? `chat-global-${event.senderId}`
-      : (event as any).order?.id
-        ? `order-${(event as any).order.id}`
-        : "eventwave",
-    timestamp: Date.now(),
-  });
+    if (shouldSend && title) {
+      const isChat = event.type === "chat.global";
+      const payload = JSON.stringify({
+        title,
+        body: bodyTexts.join("\n") || " ",
+        url: targetUrl,       
+        role,                 
+        orderId: event.type !== "address.invalid" && event.type !== "route.assigned" && !isChat
+          ? (event as any).order?.id ?? null
+          : null,
+        tag: isChat
+          ? `chat-global-${event.senderId}`
+          : (event as any).order?.id
+            ? `order-${(event as any).order.id}`
+            : "eventwave",
+        timestamp: Date.now(),
+      });
 
       for (const sub of user.pushSubscriptions) {
         try {
           await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (e: any) {
           if (e.statusCode === 410 || e.statusCode === 404) {
             expiredEndpoints.push(sub.endpoint);
@@ -342,7 +331,6 @@ if (shouldSend && title) {
 }
 
 export async function notify(event: NotificationEvent) {
-  // 🔥 ПУШИ СНОВА ВКЛЮЧЕНЫ И РАБОТАЮТ!
   await sendIndividualPushes(event).catch(console.error);
 
   switch (event.type) {
