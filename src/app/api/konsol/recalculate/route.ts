@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { updateKonsolTask } from "@/lib/konsol";
+import { updateKonsolTask, getKonsolTask } from "@/lib/konsol"; // 🔥 Добавили getKonsolTask
 
 export async function POST(req: Request) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -32,8 +32,6 @@ export async function POST(req: Request) {
         const courier = await prisma.courier.findUnique({ where: { id: courierId } });
         if (!courier || !courier.konsolContractorId) continue;
 
-        // 🔥 Ищем открытое задание (DRAFT или CONFIRMED без акта)
-        // Чтобы не было дублей, берем самое последнее
         const task = await prisma.konsolTask.findFirst({
           where: { 
             courierId, 
@@ -47,13 +45,38 @@ export async function POST(req: Request) {
           console.error(`❌ Нет открытого задания для курьера ${courierId}`);
           errors.push(`Нет открытого задания для ${courier.fullName}`);
           errorCount++;
-          continue; // БЕЗ СОЗДАНИЯ НОВЫХ ЗАДАНИЙ!
+          continue; 
+        }
+
+        // 🔥 ПРОВЕРЯЕМ РЕАЛЬНЫЙ СТАТУС В КОНСОЛИ ПЕРЕД РЕДАКТИРОВАНИЕМ
+        const remoteTask = await getKonsolTask(task.konsolTaskId);
+        if (!remoteTask) {
+           throw new Error(`Задание ${task.konsolTaskId} не найдено в API Консоли.`);
+        }
+
+        const currentState = remoteTask.state?.code;
+        
+        // 🔥 Если статус финальный, Консоль выдаст "Нет доступа" при попытке добавить услуги
+        if (['completed', 'finalized', 'cancelled', 'revoked'].includes(currentState)) {
+           console.log(`[Синхронизация БД] Задание ${task.konsolTaskId} курьера ${courierId} уже закрыто (${currentState}). Обновляем БД.`);
+           
+           // ЛЕЧИМ НАШУ БАЗУ: помечаем как закрытое и подтягиваем ID акта (если есть)
+           await prisma.konsolTask.update({
+             where: { id: task.id },
+             data: { 
+               status: "COMPLETED",
+               konsolActId: remoteTask.acts_ids?.[0] ? String(remoteTask.acts_ids[0]) : null
+             }
+           });
+           
+           errors.push(`Задание курьера ${courier.fullName} уже закрыто в Консоли (${currentState})`);
+           errorCount++;
+           continue; // Пропускаем пересчет, так как менять больше нельзя
         }
 
         // Подсчет доставок
         const dutiesMap: Record<number, number> = {};
         
-        // Берем заказы ТОЛЬКО за выделенные дни
         const orders = await prisma.order.findMany({
           where: { courierId, status: "DELIVERED", deliveryDate: { in: dates } }
         });
@@ -64,7 +87,6 @@ export async function POST(req: Request) {
           }
         }
 
-        // Применяем ручные изменения (overrides)
         if (overrides && overrides[courierId]) {
           for (const [priceStr, qty] of Object.entries(overrides[courierId] as Record<string, number>)) {
             dutiesMap[Number(priceStr)] = qty;
@@ -98,12 +120,11 @@ export async function POST(req: Request) {
         }
 
         if (newDuties.length === 0) {
-          // Если вообще нет услуг, ставим 1 базовую, чтобы Консоль не ругалась (цена 636 = 600 * 1.06)
           newDuties.push({ template_id: 89135, price: 636, quantity: 1 });
           deliveriesTotal = 636;
         }
 
-        // 🔥 Обновляем услуги в Консоли!
+        // Обновляем услуги в Консоли
         await updateKonsolTask(task.konsolTaskId, newDuties);
 
         // Обновляем сумму в нашей БД

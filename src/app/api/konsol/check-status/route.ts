@@ -12,16 +12,12 @@ const headers = {
   "Content-Type": "application/json",
 };
 
-// Получаем задания из Консоли через filter (POST)
 async function fetchKonsolTasksByWeek(mondayStr: string, sundayStr: string) {
   const res = await fetch(`${KONSOL_BUS}/workflow/tasks/filter`, {
-    method: "POST",
-    headers,
+    method: "POST", headers,
     body: JSON.stringify({
-      state_code: ["submitted", "confirmed", "auto_confirmed", "checked_in", "accepted"],
-      since_date: mondayStr,
-      to_date: sundayStr,
-      pagination: { page: 1, limit: 100 },
+      state_code: ["submitted", "confirmed", "auto_confirmed", "checked_in", "accepted", "completed", "finalized"],
+      since_date: mondayStr, to_date: sundayStr, pagination: { page: 1, limit: 100 },
     }),
     cache: "no-store",
   });
@@ -30,11 +26,9 @@ async function fetchKonsolTasksByWeek(mondayStr: string, sundayStr: string) {
   return data?.collection || [];
 }
 
-// Получаем одно задание по ID
 async function fetchKonsolTask(taskId: string) {
   const res = await fetch(`${KONSOL_BUS}/workflow/tasks/filter`, {
-    method: "POST",
-    headers,
+    method: "POST", headers,
     body: JSON.stringify({ ids: [Number(taskId)], pagination: { page: 1, limit: 1 } }),
     cache: "no-store",
   });
@@ -44,7 +38,6 @@ async function fetchKonsolTask(taskId: string) {
   return collection.length > 0 ? collection[0] : null;
 }
 
-// Получаем акт из v2
 async function fetchKonsolAct(actId: string) {
   const res = await fetch(`${KONSOL_V2}/acts/${actId}`, { headers, cache: "no-store" });
   if (!res.ok) return null;
@@ -71,7 +64,6 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const session = await getSession(req as any);
   if (session?.role !== "ADMIN" && session?.role !== "OPERATOR") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -79,19 +71,15 @@ export async function POST(req: Request) {
 
   try {
     const { weekStart, weekEnd } = await req.json();
-    const mondayStr = weekStart;
-    const sundayStr = weekEnd;
 
     // ====================================================================
     // 🔥 ШАГ 1: ПОДТЯГИВАЕМ АКТИВНЫЕ ЗАДАНИЯ НЕДЕЛИ ИЗ КОНСОЛИ
     // ====================================================================
     try {
-      const aktiveTasks = await fetchKonsolTasksByWeek(mondayStr, sundayStr);
+      const aktiveTasks = await fetchKonsolTasksByWeek(weekStart, weekEnd);
 
       if (aktiveTasks.length > 0) {
-        const couriers = await prisma.courier.findMany({
-          where: { konsolContractorId: { not: null } },
-        });
+        const couriers = await prisma.courier.findMany({ where: { konsolContractorId: { not: null } } });
 
         for (const task of aktiveTasks) {
           const rawId = task.contractor?.id;
@@ -105,16 +93,15 @@ export async function POST(req: Request) {
           const dateStr = task.since_date;
           if (!dateStr) continue;
 
-          const actsIds = task.acts_ids || task.data?.acts_ids || [];
-          const hasActs = actsIds.length > 0;
-          const actIdToSave = hasActs ? String(actsIds[0]) : null;
+          // 🔥 УМНЫЙ ПОИСК АКТА ВО ВСЕХ ВОЗМОЖНЫХ ПОЛЯХ
+          const actIdToSave = task.act_id ? String(task.act_id) : 
+                              (task.act?.id ? String(task.act.id) : 
+                              (task.acts_ids?.[0] ? String(task.acts_ids[0]) : null));
+          const hasActs = !!actIdToSave;
 
-          const existing = await prisma.konsolTask.findFirst({
-            where: { konsolTaskId: String(task.id) }
-          });
+          const existing = await prisma.konsolTask.findFirst({ where: { konsolTaskId: String(task.id) } });
 
           if (existing) {
-            // 🔥 ЗОЛОТОЕ ПРАВИЛО: НИКОГДА НЕ ПОНИЖАЕМ СТАТУС SIGNED_BY_US
             if (existing.status !== "SIGNED_BY_US") {
                const dbStatus = hasActs ? "SIGNED_BY_US" : "CONFIRMED";
                await prisma.konsolTask.update({ 
@@ -154,15 +141,18 @@ export async function POST(req: Request) {
       if (t.konsolTaskId && t.status !== "SIGNED_BY_US") {
          const remote = await fetchKonsolTask(t.konsolTaskId);
          if (remote) {
-            const actsIds = remote.acts_ids || remote.data?.acts_ids || [];
-            if (actsIds.length > 0) {
-               const newActId = String(actsIds[0]);
+            // 🔥 УМНЫЙ ПОИСК АКТА ЗДЕСЬ ТОЖЕ
+            const remoteActId = remote.act_id ? String(remote.act_id) : 
+                                (remote.act?.id ? String(remote.act.id) : 
+                                (remote.acts_ids?.[0] ? String(remote.acts_ids[0]) : null));
+            
+            if (remoteActId) {
                await prisma.konsolTask.update({
                   where: { id: t.id },
-                  data: { status: "SIGNED_BY_US", konsolActId: newActId }
+                  data: { status: "SIGNED_BY_US", konsolActId: remoteActId }
                });
                t.status = "SIGNED_BY_US"; 
-               t.konsolActId = newActId;
+               t.konsolActId = remoteActId;
             } else if (remote.state) {
                const code = remote.state.code;
                const newDbStatus = ["confirmed", "submitted", "auto_confirmed", "checked_in", "accepted"].includes(code) ? "CONFIRMED" : t.status;
@@ -176,27 +166,23 @@ export async function POST(req: Request) {
 
       // Отрисовка бейджа 
       if (t.status === "SIGNED_BY_US" && t.konsolActId) {
-          const act = await fetchKonsolAct(t.konsolActId);
-          if (act?.payment?.status === "paid") {
-            currentBadge = { label: "✅ Оплачено", color: "#10b981" };
-          } else if (act?.payment?.status === "not_paid" || act?.payment?.status === "pending") {
-            try {
-              await autopayKonsolAct(t.konsolActId);
-              autopaiedCount++;
-              currentBadge = { label: "⏳ Ожидает оплаты", color: "#f59e0b" };
-            } catch {
-              currentBadge = { label: "💳 Нет денег", color: "#d94040" };
-            }
-          } else if (act?.payment?.status === "error") {
-            currentBadge = { label: "❌ Ошибка оплаты", color: "#d94040" };
-          } else {
-            currentBadge = { label: "✅ Подписано", color: "#10b981" };
-          }
-      } else if (t.status === "CONFIRMED") {
-         currentBadge = { label: "🔵 В работе", color: "#4a7aff" };
-      } else {
-         currentBadge = { label: "⏳ Черновик", color: "#6b6860" };
-      }
+        const act = await fetchKonsolAct(t.konsolActId);
+        if (act?.payment?.status === "paid") {
+          currentBadge = { label: "✅ Оплачено", color: "#10b981" };
+        } else if (act?.payment?.status === "not_paid" || act?.payment?.status === "pending") {
+          // 🔥 Убрали автоматическую оплату отсюда! 
+          // Теперь он просто показывает статус "Ожидает оплаты"
+          currentBadge = { label: "⏳ Ожидает оплаты", color: "#f59e0b" };
+        } else if (act?.payment?.status === "error") {
+          currentBadge = { label: "❌ Ошибка оплаты", color: "#d94040" };
+        } else {
+          currentBadge = { label: "✅ Подписано", color: "#10b981" };
+        }
+    } else if (t.status === "CONFIRMED") {
+       currentBadge = { label: "🔵 В работе", color: "#4a7aff" };
+    } else {
+       currentBadge = { label: "⏳ Черновик", color: "#6b6860" };
+    }
 
       if (currentBadge && !statuses[t.courierId].some(s => s.label === currentBadge?.label)) {
         statuses[t.courierId].push(currentBadge);
