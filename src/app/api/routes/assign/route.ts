@@ -16,16 +16,19 @@ export async function POST(req: Request) {
     } = body;
 
     let existingRouteName = null;
-    // 🔥 ДОБАВЛЕНО: переменные для сохранения старых данных
     let fallbackReturnTime = null;
     let fallbackAdvice = null;
     let fallbackIsDraft = false;
 
     if (oldRouteId) {
-      const oldRoute = await prisma.route.findUnique({ where: { id: oldRouteId } });
+      // 🔥 ДОБАВЛЕНО: Подтягиваем старого курьера маршрута, чтобы знать, авто он или нет
+      const oldRoute = await prisma.route.findUnique({ 
+        where: { id: oldRouteId },
+        include: { courier: true } 
+      });
+
       if (oldRoute) {
         existingRouteName = oldRoute.name;
-        // Сохраняем старые значения, если новые не присланы (например, из RouteEditor)
         fallbackReturnTime = oldRoute.estimatedReturnTime;
         fallbackAdvice = oldRoute.departureAdvice;
         fallbackIsDraft = oldRoute.isDraft;
@@ -36,12 +39,20 @@ export async function POST(req: Request) {
       });
 
       for (const o of ordersToReset) {
+        let resetPrice = o.price;
+        
+        // 🔥 ИСПРАВЛЕНО: Если мы выкидываем заказ из авто-маршрута, снимаем 100р надбавки
+        if (oldRoute?.courier?.isAuto && resetPrice && resetPrice >= 600) {
+            resetPrice -= 100;
+        }
+
         await prisma.order.update({
           where: { id: o.id },
           data: {
             courierId: null, courier: null, routeId: null, routeOrder: null,
             status: o.status === "ASSIGNED" ? "NEW" : o.status,
-            eta: null 
+            eta: null,
+            price: resetPrice // 🔥 Сохраняем честную откаченную цену
           }
         });
         if (o.crmId) {
@@ -108,7 +119,6 @@ export async function POST(req: Request) {
         name: routeName, 
         link, 
         date: finalRouteDate, 
-        // 🔥 ИСПРАВЛЕНО: используем fallback, если значение не пришло в body
         departureAdvice: departureAdvice !== undefined ? departureAdvice : fallbackAdvice, 
         courierId: Number(courierId),
         isDraft: isDraft !== undefined ? isDraft : fallbackIsDraft,
@@ -143,8 +153,8 @@ export async function POST(req: Request) {
            }
         }
 
-        const AUTO_PRICES = [600, 1000, 1400];
-        if (oldCourierIsAuto && AUTO_PRICES.includes(basePrice)) {
+        // 🔥 ИСПРАВЛЕНО: Вместо жесткого массива, просто проверяем что была авто-цена >= 600
+        if (oldCourierIsAuto && basePrice >= 600) {
             basePrice -= 100;
         }
         const autoSurcharge = courierDb.isAuto ? 100 : 0;

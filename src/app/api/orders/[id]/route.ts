@@ -1,9 +1,4 @@
 // src/app/api/orders/[id]/route.ts
-// 
-// ИЗМЕНЕНИЯ:
-// 1. Добавлен импорт notify
-// 2. После prisma.order.update вызывается notify({ type: "order.updated", ... })
-// 3. 🔥 ДОБАВЛЕНО: Обновление `estimatedReturnTime` у маршрута (Route) при получении его в body
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -27,6 +22,11 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const updateData: any = {};
+
+    // ОБРАБОТКА ДАТЫ ДОСТАВКИ
+    if (body.deliveryDate !== undefined) {
+      updateData.deliveryDate = body.deliveryDate ? new Date(body.deliveryDate) : null;
+    }
 
     if (body.status !== undefined) {
       updateData.status = body.status;
@@ -66,8 +66,13 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     if (body.items !== undefined) updateData.items = body.items;
     if (body.routeId !== undefined) updateData.routeId = body.routeId;
     if (body.routeOrder !== undefined) updateData.routeOrder = body.routeOrder;
-    if (body.price !== undefined) updateData.price = body.price;
     if (body.costPrice !== undefined) updateData.costPrice = body.costPrice;
+
+    // СНИМАЕМ ФЛАГ ТОЛЬКО ПРИ РУЧНОМ ВВОДЕ ЦЕНЫ
+    if (body.price !== undefined) {
+      updateData.price = body.price;
+      updateData.wrongPrice = false; 
+    }
 
     let finalPrice: number | undefined = body.price;
     if (body.courier !== undefined) {
@@ -118,7 +123,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         if (siblingsCount === 0) await prisma.route.deleteMany({ where: { id: order.routeId } });
       }
       
-      const rawDate = order.deliveryDate || order.crmCreatedAt || new Date();
+      const rawDate = updateData.deliveryDate || order.deliveryDate || order.crmCreatedAt || new Date();
       const orderDate = (rawDate instanceof Date ? rawDate : new Date(rawDate))
            .toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" });
       const routeDay = orderDate.split("-")[2];
@@ -136,7 +141,6 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
             link: updateData.courierLink, 
             date: orderDate, 
             courierId: newCourierId,
-            // 🔥 ДОБАВЛЕНО: сохраняем, если пришло в body
             estimatedReturnTime: body.estimatedReturnTime || null
         },
       });
@@ -144,6 +148,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       if (order.status === "NEW") updateData.status = "ASSIGNED";
     }
 
+    // 🔥 ВОЗВРАЩЕННЫЙ БЛОК: Снятие курьера
     if ((body.courier === "" || body.courier === null) && order.courierId !== null) {
       if (order.status === "ASSIGNED" && body.status === undefined) updateData.status = "NEW";
       updateData.pickedUpAt = null;
@@ -152,6 +157,20 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         if (siblingsCount === 0) await prisma.route.deleteMany({ where: { id: order.routeId } });
         updateData.routeId = null; updateData.routeOrder = null;
       }
+    }
+
+    // 🔥 НОВЫЙ БЛОК: Безопасный выход из маршрута при смене даты
+    const oldDate = order.deliveryDate ? new Date(order.deliveryDate).toISOString().split('T')[0] : null;
+    const newDate = updateData.deliveryDate ? new Date(updateData.deliveryDate).toISOString().split('T')[0] : null;
+    const dateChanged = body.deliveryDate !== undefined && oldDate !== newDate;
+
+    if (dateChanged && order.routeId) {
+      const siblingsCount = await prisma.order.count({ where: { routeId: order.routeId, id: { not: id } }});
+      if (siblingsCount === 0) {
+         await prisma.route.deleteMany({ where: { id: order.routeId } });
+      }
+      updateData.routeId = null; 
+      updateData.routeOrder = null;
     }
 
     if (body.photoUrl !== undefined) updateData.photoUrl = body.photoUrl;
@@ -168,9 +187,6 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       updatedOrder = await prisma.order.update({ where: { id }, data: updateData, include: { route: true } });
     }
 
-    // 🔥 НОВОЕ: ОБНОВЛЕНИЕ ПЛАНОВОГО ВРЕМЕНИ ВОЗВРАТА
-    // Если фронтенд передал estimatedReturnTime, мы обновляем маршрут, 
-    // к которому привязан этот заказ. Это позволяет времени "двигаться" вслед за ETA заказов.
     if (body.estimatedReturnTime !== undefined && updatedOrder.routeId) {
       await prisma.route.update({
         where: { id: updatedOrder.routeId },
@@ -178,12 +194,10 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       });
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // 🔥 NOTIFY: отправляем пуши при любых ручных изменениях через дашборд
-    // ─────────────────────────────────────────────────────────────────────
     const changes = {
       statusChanged:         order.status         !== updatedOrder.status,
       courierChanged:        (order.courierId ?? 0) !== (updatedOrder.courierId ?? 0),
+      dateChanged:           dateChanged,
       slotChanged:           (order.slotRaw    ?? "") !== (updatedOrder.slotRaw    ?? ""),
       addressChanged:        (order.address    ?? "") !== (updatedOrder.address    ?? ""),
       commentChanged:        (order.comment    ?? "") !== (updatedOrder.comment    ?? ""),
@@ -200,7 +214,6 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         changes,
       }).catch(console.error);
     }
-    // ─────────────────────────────────────────────────────────────────────
 
     const statusChanged = body.status !== undefined && order.status !== body.status;
     if (statusChanged && (body.status === "IN_DELIVERY" || body.status === "DELIVERED")) {
