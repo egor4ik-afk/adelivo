@@ -1,7 +1,7 @@
+// src/app/api/konsol/check-status/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { autopayKonsolAct } from "@/lib/konsol";
 
 export const dynamic = "force-dynamic";
 
@@ -93,7 +93,6 @@ export async function POST(req: Request) {
           const dateStr = task.since_date;
           if (!dateStr) continue;
 
-          // 🔥 УМНЫЙ ПОИСК АКТА ВО ВСЕХ ВОЗМОЖНЫХ ПОЛЯХ
           const actIdToSave = task.act_id ? String(task.act_id) : 
                               (task.act?.id ? String(task.act.id) : 
                               (task.acts_ids?.[0] ? String(task.acts_ids[0]) : null));
@@ -102,15 +101,16 @@ export async function POST(req: Request) {
           const existing = await prisma.konsolTask.findFirst({ where: { konsolTaskId: String(task.id) } });
 
           if (existing) {
+            // 🔥 Не ставим SIGNED_BY_US автоматически. Если есть акт - ставим CONFIRMED
             if (existing.status !== "SIGNED_BY_US") {
-               const dbStatus = hasActs ? "SIGNED_BY_US" : "CONFIRMED";
+               const dbStatus = hasActs ? "CONFIRMED" : existing.status;
                await prisma.konsolTask.update({ 
                  where: { id: existing.id }, 
                  data: { status: dbStatus, konsolActId: actIdToSave || existing.konsolActId } 
                });
             }
           } else {
-            const dbStatus = hasActs ? "SIGNED_BY_US" : "CONFIRMED";
+            const dbStatus = hasActs ? "CONFIRMED" : "DRAFT";
             await prisma.konsolTask.upsert({
               where: { courierId_date: { courierId: courier.id, date: new Date(`${dateStr}T00:00:00Z`) } },
               update: { konsolTaskId: String(task.id), amount, status: dbStatus, konsolActId: actIdToSave },
@@ -141,7 +141,6 @@ export async function POST(req: Request) {
       if (t.konsolTaskId && t.status !== "SIGNED_BY_US") {
          const remote = await fetchKonsolTask(t.konsolTaskId);
          if (remote) {
-            // 🔥 УМНЫЙ ПОИСК АКТА ЗДЕСЬ ТОЖЕ
             const remoteActId = remote.act_id ? String(remote.act_id) : 
                                 (remote.act?.id ? String(remote.act.id) : 
                                 (remote.acts_ids?.[0] ? String(remote.acts_ids[0]) : null));
@@ -149,9 +148,10 @@ export async function POST(req: Request) {
             if (remoteActId) {
                await prisma.konsolTask.update({
                   where: { id: t.id },
-                  data: { status: "SIGNED_BY_US", konsolActId: remoteActId }
+                  // 🔥 Обновляем ID акта, но статус остается CONFIRMED
+                  data: { status: "CONFIRMED", konsolActId: remoteActId }
                });
-               t.status = "SIGNED_BY_US"; 
+               t.status = "CONFIRMED"; 
                t.konsolActId = remoteActId;
             } else if (remote.state) {
                const code = remote.state.code;
@@ -164,25 +164,31 @@ export async function POST(req: Request) {
          }
       }
 
-      // Отрисовка бейджа 
-      if (t.status === "SIGNED_BY_US" && t.konsolActId) {
-        const act = await fetchKonsolAct(t.konsolActId);
-        if (act?.payment?.status === "paid") {
+      // 🔥 Отрисовка бейджа (Читаем реальный статус из Консоли, если есть акт)
+      if ((t.status === "SIGNED_BY_US" || t.status === "CONFIRMED") && t.konsolActId) {
+        const rawAct = await fetchKonsolAct(t.konsolActId);
+        const act = rawAct?.data || rawAct || {};
+        
+        const actStatus = act.status;
+        const payStatus = act.payment?.status;
+
+        if (actStatus === "paid" || payStatus === "paid" || payStatus === "processed") {
           currentBadge = { label: "✅ Оплачено", color: "#10b981" };
-        } else if (act?.payment?.status === "not_paid" || act?.payment?.status === "pending") {
-          // 🔥 Убрали автоматическую оплату отсюда! 
-          // Теперь он просто показывает статус "Ожидает оплаты"
+        } else if (actStatus === "error" || payStatus === "error" || payStatus === "declined" || payStatus === "rejected") {
+          currentBadge = { label: "❌ Ошибка / Нет денег", color: "#d94040" };
+        } else if (actStatus === "processing" || payStatus === "processing" || payStatus === "pending") {
+          currentBadge = { label: "⏳ В процессе оплаты", color: "#f59e0b" };
+        } else if (actStatus === "signed" || payStatus === "not_paid") {
           currentBadge = { label: "⏳ Ожидает оплаты", color: "#f59e0b" };
-        } else if (act?.payment?.status === "error") {
-          currentBadge = { label: "❌ Ошибка оплаты", color: "#d94040" };
         } else {
-          currentBadge = { label: "✅ Подписано", color: "#10b981" };
+          currentBadge = { label: "🔵 Создан акт", color: "#4a7aff" };
         }
-    } else if (t.status === "CONFIRMED") {
-       currentBadge = { label: "🔵 В работе", color: "#4a7aff" };
-    } else {
-       currentBadge = { label: "⏳ Черновик", color: "#6b6860" };
-    }
+
+      } else if (t.status === "CONFIRMED") {
+         currentBadge = { label: "🔵 В работе", color: "#4a7aff" };
+      } else {
+         currentBadge = { label: "⏳ Черновик", color: "#6b6860" };
+      }
 
       if (currentBadge && !statuses[t.courierId].some(s => s.label === currentBadge?.label)) {
         statuses[t.courierId].push(currentBadge);

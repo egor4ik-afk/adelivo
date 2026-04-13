@@ -5,7 +5,6 @@ import { notify } from "@/lib/notifications";
 import { getSession } from "@/lib/auth";
 import { signKonsolAct, autopayKonsolAct, acceptKonsolTask, finalizeKonsolTask } from "@/lib/konsol";
 
-// Вспомогательная функция для проверки статуса акта напрямую
 async function fetchKonsolAct(actId: string) {
   const res = await fetch(`https://api.konsol.pro/v2/acts/${actId}`, {
     headers: {
@@ -19,7 +18,6 @@ async function fetchKonsolAct(actId: string) {
 }
 
 export async function POST(req: Request) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const session = await getSession(req as any);
   if (session?.role !== "ADMIN" && session?.role !== "OPERATOR") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -45,6 +43,7 @@ export async function POST(req: Request) {
         const maxDate = new Date(courierDates[courierDates.length - 1]);
         maxDate.setDate(maxDate.getDate() + 2);
 
+        // Ищем задания (DRAFT, CONFIRMED, SIGNED_BY_US)
         const task = await prisma.konsolTask.findFirst({
           where: { 
             courierId, 
@@ -61,12 +60,10 @@ export async function POST(req: Request) {
 
         let actId = task.konsolActId;
 
-        // ── Шаг 1: если акта нет — финализируем на лету ──────────────────
-        if (!actId && task.status !== "SIGNED_BY_US") {
+        // 1. ФИНАЛИЗАЦИЯ (если акта еще нет)
+        if (!actId) {
           console.log(`[Pay] Финализируем задание ${task.konsolTaskId}...`);
-          try { await acceptKonsolTask(task.konsolTaskId); } catch {
-            console.log(`[Pay] Задание ${task.konsolTaskId} уже принято`);
-          }
+          try { await acceptKonsolTask(task.konsolTaskId); } catch {}
 
           const newActId = await finalizeKonsolTask(task.konsolTaskId);
           if (!newActId) {
@@ -82,40 +79,45 @@ export async function POST(req: Request) {
           actId = String(newActId);
         }
 
-        // ── Шаг 2: подписываем акт (УМНАЯ ПРОВЕРКА) ──────────────────────
-        if (task.status !== "SIGNED_BY_US" && actId) {
-          // 🔥 Проверяем реальный статус акта в Консоли перед подписанием
-          const actData = await fetchKonsolAct(actId);
-          const actStatus = actData?.status;
-          
-          const isAlreadySigned = actStatus === "signed" || actStatus === "paid" || actData?.payment?.status === "paid" || actData?.payment?.status === "pending";
+        if (!actId) {
+            errorCount++;
+            continue;
+        }
 
-          if (isAlreadySigned) {
-             console.log(`[Pay] Акт ${actId} УЖЕ БЫЛ подписан вручную (статус: ${actStatus}). Пропускаем подписание.`);
-          } else {
+        // 2. УМНАЯ ПРОВЕРКА РЕАЛЬНОГО СТАТУСА КОНСОЛИ
+        const rawAct = await fetchKonsolAct(actId);
+        const actData = rawAct?.data || rawAct || {};
+        const actStatus = actData.status;
+        const paymentStatus = actData.payment?.status;
+        
+        // Флаги на основе реальных данных из API
+        const isFullySigned = actStatus === "signed" || actStatus === "paid" || ["paid", "pending", "processing"].includes(paymentStatus);
+        const isPaid = actStatus === "paid" || ["paid", "pending", "processing"].includes(paymentStatus);
+
+        // 3. ПОДПИСАНИЕ (Только если акт действительно не подписан в Консоли)
+        if (!isFullySigned) {
              try {
                await signKonsolAct(actId);
                console.log(`[Pay] Акт ${actId} подписан ✅`);
              } catch (signErr: any) {
                console.error(`[Pay] Ошибка подписания акта ${actId}:`, signErr.message);
-               // Если 404 - значит акт не найден в пуле ожидающих подписания (вероятно, уже подписан)
-               if (signErr.message.includes("404")) {
-                  console.log(`[Pay] Игнорируем 404: акт ${actId} уже подписан или передан в оплату.`);
-               } else {
+               // 404 означает, что акт уже перешел на следующий этап
+               if (!signErr.message.includes("404")) {
                   errorCount++;
-                  continue; // Прерываем только при реальных ошибках (например, 400 или 500)
+                  continue; 
                }
              }
-          }
-
-          // Сохраняем статус
-          await prisma.konsolTask.update({
-            where: { id: task.id },
-            data: { status: "SIGNED_BY_US" },
-          });
+        } else {
+             console.log(`[Pay] Акт ${actId} УЖЕ БЫЛ подписан (статус: ${actStatus}).`);
         }
 
-        // Зелёные кружки в таблице ЗП
+        // Записываем финальный успешный статус к нам в БД
+        await prisma.konsolTask.update({
+          where: { id: task.id },
+          data: { status: "SIGNED_BY_US" },
+        });
+
+        // 4. ЗЕЛЕНЫЕ КРУЖКИ ЗП
         for (const d of courierDates) {
           const existing = await prisma.courierPayment.findUnique({
             where: { courierId_date: { courierId, date: d } },
@@ -125,8 +127,10 @@ export async function POST(req: Request) {
           }
         }
 
-        // ── Шаг 4: автооплата ─────────────────────────────────────────────
-        if (actId) {
+        // 5. АВТООПЛАТА
+        if (isPaid) {
+           console.log(`[Pay] Акт ${actId} УЖЕ В ОПЛАТЕ (статус: ${paymentStatus || actStatus}). Пропускаем autopay.`);
+        } else {
           try {
             await autopayKonsolAct(actId);
             console.log(`[Pay] Акт ${actId} отправлен в автооплату ✅`);
@@ -134,7 +138,10 @@ export async function POST(req: Request) {
             console.error(`[Pay] Autopay акта ${actId}:`, payErr.message);
             const match = payErr.message.match(/"message":"([^"]+)"/);
             const humanMsg = match ? match[1] : payErr.message;
-            warnings.push(`Акт ${actId}: ${humanMsg}`);
+            
+            if (!humanMsg.includes("Нельзя оплатить акты из текущего статуса")) {
+                warnings.push(`Акт ${actId}: ${humanMsg}`);
+            }
           }
         }
 
