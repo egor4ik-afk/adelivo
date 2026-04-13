@@ -5,6 +5,7 @@ import { NAV_HEIGHT } from "@/components/CourierNav";
 
 interface RouteOrder {
   id: string; externalId: string; crmId: string; address: string; status: string;
+  lat: number | null; lng: number | null; // 🔥 ДОБАВЛЕНЫ КООРДИНАТЫ ДЛЯ ТОЧНЫХ МАРШРУТОВ
   name: string | null; 
   slotRaw: string | null; slotFrom: string | null; slotTo: string | null;
   recipientPhone: string | null;
@@ -36,6 +37,7 @@ export default function CourierRoutesPage() {
   const [expandedRoutes, setExpandedRoutes] = useState<Record<string, boolean>>({});
   const [showPast, setShowPast] = useState(false);
   const [uploading, setUploading] = useState<Record<string, boolean>>({}); 
+  const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({}); // 🔥 Стейт для спойлеров состава
 
   const fetchOrders = async () => {
     try {
@@ -171,6 +173,12 @@ export default function CourierRoutesPage() {
     });
   };
 
+  // 🔥 ПОМОЩНИК ДЛЯ ПОЛУЧЕНИЯ КООРДИНАТ ИЛИ АДРЕСА
+  const getRoutePointCoords = (order: RouteOrder) => {
+    if (order.lat && order.lng) return `${order.lat},${order.lng}`;
+    return encodeURIComponent(order.address);
+  };
+
   return (
     <div style={{
       display: "flex", flexDirection: "column", background: "#f5f4f0",
@@ -182,7 +190,6 @@ export default function CourierRoutesPage() {
       <div style={{ padding: "16px", background: "#fff", borderBottom: "1px solid #e8e6df", position: "sticky", top: 0, zIndex: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 18, color: "#1a1a18" }}>Мои маршруты</h1>
-          {/* 🔥 Сумма на сегодня */}
           <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 4 }}>
             На сегодня: {todayOrders.length} точек на сумму <span style={{fontWeight: 700, color: "#1a1a18"}}>{todayOrders.reduce((sum, o) => sum + (o.price || 0), 0)} ₽</span>
           </div>
@@ -214,7 +221,6 @@ export default function CourierRoutesPage() {
           const firstOrderStatus = routePoints[0]?.status;
           const showAdvice = firstOrderStatus === "ASSIGNED" || firstOrderStatus === "NEW";
 
-          // 🔥 БАЗОВЫЕ КООРДИНАТЫ (для мини-маршрутов)
           const STORE_COORDS = "55.749511,37.596205";
 
           return (
@@ -318,11 +324,11 @@ export default function CourierRoutesPage() {
                     const messageText = `Добрый день 😊 это курьер цветочного, буду у вас ${timeText}`;
                     const encodedMsg = encodeURIComponent(messageText);
 
-                    // 🔥 МИНИ-МАРШРУТЫ
+                    // 🔥 КООРДИНАТЫ И МИНИ-МАРШРУТЫ (с mode=routes)
                     const isFirst = idx === 0;
                     const isLast = idx === routePoints.length - 1;
-                    const prevAddress = isFirst ? STORE_COORDS : routePoints[idx - 1].address;
-                    const currentAddress = o.address;
+                    const prevAddressStr = isFirst ? STORE_COORDS : getRoutePointCoords(routePoints[idx - 1]);
+                    const currentAddressStr = getRoutePointCoords(o);
 
                     return (
                       <div
@@ -389,10 +395,9 @@ export default function CourierRoutesPage() {
                               {o.address}
                             </div>
                             
-                            {/* 🔥 КНОПКИ МИНИ-МАРШРУТОВ */}
                             <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
                               <a 
-                                href={`https://yandex.ru/maps/?rtext=${encodeURIComponent(prevAddress)}~${encodeURIComponent(currentAddress)}`} 
+                                href={`https://yandex.ru/maps/?mode=routes&rtext=${prevAddressStr}~${currentAddressStr}`} 
                                 target="_blank" 
                                 style={{ fontSize: 11, background: "#eef3ff", color: "#4a7aff", padding: "4px 10px", borderRadius: 6, textDecoration: "none", fontWeight: 700, display: "inline-flex", alignItems: "center" }}
                               >
@@ -400,7 +405,7 @@ export default function CourierRoutesPage() {
                               </a>
                               {isLast && (
                                 <a 
-                                  href={`https://yandex.ru/maps/?rtext=${encodeURIComponent(currentAddress)}~${STORE_COORDS}`} 
+                                  href={`https://yandex.ru/maps/?mode=routes&rtext=${currentAddressStr}~${STORE_COORDS}`} 
                                   target="_blank" 
                                   style={{ fontSize: 11, background: "#f5f4f0", color: "#6b6860", padding: "4px 10px", borderRadius: 6, textDecoration: "none", fontWeight: 700, display: "inline-flex", alignItems: "center" }}
                                 >
@@ -408,7 +413,6 @@ export default function CourierRoutesPage() {
                                 </a>
                               )}
                             </div>
-
                           </div>
                           {o.price !== null && (
                             <div style={{ fontSize: 12, whiteSpace: "nowrap", color: o.wrongPrice ? "#d94040" : "#a8a49c", fontWeight: o.wrongPrice ? 800 : 600 }}>
@@ -416,6 +420,47 @@ export default function CourierRoutesPage() {
                             </div>
                           )}
                         </div>
+
+                        {/* 🔥 БЛОК СОСТАВА ЗАКАЗА (С ВЫПАДАШКОЙ ОТ 3 ШТ) */}
+                        {o.items && o.items.trim() && (
+                          <div style={{ marginBottom: 10, background: "#fafaf8", borderRadius: 8, padding: 10, border: "1px solid #e8e6df" }}>
+                            {(() => {
+                              const lines = o.items!.split('\n').map(l => l.trim()).filter(Boolean);
+                              const isMany = lines.length >= 3;
+                              const isItemExpanded = expandedItems[o.id];
+
+                              if (!isMany) {
+                                return (
+                                  <>
+                                    <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 4, fontWeight: 600 }}>📦 Состав заказа</div>
+                                    <div style={{ fontSize: 12, color: "#1a1a18", lineHeight: 1.4 }}>
+                                      {lines.map((l, i) => <div key={i}>• {l}</div>)}
+                                    </div>
+                                  </>
+                                );
+                              }
+
+                              return (
+                                <>
+                                  <div 
+                                    onClick={() => setExpandedItems(prev => ({ ...prev, [o.id]: !prev[o.id] }))}
+                                    style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+                                  >
+                                    <div style={{ fontSize: 11, color: "#1a1a18", textTransform: "uppercase", fontWeight: 700 }}>
+                                      📦 Состав ({lines.length} позиций)
+                                    </div>
+                                    <div style={{ fontSize: 12, color: "#a8a49c" }}>{isItemExpanded ? "▲" : "▼"}</div>
+                                  </div>
+                                  {isItemExpanded && (
+                                    <div style={{ marginTop: 8, borderTop: "1px dashed #e8e6df", paddingTop: 8, fontSize: 12, color: "#1a1a18", lineHeight: 1.4 }}>
+                                      {lines.map((l, i) => <div key={i}>• {l}</div>)}
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </div>
+                        )}
 
                         {/* БЛОК ФОТО */}
                         <div style={{ marginBottom: 10 }}>
