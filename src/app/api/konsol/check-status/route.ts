@@ -1,3 +1,4 @@
+// src/app/api/konsol/check-status/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
@@ -97,20 +98,21 @@ export async function POST(req: Request) {
           const actIdToSave = task.act_id ? String(task.act_id) : 
                               (task.act?.id ? String(task.act.id) : 
                               (task.acts_ids?.[0] ? String(task.acts_ids[0]) : null));
-          const hasActs = !!actIdToSave;
 
           const existing = await prisma.konsolTask.findFirst({ where: { konsolTaskId: String(task.id) } });
 
           if (existing) {
             if (existing.status !== "SIGNED_BY_US") {
-               const dbStatus = hasActs ? "SIGNED_BY_US" : "CONFIRMED";
+               // 🔥 ИСПРАВЛЕНО: Просто прикрепляем ID акта, статус оставляем как есть (или переводим из черновика в работу)
+               const dbStatus = existing.status === "DRAFT" ? "CONFIRMED" : existing.status;
                await prisma.konsolTask.update({ 
                  where: { id: existing.id }, 
                  data: { status: dbStatus, konsolActId: actIdToSave || existing.konsolActId } 
                });
             }
           } else {
-            const dbStatus = hasActs ? "SIGNED_BY_US" : "CONFIRMED";
+            // 🔥 ИСПРАВЛЕНО: Новые задания всегда "В работе", а не "Подписано"
+            const dbStatus = "CONFIRMED";
             await prisma.konsolTask.upsert({
               where: { courierId_date: { courierId: courier.id, date: new Date(`${dateStr}T00:00:00Z`) } },
               update: { konsolTaskId: String(task.id), amount, status: dbStatus, konsolActId: actIdToSave },
@@ -147,11 +149,13 @@ export async function POST(req: Request) {
                                 (remote.acts_ids?.[0] ? String(remote.acts_ids[0]) : null));
             
             if (remoteActId) {
+               // 🔥 ИСПРАВЛЕНО: Только прикрепляем акт, статус не ломаем
+               const newStatus = t.status === "DRAFT" ? "CONFIRMED" : t.status;
                await prisma.konsolTask.update({
                   where: { id: t.id },
-                  data: { status: "SIGNED_BY_US", konsolActId: remoteActId }
+                  data: { status: newStatus, konsolActId: remoteActId }
                });
-               t.status = "SIGNED_BY_US"; 
+               t.status = newStatus; 
                t.konsolActId = remoteActId;
             } else if (remote.state) {
                const code = remote.state.code;
@@ -170,8 +174,6 @@ export async function POST(req: Request) {
         if (act?.payment?.status === "paid") {
           currentBadge = { label: "✅ Оплачено", color: "#10b981" };
         } else if (act?.payment?.status === "not_paid" || act?.payment?.status === "pending") {
-          // 🔥 Убрали автоматическую оплату отсюда! 
-          // Теперь он просто показывает статус "Ожидает оплаты"
           currentBadge = { label: "⏳ Ожидает оплаты", color: "#f59e0b" };
         } else if (act?.payment?.status === "error") {
           currentBadge = { label: "❌ Ошибка оплаты", color: "#d94040" };
