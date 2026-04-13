@@ -4,15 +4,32 @@ import { prisma } from "@/lib/prisma";
 import { notify } from "@/lib/notifications";
 import { updateCrmOrder } from "@/lib/crm";
 
-const STORE_COORDS = "55.749511,37.596205"; // База
+const STORE_COORDS = "55.749511,37.596205";
 
 export async function POST(req: Request) {
   try {
-    const { orderIds, courierId, returnToBase = false, routeDate, oldRouteId, departureAdvice, isDraft, routeEtas, estimatedReturnTime } = await req.json();
+    const body = await req.json();
+    const { 
+      orderIds, courierId, returnToBase = false, routeDate, 
+      oldRouteId, departureAdvice, isDraft, routeEtas, 
+      estimatedReturnTime 
+    } = body;
+
     let existingRouteName = null;
+    // 🔥 ДОБАВЛЕНО: переменные для сохранения старых данных
+    let fallbackReturnTime = null;
+    let fallbackAdvice = null;
+    let fallbackIsDraft = false;
+
     if (oldRouteId) {
       const oldRoute = await prisma.route.findUnique({ where: { id: oldRouteId } });
-      if (oldRoute) existingRouteName = oldRoute.name;
+      if (oldRoute) {
+        existingRouteName = oldRoute.name;
+        // Сохраняем старые значения, если новые не присланы (например, из RouteEditor)
+        fallbackReturnTime = oldRoute.estimatedReturnTime;
+        fallbackAdvice = oldRoute.departureAdvice;
+        fallbackIsDraft = oldRoute.isDraft;
+      }
       
       const ordersToReset = await prisma.order.findMany({
         where: { routeId: oldRouteId, id: { notIn: orderIds || [] } }
@@ -47,7 +64,6 @@ export async function POST(req: Request) {
     const sortedOrders = orderIds.map((id: string) => orders.find((o) => o.id === id)).filter(Boolean);
     const coordsList = sortedOrders.map((o: any) => o.lat && o.lng ? `${o.lat},${o.lng}` : null).filter(Boolean);
     
-    // 🔥 1. Получаем данные курьера РАНЬШЕ, чтобы использовать его тип (авто/пеший) для ссылки Яндекс Карт
     const courierDb = await prisma.courier.findUnique({ where: { id: Number(courierId) } });
     const courierFullName = courierDb?.fullName || "";
     const rttMode = courierDb?.isAuto ? "auto" : "mt";
@@ -55,10 +71,8 @@ export async function POST(req: Request) {
     const rtextArr = [STORE_COORDS, ...coordsList];
     if (returnToBase) rtextArr.push(STORE_COORDS);
     
-    // 🔥 2. Генерируем ссылку с правильным rttMode
     const link = `https://yandex.ru/maps/?rtext=${rtextArr.join("~")}&rtt=${rttMode}`;
 
-    // 🔥 3. Улучшенная логика даты: если с фронта не пришла, берем из первой точки
     let finalRouteDate = routeDate;
     if (!finalRouteDate && sortedOrders.length > 0) {
       const firstOrder = sortedOrders[0];
@@ -66,7 +80,6 @@ export async function POST(req: Request) {
         finalRouteDate = firstOrder.deliveryDate || (firstOrder.crmCreatedAt ? firstOrder.crmCreatedAt.split('T')[0] : null);
       }
     }
-    // Если и в точках пусто, берем сегодняшний день
     if (!finalRouteDate) {
       finalRouteDate = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }); 
     }
@@ -75,12 +88,10 @@ export async function POST(req: Request) {
     if (!routeName) {
       const routeDay = finalRouteDate.split('-')[2];
       const prefix = `M-${routeDay}`;
-
       const routes = await prisma.route.findMany({
         where: { name: { startsWith: prefix }, date: finalRouteDate },
         select: { name: true }
       });
-
       let maxNum = 0;
       for (const r of routes) {
         const match = r.name.match(new RegExp(`^${prefix}(\\d+)$`));
@@ -97,10 +108,11 @@ export async function POST(req: Request) {
         name: routeName, 
         link, 
         date: finalRouteDate, 
-        departureAdvice: departureAdvice || null, 
+        // 🔥 ИСПРАВЛЕНО: используем fallback, если значение не пришло в body
+        departureAdvice: departureAdvice !== undefined ? departureAdvice : fallbackAdvice, 
         courierId: Number(courierId),
-        isDraft: isDraft || false,
-        estimatedReturnTime: estimatedReturnTime || null // 🔥 ТЕПЕРЬ СОХРАНЯЕТСЯ ПРИ СОЗДАНИИ/СОХРАНЕНИИ!
+        isDraft: isDraft !== undefined ? isDraft : fallbackIsDraft,
+        estimatedReturnTime: estimatedReturnTime !== undefined ? estimatedReturnTime : fallbackReturnTime
       }
     });
 
@@ -109,8 +121,11 @@ export async function POST(req: Request) {
       if (!orderToUpdate) continue;
       
       let newOpComment = orderToUpdate.opComment || "";
-      if (i === 0 && departureAdvice && !newOpComment.includes(departureAdvice)) {
-        newOpComment = `💡 ${departureAdvice}\n${newOpComment}`.trim();
+      if (i === 0 && (departureAdvice || fallbackAdvice)) {
+        const advice = departureAdvice || fallbackAdvice;
+        if (!newOpComment.includes(advice)) {
+            newOpComment = `💡 ${advice}\n${newOpComment}`.trim();
+        }
       }
 
       let currentPrice = orderToUpdate.price && orderToUpdate.price > 0 ? orderToUpdate.price : 500;
@@ -132,12 +147,10 @@ export async function POST(req: Request) {
         if (oldCourierIsAuto && AUTO_PRICES.includes(basePrice)) {
             basePrice -= 100;
         }
-
         const autoSurcharge = courierDb.isAuto ? 100 : 0;
         finalPrice = basePrice + autoSurcharge;
       }
 
-      // 🔥 Берем ETA конкретно для этого заказа из присланных данных Яндекса
       const orderEta = routeEtas ? routeEtas[orderIds[i]] : undefined;
 
       await prisma.order.update({
@@ -147,19 +160,12 @@ export async function POST(req: Request) {
           routeId: newRoute.id, routeOrder: i + 1,
           status: orderToUpdate.status === "NEW" ? "ASSIGNED" : undefined,
           opComment: newOpComment, price: finalPrice, 
-          eta: orderEta // Сохраняем первичный ПЛАН!
+          eta: orderEta 
         }
       });
       
       if (courierFullName && orderToUpdate?.crmId) {
         await updateCrmOrder(orderToUpdate.crmId, { courier: courierFullName }).catch(() => {});
-      }
-    }
-
-    if (courierDb?.email && !oldRouteId && !isDraft) {
-      const courierUser = await prisma.user.findUnique({ where: { email: courierDb.email } });
-      if (courierUser) {
-        await notify({ type: "route.assigned", userId: courierUser.id, routeId: newRoute.name, pointsCount: orderIds.length }).catch(console.error); 
       }
     }
 

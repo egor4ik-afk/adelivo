@@ -55,7 +55,6 @@ export async function applyUniversalEtaShift(orderId: string, newStatus: string,
             driveTimeMins = ((arrMins - depMins) + 1440) % 1440;
           }
           
-          // Для выезда используем pickedUpAt (он никогда не перезаписывается)
           let baseMins = getCurrentMskMinutes();
           if (order.pickedUpAt) {
               const d = new Date(order.pickedUpAt);
@@ -66,17 +65,15 @@ export async function applyUniversalEtaShift(orderId: string, newStatus: string,
           diffMinutesToShift = newEtaMins - oldEtaMins;
           updatedCurrentEta = formatTimeStr(newEtaMins);
         } else {
-          return; // Если это 2, 3 точка - выходим, ничего не трогаем!
+          return; 
         }
       }
 
-      // 🔥 Для IN_DELIVERY разрешаем обновлять План (eta) текущей точки
       if (diffMinutesToShift !== 0) {
         await prisma.order.update({ where: { id: orderId }, data: { eta: updatedCurrentEta } });
       }
 
     } else if (newStatus === "DELIVERED") {
-      // 🔥 Вычисляем разницу для сдвига будущих точек
       let deliveredMins = getCurrentMskMinutes();
       
       if (explicitEta && explicitEta !== "—") {
@@ -85,12 +82,8 @@ export async function applyUniversalEtaShift(orderId: string, newStatus: string,
       }
 
       diffMinutesToShift = deliveredMins - oldEtaMins;
-      
-      // ❌ ЗДЕСЬ БОЛЬШЕ НЕТ prisma.order.update ДЛЯ ТЕКУЩЕГО ЗАКАЗА!
-      // Его `eta` навсегда остается таким, каким был до нажатия "Доставлен".
     }
 
-    // СДВИГАЕМ ВСЕ ОСТАЛЬНЫЕ ТОЧКИ В МАРШРУТЕ
     if (diffMinutesToShift !== 0) {
       const futureOrders = await prisma.order.findMany({
         where: { 
@@ -110,9 +103,9 @@ export async function applyUniversalEtaShift(orderId: string, newStatus: string,
         }
       }
 
-      // 🔥 ЛОГИКА ДЛЯ МАРШРУТА: Обрабатываем estimatedReturnTime как "дополнительную точку"
+      // 🔥 ЛОГИКА ДЛЯ МАРШРУТА: Сдвигаем ТОЛЬКО если значение уже есть.
+      // Никаких прикидок и выдуманных +30 минут здесь больше нет.
       if (order.route?.estimatedReturnTime) {
-        // Если ETA возврата уже существует, сдвигаем его на ту же самую дельту
         const routeMins = parseTimeStr(order.route.estimatedReturnTime);
         if (routeMins !== null) {
           await prisma.route.update({
@@ -121,26 +114,6 @@ export async function applyUniversalEtaShift(orderId: string, newStatus: string,
               estimatedReturnTime: formatTimeStr(routeMins + diffMinutesToShift) 
             }
           });
-        }
-      } else {
-        // Если его еще нет (сохранение/создание маршрута или выезд на 1 точку), инициализируем.
-        // Ищем самую последнюю точку маршрута.
-        const lastOrderInRoute = await prisma.order.findFirst({
-            where: { routeId: order.routeId },
-            orderBy: { routeOrder: 'desc' }
-        });
-
-        // Так как мы уже сдвинули ETA будущих точек в цикле выше, 
-        // у lastOrderInRoute здесь лежит абсолютно точный актуальный ETA.
-        if (lastOrderInRoute && lastOrderInRoute.eta) {
-            const lastMins = parseTimeStr(lastOrderInRoute.eta);
-            if (lastMins !== null) {
-                const RETURN_DRIVE_MINS = 30; // Заложим стандартные 30 минут на дорогу до базы
-                await prisma.route.update({
-                    where: { id: order.routeId },
-                    data: { estimatedReturnTime: formatTimeStr(lastMins + RETURN_DRIVE_MINS) }
-                });
-            }
         }
       }
     }
