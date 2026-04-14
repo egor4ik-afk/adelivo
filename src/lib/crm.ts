@@ -317,18 +317,37 @@ function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon
 export async function geocodeAddress(address: string) {
   if (!GEO_KEY || !address) return null;
   try {
-    const searchAddress = address.toLowerCase().includes("москва") ? address : `Москва, ${address}`;
+    // 🔥 ФУНКЦИЯ ОЧИСТКИ АДРЕСА (Отрезаем домофоны, квартиры, этажи)
+    // Ищем первую запятую, после которой идут слова-детали, и берем всё до неё.
+    let cleanAddress = address;
+    const match = address.match(/^(.*?)(?:,\s*(кв\.|квартира|кв\s|подъезд|под\.|пд\.|этаж|эт\.|домофон|код|дф\.).*)/i);
+    if (match) {
+      cleanAddress = match[1].trim();
+    }
+
+    const searchAddress = cleanAddress.toLowerCase().includes("москва") ? cleanAddress : `Москва, ${cleanAddress}`;
+    
     const res = await axios.get("https://geocode-maps.yandex.ru/1.x/", {
-      params: { apikey: GEO_KEY, geocode: searchAddress, format: "json", results: 1, ll: "37.6175,55.7520", spn: "1.0,1.0" },
+      params: { 
+        apikey: GEO_KEY, 
+        geocode: searchAddress, 
+        format: "json", 
+        results: 1, 
+        ll: "37.6175,55.7520", 
+        spn: "1.0,1.0" 
+      },
       timeout: 5000,
     });
+    
     const members = res.data?.response?.GeoObjectCollection?.featureMember ?? [];
     if (!members.length) return null;
     const point = members[0]?.GeoObject?.Point?.pos;
     if (!point) return null;
+    
     const [lng, lat] = point.split(" ").map(Number);
     const precision = members[0]?.GeoObject?.metaDataProperty?.GeocoderMetaData?.precision;
     const distanceKm = getDistanceFromLatLonInKm(55.755864, 37.617698, lat, lng);
+    
     return {
       lat, lng, precision,
       isExact: ["exact", "number", "near", "range"].includes(precision),
@@ -343,46 +362,52 @@ export async function geocodeNewOrders() {
     take: 20,
   });
   if (orders.length === 0) return;
- 
+
   const invalidOrders: Array<{ externalId: string | null; address: string | null; reason: string }> = [];
- 
+
   for (const order of orders) {
     if (!order.address) continue;
- 
-    if (order.address.toLowerCase().includes("самовывоз")) {
-      await prisma.order.update({ where: { id: order.id }, data: { geocoded: true, isInvalid: false } });
+
+    const addressLower = order.address.toLowerCase();
+
+    // 🔥 ИСКЛЮЧЕНИЯ: Самовывоз и наш конкретный адрес
+    if (addressLower.includes("самовывоз") || addressLower.includes("большой афанасьевский 39")) {
+      await prisma.order.update({ 
+        where: { id: order.id }, 
+        data: { geocoded: true, isInvalid: false, invalidReason: null } 
+      });
       continue;
     }
- 
+
     try {
       const geo = await geocodeAddress(order.address);
- 
+
       if (!geo) {
         await prisma.order.update({ where: { id: order.id }, data: { geocoded: true, isInvalid: true, invalidReason: "Адрес не найден" } });
         invalidOrders.push({ externalId: order.externalId, address: order.address, reason: "Адрес не найден" });
         continue;
       }
- 
+
       if (geo.distanceKm > 75) {
         const reason = `Вне зоны доставки (найдено в ${Math.round(geo.distanceKm)} км от МСК)`;
         await prisma.order.update({ where: { id: order.id }, data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: true, invalidReason: reason } });
         invalidOrders.push({ externalId: order.externalId, address: order.address, reason });
         continue;
       }
- 
+
       if (!geo.isExact) {
         await prisma.order.update({ where: { id: order.id }, data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: true, invalidReason: `Неточный геокод: ${geo.precision}` } });
         invalidOrders.push({ externalId: order.externalId, address: order.address, reason: `Неточный геокод: ${geo.precision}` });
         continue;
       }
- 
-      // 🔥 Считаем ожидаемую цену по зоне — только для сравнения, не для записи
+
+      // Считаем ожидаемую цену по зоне
       const basePrice = calcBaseDeliveryPrice(geo.lat, geo.lng);
       const crmPrice = order.price ?? 0;
- 
+
       // Флаг: цена в CRM не совпадает ни с базовой, ни с базовой+100 (авто)
       const wrongPrice = crmPrice > 0 && crmPrice !== basePrice && crmPrice !== basePrice + 100;
- 
+
       await prisma.order.update({
         where: { id: order.id },
         data: {
@@ -392,10 +417,9 @@ export async function geocodeNewOrders() {
           isInvalid: false,
           invalidReason: null,
           wrongPrice,
-          // 🔥 price НЕ трогаем — остаётся как пришла из CRM
         },
       });
- 
+
       // Уведомление в TG если цена не та
       if (wrongPrice) {
         const tgToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -414,7 +438,7 @@ export async function geocodeNewOrders() {
           }).catch(e => console.error("[TG] Ошибка уведомления о цене:", e));
         }
       }
- 
+
     } catch (_) {
       await prisma.order.update({
         where: { id: order.id },
@@ -422,23 +446,12 @@ export async function geocodeNewOrders() {
       }).catch(() => {});
     }
   }
- 
+
   if (invalidOrders.length > 0) {
     notify({ type: "address.invalid", orders: invalidOrders }).catch(console.error);
   }
 }
 // ─────────────────────────────────────────────────────────────────────────────
-// UPSERT ЗАКАЗА
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ПАТЧ для src/lib/crm.ts
-// Заменить ТОЛЬКО функцию upsertOrder — остальное не трогать
-// 
-// Исправления:
-// 1. recipientPhoneChanged добавлен в changes (был убран в v6)
-// 2. hasCoreChanges теперь включает recipientPhoneChanged
-// 3. Защита от дублей webhook: сравниваем crmStatus ДО перезаписи updateFields
-
 export async function upsertOrder(crmOrder: CrmOrder) {
   const data = await mapCrmOrder(crmOrder);
 
@@ -453,6 +466,13 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     pickedUpAt?: Date | null;
   } = { ...data };
 
+  // 🔥 Проверяем, является ли адрес исключением (Самовывоз или Афанасьевский)
+  const isExceptionAddress = (addr: string | null | undefined) => {
+    if (!addr) return false;
+    const lower = addr.toLowerCase();
+    return lower.includes("самовывоз") || lower.includes("большой афанасьевский 39");
+  };
+
   if (existing) {
     // 🔥 БРОНЯ полей
     if (!updateFields.name && existing.name) updateFields.name = existing.name;
@@ -464,7 +484,8 @@ export async function upsertOrder(crmOrder: CrmOrder) {
 
     if (dbAddr !== crmAddr) {
       updateFields.address       = crmAddr || null;
-      updateFields.geocoded      = false;
+      // 🔥 Если это исключение, сразу ставим geocoded: true, чтобы крон его игнорировал
+      updateFields.geocoded      = isExceptionAddress(crmAddr);
       updateFields.lat           = null;
       updateFields.lng           = null;
       updateFields.isInvalid     = false;
@@ -503,7 +524,9 @@ export async function upsertOrder(crmOrder: CrmOrder) {
 
     const isCancelledOrReturned =
       updateFields.status === OrderStatus.CANCELLED || updateFields.status === OrderStatus.RETURNED;
-    const isPickup = updateFields.address?.toLowerCase().includes("самовывоз");
+    
+    // 🔥 ТЕПЕРЬ ОТВЯЗЫВАЕМ ОТ МАРШРУТА И САМОВЫВОЗ, И АФАНАСЬЕВСКИЙ
+    const isPickup = isExceptionAddress(updateFields.address);
 
     if (isCancelledOrReturned || isPickup) {
       if (existing.routeId && updateFields.routeId !== null) {
@@ -517,7 +540,6 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     }
 
     // 🔥 ИСПРАВЛЕНО: строим changes ДО upsert, на основе existing vs data
-    // (не из результата upsert — там уже перезаписано)
     const hasCoreChanges =
       (existing.crmStatus       ?? "") !== (data.crmStatus       ?? "") ||
       (existing.courierId       ?? 0)  !== (data.courierId       ?? 0)  ||
@@ -526,7 +548,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       (existing.slotFrom        ?? "") !== (data.slotFrom        ?? "") ||
       (existing.slotTo          ?? "") !== (data.slotTo          ?? "") ||
       (existing.price           ?? 0)  !== (updateFields.price   ?? 0)  ||
-      (existing.recipientPhone  ?? "") !== (data.recipientPhone  ?? "") || // 🔥 ВОЗВРАЩЕНО
+      (existing.recipientPhone  ?? "") !== (data.recipientPhone  ?? "") ||
       dbAddr !== crmAddr;
 
     if (hasCoreChanges) updateFields.changedAt = new Date();
@@ -535,7 +557,8 @@ export async function upsertOrder(crmOrder: CrmOrder) {
   const order = await prisma.order.upsert({
     where: { crmId: data.crmId },
     update: updateFields,
-    create: { ...data, isInvalid: false, geocoded: false },
+    // 🔥 При создании нового заказа тоже сразу проверяем на исключения
+    create: { ...data, isInvalid: false, geocoded: isExceptionAddress(data.address) },
   });
 
   if (!existing) {
@@ -550,7 +573,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       commentChanged:        (existing.comment         ?? "") !== (order.comment         ?? ""),
       opCommentChanged:      (existing.opComment       ?? "") !== (order.opComment       ?? ""),
       itemsChanged:          (existing.items           ?? "") !== (order.items           ?? ""),
-      recipientPhoneChanged: (existing.recipientPhone  ?? "") !== (order.recipientPhone  ?? ""), // 🔥 ВОЗВРАЩЕНО
+      recipientPhoneChanged: (existing.recipientPhone  ?? "") !== (order.recipientPhone  ?? ""),
     };
 
     if (Object.values(changes).some(Boolean)) {

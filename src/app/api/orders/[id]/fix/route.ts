@@ -1,3 +1,4 @@
+// src/app/api/orders/[id]/fix/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { geocodeAddress } from "@/lib/crm";
@@ -15,7 +16,6 @@ const client = new OpenAI({
   },
 });
 
-// ИСПРАВЛЕНИЕ: Тип params теперь Promise<{ id: string }>
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
@@ -31,28 +31,54 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       Комментарий клиента: "${order.comment || ''}". 
       Город: Москва или МО (если в комментарии не указан другой, например Химки).
       
-      Твоя задача — исправить адрес для геокодера Яндекс.Карт. 
-      ПРАВИЛА:
-      1. Если указан район вместо улицы (например, "Крылатское"), преобразуй в улицу ("Крылатская улица").
-      2. Различай "к" как корпус и "кв" как квартиру. Например, "д. 29к2, кв. 579" -> "дом 29 корпус 2, квартира 579".
-      3. Если по смыслу это строение, пиши "строение".
+      Твоя задача — исправить адрес и отделить детали доставки от гео-координат.
       
-      ВЕРНИ ТОЛЬКО ИСПРАВЛЕННЫЙ АДРЕС. Без кавычек, пояснений и вводных слов.`;
+      ПРАВИЛА:
+      1. В поле "cleanAddress" должен быть ТОЛЬКО чистый гео-адрес: Страна, Город, Улица, Дом, Корпус, Строение. Не пиши сюда квартиры, этажи и домофоны! (Пример: "Россия, г. Москва, ул. Островитянова, д. 5к1").
+      2. Всю остальную информацию (подъезд, этаж, квартира, домофон, код двери) собери в одну строку и помести в поле "deliveryDetails". Если таких деталей нет, оставь пустую строку "".
+      3. Различай "к" как корпус и "кв" как квартиру.
+      
+      ВЕРНИ ОТВЕТ СТРОГО В ФОРМАТЕ JSON. Пример:
+      {
+        "cleanAddress": "Россия, г. Москва, ул. Ленина, д. 1",
+        "deliveryDetails": "кв. 15, подъезд 3, этаж 5, домофон 15В"
+      }`;
 
       const response = await client.chat.completions.create({
         model: `gpt://${YANDEX_CLOUD_FOLDER}/${YANDEX_CLOUD_MODEL}`,
         messages: [
-          { role: "system", content: "Ты строгий картографический редактор. Твой ответ содержит только чистую строку адреса." },
+          { role: "system", content: "Ты строгий картографический редактор. Твой ответ содержит только валидный JSON." },
           { role: "user", content: prompt }
         ],
         temperature: 0.1,
-        max_tokens: 100,
+        max_tokens: 300,
       });
 
-      const suggestedAddress = response.choices[0]?.message?.content?.trim() || order.address || "";
+      const rawContent = response.choices[0]?.message?.content?.trim() || "{}";
+      
+      // Пытаемся распарсить JSON. Если Yandex LLM вернул markdown обертку (```json ... ```), вырезаем её.
+      const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+      const jsonString = jsonMatch ? jsonMatch[0] : "{}";
+      
+      let parsedData = { cleanAddress: order.address, deliveryDetails: "" };
+      try {
+          parsedData = JSON.parse(jsonString);
+      } catch (e) {
+          console.error("[AI Fix] Ошибка парсинга JSON:", rawContent);
+      }
+
+      const suggestedAddress = parsedData.cleanAddress || order.address || "";
+      const suggestedDetails = parsedData.deliveryDetails || "";
+      
+      // Геокодируем ЧИСТУЮ строку
       const geo = await geocodeAddress(suggestedAddress);
       
-      return NextResponse.json({ suggestedAddress, geo });
+      // Возвращаем на фронт и чистый адрес, и детали, чтобы фронтенд мог склеить их в комментарий
+      return NextResponse.json({ 
+          suggestedAddress, 
+          suggestedDetails,
+          geo 
+      });
     }
 
     // ── РЕЖИМ 2: РУЧНОЙ ПРЕДПРОСМОТР НА КАРТЕ (БЕЗ сохранения в БД) ──

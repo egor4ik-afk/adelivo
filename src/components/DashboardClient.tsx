@@ -361,7 +361,7 @@ export function DashboardClient({ user }: { user: User }) {
   });
 
   const selected = orders.find(o => o.id === selectedId) ?? null;
-  const invalid = dateAndStatusOrders.filter(o => o.isInvalid && !/самовывоз/i.test(o.address || ""));
+  const invalid = dateAndStatusOrders.filter(o => o.isInvalid && !/самовывоз|большой афанасьевский 39/i.test(o.address || ""));
 
   const filtered = useMemo(() => {
     let result = selectedSlots.length === 0 ? dateAndStatusOrders : dateAndStatusOrders.filter(o => {
@@ -390,7 +390,8 @@ export function DashboardClient({ user }: { user: User }) {
 
   const sidePanelOrders = [...filtered].sort((a, b) => {
     const getPriority = (o: DashboardOrder) => {
-      if (/самовывоз/i.test(o.address || "")) return 6;
+      // 🔥 Теперь и самовывоз, и магазин уходят в самый конец списка (приоритет 6)
+      if (/самовывоз|большой афанасьевский 39/i.test(o.address || "")) return 6;
       if (o.status === "IN_DELIVERY") return 1;
       if (o.status === "NEW") return 2;
       if (o.status === "ASSIGNED") return 3;
@@ -406,8 +407,8 @@ export function DashboardClient({ user }: { user: User }) {
   });
 
   const MAP_EXCLUDED_STATUSES = ["CANCELLED", "RETURNED"];
-  const filteredForMap = filtered.filter(o => !MAP_EXCLUDED_STATUSES.includes(o.status) && !/Самовывоз/i.test(o.address ?? ""));
-
+  // 🔥 Исключаем оба варианта из отображения на карте
+  const filteredForMap = filtered.filter(o => !MAP_EXCLUDED_STATUSES.includes(o.status) && !/самовывоз|большой афанасьевский 39/i.test(o.address ?? ""));
   const tableOrders = [...filtered].sort((a, b) => {
     let valA: any = (a as any)[sortConfig.key] ?? "";
     let valB: any = (b as any)[sortConfig.key] ?? "";
