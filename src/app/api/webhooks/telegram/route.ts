@@ -8,7 +8,7 @@ const ADMIN_CHAT_ID = process.env.TELEGRAM_SPAM_ID;
 
 // Новые константы для тестирования топиков
 const TARGET_SUPERGROUP_ID = "-1003732491171";
-const ALLOWED_TOPICS = [2, 3];
+const ALLOWED_TOPICS = [4, 5];
 
 async function sendNotificationToAdmin(text: string) {
   if (!TELEGRAM_BOT_TOKEN || !ADMIN_CHAT_ID) return;
