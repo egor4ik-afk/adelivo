@@ -14,7 +14,7 @@ interface Order {
   lat: number | null;
   lng: number | null;
   price: number | null;
-  wrongPrice?: boolean;          // 🔥 ДОБАВЛЕНО: Метка ошибочной цены
+  wrongPrice?: boolean;          
   costPrice: number | null;
   courier: string | null;
   comment: string | null;
@@ -141,7 +141,6 @@ export default function OrdersPage() {
     const { id, field } = editingCell;
     const val = editValue === "" ? null : parseFloat(editValue.replace(",", "."));
     
-    // 🔥 Оптимистичное обновление: сразу сбрасываем wrongPrice локально, если правим цену
     setOrders(prev => prev.map(o => o.id === id ? { 
       ...o, 
       [field]: val,
@@ -295,6 +294,18 @@ export default function OrdersPage() {
         </select>
       </div>
 
+      {/* СТАТИСТИКА ЗАКАЗОВ */}
+      <div style={{ padding: "0 24px 16px", display: "flex", gap: 16, fontSize: 13 }}>
+                <div style={{ background: "#fff", padding: "6px 12px", borderRadius: 8, border: "1px solid #e8e6df" }}>
+          <span style={{ color: "#a8a49c" }}>Отфильтровано:</span> <span style={{ fontWeight: 700, color: "#4a7aff" }}>{sortedAndFiltered.length}</span>
+        </div>
+        {selectedIds.size > 0 && (
+          <div style={{ background: "#e8f4eb", padding: "6px 12px", borderRadius: 8, border: "1px solid #cce3d3" }}>
+            <span style={{ color: "#1a9e5c" }}>Выбрано:</span> <span style={{ fontWeight: 700, color: "#1a9e5c" }}>{selectedIds.size}</span>
+          </div>
+        )}
+      </div>
+
       {/* Таблица */}
       <div style={{ padding: "0 24px 24px" }}>
         <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e8e6df", overflow: "hidden" }}>
@@ -369,27 +380,31 @@ export default function OrdersPage() {
                             style={inlineInputStyle}
                           />
                         ) : (
-                          <div 
-                            style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", minHeight: 24 }}
-                            onClick={() => handleEditClick(o.id, "costPrice", displayCost || null)}
-                            title="Нажмите, чтобы изменить вручную"
-                          >
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 24 }}>
                             {displayCost ? (
-                              <span style={{ color: "#1a9e5c", fontWeight: 700, borderBottom: "1px dashed #a8a49c" }}>{displayCost} ₽</span>
-                            ) : (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleUpdateCost(o.id); }}
-                                disabled={costLoaders[o.id] || !o.price}
-                                style={calcBtnStyle(costLoaders[o.id] || !o.price)}
+                              <div 
+                                onClick={() => handleEditClick(o.id, "costPrice", displayCost)} 
+                                style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", color: "#1a9e5c", fontWeight: 700, borderBottom: "1px dashed #a8a49c" }} 
+                                title="Изменить"
                               >
-                                {costLoaders[o.id] ? "..." : "Считать"}
-                              </button>
+                                {displayCost} ₽ <span style={{ fontSize: 10, opacity: 0.6 }}>✏️</span>
+                              </div>
+                            ) : (
+                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleUpdateCost(o.id); }}
+                                  disabled={costLoaders[o.id] || !o.price}
+                                  style={calcBtnStyle(costLoaders[o.id] || !o.price)}
+                                >
+                                  {costLoaders[o.id] ? "..." : "Считать"}
+                                </button>
+                                <span onClick={() => handleEditClick(o.id, "costPrice", null)} style={{ cursor: "pointer", fontSize: 12, opacity: 0.5 }} title="Ввести вручную">✏️</span>
+                              </div>
                             )}
                           </div>
                         )}
                       </td>
 
-                      {/* 🔥 ЯЧЕЙКА: СУММА ЗАКАЗА (с подсветкой ошибки) */}
                       <td style={{ padding: "10px 14px", fontWeight: o.wrongPrice ? 800 : 600, color: o.wrongPrice ? "#d94040" : "inherit", minWidth: 80 }} >
                         {editingCell?.id === o.id && editingCell?.field === "price" ? (
                           <input
