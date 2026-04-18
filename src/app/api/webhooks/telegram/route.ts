@@ -6,10 +6,6 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SOURCE_CHAT_ID = process.env.TELEGRAM_SOURCE_CHAT_ID;
 const ADMIN_CHAT_ID = process.env.TELEGRAM_SPAM_ID;
 
-// Новые константы для тестирования топиков
-const TARGET_SUPERGROUP_ID = "-1003732491171";
-const ALLOWED_TOPICS = [4, 5];
-
 async function sendNotificationToAdmin(text: string) {
   if (!TELEGRAM_BOT_TOKEN || !ADMIN_CHAT_ID) return;
   await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
@@ -58,12 +54,9 @@ export async function POST(req: Request) {
 
     const text = body.message.text || body.message.caption;
     const chatId = String(body.message.chat.id);
-    // Достаем ID топика (ветки). Если сообщение в главном чате, его не будет.
-    const messageThreadId = body.message.message_thread_id; 
 
     console.log("\n👀 ПРИШЛО СООБЩЕНИЕ ИЗ ТЕЛЕГРАМА:");
     console.log(`👉 Chat ID: [${chatId}]`);
-    console.log(`👉 Topic ID (Ветка): [${messageThreadId || 'Главная тема'}]`);
     console.log(`👉 Текст: ${text ? text.substring(0, 50) + "..." : "Без текста"}`);
     console.log("------------------------------------\n");
 
@@ -71,36 +64,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: "ignored_no_text" });
     }
 
-    // 1. Проверяем, разрешено ли нам читать это сообщение
-    let isAllowed = false;
-
-    // Сценарий А: Это наш старый добрый SOURCE_CHAT_ID (оставляем как было)
-    if (SOURCE_CHAT_ID && chatId === SOURCE_CHAT_ID) {
-      isAllowed = true;
-    }
-    // Сценарий Б: Это наша тестовая супергруппа
-    else if (chatId === TARGET_SUPERGROUP_ID) {
-      // Проверяем, находится ли сообщение в нужном топике
-      if (messageThreadId && ALLOWED_TOPICS.includes(messageThreadId)) {
-        isAllowed = true;
-      } else {
-        console.log(`❌ Игнорируем топик [${messageThreadId}] в группе [${chatId}]. Ждем только топики: ${ALLOWED_TOPICS.join(", ")}`);
-      }
+    // Читаем только из нужного чата
+    if (SOURCE_CHAT_ID && chatId !== SOURCE_CHAT_ID) {
+      console.log(`❌ Игнорируем чат [${chatId}]. Ждем только из [${SOURCE_CHAT_ID}]`);
+      return NextResponse.json({ status: "ignored_wrong_chat" });
     }
 
-    // Если ни одно условие не подошло, игнорируем
-    if (!isAllowed) {
-        console.log(`❌ Игнорируем сообщение. Неизвестный чат или неразрешенный топик.`);
-        return NextResponse.json({ status: "ignored_wrong_chat" });
-    }
-
-    // 2. Фильтр: только сообщения с номером заказа
+    // Фильтр: только сообщения с номером заказа
     if (!/Номер заказа/i.test(text)) {
       console.log("❌ Игнорируем: нет номера заказа.");
       return NextResponse.json({ status: "ignored_not_order" });
     }
 
-    // 3. Парсим текст
+    // Парсим текст
     const { orderId, name, phone, address } = parseOrderText(text);
     console.log("📦 Распарсили:", { orderId, name, phone, address });
 
@@ -112,7 +88,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: "no_contacts" });
     }
 
-    // 4. Ищем заказ в БД
+    // Ищем заказ в БД
     let targetOrder = null;
 
     if (orderId) {
@@ -147,7 +123,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: "order_not_found" });
     }
 
-    // 5. Обновляем только имя и телефон получателя
+    // Обновляем только имя и телефон получателя
     const formattedPhone = normalizePhone(phone);
     console.log(`💾 Обновляем [${targetOrder.crmId}] -> Имя: ${name}, Тел: ${formattedPhone}`);
 
@@ -159,7 +135,7 @@ export async function POST(req: Request) {
       },
     });
 
-    // 6. Отчет админу
+    // Отчет админу
     const foundByText = orderId ? `#${orderId}` : `(найден по адресу)`;
     await sendNotificationToAdmin(
       `✅ Обновлен заказ ${foundByText}\n👤 Имя: ${name || "—"}\n📞 Тел: ${formattedPhone || "—"}\n📍 Адрес: ${targetOrder.address}`
