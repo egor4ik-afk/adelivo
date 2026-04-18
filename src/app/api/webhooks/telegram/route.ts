@@ -1,4 +1,3 @@
-// src/app/api/webhooks/telegram/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
@@ -6,19 +5,43 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SOURCE_CHAT_ID = process.env.TELEGRAM_SOURCE_CHAT_ID;
 const ADMIN_CHAT_ID = process.env.TELEGRAM_SPAM_ID;
 
-// ИСПРАВЛЕННАЯ ОТПРАВКА (только этот блок изменен)
 async function sendNotificationToAdmin(text: string) {
-  if (!TELEGRAM_BOT_TOKEN || !ADMIN_CHAT_ID) return;
+  // Убираем ВСЕ whitespace-символы (пробелы, \r, \n, \t) откуда угодно в значении
+  const rawToken = TELEGRAM_BOT_TOKEN || '';
+  const rawChatId = ADMIN_CHAT_ID || '';
   
-  // Убираем 'bot' из начала, если он есть, чтобы не было 'botbot' в URL
-  const cleanToken = TELEGRAM_BOT_TOKEN.replace(/^bot/i, "");
-  const url = `https://api.telegram.org/bot${cleanToken}/sendMessage`;
+  const token = rawToken.replace(/\s+/g, '').replace(/^bot/i, '');
+  const chatId = rawChatId.replace(/\s+/g, '');
+  
+  // Диагностика
+  console.log(`📤 TG send: tokenLen=${token.length}, chatId=[${chatId}]`);
+  
+  if (!token || !chatId) {
+    console.log("⚠️ Пропуск: нет токена или ID");
+    return;
+  }
 
-  await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: ADMIN_CHAT_ID, text }),
-  }).catch(err => console.error("❌ Ошибка отправки в ТГ:", err.message));
+  const url = `https://api.telegram.org/bot${token}/sendMessage`;
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    
+    if (!response.ok) {
+      console.error("❌ ТГ ошибка:", data);
+      console.error("   URL длина:", url.length);
+      console.error("   chat_id отправленный:", JSON.stringify(chatId));
+    } else {
+      console.log("✅ Отправлено:", data.result?.message_id);
+    }
+  } catch (err: any) {
+    console.error("❌ Fetch failed:", err.message);
+  }
 }
 
 // ДАЛЕЕ ТВОЯ ЛОГИКА БЕЗ ИЗМЕНЕНИЙ
