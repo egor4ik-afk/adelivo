@@ -5,19 +5,14 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SOURCE_CHAT_ID = process.env.TELEGRAM_SOURCE_CHAT_ID;
 const ADMIN_CHAT_ID = process.env.TELEGRAM_SPAM_ID;
 
+// ИСПРАВЛЕННАЯ ОТПРАВКА (С защитой от скрытых пробелов)
 async function sendNotificationToAdmin(text: string) {
-  // Убираем ВСЕ whitespace-символы (пробелы, \r, \n, \t) откуда угодно в значении
-  const rawToken = TELEGRAM_BOT_TOKEN || '';
-  const rawChatId = ADMIN_CHAT_ID || '';
-  
-  const token = rawToken.replace(/\s+/g, '').replace(/^bot/i, '');
-  const chatId = rawChatId.replace(/\s+/g, '');
-  
-  // Диагностика
-  console.log(`📤 TG send: tokenLen=${token.length}, chatId=[${chatId}]`);
-  
+  // .trim() убирает невидимые пробелы и переносы строк \r
+  const token = TELEGRAM_BOT_TOKEN?.trim().replace(/^bot/i, "");
+  const chatId = ADMIN_CHAT_ID?.trim();
+
   if (!token || !chatId) {
-    console.log("⚠️ Пропуск: нет токена или ID");
+    console.log("⚠️ Пропуск отправки: нет токена или ID чата");
     return;
   }
 
@@ -30,17 +25,12 @@ async function sendNotificationToAdmin(text: string) {
       body: JSON.stringify({ chat_id: chatId, text }),
     });
 
-    const data = await response.json().catch(() => ({}));
-    
     if (!response.ok) {
-      console.error("❌ ТГ ошибка:", data);
-      console.error("   URL длина:", url.length);
-      console.error("   chat_id отправленный:", JSON.stringify(chatId));
-    } else {
-      console.log("✅ Отправлено:", data.result?.message_id);
+      const errorData = await response.json().catch(() => ({}));
+      console.error("❌ ТГ ответил ошибкой:", errorData.description || response.statusText);
     }
   } catch (err: any) {
-    console.error("❌ Fetch failed:", err.message);
+    console.error("❌ Ошибка сети в ТГ:", err.message);
   }
 }
 
