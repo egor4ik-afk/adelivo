@@ -158,9 +158,17 @@ export async function POST(req: Request) {
                t.status = newStatus; 
                t.konsolActId = remoteActId;
             } else if (remote.state) {
-               const code = remote.state.code;
-               const newDbStatus = ["confirmed", "submitted", "auto_confirmed", "checked_in", "accepted"].includes(code) ? "CONFIRMED" : t.status;
-               if (newDbStatus !== t.status) {
+              const code = remote.state.code;
+              let newDbStatus = t.status;
+              
+              // Разделяем "В работе" и "Выполнено/Акт"
+              if (code === "accepted" || code === "finalized") {
+                newDbStatus = "ACCEPTED";
+              } else if (["confirmed", "submitted", "auto_confirmed", "checked_in"].includes(code)) {
+                newDbStatus = "CONFIRMED";
+              }
+              
+              if (newDbStatus !== t.status) {
                  await prisma.konsolTask.update({ where: { id: t.id }, data: { status: newDbStatus } });
                  t.status = newDbStatus;
                }
@@ -180,11 +188,18 @@ export async function POST(req: Request) {
         } else {
           currentBadge = { label: "✅ Подписано", color: "#10b981" };
         }
-    } else if (t.status === "CONFIRMED") {
-       currentBadge = { label: "🔵 В работе", color: "#4a7aff" };
-    } else {
-       currentBadge = { label: "⏳ Черновик", color: "#6b6860" };
-    }
+      } else if (t.status === "ACCEPTED") {
+        currentBadge = { label: "🟢 Выполнено", color: "#10b981" };
+      } else if (t.status === "CONFIRMED") {
+        // Если статус CONFIRMED, но уже привязан ID Акта, значит Акт сформирован
+        if (t.konsolActId) {
+          currentBadge = { label: "📄 Акт готов", color: "#8b5cf6" };
+        } else {
+          currentBadge = { label: "🔵 В работе", color: "#4a7aff" };
+        }
+      } else {
+        currentBadge = { label: "⏳ Черновик", color: "#6b6860" };
+      }
 
       if (currentBadge && !statuses[t.courierId].some(s => s.label === currentBadge?.label)) {
         statuses[t.courierId].push(currentBadge);
