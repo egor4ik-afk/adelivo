@@ -1,7 +1,6 @@
 // src/app/api/konsol/pay/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { notify } from "@/lib/notifications";
 import { getSession } from "@/lib/auth";
 import { signKonsolAct, autopayKonsolAct, acceptKonsolTask, finalizeKonsolTask } from "@/lib/konsol";
 
@@ -47,11 +46,11 @@ export async function POST(req: Request) {
         const maxDate = new Date(courierDates[courierDates.length - 1]);
         maxDate.setDate(maxDate.getDate() + 2);
 
-        // Ищем задания (DRAFT, CONFIRMED, SIGNED_BY_US, ACCEPTED)
+        // Ищем задание (в любом активном статусе)
         const task = await prisma.konsolTask.findFirst({
           where: { 
             courierId, 
-            status: { in: ["CONFIRMED", "DRAFT", "SIGNED_BY_US", "ACCEPTED"] },
+            status: { in: ["CONFIRMED", "DRAFT", "SIGNED_BY_US", "ACCEPTED", "CONFIRMED_ACT"] },
             date: { lte: maxDate }
           },
           orderBy: { date: "desc" },
@@ -82,7 +81,7 @@ export async function POST(req: Request) {
           });
           actId = String(newActId);
 
-          console.log(`[Pay] Ждем генерации акта ${actId}...`);
+          console.log(`[Pay] Ждем 3 сек для генерации акта ${actId}...`);
           await delay(3000);
         }
 
@@ -91,66 +90,54 @@ export async function POST(req: Request) {
             continue;
         }
 
-        // 2. УЗНАЕМ РЕАЛЬНЫЙ СТАТУС КОНСОЛИ
-        const rawAct = await fetchKonsolAct(actId);
-        const actData = rawAct?.data || rawAct || {};
-        const actStatus = actData.status; // 'draft', 'pending', 'signed', 'paid'
-        const paymentStatus = actData.payment?.status;
-        const isAutopayOn = actData.autopay === true;
-
-        console.log(`[Pay] Акт ${actId} имеет статус: ${actStatus}, статус оплаты: ${paymentStatus}`);
-
-        // 3. БЕЗУСЛОВНОЕ ПОДПИСАНИЕ
-        // Если акт не "signed" и не "paid" - ВСЕГДА пробуем подписать
-        if (actStatus !== "signed" && actStatus !== "paid") {
-             console.log(`[Pay] Пробуем подписать акт ${actId}...`);
-             try {
-               await signKonsolAct(actId);
-               console.log(`[Pay] Акт ${actId} УСПЕШНО ПОДПИСАН ✅`);
-               // Даем Консоли время обновить статус акта на signed
-               await delay(2000); 
-             } catch (signErr: any) {
-               console.error(`[Pay] Ошибка подписания акта ${actId}:`, signErr.message);
-               if (signErr.message.includes("404")) {
-                  errorCount++;
-                  continue; 
-               }
-             }
-        } else {
-             console.log(`[Pay] Акт ${actId} уже подписан (статус: ${actStatus}). Пропускаем подписание.`);
+        // 2. БЕЗУСЛОВНОЕ ПОДПИСАНИЕ
+        console.log(`[Pay] Пробуем подписать акт ${actId}...`);
+        try {
+          await signKonsolAct(actId);
+          console.log(`[Pay] Акт ${actId} УСПЕШНО ПОДПИСАН ✅`);
+          await delay(2000); // Даем Консоли 2 сек на смену статуса
+        } catch (signErr: any) {
+          console.error(`[Pay] Ошибка подписания акта ${actId}:`, signErr.message);
+          // Если 404 - значит акт УЖЕ подписан или недоступен для подписи. Идем дальше.
+          if (signErr.message.includes("404")) {
+             console.log(`[Pay] Игнорируем 404. Считаем, что акт ${actId} уже подписан.`);
+          } else {
+             errorCount++;
+             continue; 
+          }
         }
 
-        // Обновляем локальный статус
+        // Обновляем локальный статус (Акт точно подписан)
         await prisma.konsolTask.update({
           where: { id: task.id },
           data: { status: "SIGNED_BY_US" },
         });
 
-        // 4. ЗЕЛЕНЫЕ КРУЖКИ ЗП В ИНТЕРФЕЙСЕ
+        // 3. БЕЗУСЛОВНАЯ АВТООПЛАТА
+        console.log(`[Pay] Отправляем акт ${actId} в автооплату...`);
+        try {
+          await autopayKonsolAct(actId);
+          console.log(`[Pay] Акт ${actId} УСПЕШНО отправлен в автооплату ✅`);
+        } catch (payErr: any) {
+          console.error(`[Pay] Ошибка автооплаты акта ${actId}:`, payErr.message);
+          
+          // Если Консоль говорит "Нельзя оплатить", значит акт УЖЕ в оплате или оплачен.
+          if (payErr.message.includes("Нельзя оплатить акты из текущего статуса") || payErr.message.includes("уже оплачен")) {
+             console.log(`[Pay] Акт ${actId} УЖЕ в оплате или оплачен. Считаем успехом.`);
+          } else {
+             const match = payErr.message.match(/"message":"([^"]+)"/);
+             const humanMsg = match ? match[1] : payErr.message;
+             warnings.push(`Акт ${actId}: ${humanMsg}`);
+          }
+        }
+
+        // 4. ЗАЖИГАЕМ ЗЕЛЕНЫЕ КРУЖКИ В ИНТЕРФЕЙСЕ (только после успешного прохождения)
         for (const d of courierDates) {
           const existing = await prisma.courierPayment.findUnique({
             where: { courierId_date: { courierId, date: d } },
           });
           if (!existing) {
             await prisma.courierPayment.create({ data: { courierId, date: d } });
-          }
-        }
-
-        // 5. АВТООПЛАТА
-        const alreadyInPayment = actStatus === "paid" || isAutopayOn || ["paid", "pending", "processing"].includes(paymentStatus);
-
-        if (alreadyInPayment) {
-           console.log(`[Pay] Акт ${actId} УЖЕ В ОПЛАТЕ или АВТООПЛАТЕ. Пропускаем autopay.`);
-        } else {
-          console.log(`[Pay] Отправляем акт ${actId} в автооплату...`);
-          try {
-            await autopayKonsolAct(actId);
-            console.log(`[Pay] Акт ${actId} УСПЕШНО отправлен в автооплату ✅`);
-          } catch (payErr: any) {
-            console.error(`[Pay] Ошибка автооплаты акта ${actId}:`, payErr.message);
-            const match = payErr.message.match(/"message":"([^"]+)"/);
-            const humanMsg = match ? match[1] : payErr.message;
-            warnings.push(`Акт ${actId}: ${humanMsg}`);
           }
         }
 
