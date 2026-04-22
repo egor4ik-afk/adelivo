@@ -181,6 +181,27 @@ export async function POST(req: Request) {
         const act = await fetchKonsolAct(t.konsolActId);
         if (act?.payment?.status === "paid") {
           currentBadge = { label: "✅ Оплачено", color: "#10b981" };
+          
+          // 🔥 АВТОМАТИЧЕСКИ ОТМЕЧАЕМ СМЕНЫ ОПЛАЧЕННЫМИ В БД
+          const shifts = await prisma.courierShift.findMany({
+            where: {
+              courierId: t.courierId,
+              date: { gte: weekStart, lte: weekEnd }
+            }
+          });
+
+          for (const shift of shifts) {
+            const existing = await prisma.courierPayment.findUnique({
+              where: { courierId_date: { courierId: t.courierId, date: shift.date } },
+            });
+            if (!existing) {
+              await prisma.courierPayment.create({
+                data: { courierId: t.courierId, date: shift.date }
+              });
+            }
+          }
+          // 🔥 Конец добавленного блока
+
         } else if (act?.payment?.status === "not_paid" || act?.payment?.status === "pending") {
           currentBadge = { label: "⏳ Ожидает оплаты", color: "#f59e0b" };
         } else if (act?.payment?.status === "error") {
