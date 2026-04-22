@@ -39,22 +39,14 @@ export async function sendNewOrderAlert(order: {
   courier: string | null;
   items: string | null;
 }) {
+  return; // 🔥 Просто выходим, письмо отправляться не будет
+
+  /* Весь код ниже можно оставить как есть или закомментировать
   if (!TO) return;
   await transporter.sendMail({
-    from: FROM,
-    to: TO,
-    subject: `Новый заказ ${order.externalId ?? "—"} · ${order.slotRaw ?? ""}`,
-    html: `
-      <div style="font-family:sans-serif;max-width:480px;padding:24px;background:#f9f9f9;border-radius:12px">
-        <h3 style="margin:0 0 16px;color:#111">Новый заказ: ${order.externalId ?? "—"}</h3>
-        <table style="width:100%;font-size:13px;border-collapse:collapse">
-          <tr><td style="color:#888;padding:6px 0;width:120px">Адрес</td><td style="font-weight:600">${order.address ?? "—"}</td></tr>
-          <tr><td style="color:#888;padding:6px 0">Слот</td><td>${order.slotRaw ?? "—"}</td></tr>
-          <tr><td style="color:#888;padding:6px 0">Курьер</td><td>${order.courier ?? "Не назначен"}</td></tr>
-          <tr><td style="color:#888;padding:6px 0">Состав</td><td style="color:#999">${order.items ?? "—"}</td></tr>
-        </table>
-      </div>`,
+    ...
   });
+  */
 }
 
 export async function sendOrderUpdateAlert(order: {
@@ -63,21 +55,14 @@ export async function sendOrderUpdateAlert(order: {
   status: string;
   previousStatus?: string;
 }) {
+  return; // 🔥 Просто выходим, письмо об изменении статуса отправляться не будет
+
+  /*
   if (!TO) return;
   await transporter.sendMail({
-    from: FROM,
-    to: TO,
-    subject: `Заказ ${order.externalId ?? "—"} изменён → ${order.status}`,
-    html: `
-      <div style="font-family:sans-serif;max-width:480px;padding:24px;background:#f9f9f9;border-radius:12px">
-        <h3 style="margin:0 0 16px;color:#111">Изменение: ${order.externalId ?? "—"}</h3>
-        <table style="width:100%;font-size:13px;border-collapse:collapse">
-          <tr><td style="color:#888;padding:6px 0;width:120px">Адрес</td><td>${order.address ?? "—"}</td></tr>
-          ${order.previousStatus ? `<tr><td style="color:#888;padding:6px 0">Был</td><td style="color:#888">${order.previousStatus}</td></tr>` : ""}
-          <tr><td style="color:#888;padding:6px 0">Стал</td><td style="font-weight:600">${order.status}</td></tr>
-        </table>
-      </div>`,
+    ...
   });
+  */
 }
 
 // Один аргумент — адрес берётся из RECIPIENT_EMAIL
