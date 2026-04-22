@@ -1,6 +1,6 @@
 // src/app/api/request/route.ts
-// Принимает заявку с формы и отправляет в Telegram-бот
 import { NextResponse } from "next/server";
+import { sendRequestAlert } from "@/lib/mailer";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID   = process.env.TELEGRAM_CHAT_ID; // ID чата/группы для уведомлений
@@ -35,27 +35,52 @@ export async function POST(req: Request) {
       `${collabLabels[collab] || collab || "—"}`,
     ].join("\n");
 
-    if (!BOT_TOKEN || !CHAT_ID) {
+    let tgSuccess = false;
+
+    // 1. Пробуем отправить в Telegram (не прерываем работу при ошибке)
+    if (BOT_TOKEN && CHAT_ID) {
+      try {
+        const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: CHAT_ID,
+            text,
+            parse_mode: "Markdown",
+          }),
+        });
+
+        if (res.ok) {
+          tgSuccess = true;
+        } else {
+          const err = await res.text();
+          console.error("[Request] Telegram error:", err);
+        }
+      } catch (e) {
+        console.error("[Request] Telegram fetch failed:", e);
+      }
+    } else {
       console.error("[Request] BOT_TOKEN или CHAT_ID не настроены");
-      return NextResponse.json({ error: "Бот не настроен" }, { status: 500 });
     }
 
-    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: CHAT_ID,
-        text,
-        parse_mode: "Markdown",
-      }),
-    });
-
-    if (!res.ok) {
-      const err = await res.text();
-      console.error("[Request] Telegram error:", err);
-      return NextResponse.json({ error: "Ошибка отправки" }, { status: 500 });
+    // 2. Всегда отправляем дубль на почту
+    let emailSuccess = false;
+    try {
+      // Очищаем текст от Markdown-звездочек для красивого отображения в письме
+      const cleanText = text.replace(/[*]/g, ""); 
+      await sendRequestAlert(cleanText);
+      emailSuccess = true;
+    } catch (e) {
+      console.error("[Request] Email error:", e);
     }
 
+    // 3. Возвращаем ответ
+    // Если ни Telegram, ни почта не отработали, выдаём 500 ошибку
+    if (!tgSuccess && !emailSuccess) {
+      return NextResponse.json({ error: "Не удалось отправить заявку ни в TG, ни на email" }, { status: 500 });
+    }
+
+    // Если хотя бы один канал связи отработал успешно, считаем заявку принятой
     return NextResponse.json({ success: true });
   } catch (e: any) {
     console.error("[Request] Error:", e);

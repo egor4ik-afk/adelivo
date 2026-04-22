@@ -109,3 +109,12 @@ export async function sendInvalidAddressAlert(
       </div>`,
   });
 }
+export async function sendRequestAlert(text: string) {
+  if (!TO) return;
+  await transporter.sendMail({
+    from: FROM,
+    to: TO, // Письмо уйдет на адрес из переменной RECIPIENT_EMAIL
+    subject: "🆕 Новая заявка с сайта Event Wave",
+    text: text,
+  });
+}

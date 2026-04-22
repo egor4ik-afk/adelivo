@@ -24,13 +24,13 @@ if (!initialized && process.env.NODE_ENV !== "test") {
   initialized = true;
 
   // 1. RetailCRM: Основной магазин Bunch (каждые 5 минут)
-  cron.schedule("*/10 * * * *", async () => {
+  cron.schedule("*/9 * * * *", async () => {
     try { await pollCrmOrders(); } 
     catch (err) { console.error("[Cron] Poll Bunch failed:", err); }
   });
 
   // 🔥 1.5 RetailCRM: Сеть Meura (каждые 10 минут) 🔥
-  cron.schedule("*/15 * * * *", async () => {
+  cron.schedule("*/13 * * * *", async () => {
     try { 
       console.log("[Cron] Запуск поллинга Meura...");
       await pollMeuraOrders(); 
