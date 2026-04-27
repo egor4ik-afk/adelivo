@@ -330,28 +330,45 @@ async function assignClustersWithLLM(
 Ответ СТРОГО JSON без markdown:
 [{"courierId":1,"clusterIndexes":[0,2],"priorities":{"order-id":"HIGH"}}]`;
 
-    const response = await goClient.chat.completions.create({
-      model: "deepseek-v4-pro",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `Кластеры: ${JSON.stringify(clusterDigest)}\nКурьеры: ${JSON.stringify(courierDigest)}\nРасстояния км: ${JSON.stringify(clusterDists)}` },
-      ],
-      temperature: 0.1,
-      max_tokens: 4000, // Увеличили лимит токенов, чтобы длинные ответы не обрезались
-    });
+const response = await goClient.chat.completions.create({
+  // 🔥 Используем формат из доки Open Code
+  model: "opencode-go/deepseek-v4-pro", 
+  response_format: { type: "json_object" }, // Принудительно требуем JSON
+  messages: [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: `Кластеры: ${JSON.stringify(clusterDigest)}\nКурьеры: ${JSON.stringify(courierDigest)}\nРасстояния км: ${JSON.stringify(clusterDists)}` },
+  ],
+  temperature: 0.1,
+  max_tokens: 4000,
+});
 
-    let content = response.choices[0]?.message?.content?.trim() ?? "[]";
-    content = content.replace(/^```json\s*/g, "").replace(/^```\s*/g, "").replace(/\s*```$/g, "").trim();
+const rawContent = response.choices[0]?.message?.content;
 
-    // Безопасный парсинг с выводом ошибки
-    try {
-      const parsed: LLMAssignment[] = JSON.parse(content);
-      if (!Array.isArray(parsed) || parsed.length === 0) return null;
-      return parsed;
-    } catch (parseError) {
-      console.error("[LLM] Ошибка парсинга JSON! Сырой ответ от модели:", content);
-      return null;
-    }
+// Выводим полный ответ, если пришла пустота
+if (!rawContent) {
+  console.error("[LLM] Пустой ответ от OpenCode API! Полный ответ сервера:", JSON.stringify(response, null, 2));
+  return null;
+}
+
+let content = rawContent.trim();
+content = content.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
+
+try {
+  const parsed: LLMAssignment[] = JSON.parse(content);
+  
+  // Автокоррекция, если модель вложила массив в объект (например, {"data": [...]})
+  if (!Array.isArray(parsed) && parsed && typeof parsed === 'object') {
+     const possibleArray = Object.values(parsed).find(Array.isArray);
+     if (possibleArray) return possibleArray as LLMAssignment[];
+  }
+  
+  if (!Array.isArray(parsed) || parsed.length === 0) return null;
+  return parsed;
+} catch (parseError) {
+  // Теперь мы точно увидим, КАКОЙ текст сломал парсер
+  console.error("[LLM] Ошибка парсинга JSON! Сырой ответ от модели:", content);
+  return null;
+}
 
   } catch (e) {
     console.error("[LLM] DeepSeek общая ошибка запроса:", e);
