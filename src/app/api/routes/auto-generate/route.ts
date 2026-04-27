@@ -434,19 +434,75 @@ async function saveRoute(
 //  MAIN HANDLER
 // ─────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────
+//  НОРМАЛИЗАЦИЯ СЛОТОВ
+//  Принимаем любой формат от фронта:
+//    "12:00-14:00"  "12-14"  "с 12:00 до 14:00"  или label из SLOTS
+//  Возвращаем Set строк вида "12:00-14:00"
+// ─────────────────────────────────────────────────────────
+
+function normalizeSlots(raw: string[]): Set<string> {
+  const result = new Set<string>();
+  for (const s of raw) {
+    // Уже в формате "12:00-14:00"
+    const direct = s.match(/^(\d{1,2}:\d{2})-(\d{1,2}:\d{2})$/);
+    if (direct) { result.add(s); continue; }
+
+    // Формат "12-14" → "12:00-14:00"
+    const short = s.match(/^(\d{1,2})-(\d{1,2})$/);
+    if (short) { result.add(`${short[1].padStart(2,"0")}:00-${short[2].padStart(2,"0")}:00`); continue; }
+
+    // Формат "с 12:00 до 14:00"
+    const ru = s.match(/(\d{1,2}:\d{2}).*?(\d{1,2}:\d{2})/);
+    if (ru) { result.add(`${ru[1]}-${ru[2]}`); continue; }
+
+    // Label из SLOTS ("12-14 пешком" и т.п.) → ищем в константах
+    const slotMatch = SLOTS.find((sl) => sl.label === s);
+    if (slotMatch) { result.add(`${slotMatch.from}-${slotMatch.to}`); continue; }
+
+    // Оставляем как есть (для "Другие" и кастомных)
+    result.add(s);
+  }
+  return result;
+}
+
+// Проверяет попадает ли заказ в переданный набор слотов
+function orderMatchesSlots(
+  o: { slotFrom: string | null; slotTo: string | null },
+  slotSet: Set<string>
+): boolean {
+  if (!o.slotFrom || !o.slotTo) return slotSet.has("Другие");
+  // Точное совпадение "HH:MM-HH:MM"
+  if (slotSet.has(`${o.slotFrom}-${o.slotTo}`)) return true;
+  // Через SLOTS.label
+  const slot = SLOTS.find((s) => s.from === o.slotFrom && s.to === o.slotTo);
+  if (slot && slotSet.has(slot.label)) return true;
+  return false;
+}
+
 export async function POST(req: Request) {
   try {
-    const { routeDate, selectedSlots } = await req.json();
-    if (!routeDate) return NextResponse.json({ error: "Не указана дата" }, { status: 400 });
+    const body = await req.json();
+    const routeDate: string | undefined = body.routeDate;
+    // selectedSlots — массив временных диапазонов: ["12:00-14:00", "18:00-20:00"]
+    // Если не передан или пустой — распределяем ВСЕ свободные заказы на дату
+    const rawSlots: string[] = body.selectedSlots ?? [];
+
+    if (!routeDate)
+      return NextResponse.json({ error: "Не указана дата (routeDate)" }, { status: 400 });
+
+    const slotSet = normalizeSlots(rawSlots); // пустой Set = все слоты
+    const filterBySlots = slotSet.size > 0;
 
     const startOfDay = new Date(`${routeDate}T00:00:00.000Z`);
     const endOfDay   = new Date(`${routeDate}T23:59:59.999Z`);
 
-    // 1. Заказы
+    // ─── 1. Только NEW + без курьера + с координатами ─────
+    //  Delivered / Assigned / InDelivery — не трогаем никогда
     const orders = await prisma.order.findMany({
       where: {
-        status: "NEW",
-        courierId: null,
+        status: "NEW",        // ← только новые
+        courierId: null,      // ← ещё не назначены
         lat: { not: null },
         lng: { not: null },
         OR: [
@@ -455,23 +511,37 @@ export async function POST(req: Request) {
         ],
       },
     });
-    if (orders.length === 0)
-      return NextResponse.json({ error: "Нет свободных заказов" }, { status: 400 });
 
-    // 2. Фильтр по слотам
-    let targetOrders = orders;
-    if (selectedSlots?.length > 0) {
-      targetOrders = orders.filter((o) => {
-        if (!o.slotFrom) return selectedSlots.includes("Другие");
-        const exact = SLOTS.find((s) => s.from === o.slotFrom && s.to === o.slotTo);
-        if (exact) return selectedSlots.includes(exact.label);
-        const match = SLOTS.find((s) => o.slotFrom! > s.from && o.slotFrom! <= s.to);
-        if (match) return selectedSlots.includes(match.label);
-        return selectedSlots.includes("Другие");
-      });
+    if (orders.length === 0)
+      return NextResponse.json({ error: "Нет свободных заказов на эту дату" }, { status: 400 });
+
+    // ─── 2. Фильтруем по выбранным слотам ─────────────────
+    const targetOrders = filterBySlots
+      ? orders.filter((o) => orderMatchesSlots(o, slotSet))
+      : orders;
+
+    if (targetOrders.length === 0) {
+      // Подсказываем какие слоты вообще есть
+      const availableSlots = [
+        ...new Set(
+          orders.map((o) =>
+            o.slotFrom && o.slotTo ? `${o.slotFrom}-${o.slotTo}` : "Другие"
+          )
+        ),
+      ].sort();
+      return NextResponse.json({
+        error: "В выбранных слотах нет свободных заказов",
+        requestedSlots: [...slotSet],
+        availableSlots,
+      }, { status: 400 });
     }
-    if (targetOrders.length === 0)
-      return NextResponse.json({ error: "В выбранных слотах нет свободных заказов" }, { status: 400 });
+
+    // Собираем статистику по слотам для ответа
+    const slotStats: Record<string, number> = {};
+    for (const o of targetOrders) {
+      const key = o.slotFrom && o.slotTo ? `${o.slotFrom}-${o.slotTo}` : "Другие";
+      slotStats[key] = (slotStats[key] ?? 0) + 1;
+    }
 
     // 3. Курьеры на смене
     const activeCouriers = await prisma.courier.findMany({
@@ -583,7 +653,17 @@ export async function POST(req: Request) {
 
     const leftOver = enriched.filter((o) => !assignedSet.has(o.id)).length;
 
-    return NextResponse.json({ success: true, routesCreated, ordersAssigned, leftOver, usedFallback });
+    return NextResponse.json({
+      success: true,
+      routesCreated,
+      ordersAssigned,
+      leftOver,
+      usedFallback,
+      processedSlots: filterBySlots ? [...slotSet] : ["все"],
+      slotBreakdown: slotStats,
+      // Сколько NEW-заказов на эту дату осталось нетронутыми (другие слоты)
+      untouchedNewOrders: orders.length - targetOrders.length,
+    });
   } catch (e: any) {
     console.error("[auto-generate] общая ошибка:", e);
     return NextResponse.json({ error: String(e?.message ?? e) }, { status: 500 });
