@@ -4,16 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { SLOTS } from "@/lib/constants";
 import OpenAI from "openai";
 
-// 🔥 Игнорируем заглушку, если она случайно подтянулась из переменных окружения
-const rawFolderId = process.env.YANDEX_CATALOG_ID;
-const YANDEX_CLOUD_FOLDER = (!rawFolderId || rawFolderId.includes("stub")) 
-  ? "b1gcr5m4ptniag2qpsqm" 
-  : rawFolderId;
-
+const YANDEX_CLOUD_FOLDER = process.env.YANDEX_CLOUD_FOLDER;
 const YANDEX_CLOUD_API_KEY = process.env.YANDEX_LLM_API_KEY;
 const YANDEX_CLOUD_MODEL = "aliceai-llm/latest"; // или "yandexgpt/latest"
-// 🔥 КЛЮЧ ДЛЯ МАТРИЦЫ РАССТОЯНИЙ
-const YANDEX_ROUTING_KEY = process.env.YANDEX_ROUTING_KEY; 
 
 const client = new OpenAI({
   apiKey: YANDEX_CLOUD_API_KEY,
@@ -26,26 +19,32 @@ const client = new OpenAI({
 const STORE_LAT = 55.749511;
 const STORE_LNG = 37.596205;
 
+// Центральные координаты Москвы (Кремль) для расчета удаленности
+const MOSCOW_CENTER_LAT = 55.7558;
+const MOSCOW_CENTER_LNG = 37.6173;
+
 // === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
 
-async function getDistanceMatrix(points: { id: string, lat: number, lng: number }[], mode: 'auto' | 'transit') {
-  if (!YANDEX_ROUTING_KEY) {
-      console.warn("Нет ключа YANDEX_ROUTING_KEY, возвращаем заглушку (по прямой)");
-      return null;
-  }
-  try {
-      // 🔥 ВАЖНОЕ ИСПРАВЛЕНИЕ: Яндекс требует формат "долгота,широта" (lng,lat)
-      const origins = points.map(p => `${p.lng},${p.lat}`).join('|');
-      const destinations = origins;
-      const res = await fetch(`https://api.routing.yandex.net/v2/distancematrix?apikey=${YANDEX_ROUTING_KEY}&origins=${origins}&destinations=${destinations}&mode=${mode}`);
-      if (!res.ok) return null;
-      return await res.json();
-  } catch (e) {
-      console.error("Ошибка получения матрицы:", e);
-      return null;
-  }
+// Функция расчета расстояния в километрах (Формула гаверсинуса)
+function getDistanceFromCenterKm(lat: number, lng: number): number {
+  const R = 6371; // Радиус Земли в км
+  const dLat = (lat - MOSCOW_CENTER_LAT) * (Math.PI / 180);
+  const dLon = (lng - MOSCOW_CENTER_LNG) * (Math.PI / 180);
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(MOSCOW_CENTER_LAT * (Math.PI / 180)) * Math.cos(lat * (Math.PI / 180)) * Math.sin(dLon/2) * Math.sin(dLon/2); 
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+  return R * c;
 }
 
+// Определение зоны по удаленности от центра
+function getMoscowZone(distanceKm: number): string {
+  if (distanceKm <= 5.5) return "Внутри ТТК";
+  if (distanceKm <= 16.5) return "Между ТТК и МКАД";
+  return "За МКАДом";
+}
+
+// Расчет расстояния по прямой между двумя точками
 function getDist(lat1: number, lng1: number, lat2: number, lng2: number) {
   return Math.sqrt(Math.pow(lat1 - lat2, 2) + Math.pow(lng1 - lng2, 2));
 }
@@ -79,7 +78,6 @@ function optimizeCluster(points: any[], startLat: number, startLng: number) {
 
 export async function POST(req: Request) {
   try {
-    // Безопасное извлечение тела запроса
     let body;
     try {
       body = await req.json();
@@ -136,17 +134,21 @@ export async function POST(req: Request) {
     availableCouriers.sort((a, b) => (b.priority || 3) - (a.priority || 3));
     if (availableCouriers.length === 0) return NextResponse.json({ error: "Курьеры не подошли под критерии" }, { status: 400 });
 
-    const pointsForMatrix = [{ id: "STORE", lat: STORE_LAT, lng: STORE_LNG }, ...targetOrders.map(o => ({ id: o.id, lat: o.lat!, lng: o.lng! }))];
-    const distanceMatrix = await getDistanceMatrix(pointsForMatrix, 'transit'); 
-
-    const promptOrders = targetOrders.map(o => ({
-        id: o.id,
-        address: o.address, 
-        slot: `${o.slotFrom}-${o.slotTo}`,
-        items: o.items,
-        comment: o.comment,
-        lat: o.lat, lng: o.lng
-    }));
+    // 🔥 ОБОГАЩАЕМ ЗАКАЗЫ ЗОНАМИ ДЛЯ НЕЙРОСЕТИ
+    const promptOrders = targetOrders.map(o => {
+        const distKm = getDistanceFromCenterKm(o.lat!, o.lng!);
+        return {
+            id: o.id,
+            address: o.address, 
+            slot: `${o.slotFrom}-${o.slotTo}`,
+            items: o.items,
+            comment: o.comment,
+            lat: o.lat, 
+            lng: o.lng,
+            distanceFromCenterKm: Math.round(distKm * 10) / 10,
+            zone: getMoscowZone(distKm) // Внутри ТТК, Между ТТК и МКАД, За МКАДом
+        };
+    });
 
     const promptCouriers = availableCouriers.map(c => ({
         id: c.id,
@@ -157,12 +159,23 @@ export async function POST(req: Request) {
     const systemPrompt = `Ты — продвинутый AI-логист. Твоя задача — разбить заказы на компактные маршруты для курьеров.
     
     КРИТИЧЕСКИЕ ПРАВИЛА СОЗДАНИЯ МАРШРУТОВ:
-    1. ОБЪЕМ: Для пешего курьера (walking) создавай маршруты СТРОГО по 3-4 точек! Для авто (auto) — по 5-7 точек. Не перегружай пеших!
-    2. ПРИОРИТЕТ ГРУЗА: Анализируй поле 'items' и 'comment'. 
-       - Если это быстро увядающие цветы (например: розы, тюльпаны, букеты без аквабокса) или тяжелый/объемный заказ (много позиций), помечай этот заказ как "HIGH" приоритет.
-       - Остальное (стойкие цветы в аквабоксах, мелкие подарки, если долго хранятся) — "NORMAL".
-    3. ГЕОГРАФИЯ: Собирай точки в ОДНОМ районе (кластере). Используй координаты (lat, lng), чтобы точки в одном массиве были близко друг к другу.
-    4. Если заказов много, ОДНОМУ курьеру можно создать НЕСКОЛЬКО маршрутов (массивов orderIds), но каждый массив должен быть небольшим (3-5 точек для пешего).
+    
+    1. ПРАВИЛА ДЛЯ ПЕШЕГО КУРЬЕРА (walking):
+       - ОБЪЕМ: Строго от 2 до 4 заказов на маршруте.
+       - СЛОТЫ ДОСТАВКИ: Не более 2 разных периодов доставки (слотов) в одном маршруте.
+       - ГЕОГРАФИЯ (ВАЖНО!): Выбирай для пеших курьеров заказы с пометкой zone: "Внутри ТТК". Они имеют абсолютный приоритет.
+    
+    2. ПРАВИЛА ДЛЯ АВТО-КУРЬЕРА (auto):
+       - ОБЪЕМ: Строго от 5 до 10 заказов на маршруте.
+       - СЛОТЫ ДОСТАВКИ: Не более 2 разных периодов доставки (слотов) в одном маршруте.
+       - ГЕОГРАФИЯ (ВАЖНО!): Нужно давать авто-курьерам заказы за пределами ТТК. Чем дальше от центра (distanceFromCenterKm) — тем лучше. НАИВЫСШИЙ ПРИОРИТЕТ отдавай заказам с пометкой zone: "За МКАДом".
+    
+    3. ОБЩАЯ ЛОГИКА И ПРИОРИТЕТЫ:
+       - ГРУППИРОВКА: Собирай точки в ОДНОМ районе (кластере), чтобы минимизировать время в пути (используй координаты lat/lng). Маршрут должен занимать около 3 часов в одну сторону.
+       - ПРИОРИТЕТ ГРУЗА: Анализируй поле 'items' и 'comment'. Быстро увядающие цветы (например: розы, тюльпаны, букеты без аквабокса) или тяжелый/объемный заказ помечай как "HIGH" приоритет. Остальное — "NORMAL".
+       - МУЛЬТИ-МАРШРУТЫ: ОДНОМУ курьеру можно создать НЕСКОЛЬКО маршрутов (массивов orderIds), но каждый массив должен подчиняться правилам объема выше.
+    
+    Каждый заказ в списке имеет параметры 'zone' и 'distanceFromCenterKm'. Обязательно используй их для правильного распределения между 'walking' и 'auto' курьерами!
     
     Формат ответа СТРОГО JSON:
     [
@@ -185,14 +198,13 @@ export async function POST(req: Request) {
             messages: [
               { role: "system", content: systemPrompt },
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              { role: "user", content: `Матрица расстояний (минуты): ${JSON.stringify(distanceMatrix?.rows?.map((r:any) => r.elements.map((e:any)=> Math.round(e.duration.value/60))) || "Недоступна")}\nЗаказы: ${JSON.stringify(promptOrders)}\nКурьеры: ${JSON.stringify(promptCouriers)}` }
+              { role: "user", content: `Заказы: ${JSON.stringify(promptOrders)}\nКурьеры: ${JSON.stringify(promptCouriers)}` }
             ],
             temperature: 0.1, 
         });
 
         let content = response.choices[0]?.message?.content?.trim() || "[]";
         
-        // 🔥 ПУЛЕНЕПРОБИВАЕМЫЙ ПАРСИНГ: Ищем массив внутри любого текста
         const startIdx = content.indexOf('[');
         const endIdx = content.lastIndexOf(']');
         
@@ -237,11 +249,8 @@ export async function POST(req: Request) {
                  assignedSet.add(o.id); 
              });
 
-             // Оптимизируем внутри микро-маршрута с учетом High Priority
              const optimizedRoute = optimizeCluster(validOrders, STORE_LAT, STORE_LNG);
-
              const routeName = `${prefix}${courier.id}-${Math.floor(Math.random() * 1000)}`;
-             // Для ссылок Яндекс.Карт формат lat,lng правильный
              const link = `https://yandex.ru/maps/?rtext=${STORE_LAT},${STORE_LNG}~${optimizedRoute.map(o => `${o.lat},${o.lng}`).join("~")}&rtt=${courier.isAuto ? 'auto' : 'mt'}`;
 
              const newRoute = await prisma.route.create({
@@ -266,9 +275,7 @@ export async function POST(req: Request) {
         }
     }
 
-    // Подсчитываем сколько точек ИИ оставил без внимания
     const leftOverOrders = targetOrders.filter(o => !assignedSet.has(o.id));
-
     return NextResponse.json({ success: true, routesCreated, ordersAssigned, leftOver: leftOverOrders.length });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
