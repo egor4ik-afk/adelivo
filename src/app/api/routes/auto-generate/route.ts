@@ -4,69 +4,435 @@ import { prisma } from "@/lib/prisma";
 import { SLOTS } from "@/lib/constants";
 import OpenAI from "openai";
 
-const YANDEX_CLOUD_FOLDER = process.env.YANDEX_CATALOG_ID || "b1gcr5m4ptniag2qpsqm";
-const YANDEX_CLOUD_API_KEY = process.env.YANDEX_LLM_API_KEY;
-const YANDEX_CLOUD_MODEL = "aliceai-llm/latest";
-// 🔥 КЛЮЧ ДЛЯ МАТРИЦЫ РАССТОЯНИЙ
-const YANDEX_ROUTING_KEY = process.env.YANDEX_ROUTING_KEY; 
-
-const client = new OpenAI({
-  apiKey: YANDEX_CLOUD_API_KEY,
-  baseURL: "https://ai.api.cloud.yandex.net/v1",
-  defaultHeaders: {
-    "OpenAI-Project": YANDEX_CLOUD_FOLDER,
-  },
+// ─── LLM: DeepSeek V4 Pro через opencode.ai (primary) ───
+const GO_API_KEY = process.env.GO_API_KEY; // ключ opencode.ai
+const goClient = new OpenAI({
+  apiKey: GO_API_KEY,
+  baseURL: "https://opencode.ai/zen/go/v1",
 });
 
+// ─── Яндекс Distance Matrix ───────────────────────────────
+const YANDEX_ROUTING_KEY = process.env.YANDEX_ROUTING_KEY;
+
+// ─── Конфиг ───────────────────────────────────────────────
 const STORE_LAT = 55.749511;
 const STORE_LNG = 37.596205;
 
-// === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
+const MAX_ORDERS_WALKING  = 4;
+const MAX_ORDERS_AUTO     = 7;
+const MIN_ORDERS_FOR_AUTO = 15;
+const AVG_SPEED_WALK_KMH  = 5;
+const AVG_SPEED_AUTO_KMH  = 25;
+const STOP_TIME_WALK_MIN  = 8;
+const STOP_TIME_AUTO_MIN  = 5;
+const RETURN_BUFFER_MIN   = 20;
 
-async function getDistanceMatrix(points: { id: string, lat: number, lng: number }[], mode: 'auto' | 'transit') {
-  if (!YANDEX_ROUTING_KEY) {
-      console.warn("Нет ключа YANDEX_ROUTING_KEY, возвращаем заглушку (по прямой)");
-      return null;
-  }
+// ─────────────────────────────────────────────────────────
+//  ТИПЫ
+// ─────────────────────────────────────────────────────────
+
+type OrderRow = {
+  id: string;
+  lat: number;
+  lng: number;
+  slotFrom: string | null;
+  slotTo: string | null;
+  items: string | null;
+  comment: string | null;
+  address: string | null;
+  priority: "HIGH" | "NORMAL";
+};
+
+type CourierRow = {
+  id: number;
+  fullName: string;
+  isAuto: boolean;
+  priority: number | null;
+  lat: number | null;
+  lng: number | null;
+  locationUpdatedAt: Date | null;
+  homeLat: number | null;
+  homeLng: number | null;
+};
+
+type LLMAssignment = {
+  courierId: number;
+  clusterIndexes: number[];
+  priorities: Record<string, "HIGH" | "NORMAL">;
+};
+
+// ─────────────────────────────────────────────────────────
+//  ГЕОМЕТРИЯ
+// ─────────────────────────────────────────────────────────
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function travelMin(lat1: number, lng1: number, lat2: number, lng2: number, isAuto: boolean) {
+  return (haversineKm(lat1, lng1, lat2, lng2) / (isAuto ? AVG_SPEED_AUTO_KMH : AVG_SPEED_WALK_KMH)) * 60;
+}
+
+function euclidean(lat1: number, lng1: number, lat2: number, lng2: number) {
+  return Math.sqrt((lat1 - lat2) ** 2 + (lng1 - lng2) ** 2);
+}
+
+// ─────────────────────────────────────────────────────────
+//  ЯНДЕКС DISTANCE MATRIX
+// ─────────────────────────────────────────────────────────
+
+async function getDistanceMatrix(
+  points: { id: string; lat: number; lng: number }[],
+  isAuto: boolean
+): Promise<number[][] | null> {
+  if (!YANDEX_ROUTING_KEY) return null;
   try {
-      const origins = points.map(p => `${p.lat},${p.lng}`).join('|');
-      const destinations = origins;
-      const res = await fetch(`https://api.routing.yandex.net/v2/distancematrix?apikey=${YANDEX_ROUTING_KEY}&origins=${origins}&destinations=${destinations}&mode=${mode}`);
-      if (!res.ok) return null;
-      return await res.json();
+    const coords = points.map((p) => `${p.lat},${p.lng}`).join("|");
+    const mode = isAuto ? "auto" : "transit";
+    const res = await fetch(
+      `https://api.routing.yandex.net/v2/distancematrix?apikey=${YANDEX_ROUTING_KEY}&origins=${coords}&destinations=${coords}&mode=${mode}`,
+      { signal: AbortSignal.timeout(8000) }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data.rows ?? []).map((row: any) =>
+      (row.elements ?? []).map((el: any) =>
+        el.status === "OK" ? el.duration.value / 60 : null
+      )
+    );
   } catch (e) {
-      console.error("Ошибка получения матрицы:", e);
-      return null;
+    console.warn("[matrix] Яндекс недоступен, fallback haversine:", e);
+    return null;
   }
 }
 
-function getDist(lat1: number, lng1: number, lat2: number, lng2: number) {
-  return Math.sqrt(Math.pow(lat1 - lat2, 2) + Math.pow(lng1 - lng2, 2));
+function getDuration(
+  matrix: number[][] | null,
+  fromIdx: number, toIdx: number,
+  fromLat: number, fromLng: number,
+  toLat: number, toLng: number,
+  isAuto: boolean
+): number {
+  const val = matrix?.[fromIdx]?.[toIdx];
+  if (val != null && val > 0) return val;
+  return travelMin(fromLat, fromLng, toLat, toLng, isAuto);
 }
 
-function optimizeCluster(points: any[], startLat: number, startLng: number) {
-  const sorted: any[] = [];
-  const remaining = [...points];
-  let curLat = startLat;
-  let curLng = startLng;
+// ─────────────────────────────────────────────────────────
+//  ПРИОРИТЕТ ЗАКАЗА
+// ─────────────────────────────────────────────────────────
 
-  const highPriority = remaining.filter(p => p.aiPriority === "HIGH");
-  const normalPriority = remaining.filter(p => p.aiPriority !== "HIGH");
+const HIGH_KEYWORDS = [
+  "роза", "розы", "тюльпан", "тюльпаны", "букет",
+  "срочно", "fragile", "хрупко", "живые цветы",
+];
 
-  const buildRoute = (pool: any[]) => {
-      while(pool.length > 0) {
-          pool.sort((a,b) => getDist(curLat, curLng, a.lat!, a.lng!) - getDist(curLat, curLng, b.lat!, b.lng!));
-          const next = pool.shift();
-          sorted.push(next);
-          curLat = next.lat!; curLng = next.lng!;
+function detectPriority(items: string | null, comment: string | null): "HIGH" | "NORMAL" {
+  const text = `${items ?? ""} ${comment ?? ""}`.toLowerCase();
+  return HIGH_KEYWORDS.some((kw) => text.includes(kw)) ? "HIGH" : "NORMAL";
+}
+
+// ─────────────────────────────────────────────────────────
+//  СТАРТОВАЯ ТОЧКА КУРЬЕРА
+// ─────────────────────────────────────────────────────────
+
+function courierStart(
+  courier: CourierRow,
+  clusterLat: number,
+  clusterLng: number
+): { lat: number; lng: number } {
+  // Текущая геолокация если свежее 30 мин
+  if (courier.lat && courier.lng && courier.locationUpdatedAt) {
+    const ageMin = (Date.now() - courier.locationUpdatedAt.getTime()) / 60000;
+    if (ageMin < 30) return { lat: courier.lat, lng: courier.lng };
+  }
+  // Дом если ближе к кластеру чем магазин
+  if (courier.homeLat && courier.homeLng) {
+    const dHome  = euclidean(courier.homeLat, courier.homeLng, clusterLat, clusterLng);
+    const dStore = euclidean(STORE_LAT, STORE_LNG, clusterLat, clusterLng);
+    if (dHome < dStore) return { lat: courier.homeLat, lng: courier.homeLng };
+  }
+  return { lat: STORE_LAT, lng: STORE_LNG };
+}
+
+// ─────────────────────────────────────────────────────────
+//  TSP: NEAREST-NEIGHBOUR + 2-OPT
+// ─────────────────────────────────────────────────────────
+
+function routeCost(
+  route: OrderRow[], sLat: number, sLng: number,
+  matrix: number[][] | null, idxMap: Map<string, number>,
+  sIdx: number, isAuto: boolean
+): number {
+  let cost = 0, pLat = sLat, pLng = sLng, pIdx = sIdx;
+  for (const o of route) {
+    const tIdx = idxMap.get(o.id)!;
+    cost += getDuration(matrix, pIdx, tIdx, pLat, pLng, o.lat, o.lng, isAuto);
+    pLat = o.lat; pLng = o.lng; pIdx = tIdx;
+  }
+  return cost;
+}
+
+function tspOptimize(
+  orders: OrderRow[], sLat: number, sLng: number,
+  matrix: number[][] | null, idxMap: Map<string, number>,
+  sIdx: number, isAuto: boolean
+): OrderRow[] {
+  // Nearest-neighbour
+  const rem = [...orders];
+  const route: OrderRow[] = [];
+  let pLat = sLat, pLng = sLng, pIdx = sIdx;
+  while (rem.length > 0) {
+    let bi = -1, bd = Infinity;
+    for (let i = 0; i < rem.length; i++) {
+      const d = getDuration(matrix, pIdx, idxMap.get(rem[i].id)!, pLat, pLng, rem[i].lat, rem[i].lng, isAuto);
+      if (d < bd) { bd = d; bi = i; }
+    }
+    const next = rem.splice(bi, 1)[0];
+    route.push(next);
+    pLat = next.lat; pLng = next.lng; pIdx = idxMap.get(next.id)!;
+  }
+  // 2-opt improvement
+  if (route.length <= 3) return route;
+  let best = [...route], improved = true;
+  while (improved) {
+    improved = false;
+    for (let i = 0; i < best.length - 1; i++) {
+      for (let j = i + 2; j < best.length; j++) {
+        const cand = [...best];
+        let l = i + 1, r = j;
+        while (l < r) { [cand[l], cand[r]] = [cand[r], cand[l]]; l++; r--; }
+        if (routeCost(cand, sLat, sLng, matrix, idxMap, sIdx, isAuto) <
+            routeCost(best, sLat, sLng, matrix, idxMap, sIdx, isAuto)) {
+          best = cand; improved = true;
+        }
       }
-  };
-
-  buildRoute(highPriority);
-  buildRoute(normalPriority);
-
-  return sorted;
+    }
+  }
+  return best;
 }
+
+// ─────────────────────────────────────────────────────────
+//  КЛАСТЕРИЗАЦИЯ (жадный NN, HIGH-заказы в приоритете)
+// ─────────────────────────────────────────────────────────
+
+function clusterOrders(orders: OrderRow[], maxSize: number): OrderRow[][] {
+  const rem = [...orders].sort((a, b) => {
+    if (a.priority === "HIGH" && b.priority !== "HIGH") return -1;
+    if (b.priority === "HIGH" && a.priority !== "HIGH") return 1;
+    return euclidean(a.lat, a.lng, STORE_LAT, STORE_LNG) - euclidean(b.lat, b.lng, STORE_LAT, STORE_LNG);
+  });
+
+  const clusters: OrderRow[][] = [];
+  while (rem.length > 0) {
+    const seed = rem.shift()!;
+    const cluster: OrderRow[] = [seed];
+    let cLat = seed.lat, cLng = seed.lng;
+
+    while (cluster.length < maxSize && rem.length > 0) {
+      let bi = -1, bd = Infinity;
+      for (let i = 0; i < rem.length; i++) {
+        const d = euclidean(rem[i].lat, rem[i].lng, cLat, cLng);
+        if (d < bd) { bd = d; bi = i; }
+      }
+      if (bi < 0) break;
+      cluster.push(rem.splice(bi, 1)[0]);
+      cLat = cluster.reduce((s, o) => s + o.lat, 0) / cluster.length;
+      cLng = cluster.reduce((s, o) => s + o.lng, 0) / cluster.length;
+    }
+    clusters.push(cluster);
+  }
+  return clusters;
+}
+
+// ─────────────────────────────────────────────────────────
+//  ОЦЕНКА ВРЕМЕНИ
+// ─────────────────────────────────────────────────────────
+
+function estimateTime(
+  route: OrderRow[], sLat: number, sLng: number,
+  matrix: number[][] | null, idxMap: Map<string, number>,
+  sIdx: number, isAuto: boolean
+): { routeMin: number; returnMin: number } {
+  const stopTime = isAuto ? STOP_TIME_AUTO_MIN : STOP_TIME_WALK_MIN;
+  let total = 0, pLat = sLat, pLng = sLng, pIdx = sIdx;
+
+  for (const o of route) {
+    const tIdx = idxMap.get(o.id)!;
+    total += getDuration(matrix, pIdx, tIdx, pLat, pLng, o.lat, o.lng, isAuto) + stopTime;
+    pLat = o.lat; pLng = o.lng; pIdx = tIdx;
+  }
+
+  const storeIdx = idxMap.get("__store__") ?? 0;
+  const returnMin = getDuration(matrix, pIdx, storeIdx, pLat, pLng, STORE_LAT, STORE_LNG, isAuto);
+
+  return { routeMin: Math.round(total), returnMin: Math.round(returnMin) };
+}
+
+// ─────────────────────────────────────────────────────────
+//  LLM: DeepSeek V4 Pro — распределяет кластеры по курьерам
+// ─────────────────────────────────────────────────────────
+
+async function assignClustersWithLLM(
+  clusters: OrderRow[][],
+  couriers: CourierRow[]
+): Promise<LLMAssignment[] | null> {
+  if (!GO_API_KEY) return null;
+
+  try {
+    const clusterDigest = clusters.map((cl, i) => ({
+      index: i,
+      count: cl.length,
+      centerLat: +(cl.reduce((s, o) => s + o.lat, 0) / cl.length).toFixed(5),
+      centerLng: +(cl.reduce((s, o) => s + o.lng, 0) / cl.length).toFixed(5),
+      hasHigh: cl.some((o) => o.priority === "HIGH"),
+      slots: [...new Set(cl.map((o) => `${o.slotFrom}-${o.slotTo}`))],
+      orders: cl.map((o) => ({ id: o.id, priority: o.priority, slot: `${o.slotFrom}-${o.slotTo}`, items: o.items?.slice(0, 60) })),
+    }));
+
+    const courierDigest = couriers.map((c) => ({
+      id: c.id,
+      type: c.isAuto ? "auto" : "walking",
+      rating: c.priority ?? 3,
+      hasLiveLocation: !!(c.lat && c.lng && c.locationUpdatedAt && (Date.now() - c.locationUpdatedAt.getTime()) / 60000 < 30),
+    }));
+
+    // Расстояния между центрами кластеров
+    const clusterDists = clusters.map((clA, i) => {
+      const aLat = clA.reduce((s, o) => s + o.lat, 0) / clA.length;
+      const aLng = clA.reduce((s, o) => s + o.lng, 0) / clA.length;
+      return clusters.map((clB) => {
+        const bLat = clB.reduce((s, o) => s + o.lat, 0) / clB.length;
+        const bLng = clB.reduce((s, o) => s + o.lng, 0) / clB.length;
+        return +haversineKm(aLat, aLng, bLat, bLng).toFixed(2);
+      });
+    });
+
+    const systemPrompt = `Ты — экспертный логист. Распредели кластеры заказов по курьерам оптимально.
+
+ПРАВИЛА:
+1. walking-курьер: не более 2 кластеров за смену (3-4 заказа каждый)
+2. auto-курьер: не более 3 кластеров за смену (5-7 заказов каждый)
+3. HIGH-приоритет (розы, срочно, хрупкое) — курьерам с высоким рейтингом
+4. Географически близкие кластеры (малое расстояние) — одному курьеру
+5. Сначала заполняй рейтинговых курьеров
+6. Укажи priority для каждого order id
+
+Ответ СТРОГО JSON без markdown:
+[{"courierId":1,"clusterIndexes":[0,2],"priorities":{"order-id":"HIGH"}}]`;
+
+    const response = await goClient.chat.completions.create({
+      model: "deepseek-v4-pro",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Кластеры: ${JSON.stringify(clusterDigest)}\nКурьеры: ${JSON.stringify(courierDigest)}\nРасстояния км: ${JSON.stringify(clusterDists)}` },
+      ],
+      temperature: 0.1,
+      max_tokens: 2000,
+    });
+
+    let content = response.choices[0]?.message?.content?.trim() ?? "[]";
+    content = content.replace(/^```json\s*/g, "").replace(/^```\s*/g, "").replace(/\s*```$/g, "").trim();
+
+    const parsed: LLMAssignment[] = JSON.parse(content);
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+    return parsed;
+  } catch (e) {
+    console.error("[LLM] DeepSeek ошибка:", e);
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+//  FALLBACK: алгоритмическое распределение
+// ─────────────────────────────────────────────────────────
+
+function assignClustersAlgo(clusters: OrderRow[][], couriers: CourierRow[]): LLMAssignment[] {
+  const result: LLMAssignment[] = [];
+  const usedClusters = new Set<number>();
+
+  for (const courier of couriers) {
+    if (usedClusters.size >= clusters.length) break;
+    const maxClusters = courier.isAuto ? 3 : 2;
+    const clusterIndexes: number[] = [];
+    const priorities: Record<string, "HIGH" | "NORMAL"> = {};
+
+    for (let i = 0; i < clusters.length && clusterIndexes.length < maxClusters; i++) {
+      if (!usedClusters.has(i)) {
+        clusterIndexes.push(i);
+        usedClusters.add(i);
+        for (const o of clusters[i]) priorities[o.id] = o.priority;
+      }
+    }
+
+    if (clusterIndexes.length > 0) result.push({ courierId: courier.id, clusterIndexes, priorities });
+  }
+
+  return result;
+}
+
+// ─────────────────────────────────────────────────────────
+//  ЗАПИСЬ МАРШРУТА В БД
+// ─────────────────────────────────────────────────────────
+
+async function saveRoute(
+  orders: OrderRow[], courier: CourierRow,
+  routeDate: string, prefix: string,
+  matrix: number[][] | null, idxMap: Map<string, number>,
+  startLat: number, startLng: number
+): Promise<number> {
+  if (orders.length === 0) return 0;
+
+  const storeIdx = idxMap.get("__store__") ?? 0;
+  const optimized = tspOptimize(orders, startLat, startLng, matrix, idxMap, storeIdx, courier.isAuto);
+  const { routeMin, returnMin } = estimateTime(optimized, startLat, startLng, matrix, idxMap, storeIdx, courier.isAuto);
+
+  const waypoints = [`${startLat},${startLng}`, ...optimized.map((o) => `${o.lat},${o.lng}`)].join("~");
+  const link = `https://yandex.ru/maps/?rtext=${waypoints}&rtt=${courier.isAuto ? "auto" : "mt"}`;
+  const name = `${prefix}${courier.id}-${Math.floor(Math.random() * 9000) + 1000}`;
+
+  const newRoute = await prisma.route.create({
+    data: {
+      name,
+      link,
+      date: routeDate,
+      courierId: courier.id,
+      isDraft: true,
+      departureAdvice: `~${routeMin} мин в пути, возврат ~${returnMin} мин`,
+    },
+  });
+
+  for (let i = 0; i < optimized.length; i++) {
+    try {
+      await prisma.order.update({
+        where: { id: optimized[i].id },
+        data: {
+          courierId: courier.id,
+          courier: courier.fullName,
+          routeId: newRoute.id,
+          routeOrder: i + 1,
+          status: "ASSIGNED",
+        },
+      });
+    } catch (e) {
+      console.error(`[saveRoute] order ${optimized[i].id}:`, e);
+    }
+  }
+
+  return optimized.length;
+}
+
+// ─────────────────────────────────────────────────────────
+//  MAIN HANDLER
+// ─────────────────────────────────────────────────────────
 
 export async function POST(req: Request) {
   try {
@@ -74,172 +440,152 @@ export async function POST(req: Request) {
     if (!routeDate) return NextResponse.json({ error: "Не указана дата" }, { status: 400 });
 
     const startOfDay = new Date(`${routeDate}T00:00:00.000Z`);
-    const endOfDay = new Date(`${routeDate}T23:59:59.999Z`);
+    const endOfDay   = new Date(`${routeDate}T23:59:59.999Z`);
 
+    // 1. Заказы
     const orders = await prisma.order.findMany({
-      where: { 
-        status: "NEW", 
+      where: {
+        status: "NEW",
         courierId: null,
         lat: { not: null },
         lng: { not: null },
         OR: [
           { deliveryDate: routeDate },
-          { deliveryDate: null, crmCreatedAt: { gte: startOfDay, lte: endOfDay } }
-        ]
-      }
+          { deliveryDate: null, crmCreatedAt: { gte: startOfDay, lte: endOfDay } },
+        ],
+      },
     });
+    if (orders.length === 0)
+      return NextResponse.json({ error: "Нет свободных заказов" }, { status: 400 });
 
-    if (orders.length === 0) return NextResponse.json({ error: "Нет свободных заказов" }, { status: 400 });
-
+    // 2. Фильтр по слотам
     let targetOrders = orders;
-    if (selectedSlots && selectedSlots.length > 0) {
-      targetOrders = orders.filter(o => {
+    if (selectedSlots?.length > 0) {
+      targetOrders = orders.filter((o) => {
         if (!o.slotFrom) return selectedSlots.includes("Другие");
-        const exact = SLOTS.find(s => s.from === o.slotFrom && s.to === o.slotTo);
+        const exact = SLOTS.find((s) => s.from === o.slotFrom && s.to === o.slotTo);
         if (exact) return selectedSlots.includes(exact.label);
-        const match = SLOTS.find(s => o.slotFrom! > s.from && o.slotFrom! <= s.to);
+        const match = SLOTS.find((s) => o.slotFrom! > s.from && o.slotFrom! <= s.to);
         if (match) return selectedSlots.includes(match.label);
         return selectedSlots.includes("Другие");
       });
     }
+    if (targetOrders.length === 0)
+      return NextResponse.json({ error: "В выбранных слотах нет свободных заказов" }, { status: 400 });
 
-    if (targetOrders.length === 0) return NextResponse.json({ error: "В выбранных слотах нет свободных заказов" }, { status: 400 });
-
+    // 3. Курьеры на смене
     const activeCouriers = await prisma.courier.findMany({
       where: { isActive: true },
-      include: { shifts: { where: { date: routeDate } } }
+      include: { shifts: { where: { date: routeDate } } },
     });
+    let availableCouriers = activeCouriers.filter((c) => c.shifts.length > 0);
+    if (availableCouriers.length === 0)
+      return NextResponse.json({ error: "Нет курьеров на смене" }, { status: 400 });
 
-    let availableCouriers = activeCouriers.filter(c => c.shifts.length > 0);
-    if (availableCouriers.length === 0) return NextResponse.json({ error: "Нет курьеров на смене" }, { status: 400 });
-
-    if (targetOrders.length < 15) {
-        availableCouriers = availableCouriers.filter(c => !c.isAuto);
+    if (targetOrders.length < MIN_ORDERS_FOR_AUTO) {
+      const walking = availableCouriers.filter((c) => !c.isAuto);
+      if (walking.length > 0) availableCouriers = walking;
     }
-    availableCouriers.sort((a, b) => (b.priority || 3) - (a.priority || 3));
-    if (availableCouriers.length === 0) return NextResponse.json({ error: "Курьеры не подошли под критерии" }, { status: 400 });
+    availableCouriers.sort((a, b) => (b.priority ?? 3) - (a.priority ?? 3));
 
-    const pointsForMatrix = [{ id: "STORE", lat: STORE_LAT, lng: STORE_LNG }, ...targetOrders.map(o => ({ id: o.id, lat: o.lat!, lng: o.lng! }))];
-    const distanceMatrix = await getDistanceMatrix(pointsForMatrix, 'transit'); 
-
-    const promptOrders = targetOrders.map(o => ({
-        id: o.id,
-        address: o.address, 
-        slot: `${o.slotFrom}-${o.slotTo}`,
-        items: o.items,
-        comment: o.comment,
-        lat: o.lat, lng: o.lng
+    // 4. Обогащаем приоритетами
+    const enriched: OrderRow[] = targetOrders.map((o) => ({
+      id: o.id, lat: o.lat!, lng: o.lng!,
+      slotFrom: o.slotFrom, slotTo: o.slotTo,
+      items: o.items, comment: o.comment, address: o.address,
+      priority: detectPriority(o.items, o.comment),
     }));
 
-    const promptCouriers = availableCouriers.map(c => ({
-        id: c.id,
-        type: c.isAuto ? "auto" : "walking",
-        rating: c.priority || 3,
+    // 5. Яндекс Distance Matrix
+    const hasAuto = availableCouriers.some((c) => c.isAuto);
+    const matrixPoints = [
+      { id: "__store__", lat: STORE_LAT, lng: STORE_LNG },
+      ...enriched.map((o) => ({ id: o.id, lat: o.lat, lng: o.lng })),
+    ];
+    const matrix = await getDistanceMatrix(matrixPoints, hasAuto).catch(() => null);
+    const idxMap = new Map<string, number>();
+    matrixPoints.forEach((p, i) => idxMap.set(p.id, i));
+
+    // 6. Кластеризация
+    const maxClusterSize = hasAuto ? MAX_ORDERS_AUTO : MAX_ORDERS_WALKING;
+    const clusters = clusterOrders(enriched, maxClusterSize);
+
+    // 7. Распределение: DeepSeek V4 Pro → fallback алгоритм
+    const couriersForAssign: CourierRow[] = availableCouriers.map((c) => ({
+      id: c.id, fullName: c.fullName, isAuto: c.isAuto, priority: c.priority,
+      lat: c.lat, lng: c.lng, locationUpdatedAt: c.locationUpdatedAt,
+      homeLat: c.homeLat, homeLng: c.homeLng,
     }));
 
-    const systemPrompt = `Ты — продвинутый AI-логист. Твоя задача — разбить заказы на компактные маршруты для курьеров.
-    
-    КРИТИЧЕСКИЕ ПРАВИЛА СОЗДАНИЯ МАРШРУТОВ:
-    1. ОБЪЕМ: Для пешего курьера (walking) создавай маршруты СТРОГО по 3-4 точек! Для авто (auto) — по 5-7 точек. Не перегружай пеших!
-    2. ПРИОРИТЕТ ГРУЗА: Анализируй поле 'items' и 'comment'. 
-       - Если это быстро увядающие цветы (например: розы, тюльпаны, букеты без аквабокса) или тяжелый/объемный заказ (много позиций), помечай этот заказ как "HIGH" приоритет.
-       - Остальное (стойкие цветы в аквабоксах, мелкие подарки, если долго хранятся) — "NORMAL".
-    3. ГЕОГРАФИЯ: Собирай точки в ОДНОМ районе (кластере). Используй координаты (lat, lng), чтобы точки в одном массиве были близко друг к другу.
-    4. Если заказов много, ОДНОМУ курьеру можно создать НЕСКОЛЬКО маршрутов (массивов orderIds), но каждый массив должен быть небольшим (3-5 точек для пешего).
-    
-    Формат ответа СТРОГО JSON:
-    [
-      { 
-        "courierId": 123, 
-        "routes": [
-          {
-            "orderIds": ["uuid-1", "uuid-2"],
-            "priorities": { "uuid-1": "HIGH", "uuid-2": "NORMAL" }
-          }
-        ]
-      }
-    ]`;
-
-    let aiParsedData: any[] = [];
-    try {
-        const response = await client.chat.completions.create({
-            model: `gpt://${YANDEX_CLOUD_FOLDER}/${YANDEX_CLOUD_MODEL}`,
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: `Матрица расстояний (минуты): ${JSON.stringify(distanceMatrix?.rows?.map((r:any) => r.elements.map((e:any)=> Math.round(e.duration.value/60))) || "Недоступна")}\nЗаказы: ${JSON.stringify(promptOrders)}\nКурьеры: ${JSON.stringify(promptCouriers)}` }
-            ],
-            temperature: 0.1, 
-        });
-
-        let content = response.choices[0]?.message?.content?.trim() || "[]";
-        if (content.startsWith("```")) content = content.replace(/^```json/g, "").replace(/^```/g, "").replace(/```$/g, "").trim();
-        aiParsedData = JSON.parse(content);
-    } catch (e) {
-        console.error("Ошибка AI:", e);
-        return NextResponse.json({ error: "AI не справился с расчетом" }, { status: 500 });
+    let assignments = await assignClustersWithLLM(clusters, couriersForAssign);
+    const usedFallback = !assignments;
+    if (!assignments) {
+      console.warn("[auto-generate] LLM недоступен, используем алгоритм");
+      assignments = assignClustersAlgo(clusters, couriersForAssign);
     }
 
+    // 8. Записываем в БД
+    const assignedSet = new Set<string>();
     let routesCreated = 0;
     let ordersAssigned = 0;
-    const routeDay = routeDate.split('-')[2];
-    const prefix = `AI-${routeDay}-`;
+    const prefix = `AI-${routeDate.split("-")[2]}-`;
 
-    const assignedSet = new Set<string>();
+    for (const assignment of assignments) {
+      try {
+        const courier = couriersForAssign.find((c) => c.id === assignment.courierId);
+        if (!courier) continue;
 
-    // Применение маршрутов
-    for (const assignment of aiParsedData) {
-        const courierId = Number(assignment.courierId);
-        const courier = availableCouriers.find(c => c.id === courierId);
-        if (!courier || !assignment.routes) continue;
+        let isFirstRoute = true;
+        let timeBudget = 480; // 8 часов в минутах
 
-        for (const routeCluster of assignment.routes) {
-             const orderIds = routeCluster.orderIds || [];
-             const priorities = routeCluster.priorities || {};
+        for (const clIdx of assignment.clusterIndexes) {
+          try {
+            const cluster = clusters[clIdx];
+            if (!cluster) continue;
 
-             const validOrders = orderIds.map((id:string) => targetOrders.find(o => o.id === id && !assignedSet.has(o.id))).filter(Boolean);
-             if (validOrders.length === 0) continue;
+            const available = cluster
+              .filter((o) => !assignedSet.has(o.id))
+              .slice(0, courier.isAuto ? MAX_ORDERS_AUTO : MAX_ORDERS_WALKING)
+              .map((o) => ({ ...o, priority: (assignment.priorities[o.id] ?? o.priority) as "HIGH" | "NORMAL" }));
 
-             validOrders.forEach((o:any) => { 
-                 o.aiPriority = priorities[o.id] || "NORMAL"; 
-                 assignedSet.add(o.id); 
-             });
+            if (available.length === 0) continue;
 
-             // Оптимизируем внутри микро-маршрута с учетом High Priority
-             const optimizedRoute = optimizeCluster(validOrders, STORE_LAT, STORE_LNG);
+            const clLat = available.reduce((s, o) => s + o.lat, 0) / available.length;
+            const clLng = available.reduce((s, o) => s + o.lng, 0) / available.length;
+            const start = isFirstRoute ? courierStart(courier, clLat, clLng) : { lat: STORE_LAT, lng: STORE_LNG };
 
-             const routeName = `${prefix}${courier.id}-${Math.floor(Math.random() * 1000)}`;
-             const link = `https://yandex.ru/maps/?rtext=${STORE_LAT},${STORE_LNG}~${optimizedRoute.map(o => `${o.lat},${o.lng}`).join("~")}&rtt=${courier.isAuto ? 'auto' : 'mt'}`;
+            // Проверяем бюджет времени
+            const storeIdx = idxMap.get("__store__") ?? 0;
+            const preview = tspOptimize(available, start.lat, start.lng, matrix, idxMap, storeIdx, courier.isAuto);
+            const { routeMin, returnMin } = estimateTime(preview, start.lat, start.lng, matrix, idxMap, storeIdx, courier.isAuto);
+            const totalNeeded = routeMin + returnMin + RETURN_BUFFER_MIN;
 
-             const newRoute = await prisma.route.create({
-              data: { 
-                 name: routeName, 
-                 link, 
-                 date: routeDate, 
-                 courierId: courier.id, 
-                 isDraft: true,
-                 // 🔥 ИСПРАВЛЕНО: Убрали body, просто инициализируем как пустое поле
-                 estimatedReturnTime: null 
-              }
-          });
+            if (totalNeeded > timeBudget) {
+              console.warn(`[auto-generate] курьер ${courier.id}: нужно ${totalNeeded} мин, осталось ${timeBudget}`);
+              continue;
+            }
 
-             for (let i = 0; i < optimizedRoute.length; i++) {
-                 await prisma.order.update({
-                     where: { id: optimizedRoute[i].id },
-                     data: { courierId: courier.id, courier: courier.fullName, routeId: newRoute.id, routeOrder: i + 1, status: "ASSIGNED" }
-                 });
-             }
-             routesCreated++;
-             ordersAssigned += optimizedRoute.length;
+            const saved = await saveRoute(available, courier, routeDate, prefix, matrix, idxMap, start.lat, start.lng);
+            for (const o of available) assignedSet.add(o.id);
+
+            routesCreated++;
+            ordersAssigned += saved;
+            timeBudget -= totalNeeded;
+            isFirstRoute = false;
+          } catch (e) {
+            console.error("[auto-generate] ошибка кластера:", e);
+          }
         }
+      } catch (e) {
+        console.error("[auto-generate] ошибка assignment:", e);
+      }
     }
 
-    // Подсчитываем сколько точек ИИ оставил без внимания
-    const leftOverOrders = targetOrders.filter(o => !assignedSet.has(o.id));
+    const leftOver = enriched.filter((o) => !assignedSet.has(o.id)).length;
 
-    return NextResponse.json({ success: true, routesCreated, ordersAssigned, leftOver: leftOverOrders.length });
-
+    return NextResponse.json({ success: true, routesCreated, ordersAssigned, leftOver, usedFallback });
   } catch (e: any) {
-    console.error("Общая ошибка auto-generate:", e);
-    return NextResponse.json({ error: String(e.message) }, { status: 500 });
+    console.error("[auto-generate] общая ошибка:", e);
+    return NextResponse.json({ error: String(e?.message ?? e) }, { status: 500 });
   }
 }
