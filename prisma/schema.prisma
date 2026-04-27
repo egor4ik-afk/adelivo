@@ -1,300 +1,319 @@
 // prisma/schema.prisma
 
 generator client {
-  provider = "prisma-client-js"
+    provider = "prisma-client-js"
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+    provider  = "postgresql"
+      url       = env("DATABASE_URL")
+        directUrl = env("DIRECT_URL")
 }
 
 enum Role {
-  OPERATOR
-  COURIER
-  ADMIN
+    OPERATOR
+      COURIER
+        ADMIN
 }
 
 enum OrderStatus {
-  NEW
-  GEOCODED
-  INVALID_ADDRESS
-  ASSIGNED
-  IN_DELIVERY
-  DELIVERED
-  RETURNED
-  CANCELLED
+    NEW
+      GEOCODED
+        INVALID_ADDRESS
+          ASSIGNED
+            IN_DELIVERY
+              DELIVERED
+                RETURNED
+                  CANCELLED
 }
 
 model User {
-  id                String             @id @default(cuid())
-  email             String             @unique
-  role              Role               @default(COURIER)
-  firstName         String?
-  lastName          String?
-  phone             String?      
-  avatarUrl         String?            // 🔥 ДОБАВЛЕНО: Ссылка на аватарку      
-  lastLoginAt       DateTime?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+    id                String             @id @default(cuid())
+      email             String             @unique
+        role              Role               @default(COURIER)
+          firstName         String?
+            lastName          String?
+              phone             String?      
+                avatarUrl         String?            // 🔥 ДОБАВЛЕНО: Ссылка на аватарку      
+                  lastLoginAt       DateTime?
+                    createdAt         DateTime           @default(now())
+                      updatedAt         DateTime           @updatedAt
 
-  notifyNewOrder    Boolean            @default(true)
-  notifyStatus      Boolean            @default(true)
-  notifyCourier     Boolean            @default(true)
-  notifyAddress     Boolean            @default(true)
-  notifyTime        Boolean            @default(true)
-  notifyComment     Boolean            @default(true)
-  notifyOpComment   Boolean            @default(true)
-  notifyItems       Boolean            @default(true)
+                        notifyNewOrder    Boolean            @default(true)
+                          notifyStatus      Boolean            @default(true)
+                            notifyCourier     Boolean            @default(true)
+                              notifyAddress     Boolean            @default(true)
+                                notifyTime        Boolean            @default(true)
+                                  notifyComment     Boolean            @default(true)
+                                    notifyOpComment   Boolean            @default(true)
+                                      notifyItems       Boolean            @default(true)
 
-  sessions          Session[]
-  authCodes         AuthCode[]
-  pushSubscriptions PushSubscription[]
-  conversations1    Conversation[]     @relation("ConvUser1")
-  conversations2    Conversation[]     @relation("ConvUser2")
-  sentMessages      Message[]          @relation("SentMessages")
-  sentGlobalMessages GlobalMessage[] @relation("SentGlobalMessages")
+                                        sessions          Session[]
+                                          authCodes         AuthCode[]
+                                            pushSubscriptions PushSubscription[]
+                                              conversations1    Conversation[]     @relation("ConvUser1")
+                                                conversations2    Conversation[]     @relation("ConvUser2")
+                                                  sentMessages      Message[]          @relation("SentMessages")
+                                                    sentGlobalMessages GlobalMessage[] @relation("SentGlobalMessages")
 }
 
 model Session {
-  id        String   @id @default(cuid())
-  userId    String
-  token     String   @unique
-  expiresAt DateTime
-  createdAt DateTime @default(now())
+    id        String   @id @default(cuid())
+      userId    String
+        token     String   @unique
+          expiresAt DateTime
+            createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+              user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([token])
+                @@index([token])
 }
 
 model AuthCode {
-  id        String   @id @default(cuid())
-  userId    String
-  code      String
-  used      Boolean  @default(false)
-  expiresAt DateTime
-  createdAt DateTime @default(now())
+    id        String   @id @default(cuid())
+      userId    String
+        code      String
+          used      Boolean  @default(false)
+            expiresAt DateTime
+              createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+                user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
-  @@index([code])
+                  @@index([userId])
+                    @@index([code])
 }
 
 model PushSubscription {
-  id        String   @id @default(cuid())
-  userId    String
-  endpoint  String   @unique
-  p256dh    String
-  auth      String
-  userAgent String?
-  createdAt DateTime @default(now())
+    id        String   @id @default(cuid())
+      userId    String
+        endpoint  String   @unique
+          p256dh    String
+            auth      String
+              userAgent String?
+                createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+                  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+                    @@index([userId])
 }
 
 model Courier {
-  id                Int        @id 
-  firstName         String?
-  lastName          String?
-  patronymic        String?
-  fullName          String     
-  phone             String?
-  email             String?
-  description       String?  
-  isActive          Boolean    @default(true) 
-  lat               Float?   
-  lng               Float?   
-  locationUpdatedAt DateTime?
-  homeLat           Float?   
-  homeLng           Float?   
-  homeAddress       String?  
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
+    id                Int        @id 
+      firstName         String?
+        lastName          String?
+          patronymic        String?
+            fullName          String     
+              phone             String?
+                email             String?
+                  description       String?  
+                    isActive          Boolean    @default(true) 
+                      lat               Float?   
+                        lng               Float?   
+                          locationUpdatedAt DateTime?
+                            homeLat           Float?   
+                              homeLng           Float?   
+                                homeAddress       String?  
+                                  createdAt         DateTime   @default(now())
+                                    updatedAt         DateTime   @updatedAt
 
-  // 🔥 ИНТЕГРАЦИЯ С КОНСОЛЬ.ПРО
-  konsolPhone        String?  
-  konsolContractorId String? 
-  isSelfEmployed     Boolean @default(false) 
-  priority  Int      @default(3)
-  shifts      CourierShift[]
-  payments    CourierPayment[]
-  routes      Route[] 
-  isAuto      Boolean   @default(false) // 🔥 Наш новый признак авто-курьера
-  konsolTasks KonsolTask[] // 🔥 Связь с заданиями Консоли
+                                      // 🔥 ИНТЕГРАЦИЯ С КОНСОЛЬ.ПРО
+                                        konsolPhone        String?  
+                                          konsolContractorId String? 
+                                            isSelfEmployed     Boolean @default(false) 
+                                              priority  Int      @default(3)
+                                                shifts      CourierShift[]
+                                                  payments    CourierPayment[]
+                                                    routes      Route[] 
+                                                      isAuto      Boolean   @default(false) // 🔥 Наш новый признак авто-курьера
+                                                        konsolTasks KonsolTask[] // 🔥 Связь с заданиями Консоли
 }
 
 model CourierShift {
-  id        String   @id @default(cuid())
-  courierId Int
-  date      String   
-  
-  startTime String?  @default("10:00") // 🔥 Начало смены
-  endTime   String?  @default("22:00") // 🔥 Конец смены
+    id        String   @id @default(cuid())
+      courierId Int
+        date      String   
+          
+            startTime String?  @default("10:00") // 🔥 Начало смены
+              endTime   String?  @default("22:00") // 🔥 Конец смены
 
-  courier   Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
+                courier   Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
 
-  @@unique([courierId, date])
+                  @@unique([courierId, date])
 }
 model CourierPayment {
-  id        String   @id @default(cuid())
-  courierId Int
-  date      String
-  
-  courier   Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
-  
-  @@unique([courierId, date])
+    id        String   @id @default(cuid())
+      courierId Int
+        date      String
+          
+            courier   Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
+              
+                @@unique([courierId, date])
 }
 
 model Order {
-  id            String      @id @default(cuid())
-  crmId         String      @unique
-  externalId    String?
-  status        OrderStatus @default(NEW)
-  address       String?
-  lat           Float?
-  lng           Float?
-  price         Float?
-  costPrice     Int?      // 🔥 НОВОЕ ПОЛЕ: Наша себестоимость доставки
-  courierId     Int?        
-  courier       String?
-  pickedUpAt    DateTime? // 🔥 Время выезда с базы
-  comment       String?
-  opComment     String?
-  items         String?
-  slotFrom      String?
-  slotTo        String?
-  slotRaw       String?
-  deliveryType  String?
-  deliveryDate  String?
-  deliveredAt   DateTime? // 🔥 ДОБАВИТЬ ЭТУ СТРОКУ
-  delayNotified Boolean @default(false)
-  eta           String?     // 🔥 НОВОЕ ПОЛЕ: Примерное время прибытия курьера
-  photoUrl      String?     // 🔥 ДОБАВЛЕНО: Ссылка на одно фото от курьера
-  crmStatus     String?
-  isInvalid     Boolean     @default(false)
-  invalidReason String?
-  geocoded      Boolean     @default(false)
-  crmCreatedAt  DateTime?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  changedAt     DateTime?
-  courierManual Boolean     @default(false)
-  name          String?   // Имя получателя
-  shop          String?   // Код магазина (например, "kaktusfiori" или "bunch")
-  recipientPhone String? 
-  routeId        String? 
-  route          Route?  @relation(fields: [routeId], references: [id], onDelete: SetNull)
-  routeOrder     Int?    
-  courierLink    String? @db.Text  
-  wrongPrice     Boolean     @default(false) // 🔥 НОВОЕ: Метка несовпадения цены
-  @@index([createdAt])
-  @@index([slotFrom, slotTo])
-  @@index([status])
-  @@index([isInvalid])
+    id            String      @id @default(cuid())
+      crmId         String      @unique
+        externalId    String?
+          status        OrderStatus @default(NEW)
+            address       String?
+              lat           Float?
+                lng           Float?
+                  price         Float?
+                    costPrice     Int?      // 🔥 НОВОЕ ПОЛЕ: Наша себестоимость доставки
+                      courierId     Int?        
+                        courier       String?
+                          pickedUpAt    DateTime? // 🔥 Время выезда с базы
+                            comment       String?
+                              opComment     String?
+                                items         String?
+                                  slotFrom      String?
+                                    slotTo        String?
+                                      slotRaw       String?
+                                        deliveryType  String?
+                                          deliveryDate  String?
+                                            deliveredAt   DateTime? // 🔥 ДОБАВИТЬ ЭТУ СТРОКУ
+                                              delayNotified Boolean @default(false)
+                                                eta           String?     // 🔥 НОВОЕ ПОЛЕ: Примерное время прибытия курьера
+                                                  photoUrl      String?     // 🔥 ДОБАВЛЕНО: Ссылка на одно фото от курьера
+                                                    crmStatus     String?
+                                                      isInvalid     Boolean     @default(false)
+                                                        invalidReason String?
+                                                          geocoded      Boolean     @default(false)
+                                                            crmCreatedAt  DateTime?
+                                                              createdAt     DateTime    @default(now())
+                                                                updatedAt     DateTime    @updatedAt
+                                                                  changedAt     DateTime?
+                                                                    courierManual Boolean     @default(false)
+                                                                      name          String?   // Имя получателя
+                                                                        shop          String?   // Код магазина (например, "kaktusfiori" или "bunch")
+                                                                          recipientPhone String? 
+                                                                            routeId        String? 
+                                                                              route          Route?  @relation(fields: [routeId], references: [id], onDelete: SetNull)
+                                                                                routeOrder     Int?    
+                                                                                  courierLink    String? @db.Text  
+                                                                                    wrongPrice     Boolean     @default(false) // 🔥 НОВОЕ: Метка несовпадения цены
+                                                                                      @@index([createdAt])
+                                                                                        @@index([slotFrom, slotTo])
+                                                                                          @@index([status])
+                                                                                            @@index([isInvalid])
 }
 
 model SyncState {
-  id         Int      @id @default(1)
-  lastSyncAt DateTime @default(now())
+    id         Int      @id @default(1)
+      lastSyncAt DateTime @default(now())
 }
 
 model NotificationLog {
-  id        String   @id @default(cuid())
-  type      String   
-  channel   String   
-  payload   String   
-  success   Boolean
-  error     String?
-  createdAt DateTime @default(now())
+    id        String   @id @default(cuid())
+      type      String   
+        channel   String   
+          payload   String   
+            success   Boolean
+              error     String?
+                createdAt DateTime @default(now())
 
-  @@index([createdAt])
-  @@index([type])
+                  @@index([createdAt])
+                    @@index([type])
 }
 
 model Route {
-  id              String   @id @default(uuid())
-  name            String   
-  link            String?  @db.Text 
-  date            String   
-  departureAdvice String?
-  courierId       Int
-  courier         Courier  @relation(fields: [courierId], references: [id])
-  baseArrivalTime String?  // 🔥 ДОБАВЛЕНО: Время, когда курьер планирует быть на базе
-  estimatedReturnTime String?  // 🔥 НОВОЕ ПОЛЕ: Плановое прибытие обратно на базу
-  orders    Order[]
-  isDraft         Boolean  @default(false) // 🔥 ДОБАВЛЕНО
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+    id              String   @id @default(uuid())
+      name            String   
+        link            String?  @db.Text 
+          date            String   
+            departureAdvice String?
+              courierId       Int
+                courier         Courier  @relation(fields: [courierId], references: [id])
+                  baseArrivalTime String?  // 🔥 ДОБАВЛЕНО: Время, когда курьер планирует быть на базе
+                    estimatedReturnTime String?  // 🔥 НОВОЕ ПОЛЕ: Плановое прибытие обратно на базу
+                      orders    Order[]
+                        isDraft         Boolean  @default(false) // 🔥 ДОБАВЛЕНО
+                          createdAt DateTime @default(now())
+                            updatedAt DateTime @updatedAt
 }
 
 model Conversation {
-  id          String    @id @default(cuid())
-  user1Id     String
-  user2Id     String
-  user1       User      @relation("ConvUser1", fields: [user1Id], references: [id], onDelete: Cascade)
-  user2       User      @relation("ConvUser2", fields: [user2Id], references: [id], onDelete: Cascade)
-  
-  messages    Message[]
-  
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+    id          String    @id @default(cuid())
+      user1Id     String
+        user2Id     String
+          user1       User      @relation("ConvUser1", fields: [user1Id], references: [id], onDelete: Cascade)
+            user2       User      @relation("ConvUser2", fields: [user2Id], references: [id], onDelete: Cascade)
+              
+                messages    Message[]
+                  
+                    createdAt   DateTime  @default(now())
+                      updatedAt   DateTime  @updatedAt
 
-  @@unique([user1Id, user2Id]) 
-  @@index([user1Id])
-  @@index([user2Id])
+                        @@unique([user1Id, user2Id]) 
+                          @@index([user1Id])
+                            @@index([user2Id])
 }
 
 model Message {
-  id             String       @id @default(cuid())
-  text           String?      @db.Text
-  mediaUrl       String?      @db.Text
-  mediaType      String?      
-  
-  conversationId String
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  
-  senderId       String
-  sender         User         @relation("SentMessages", fields: [senderId], references: [id])
-  reactions  Json?   // 🔥 нужно добавить если нет
-  
-  readAt         DateTime?    
-  createdAt      DateTime     @default(now())
+    id             String       @id @default(cuid())
+      text           String?      @db.Text
+        mediaUrl       String?      @db.Text
+          mediaType      String?      
+            
+              conversationId String
+                conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+                  
+                    senderId       String
+                      sender         User         @relation("SentMessages", fields: [senderId], references: [id])
+                        reactions  Json?   // 🔥 нужно добавить если нет
+                          
+                            readAt         DateTime?    
+                              createdAt      DateTime     @default(now())
 
-  @@index([conversationId, createdAt])
-  @@index([senderId])
+                                @@index([conversationId, createdAt])
+                                  @@index([senderId])
 }
 
 model GlobalMessage {
-  id          String       @id @default(cuid())
-  text        String?      @db.Text
-  mediaUrl    String?      @db.Text
-  mediaType   String?      
-  
-  senderId    String
-  sender      User         @relation("SentGlobalMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  reactions  Json?   // 🔥 нужно добавить если нет
-  createdAt   DateTime     @default(now())
+    id          String       @id @default(cuid())
+      text        String?      @db.Text
+        mediaUrl    String?      @db.Text
+          mediaType   String?      
+            
+              senderId    String
+                sender      User         @relation("SentGlobalMessages", fields: [senderId], references: [id], onDelete: Cascade)
+                  reactions  Json?   // 🔥 нужно добавить если нет
+                    createdAt   DateTime     @default(now())
 
-  @@index([createdAt])
-  @@index([senderId])
+                      @@index([createdAt])
+                        @@index([senderId])
 }
 
 model KonsolTask {
-  id             String   @id @default(cuid())
-  courierId      Int
-  konsolTaskId   String   
-  konsolActId    String?  
-  date           DateTime
-  amount         Float    
-  status         String   @default("DRAFT")
-  createdAt      DateTime @default(now())
-  
-  courier        Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
-  
-  @@unique([courierId, date])
+    id             String   @id @default(cuid())
+      courierId      Int
+        konsolTaskId   String   
+          konsolActId    String?  
+            date           DateTime
+              amount         Float    
+                status         String   @default("DRAFT")
+                  createdAt      DateTime @default(now())
+                    
+                      courier        Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
+                        
+                          @@unique([courierId, date])
+}
+}
+}
+}
+}
+}
+}
+}
+}
+}
+}
+}
+}
+}
+}
+}
+}
+}
+}
 }

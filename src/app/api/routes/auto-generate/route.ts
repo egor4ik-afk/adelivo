@@ -332,8 +332,7 @@ async function assignClustersWithLLM(
 
 const response = await goClient.chat.completions.create({
   // 🔥 Используем формат из доки Open Code
-  model: "deepseek-v4-pro", // 🔥 Возвращаем оригинальное имя без префикса
-  //   response_format: { type: "json_object" }, // Принудительно требуем JSON
+  model: "deepseek-v4-flash", // 🔥 Меняем Pro на Flash, чтобы отключить "долгие размышления"  //   response_format: { type: "json_object" }, // Принудительно требуем JSON
   messages: [
     { role: "system", content: systemPrompt },
     { role: "user", content: `Кластеры: ${JSON.stringify(clusterDigest)}\nКурьеры: ${JSON.stringify(courierDigest)}\nРасстояния км: ${JSON.stringify(clusterDists)}` },
