@@ -4,7 +4,12 @@ import { prisma } from "@/lib/prisma";
 import { SLOTS } from "@/lib/constants";
 import OpenAI from "openai";
 
-const YANDEX_CLOUD_FOLDER = process.env.YANDEX_CATALOG_ID || "b1gcr5m4ptniag2qpsqm";
+// 🔥 Игнорируем заглушку, если она случайно подтянулась из переменных окружения
+const rawFolderId = process.env.YANDEX_CATALOG_ID;
+const YANDEX_CLOUD_FOLDER = (!rawFolderId || rawFolderId.includes("stub")) 
+  ? "b1gcr5m4ptniag2qpsqm" 
+  : rawFolderId;
+
 const YANDEX_CLOUD_API_KEY = process.env.YANDEX_LLM_API_KEY;
 const YANDEX_CLOUD_MODEL = "aliceai-llm/latest"; // или "yandexgpt/latest"
 // 🔥 КЛЮЧ ДЛЯ МАТРИЦЫ РАССТОЯНИЙ
