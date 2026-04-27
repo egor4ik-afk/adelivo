@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { geocodeAddress } from "@/lib/crm";
 import OpenAI from "openai";
 
-const YANDEX_CLOUD_FOLDER = process.env.YANDEX_CATALOG_ID || "b1gcr5m4ptniag2qpsqm";
+const YANDEX_CLOUD_FOLDER = process.env.YANDEX_CLOUD_FOLDER || "b1gcr5m4ptniag2qpsqm";
 const YANDEX_CLOUD_API_KEY = process.env.YANDEX_LLM_API_KEY;
 const YANDEX_CLOUD_MODEL = "aliceai-llm/latest";
 
