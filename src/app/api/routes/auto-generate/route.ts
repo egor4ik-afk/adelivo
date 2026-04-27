@@ -281,6 +281,8 @@ function estimateTime(
 //  LLM: DeepSeek V4 Pro — распределяет кластеры по курьерам
 // ─────────────────────────────────────────────────────────
 
+// src/app/api/routes/auto-generate/route.ts (Замени функцию assignClustersWithLLM)
+
 async function assignClustersWithLLM(
   clusters: OrderRow[][],
   couriers: CourierRow[]
@@ -305,7 +307,6 @@ async function assignClustersWithLLM(
       hasLiveLocation: !!(c.lat && c.lng && c.locationUpdatedAt && (Date.now() - c.locationUpdatedAt.getTime()) / 60000 < 30),
     }));
 
-    // Расстояния между центрами кластеров
     const clusterDists = clusters.map((clA, i) => {
       const aLat = clA.reduce((s, o) => s + o.lat, 0) / clA.length;
       const aLng = clA.reduce((s, o) => s + o.lng, 0) / clA.length;
@@ -336,21 +337,27 @@ async function assignClustersWithLLM(
         { role: "user", content: `Кластеры: ${JSON.stringify(clusterDigest)}\nКурьеры: ${JSON.stringify(courierDigest)}\nРасстояния км: ${JSON.stringify(clusterDists)}` },
       ],
       temperature: 0.1,
-      max_tokens: 2000,
+      max_tokens: 4000, // Увеличили лимит токенов, чтобы длинные ответы не обрезались
     });
 
     let content = response.choices[0]?.message?.content?.trim() ?? "[]";
     content = content.replace(/^```json\s*/g, "").replace(/^```\s*/g, "").replace(/\s*```$/g, "").trim();
 
-    const parsed: LLMAssignment[] = JSON.parse(content);
-    if (!Array.isArray(parsed) || parsed.length === 0) return null;
-    return parsed;
+    // Безопасный парсинг с выводом ошибки
+    try {
+      const parsed: LLMAssignment[] = JSON.parse(content);
+      if (!Array.isArray(parsed) || parsed.length === 0) return null;
+      return parsed;
+    } catch (parseError) {
+      console.error("[LLM] Ошибка парсинга JSON! Сырой ответ от модели:", content);
+      return null;
+    }
+
   } catch (e) {
-    console.error("[LLM] DeepSeek ошибка:", e);
+    console.error("[LLM] DeepSeek общая ошибка запроса:", e);
     return null;
   }
 }
-
 // ─────────────────────────────────────────────────────────
 //  FALLBACK: алгоритмическое распределение
 // ─────────────────────────────────────────────────────────
