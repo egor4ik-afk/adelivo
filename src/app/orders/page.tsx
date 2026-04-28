@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { IMaskInput } from "react-imask"; // Добавлен импорт маски
 
 interface Order {
   id: string;
@@ -66,7 +67,8 @@ export default function OrdersPage() {
 
   const [sortConfig, setSortConfig] = useState<{ key: SortKey | null, direction: 'asc' | 'desc' }>({ key: 'changedAt', direction: 'desc' });
 
-  const [editingCell, setEditingCell] = useState<{ id: string, field: 'price' | 'costPrice' } | null>(null);
+  // Добавлен recipientPhone в типы
+  const [editingCell, setEditingCell] = useState<{ id: string, field: 'price' | 'costPrice' | 'recipientPhone' } | null>(null);
   const [editValue, setEditValue] = useState("");
 
   const fetchOrders = async () => {
@@ -131,7 +133,7 @@ export default function OrdersPage() {
     }
   };
 
-  const handleEditClick = (id: string, field: 'price' | 'costPrice', currentValue: number | null) => {
+  const handleEditClick = (id: string, field: 'price' | 'costPrice' | 'recipientPhone', currentValue: number | string | null) => {
     setEditingCell({ id, field });
     setEditValue(currentValue ? String(currentValue) : "");
   };
@@ -139,7 +141,12 @@ export default function OrdersPage() {
   const handleEditSave = async () => {
     if (!editingCell) return;
     const { id, field } = editingCell;
-    const val = editValue === "" ? null : parseFloat(editValue.replace(",", "."));
+    
+    // Проверяем: если цена - парсим как число, если телефон - оставляем строкой
+    let val: number | string | null = editValue === "" ? null : editValue;
+    if (field === 'price' || field === 'costPrice') {
+      val = editValue === "" ? null : parseFloat(editValue.replace(",", "."));
+    }
     
     setOrders(prev => prev.map(o => o.id === id ? { 
       ...o, 
@@ -363,7 +370,30 @@ export default function OrdersPage() {
                       <td style={{ padding: "10px 14px", color: o.courier ? "#1a1a18" : "#d94040" }}>{o.courier || "—"}</td>
                       
                       <td style={{ padding: "10px 14px", fontWeight: 500 }}>{o.name || "—"}</td>
-                      <td style={{ padding: "10px 14px", whiteSpace: "nowrap", fontFamily: "monospace", color: "#4a7aff" }}>{o.recipientPhone || "—"}</td>
+                      
+                      {/* НОВАЯ ЯЧЕЙКА С НОМЕРОМ ТЕЛЕФОНА */}
+                      <td style={{ padding: "10px 14px", whiteSpace: "nowrap", fontFamily: "monospace", color: "#4a7aff" }}>
+                        {editingCell?.id === o.id && editingCell?.field === "recipientPhone" ? (
+                          <IMaskInput
+                            mask="+7 (000) 000-00-00"
+                            autoFocus
+                            value={editValue}
+                            onAccept={(value: string) => setEditValue(value)}
+                            onBlur={handleEditSave}
+                            onKeyDown={handleKeyDown}
+                            style={inlineInputStyle}
+                            placeholder="+7 (___) ___-__-__"
+                          />
+                        ) : (
+                          <span 
+                            onClick={() => handleEditClick(o.id, "recipientPhone", o.recipientPhone)}
+                            title="Нажмите, чтобы изменить" 
+                            style={{ borderBottom: "1px dashed #a8a49c", cursor: "pointer", display: "inline-block", minHeight: 20 }}
+                          >
+                            {o.recipientPhone || "—"}
+                          </span>
+                        )}
+                      </td>
 
                       <td style={{ padding: "10px 14px", maxWidth: 260 }}>{o.address || "—"}</td>
                       <td style={{ padding: "10px 14px", color: "#6b6860" }}>{o.slotRaw || "—"}</td>
