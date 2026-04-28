@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { IMaskInput } from "react-imask"; // Добавлен импорт маски
+import { IMaskInput } from "react-imask";
 
 interface Order {
   id: string;
@@ -48,6 +48,12 @@ function fmt(d?: string | null) {
   return new Date(d).toLocaleString("ru", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
+// Хелпер для проверки игнорируемого адреса
+const isIgnoredAddress = (address?: string | null) => {
+  if (!address) return false;
+  return address.toLowerCase().includes("большой афанасьевский 39");
+};
+
 type SortKey = keyof Order | "costPriceDisplay";
 
 export default function OrdersPage() {
@@ -67,7 +73,6 @@ export default function OrdersPage() {
 
   const [sortConfig, setSortConfig] = useState<{ key: SortKey | null, direction: 'asc' | 'desc' }>({ key: 'changedAt', direction: 'desc' });
 
-  // Добавлен recipientPhone в типы
   const [editingCell, setEditingCell] = useState<{ id: string, field: 'price' | 'costPrice' | 'recipientPhone' } | null>(null);
   const [editValue, setEditValue] = useState("");
 
@@ -142,7 +147,6 @@ export default function OrdersPage() {
     if (!editingCell) return;
     const { id, field } = editingCell;
     
-    // Проверяем: если цена - парсим как число, если телефон - оставляем строкой
     let val: number | string | null = editValue === "" ? null : editValue;
     if (field === 'price' || field === 'costPrice') {
       val = editValue === "" ? null : parseFloat(editValue.replace(",", "."));
@@ -199,8 +203,17 @@ export default function OrdersPage() {
 
   const sortedAndFiltered = useMemo(() => {
     let result = [...filtered];
-    if (sortConfig.key) {
-      result.sort((a, b) => {
+    
+    result.sort((a, b) => {
+      // 1. Игнорируемые адреса всегда смещаем вниз
+      const aIgnored = isIgnoredAddress(a.address);
+      const bIgnored = isIgnoredAddress(b.address);
+      
+      if (aIgnored && !bIgnored) return 1;
+      if (!aIgnored && bIgnored) return -1;
+
+      // 2. Стандартная сортировка для остальных
+      if (sortConfig.key) {
         let aVal: any = a[sortConfig.key as keyof Order];
         let bVal: any = b[sortConfig.key as keyof Order];
 
@@ -224,10 +237,15 @@ export default function OrdersPage() {
         }
 
         return sortConfig.direction === 'asc' ? (aVal < bVal ? -1 : 1) : (aVal > bVal ? -1 : 1);
-      });
-    }
+      }
+      return 0;
+    });
+
     return result;
   }, [filtered, sortConfig, localCosts]);
+
+  // Заказы, которые реально участвуют в подсчете и массовом выделении (исключая игнорируемые)
+  const countableOrders = useMemo(() => sortedAndFiltered.filter(o => !isIgnoredAddress(o.address)), [sortedAndFiltered]);
 
   const handleSort = (key: SortKey) => {
     setSortConfig(prev => {
@@ -239,7 +257,8 @@ export default function OrdersPage() {
   };
 
   const toggleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.checked) setSelectedIds(new Set(sortedAndFiltered.map(o => o.id)));
+    // Выделяем только те, что входят в countableOrders
+    if (e.target.checked) setSelectedIds(new Set(countableOrders.map(o => o.id)));
     else setSelectedIds(new Set());
   };
 
@@ -250,7 +269,7 @@ export default function OrdersPage() {
     setSelectedIds(next);
   };
 
-  const isAllSelected = sortedAndFiltered.length > 0 && selectedIds.size === sortedAndFiltered.length;
+  const isAllSelected = countableOrders.length > 0 && selectedIds.size === countableOrders.length;
 
   const HEADERS: { label: string, key: SortKey | null }[] = [
     { label: "ID", key: "externalId" },
@@ -303,8 +322,8 @@ export default function OrdersPage() {
 
       {/* СТАТИСТИКА ЗАКАЗОВ */}
       <div style={{ padding: "0 24px 16px", display: "flex", gap: 16, fontSize: 13 }}>
-                <div style={{ background: "#fff", padding: "6px 12px", borderRadius: 8, border: "1px solid #e8e6df" }}>
-          <span style={{ color: "#a8a49c" }}>Отфильтровано:</span> <span style={{ fontWeight: 700, color: "#4a7aff" }}>{sortedAndFiltered.length}</span>
+        <div style={{ background: "#fff", padding: "6px 12px", borderRadius: 8, border: "1px solid #e8e6df" }}>
+          <span style={{ color: "#a8a49c" }}>Отфильтровано:</span> <span style={{ fontWeight: 700, color: "#4a7aff" }}>{countableOrders.length}</span>
         </div>
         {selectedIds.size > 0 && (
           <div style={{ background: "#e8f4eb", padding: "6px 12px", borderRadius: 8, border: "1px solid #cce3d3" }}>
@@ -347,11 +366,12 @@ export default function OrdersPage() {
                   const statusColor = STATUS_COLORS[o.status] ?? "#a8a49c";
                   const isSelected = selectedIds.has(o.id);
                   const displayCost = o.costPrice || localCosts[o.id]; 
+                  const ignored = isIgnoredAddress(o.address);
                   
                   return (
-                    <tr key={o.id} style={{ borderBottom: "1px solid #f5f4f0", background: isSelected ? "#f4f7ff" : (i % 2 === 0 ? "#fff" : "#fafaf8") }}>
+                    <tr key={o.id} style={{ borderBottom: "1px solid #f5f4f0", background: isSelected ? "#f4f7ff" : (i % 2 === 0 ? "#fff" : "#fafaf8"), opacity: ignored ? 0.6 : 1 }}>
                       <td style={{ padding: "10px 14px" }}>
-                        <input type="checkbox" checked={isSelected} onChange={() => toggleSelectOne(o.id)} style={{ cursor: "pointer" }} />
+                        <input type="checkbox" checked={isSelected} disabled={ignored} onChange={() => toggleSelectOne(o.id)} style={{ cursor: ignored ? "not-allowed" : "pointer" }} />
                       </td>
                       <td style={{ padding: "10px 14px", fontFamily: "monospace", color: "#6b6860" }}>{o.externalId ?? o.crmId}</td>
                       
@@ -371,7 +391,6 @@ export default function OrdersPage() {
                       
                       <td style={{ padding: "10px 14px", fontWeight: 500 }}>{o.name || "—"}</td>
                       
-                      {/* НОВАЯ ЯЧЕЙКА С НОМЕРОМ ТЕЛЕФОНА */}
                       <td style={{ padding: "10px 14px", whiteSpace: "nowrap", fontFamily: "monospace", color: "#4a7aff" }}>
                         {editingCell?.id === o.id && editingCell?.field === "recipientPhone" ? (
                           <IMaskInput
