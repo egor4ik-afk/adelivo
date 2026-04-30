@@ -8,14 +8,14 @@ interface Order {
   crmId: string;
   externalId: string | null;
   status: string;
-  shop: string | null;           
-  name: string | null;           
-  recipientPhone: string | null; 
+  shop: string | null;
+  name: string | null;
+  recipientPhone: string | null;
   address: string | null;
   lat: number | null;
   lng: number | null;
   price: number | null;
-  wrongPrice?: boolean;          
+  wrongPrice?: boolean;
   costPrice: number | null;
   courier: string | null;
   comment: string | null;
@@ -68,6 +68,19 @@ export default function OrdersPage() {
 
   const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
   const [fStatus, setFStatus] = useState("ALL");
+
+  // Подтягиваем сохраненную дату при загрузке
+  useEffect(() => {
+    const savedDate = localStorage.getItem("orders_filterDate");
+    if (savedDate) setFilterDate(savedDate);
+  }, []);
+
+  // Функция для обновления даты и сохранения в память
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newDate = e.target.value;
+    setFilterDate(newDate);
+    localStorage.setItem("orders_filterDate", newDate);
+  };
   const [fCourier, setFCourier] = useState("ALL");
   const [fSearch, setFSearch] = useState("");
 
@@ -146,14 +159,14 @@ export default function OrdersPage() {
   const handleEditSave = async () => {
     if (!editingCell) return;
     const { id, field } = editingCell;
-    
+
     let val: number | string | null = editValue === "" ? null : editValue;
     if (field === 'price' || field === 'costPrice') {
       val = editValue === "" ? null : parseFloat(editValue.replace(",", "."));
     }
-    
-    setOrders(prev => prev.map(o => o.id === id ? { 
-      ...o, 
+
+    setOrders(prev => prev.map(o => o.id === id ? {
+      ...o,
       [field]: val,
       ...(field === 'price' ? { wrongPrice: false } : {})
     } : o));
@@ -194,8 +207,8 @@ export default function OrdersPage() {
         return (o.externalId || "").toLowerCase().includes(q) ||
           (o.address || "").toLowerCase().includes(q) ||
           (o.courier || "").toLowerCase().includes(q) ||
-          (o.name || "").toLowerCase().includes(q) ||          
-          (o.recipientPhone || "").toLowerCase().includes(q);  
+          (o.name || "").toLowerCase().includes(q) ||
+          (o.recipientPhone || "").toLowerCase().includes(q);
       }
       return true;
     });
@@ -203,12 +216,12 @@ export default function OrdersPage() {
 
   const sortedAndFiltered = useMemo(() => {
     let result = [...filtered];
-    
+
     result.sort((a, b) => {
       // 1. Игнорируемые адреса всегда смещаем вниз
       const aIgnored = isIgnoredAddress(a.address);
       const bIgnored = isIgnoredAddress(b.address);
-      
+
       if (aIgnored && !bIgnored) return 1;
       if (!aIgnored && bIgnored) return -1;
 
@@ -273,11 +286,11 @@ export default function OrdersPage() {
 
   const HEADERS: { label: string, key: SortKey | null }[] = [
     { label: "ID", key: "externalId" },
-    { label: "Магазин", key: "shop" },            
+    { label: "Магазин", key: "shop" },
     { label: "Статус", key: "status" },
     { label: "Курьер", key: "courier" },
-    { label: "Имя", key: "name" },                
-    { label: "Телефон", key: "recipientPhone" },  
+    { label: "Имя", key: "name" },
+    { label: "Телефон", key: "recipientPhone" },
     { label: "Адрес", key: "address" },
     { label: "Слот", key: "slotRaw" },
     { label: "Себ-ть", key: "costPriceDisplay" },
@@ -288,7 +301,7 @@ export default function OrdersPage() {
 
   return (
     <div style={{ fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", minHeight: "100vh", paddingBottom: selectedIds.size > 0 ? 80 : 0 }}>
-      
+
       {/* Шапка */}
       <div style={{ background: "#fff", borderBottom: "1px solid #e8e6df", padding: "0 24px", height: 56, display: "flex", alignItems: "center", gap: 16, overflowX: "auto" }}>
         <Link href="/dashboard" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 7, color: "#1a1a18", fontWeight: 600, fontSize: 15, flexShrink: 0 }}>
@@ -307,7 +320,7 @@ export default function OrdersPage() {
 
       {/* Фильтры */}
       <div style={{ padding: "16px 24px", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-        <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={inputStyle} />
+        <input type="date" value={filterDate} onChange={handleDateChange} style={inputStyle} />
         <input placeholder="Поиск по ID, адресу, имени..." value={fSearch} onChange={e => setFSearch(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 220 }} />
         <select value={fStatus} onChange={e => setFStatus(e.target.value)} style={inputStyle}>
           <option value="ALL">Все статусы</option>
@@ -343,8 +356,8 @@ export default function OrdersPage() {
                     <input type="checkbox" checked={isAllSelected} onChange={toggleSelectAll} style={{ cursor: "pointer" }} />
                   </th>
                   {HEADERS.map(h => (
-                    <th 
-                      key={h.label} 
+                    <th
+                      key={h.label}
                       style={{ ...thStyle, cursor: h.key ? "pointer" : "default" }}
                       onClick={() => h.key && handleSort(h.key)}
                       title={h.key ? "Нажмите для сортировки" : ""}
@@ -365,19 +378,19 @@ export default function OrdersPage() {
                 ) : sortedAndFiltered.map((o, i) => {
                   const statusColor = STATUS_COLORS[o.status] ?? "#a8a49c";
                   const isSelected = selectedIds.has(o.id);
-                  const displayCost = o.costPrice || localCosts[o.id]; 
+                  const displayCost = o.costPrice || localCosts[o.id];
                   const ignored = isIgnoredAddress(o.address);
-                  
+
                   return (
                     <tr key={o.id} style={{ borderBottom: "1px solid #f5f4f0", background: isSelected ? "#f4f7ff" : (i % 2 === 0 ? "#fff" : "#fafaf8"), opacity: ignored ? 0.6 : 1 }}>
                       <td style={{ padding: "10px 14px" }}>
                         <input type="checkbox" checked={isSelected} disabled={ignored} onChange={() => toggleSelectOne(o.id)} style={{ cursor: ignored ? "not-allowed" : "pointer" }} />
                       </td>
                       <td style={{ padding: "10px 14px", fontFamily: "monospace", color: "#6b6860" }}>{o.externalId ?? o.crmId}</td>
-                      
+
                       <td style={{ padding: "10px 14px", fontWeight: 600 }}>
-                        {o.shop === 'kaktusfiori' || o.shop === 'meura-flowers' 
-                          ? <span style={{ color: "#d63384" }}>🌸 Meura</span> 
+                        {o.shop === 'kaktusfiori' || o.shop === 'meura-flowers'
+                          ? <span style={{ color: "#d63384" }}>🌸 Meura</span>
                           : <span style={{ color: "#0d6efd" }}>📦 Bunch</span>
                         }
                       </td>
@@ -388,9 +401,9 @@ export default function OrdersPage() {
                         </span>
                       </td>
                       <td style={{ padding: "10px 14px", color: o.courier ? "#1a1a18" : "#d94040" }}>{o.courier || "—"}</td>
-                      
+
                       <td style={{ padding: "10px 14px", fontWeight: 500 }}>{o.name || "—"}</td>
-                      
+
                       <td style={{ padding: "10px 14px", whiteSpace: "nowrap", fontFamily: "monospace", color: "#4a7aff" }}>
                         {editingCell?.id === o.id && editingCell?.field === "recipientPhone" ? (
                           <IMaskInput
@@ -404,9 +417,9 @@ export default function OrdersPage() {
                             placeholder="+7 (___) ___-__-__"
                           />
                         ) : (
-                          <span 
+                          <span
                             onClick={() => handleEditClick(o.id, "recipientPhone", o.recipientPhone)}
-                            title="Нажмите, чтобы изменить" 
+                            title="Нажмите, чтобы изменить"
                             style={{ borderBottom: "1px dashed #a8a49c", cursor: "pointer", display: "inline-block", minHeight: 20 }}
                           >
                             {o.recipientPhone || "—"}
@@ -416,7 +429,7 @@ export default function OrdersPage() {
 
                       <td style={{ padding: "10px 14px", maxWidth: 260 }}>{o.address || "—"}</td>
                       <td style={{ padding: "10px 14px", color: "#6b6860" }}>{o.slotRaw || "—"}</td>
-                      
+
                       <td style={{ padding: "10px 14px", minWidth: 90 }}>
                         {editingCell?.id === o.id && editingCell?.field === "costPrice" ? (
                           <input
@@ -431,9 +444,9 @@ export default function OrdersPage() {
                         ) : (
                           <div style={{ display: "flex", alignItems: "center", gap: 6, minHeight: 24 }}>
                             {displayCost ? (
-                              <div 
-                                onClick={() => handleEditClick(o.id, "costPrice", displayCost)} 
-                                style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", color: "#1a9e5c", fontWeight: 700, borderBottom: "1px dashed #a8a49c" }} 
+                              <div
+                                onClick={() => handleEditClick(o.id, "costPrice", displayCost)}
+                                style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", color: "#1a9e5c", fontWeight: 700, borderBottom: "1px dashed #a8a49c" }}
                                 title="Изменить"
                               >
                                 {displayCost} ₽ <span style={{ fontSize: 10, opacity: 0.6 }}>✏️</span>
@@ -466,9 +479,9 @@ export default function OrdersPage() {
                             style={{ ...inlineInputStyle, borderColor: o.wrongPrice ? "#d94040" : "#4a7aff" }}
                           />
                         ) : (
-                          <span 
+                          <span
                             onClick={() => handleEditClick(o.id, "price", o.price)}
-                            title={o.wrongPrice ? "⚠️ Цена не совпадает с расчетной! Нажмите для ред." : "Нажмите, чтобы изменить"} 
+                            title={o.wrongPrice ? "⚠️ Цена не совпадает с расчетной! Нажмите для ред." : "Нажмите, чтобы изменить"}
                             style={{ borderBottom: o.wrongPrice ? "1px dashed #d94040" : "1px dashed #a8a49c", cursor: "pointer", display: "inline-block", minHeight: 20 }}
                           >
                             {o.wrongPrice && "⚠️ "}{o.price ? `${o.price} ₽` : "—"}
@@ -494,7 +507,7 @@ export default function OrdersPage() {
         <div style={floatingPanelStyle}>
           <div style={{ fontSize: 13, fontWeight: 600 }}>Выбрано: {selectedIds.size}</div>
           <div style={{ width: 1, height: 24, background: "#404040" }} />
-          <button 
+          <button
             onClick={handleMassUpdateCost}
             disabled={massUpdating}
             style={{ ...actionBtnStyle, background: massUpdating ? "#404040" : "#4a7aff", cursor: massUpdating ? "wait" : "pointer" }}

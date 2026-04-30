@@ -38,7 +38,16 @@ export default function CourierRoutesPage() {
   const [showPast, setShowPast] = useState(false);
   const [uploading, setUploading] = useState<Record<string, boolean>>({}); 
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({}); // 🔥 Стейт для спойлеров состава
+  // В начало компонента, рядом с другими useState
+const [collapsedOrders, setCollapsedOrders] = useState<Record<string, boolean>>({});
 
+// Функция-хелпер для переключения состояния заказа
+const toggleOrder = (orderId: string) => {
+  setCollapsedOrders(prev => ({
+    ...prev,
+    [orderId]: !prev[orderId]
+  }));
+};
   const fetchOrders = async () => {
     try {
       const res = await fetch("/api/courier/my-orders");
@@ -305,97 +314,118 @@ export default function CourierRoutesPage() {
               {isExpanded && (
                 <div style={{ display: "flex", flexDirection: "column" }}>
                   {routePoints.map((o, idx) => {
-                    const st = STATUS_MAP[o.status] || STATUS_MAP.ASSIGNED;
-                    const phone = o.recipientPhone || "—";
-                    const rawOp = o.opComment || "";
-                    const opComment = rawOp.split("\n").filter(line => !line.startsWith("💡")).join("\n").trim();
-                    const isDelivered = o.status === "DELIVERED";
-                    const actualTime = formatDeliveredTime(o.deliveredAt || null);
+                  const st = STATUS_MAP[o.status] || STATUS_MAP.ASSIGNED;
+                  const phone = o.recipientPhone || "—";
+                  const rawOp = o.opComment || "";
+                  const opComment = rawOp.split("\n").filter(line => !line.startsWith("💡")).join("\n").trim();
+                  const isDelivered = o.status === "DELIVERED";
+                  const actualTime = formatDeliveredTime(o.deliveredAt || null);
 
-                    const cleanPhoneForTg = phone !== "—" ? phone.replace(/[^\d+]/g, "") : "";
-                    
-                    let timeText = "в ближайшее время";
-                    if (o.eta) {
-                      timeText = `примерно в ${o.eta}`;
-                    } else if (o.slotRaw) {
-                      timeText = o.slotRaw;
-                    }
-                    
-                    const messageText = `Добрый день 😊 это курьер цветочного, буду у вас ${timeText}`;
-                    const encodedMsg = encodeURIComponent(messageText);
+                  const cleanPhoneForTg = phone !== "—" ? phone.replace(/[^\d+]/g, "") : "";
+                  
+                  let timeText = "в ближайшее время";
+                  if (o.eta) {
+                    timeText = `примерно в ${o.eta}`;
+                  } else if (o.slotRaw) {
+                    timeText = o.slotRaw;
+                  }
+                  
+                  const messageText = `Добрый день 😊 это курьер цветочного, буду у вас ${timeText}`;
+                  const encodedMsg = encodeURIComponent(messageText);
 
-                    // 🔥 КООРДИНАТЫ И МИНИ-МАРШРУТЫ (с mode=routes)
-                    const isFirst = idx === 0;
-                    const isLast = idx === routePoints.length - 1;
-                    const prevAddressStr = isFirst ? STORE_COORDS : getRoutePointCoords(routePoints[idx - 1]);
-                    const currentAddressStr = getRoutePointCoords(o);
+                  // 🔥 КООРДИНАТЫ И МИНИ-МАРШРУТЫ (с mode=routes)
+                  const isFirst = idx === 0;
+                  const isLast = idx === routePoints.length - 1;
+                  const prevAddressStr = isFirst ? STORE_COORDS : getRoutePointCoords(routePoints[idx - 1]);
+                  const currentAddressStr = getRoutePointCoords(o);
 
-                    return (
-                      <div
-                        key={o.id}
-                        style={{
-                          padding: "14px 16px",
-                          borderBottom: idx < routePoints.length - 1 ? "1px solid #f0efe9" : "none",
-                          opacity: isDelivered ? 0.55 : 1,
-                          transition: "opacity 0.2s",
+                  // ОПРЕДЕЛЯЕМ, СВЕРНУТ ЛИ ЗАКАЗ
+                  const isCollapsed = collapsedOrders[o.id] !== undefined ? collapsedOrders[o.id] : isDelivered;
+
+                  return (
+                    <div
+                      key={o.id}
+                      style={{
+                        margin: "8px 0",
+                        background: "#fff",
+                        borderRadius: 12,
+                        border: "1px solid #e8e6df",
+                        overflow: "hidden",
+                        boxShadow: isCollapsed ? "none" : "0 2px 8px rgba(0,0,0,0.05)",
+                        opacity: isDelivered ? 0.7 : 1,
+                      }}
+                    >
+                      {/* КЛИКАБЕЛЬНЫЙ ЗАГОЛОВОК (ДРОПДАУН) */}
+                      <div 
+                        onClick={() => toggleOrder(o.id)}
+                        style={{ 
+                          padding: "12px 16px", 
+                          cursor: "pointer",
+                          display: "flex", 
+                          alignItems: "center", 
+                          gap: 10,
+                          background: isCollapsed ? "#fff" : "#fafaf8" 
                         }}
                       >
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                          {o.routeOrder && (
-                            <div style={{
-                              width: 22, height: 22, borderRadius: "50%",
-                              background: st.bg, color: st.color,
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              fontSize: 11, fontWeight: 700, flexShrink: 0,
-                            }}>
-                              {o.routeOrder}
-                            </div>
-                          )}
-                          <div style={{ flex: 1, minWidth: 0 }}>
+                        {o.routeOrder && (
+                          <div style={{
+                            width: 22, height: 22, borderRadius: "50%",
+                            background: st.bg, color: st.color,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 11, fontWeight: 700, flexShrink: 0
+                          }}>
+                            {o.routeOrder}
+                          </div>
+                        )}
+                        
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {o.address}
+                          </div>
+                          <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ color: (isDelivered && actualTime) ? "#10b981" : "inherit" }}>
+                              {(isDelivered && actualTime) ? `✅ Доставлен в ${actualTime}` : (o.slotRaw ?? "Время не указано")}
+                            </span>
+                            {o.eta && !isDelivered && (
+                              <span style={{ background: "#eef3ff", color: "#4a7aff", padding: "1px 6px", borderRadius: 4, fontWeight: 600, fontSize: 10 }}>
+                                ~{o.eta}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div style={{ fontSize: 12, color: "#a8a49c", transform: isCollapsed ? "none" : "rotate(180deg)", transition: "transform 0.2s" }}>
+                          ▼
+                        </div>
+                      </div>
+
+                      {/* РАЗВОРАЧИВАЕМЫЕ ДЕТАЛИ ЗАКАЗА */}
+                      {!isCollapsed && (
+                        <div style={{ padding: "12px 16px 16px", borderTop: "1px solid #f0efe9" }}>
+                          
+                          {/* ID и Выбор Статуса */}
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                             <div style={{ fontSize: 10, color: "#a8a49c", fontFamily: "monospace" }}>
                               {o.externalId ?? o.crmId}
                             </div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <div style={{ 
-                                fontSize: 12, fontWeight: 700, 
-                                color: (isDelivered && actualTime) ? "#10b981" : "#1a1a18" 
-                              }}>
-                                {(isDelivered && actualTime) 
-                                  ? `Доставлен в ${actualTime}` 
-                                  : (o.slotRaw ?? "Время не указано")}
-                              </div>
-                              {o.eta && !isDelivered && (
-                                <div style={{
-                                  fontSize: 11, background: "#eef3ff", color: "#4a7aff",
-                                  padding: "2px 6px", borderRadius: 4, fontWeight: 600
-                                }}>
-                                  ~{o.eta}
-                                </div>
-                              )}
-                            </div>
+                            <select
+                              value={o.status}
+                              onClick={e => e.stopPropagation()}
+                              onChange={(e) => handleStatusChange(o.id, e.target.value)}
+                              style={{
+                                background: st.bg, color: st.color, border: "none", padding: "6px 10px", borderRadius: 8,
+                                fontSize: 11, fontWeight: 700, outline: "none", cursor: "pointer", WebkitAppearance: "none",
+                              }}
+                            >
+                              <option value="ASSIGNED">Назначен</option>
+                              <option value="IN_DELIVERY">🚀 В пути</option>
+                              <option value="DELIVERED">✅ Доставлен</option>
+                            </select>
                           </div>
-                          <select
-                            value={o.status}
-                            onChange={(e) => handleStatusChange(o.id, e.target.value)}
-                            style={{
-                              background: st.bg, color: st.color, border: "none", padding: "6px 10px", borderRadius: 8,
-                              fontSize: 11, fontWeight: 700, outline: "none", cursor: "pointer", WebkitAppearance: "none",
-                            }}
-                          >
-                            <option value="ASSIGNED">Назначен</option>
-                            <option value="IN_DELIVERY">🚀 В пути</option>
-                            <option value="DELIVERED">✅ Доставлен</option>
-                          </select>
-                        </div>
 
-                        {/* БЛОК АДРЕСА, ЦЕНЫ И МИНИ-МАРШРУТОВ */}
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 10 }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", lineHeight: 1.3 }}>
-                              {o.address}
-                            </div>
-                            
-                            <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {/* Ссылки на Яндекс.Карты и Цена */}
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 12 }}>
+                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                               <a 
                                 href={`https://yandex.ru/maps/?mode=routes&rtext=${prevAddressStr}~${currentAddressStr}`} 
                                 target="_blank" 
@@ -413,173 +443,174 @@ export default function CourierRoutesPage() {
                                 </a>
                               )}
                             </div>
+                            {o.price !== null && (
+                              <div style={{ fontSize: 12, whiteSpace: "nowrap", color: o.wrongPrice ? "#d94040" : "#a8a49c", fontWeight: o.wrongPrice ? 800 : 600 }}>
+                                {o.price} ₽
+                              </div>
+                            )}
                           </div>
-                          {o.price !== null && (
-                            <div style={{ fontSize: 12, whiteSpace: "nowrap", color: o.wrongPrice ? "#d94040" : "#a8a49c", fontWeight: o.wrongPrice ? 800 : 600 }}>
-                              {o.price} ₽
-                            </div>
-                          )}
-                        </div>
 
-                        {/* 🔥 БЛОК СОСТАВА ЗАКАЗА (С ВЫПАДАШКОЙ ОТ 3 ШТ) */}
-                        {o.items && o.items.trim() && (
-                          <div style={{ marginBottom: 10, background: "#fafaf8", borderRadius: 8, padding: 10, border: "1px solid #e8e6df" }}>
-                            {(() => {
-                              const lines = o.items!.split('\n').map(l => l.trim()).filter(Boolean);
-                              const isMany = lines.length >= 3;
-                              const isItemExpanded = expandedItems[o.id];
+                          {/* Состав заказа */}
+                          {o.items && o.items.trim() && (
+                            <div style={{ marginBottom: 10, background: "#fafaf8", borderRadius: 8, padding: 10, border: "1px solid #e8e6df" }}>
+                              {(() => {
+                                const lines = o.items!.split('\n').map(l => l.trim()).filter(Boolean);
+                                const isMany = lines.length >= 3;
+                                const isItemExpanded = expandedItems[o.id];
 
-                              if (!isMany) {
+                                if (!isMany) {
+                                  return (
+                                    <>
+                                      <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 4, fontWeight: 600 }}>📦 Состав заказа</div>
+                                      <div style={{ fontSize: 12, color: "#1a1a18", lineHeight: 1.4 }}>
+                                        {lines.map((l, i) => <div key={i}>• {l}</div>)}
+                                      </div>
+                                    </>
+                                  );
+                                }
+
                                 return (
                                   <>
-                                    <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 4, fontWeight: 600 }}>📦 Состав заказа</div>
-                                    <div style={{ fontSize: 12, color: "#1a1a18", lineHeight: 1.4 }}>
-                                      {lines.map((l, i) => <div key={i}>• {l}</div>)}
+                                    <div 
+                                      onClick={() => setExpandedItems(prev => ({ ...prev, [o.id]: !prev[o.id] }))}
+                                      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+                                    >
+                                      <div style={{ fontSize: 11, color: "#1a1a18", textTransform: "uppercase", fontWeight: 700 }}>
+                                        📦 Состав ({lines.length} позиций)
+                                      </div>
+                                      <div style={{ fontSize: 12, color: "#a8a49c" }}>{isItemExpanded ? "▲" : "▼"}</div>
                                     </div>
+                                    {isItemExpanded && (
+                                      <div style={{ marginTop: 8, borderTop: "1px dashed #e8e6df", paddingTop: 8, fontSize: 12, color: "#1a1a18", lineHeight: 1.4 }}>
+                                        {lines.map((l, i) => <div key={i}>• {l}</div>)}
+                                      </div>
+                                    )}
                                   </>
                                 );
-                              }
-
-                              return (
-                                <>
-                                  <div 
-                                    onClick={() => setExpandedItems(prev => ({ ...prev, [o.id]: !prev[o.id] }))}
-                                    style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
-                                  >
-                                    <div style={{ fontSize: 11, color: "#1a1a18", textTransform: "uppercase", fontWeight: 700 }}>
-                                      📦 Состав ({lines.length} позиций)
-                                    </div>
-                                    <div style={{ fontSize: 12, color: "#a8a49c" }}>{isItemExpanded ? "▲" : "▼"}</div>
-                                  </div>
-                                  {isItemExpanded && (
-                                    <div style={{ marginTop: 8, borderTop: "1px dashed #e8e6df", paddingTop: 8, fontSize: 12, color: "#1a1a18", lineHeight: 1.4 }}>
-                                      {lines.map((l, i) => <div key={i}>• {l}</div>)}
-                                    </div>
-                                  )}
-                                </>
-                              );
-                            })()}
-                          </div>
-                        )}
-
-                        {/* БЛОК ФОТО */}
-                        <div style={{ marginBottom: 10 }}>
-                          {uploading[o.id] ? (
-                            <div style={{ textAlign: "center", padding: "14px", background: "#fafaf8", borderRadius: 8, color: "#a8a49c", fontWeight: 600, fontSize: 13 }}>
-                              ⏳ Загрузка фото...
-                            </div>
-                          ) : (
-                            <div style={{ display: "flex", gap: 8 }}>
-                              <label style={{
-                                flex: 1, background: o.photoUrl ? "#ecfdf5" : "#fff",
-                                border: `1px solid ${o.photoUrl ? "#10b981" : "#e8e6df"}`,
-                                padding: "10px", borderRadius: 8, cursor: "pointer",
-                                textAlign: "center", fontWeight: 700, fontSize: 13,
-                                color: o.photoUrl ? "#10b981" : "#1a1a18"
-                              }}>
-                                <input
-                                  type="file" accept="image/*" capture="environment" style={{ display: "none" }}
-                                  onChange={(e) => { if (e.target.files?.[0]) handlePhotoUpload(o.id, e.target.files[0]); }}
-                                />
-                                📸 Камера
-                              </label>
-
-                              <label style={{
-                                flex: 1, background: "#fff", border: "1px solid #e8e6df",
-                                padding: "10px", borderRadius: 8, cursor: "pointer",
-                                textAlign: "center", fontWeight: 700, fontSize: 13, color: "#1a1a18"
-                              }}>
-                                <input
-                                  type="file" accept="image/*" style={{ display: "none" }}
-                                  onChange={(e) => { if (e.target.files?.[0]) handlePhotoUpload(o.id, e.target.files[0]); }}
-                                />
-                                🖼️ Из альбома
-                              </label>
+                              })()}
                             </div>
                           )}
 
-                          {o.photoUrl && !uploading[o.id] && (
-                            <div style={{ marginTop: 8 }}>
-                              <a href={o.photoUrl} target="_blank" rel="noopener noreferrer">
-                                <img 
-                                  src={o.photoUrl} alt="Фото заказа" 
-                                  style={{ width: "100%", maxHeight: 180, objectFit: "cover", borderRadius: 8, border: "1px solid #e8e6df", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }} 
-                                />
-                              </a>
-                            </div>
-                          )}
-                        </div>
+                          {/* Блок загрузки Фото */}
+                          <div style={{ marginBottom: 10 }}>
+                            {uploading[o.id] ? (
+                              <div style={{ textAlign: "center", padding: "14px", background: "#fafaf8", borderRadius: 8, color: "#a8a49c", fontWeight: 600, fontSize: 13 }}>
+                                ⏳ Загрузка фото...
+                              </div>
+                            ) : (
+                              <div style={{ display: "flex", gap: 8 }}>
+                                <label style={{
+                                  flex: 1, background: o.photoUrl ? "#ecfdf5" : "#fff",
+                                  border: `1px solid ${o.photoUrl ? "#10b981" : "#e8e6df"}`,
+                                  padding: "10px", borderRadius: 8, cursor: "pointer",
+                                  textAlign: "center", fontWeight: 700, fontSize: 13,
+                                  color: o.photoUrl ? "#10b981" : "#1a1a18"
+                                }}>
+                                  <input
+                                    type="file" accept="image/*" capture="environment" style={{ display: "none" }}
+                                    onChange={(e) => { if (e.target.files?.[0]) handlePhotoUpload(o.id, e.target.files[0]); }}
+                                  />
+                                  📸 Камера
+                                </label>
 
-                        {/* БЛОК ПОЛУЧАТЕЛЯ */}
-                        <div style={{ background: "#f5f4f0", borderRadius: 8, padding: 10, marginBottom: opComment ? 8 : 0 }}>
-                          <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 4 }}>
-                            Получатель
-                          </div>
-                          
-                          {o.name && (
-                            <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a18", marginBottom: 4 }}>
-                              👤 {o.name}
-                            </div>
-                          )}
+                                <label style={{
+                                  flex: 1, background: "#fff", border: "1px solid #e8e6df",
+                                  padding: "10px", borderRadius: 8, cursor: "pointer",
+                                  textAlign: "center", fontWeight: 700, fontSize: 13, color: "#1a1a18"
+                                }}>
+                                  <input
+                                    type="file" accept="image/*" style={{ display: "none" }}
+                                    onChange={(e) => { if (e.target.files?.[0]) handlePhotoUpload(o.id, e.target.files[0]); }}
+                                  />
+                                  🖼️ Из альбома
+                                </label>
+                              </div>
+                            )}
 
-                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                            <div style={{ fontSize: 13, fontWeight: 600 }}>
-                              {phone !== "—"
-                                ? <a href={`tel:${phone}`} style={{ color: "#4a7aff", textDecoration: "none" }}>📞 {phone}</a>
-                                : <span style={{ color: "#1a1a18" }}>—</span>}
-                            </div>
-
-                            {/* КНОПКА ТЕЛЕГРАМ И КНОПКА SMS */}
-                            {cleanPhoneForTg && (
-                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <a 
-                                  href={`https://t.me/${cleanPhoneForTg}?text=${encodedMsg}`} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  title="Написать в Telegram"
-                                  style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#2AABEE", width: 28, height: 28, borderRadius: "50%", textDecoration: "none", boxShadow: "0 2px 4px rgba(42, 171, 238, 0.3)" }}
-                                >
-                                  <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff">
-                                    <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z"/>
-                                  </svg>
-                                </a>
-
-                                <a 
-                                  href={`sms:${cleanPhoneForTg}?body=${encodedMsg}`}
-                                  title="Отправить SMS"
-                                  style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#34C759", width: 28, height: 28, borderRadius: "50%", textDecoration: "none", boxShadow: "0 2px 4px rgba(52, 199, 89, 0.3)" }}
-                                >
-                                  <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff">
-                                    <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
-                                  </svg>
+                            {o.photoUrl && !uploading[o.id] && (
+                              <div style={{ marginTop: 8 }}>
+                                <a href={o.photoUrl} target="_blank" rel="noopener noreferrer">
+                                  <img 
+                                    src={o.photoUrl} alt="Фото заказа" 
+                                    style={{ width: "100%", maxHeight: 180, objectFit: "cover", borderRadius: 8, border: "1px solid #e8e6df", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }} 
+                                  />
                                 </a>
                               </div>
                             )}
                           </div>
 
-                          {o.comment && (
-                            <div style={{ fontSize: 12, color: "#d94040", marginTop: 6, fontWeight: 500 }}>
-                              ⚠ {o.comment}
+                          {/* Блок Получателя */}
+                          <div style={{ background: "#f5f4f0", borderRadius: 8, padding: 10, marginBottom: opComment ? 8 : 0 }}>
+                            <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 4 }}>
+                              Получатель
+                            </div>
+                            
+                            {o.name && (
+                              <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a18", marginBottom: 4 }}>
+                                👤 {o.name}
+                              </div>
+                            )}
+
+                            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                              <div style={{ fontSize: 13, fontWeight: 600 }}>
+                                {phone !== "—"
+                                  ? <a href={`tel:${phone}`} style={{ color: "#4a7aff", textDecoration: "none" }}>📞 {phone}</a>
+                                  : <span style={{ color: "#1a1a18" }}>—</span>}
+                              </div>
+
+                              {cleanPhoneForTg && (
+                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                  <a 
+                                    href={`https://t.me/${cleanPhoneForTg}?text=${encodedMsg}`} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    title="Написать в Telegram"
+                                    style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#2AABEE", width: 28, height: 28, borderRadius: "50%", textDecoration: "none", boxShadow: "0 2px 4px rgba(42, 171, 238, 0.3)" }}
+                                  >
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff">
+                                      <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z"/>
+                                    </svg>
+                                  </a>
+
+                                  <a 
+                                    href={`sms:${cleanPhoneForTg}?body=${encodedMsg}`}
+                                    title="Отправить SMS"
+                                    style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#34C759", width: 28, height: 28, borderRadius: "50%", textDecoration: "none", boxShadow: "0 2px 4px rgba(52, 199, 89, 0.3)" }}
+                                  >
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff">
+                                      <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
+                                    </svg>
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+
+                            {o.comment && (
+                              <div style={{ fontSize: 12, color: "#d94040", marginTop: 6, fontWeight: 500 }}>
+                                ⚠ {o.comment}
+                              </div>
+                            )}
+                          </div>
+
+                          {opComment && (
+                            <div style={{
+                              background: "#fffbeb", borderRadius: 8, padding: 10,
+                              border: "1px solid #fde68a",
+                            }}>
+                              <div style={{ fontSize: 11, color: "#92400e", textTransform: "uppercase", marginBottom: 2, fontWeight: 600 }}>
+                                📋 Заметка оператора
+                              </div>
+                              <div style={{ fontSize: 13, color: "#78350f", lineHeight: 1.4, whiteSpace: "pre-wrap" }}>
+                                {opComment}
+                              </div>
                             </div>
                           )}
-                        </div>
 
-                        {opComment && (
-                          <div style={{
-                            background: "#fffbeb", borderRadius: 8, padding: 10,
-                            border: "1px solid #fde68a",
-                          }}>
-                            <div style={{ fontSize: 11, color: "#92400e", textTransform: "uppercase", marginBottom: 2, fontWeight: 600 }}>
-                              📋 Заметка оператора
-                            </div>
-                            <div style={{ fontSize: 13, color: "#78350f", lineHeight: 1.4, whiteSpace: "pre-wrap" }}>
-                              {opComment}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
                 </div>
               )}
             </div>

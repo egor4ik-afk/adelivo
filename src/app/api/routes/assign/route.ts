@@ -179,6 +179,21 @@ export async function POST(req: Request) {
       }
     }
 
+  // 🔥 ДОБАВЛЕНО: Отправка Push-уведомления курьеру о новом маршруте
+  if (courierDb?.email) {
+    const userObj = await prisma.user.findUnique({ where: { email: courierDb.email } });
+    if (userObj) {
+      await notify({
+        type: "route.assigned",
+        userId: userObj.id,
+        routeId: newRoute.name,
+        pointsCount: orderIds.length
+      });
+    }
+  }
+
+  return NextResponse.json({ success: true, routeId: newRoute.id });
+
     return NextResponse.json({ success: true, routeId: newRoute.id });
   } catch (e: any) {
     return NextResponse.json({ error: String(e.message || e) }, { status: 500 });
