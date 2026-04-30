@@ -330,7 +330,7 @@ const toggleOrder = (orderId: string) => {
                     timeText = o.slotRaw;
                   }
                   
-                  const messageText = `Добрый день 😊 это курьер цветочного, буду у вас ${timeText}`;
+                  const messageText = `Здравствуйте 😊 это курьер с цветочного, буду у вас ${timeText}`;
                   const encodedMsg = encodeURIComponent(messageText);
 
                   // 🔥 КООРДИНАТЫ И МИНИ-МАРШРУТЫ (с mode=routes)
@@ -379,7 +379,7 @@ const toggleOrder = (orderId: string) => {
                         )}
                         
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", lineHeight: 1.3 }}>
                             {o.address}
                           </div>
                           <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
