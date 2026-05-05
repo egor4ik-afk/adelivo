@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { signKonsolAct, autopayKonsolAct, acceptKonsolTask, finalizeKonsolTask } from "@/lib/konsol";
+import { signKonsolAct, autopayKonsolAct } from "@/lib/konsol";
 
 async function fetchKonsolAct(actId: string) {
   const res = await fetch(`https://api.konsol.pro/v2/acts/${actId}`, {
@@ -61,36 +61,17 @@ export async function POST(req: Request) {
           continue;
         }
 
-        let actId = task.konsolActId;
+        const actId = task.konsolActId;
 
-        // 1. ФИНАЛИЗАЦИЯ (если акта еще нет)
+        // Если акта нет — просто пропускаем, как ты и просил
         if (!actId) {
-          console.log(`[Pay] Финализируем задание ${task.konsolTaskId}...`);
-          try { await acceptKonsolTask(task.konsolTaskId); } catch {}
-
-          const newActId = await finalizeKonsolTask(task.konsolTaskId);
-          if (!newActId) {
-            console.error(`[Pay] Не удалось создать акт для ${task.konsolTaskId}`);
-            errorCount++;
-            continue;
-          }
-
-          await prisma.konsolTask.update({
-            where: { id: task.id },
-            data: { konsolActId: String(newActId), status: "CONFIRMED" },
-          });
-          actId = String(newActId);
-
-          console.log(`[Pay] Ждем 3 сек для генерации акта ${actId}...`);
-          await delay(3000);
+          console.log(`[Pay] Пропуск: у задания ${task.konsolTaskId} курьера ${courierId} еще нет акта.`);
+          warnings.push(`Курьер ${courierId}: нет выпущенного акта для задания.`);
+          errorCount++;
+          continue;
         }
 
-        if (!actId) {
-            errorCount++;
-            continue;
-        }
-
-        // 2. БЕЗУСЛОВНОЕ ПОДПИСАНИЕ
+        // 1. БЕЗУСЛОВНОЕ ПОДПИСАНИЕ
         console.log(`[Pay] Пробуем подписать акт ${actId}...`);
         try {
           await signKonsolAct(actId);
@@ -113,7 +94,7 @@ export async function POST(req: Request) {
           data: { status: "SIGNED_BY_US" },
         });
 
-        // 3. БЕЗУСЛОВНАЯ АВТООПЛАТА
+        // 2. БЕЗУСЛОВНАЯ АВТООПЛАТА
         console.log(`[Pay] Отправляем акт ${actId} в автооплату...`);
         try {
           await autopayKonsolAct(actId);
@@ -131,7 +112,7 @@ export async function POST(req: Request) {
           }
         }
 
-        // 4. ЗАЖИГАЕМ ЗЕЛЕНЫЕ КРУЖКИ В ИНТЕРФЕЙСЕ (только после успешного прохождения)
+        // 3. ЗАЖИГАЕМ ЗЕЛЕНЫЕ КРУЖКИ В ИНТЕРФЕЙСЕ (только после успешного прохождения)
         for (const d of courierDates) {
           const existing = await prisma.courierPayment.findUnique({
             where: { courierId_date: { courierId, date: d } },
