@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import axios from "axios";
-import { upsertOrder } from "@/lib/crm"; // 🔥 Импортируем вашу функцию создания заказа
+import { upsertOrder } from "@/lib/crm"; // Импортируем вашу функцию синхронизации
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const SOURCE_CHAT_ID = process.env.TELEGRAM_SOURCE_CHAT_ID;
@@ -13,6 +13,7 @@ const CRM_KEY = process.env.RETAILCRM_API_KEY;
 const TARGET_SUPERGROUP_ID = "-1003732491171";
 const ALLOWED_TOPICS = [4, 5];
 
+// Переписали на axios для стабильности (убирает fetch failed)
 async function sendNotificationToAdmin(text: string) {
   const token = TELEGRAM_BOT_TOKEN?.replace(/\s+/g, "")?.replace(/^bot/i, "");
   const chatId = ADMIN_CHAT_ID?.replace(/\s+/g, "");
@@ -25,18 +26,9 @@ async function sendNotificationToAdmin(text: string) {
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
 
   try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error("❌ ТГ ответил ошибкой:", errorData.description || response.statusText);
-    }
+    await axios.post(url, { chat_id: chatId, text }, { timeout: 5000 });
   } catch (err: any) {
-    console.error("❌ Ошибка сети в ТГ (Админ):", err.message);
+    console.error("❌ Ошибка отправки уведомления админу в ТГ:", err?.response?.data || err.message);
   }
 }
 
@@ -63,21 +55,20 @@ function parseOrderText(text: string) {
   return { orderId, name, phone, address };
 }
 
-// 🔥 НОВАЯ ФУНКЦИЯ: Прямой запрос в RetailCRM
+// Прямой запрос в RetailCRM, если заказа еще нет в локальной БД
 async function fetchAndUpsertFromCrm(orderId: string) {
   if (!CRM_URL || !CRM_KEY) return null;
 
   try {
     console.log(`🔍 [CRM Fetch] Идем искать заказ ${orderId} напрямую в RetailCRM...`);
     
-    // 1. Пробуем найти по externalId
+    // 1. Ищем по externalId (внешнему номеру)
     const paramsExt = new URLSearchParams({ apiKey: CRM_KEY });
     paramsExt.append("filter[externalIds][]", orderId);
-    
     let res = await axios.get(`${CRM_URL}/api/v5/orders?${paramsExt.toString()}`, { timeout: 7000 });
     let orders = res.data?.orders || [];
 
-    // 2. Если не нашли, пробуем по внутреннему номеру
+    // 2. Если не нашли, ищем по внутреннему ID/номеру RetailCRM
     if (orders.length === 0) {
       const paramsNum = new URLSearchParams({ apiKey: CRM_KEY });
       paramsNum.append("filter[numbers][]", orderId);
@@ -86,63 +77,69 @@ async function fetchAndUpsertFromCrm(orderId: string) {
     }
 
     if (orders.length > 0) {
-      console.log(`✅ [CRM Fetch] Нашли заказ ${orderId} в RetailCRM! Сохраняем в нашу БД...`);
-      // Прогоняем заказ через вашу стандартную функцию сохранения
+      console.log(`✅ [CRM Fetch] Нашли заказ ${orderId} в RetailCRM! Создаем локально...`);
+      // Вызываем вашу стандартную функцию создания/обновления заказа из crm.ts
       const newOrder = await upsertOrder(orders[0]); 
       return newOrder;
-    } else {
-       console.log(`❌ [CRM Fetch] Заказ ${orderId} не найден даже в CRM.`);
     }
+    console.log(`❌ [CRM Fetch] Заказ ${orderId} не найден в RetailCRM.`);
   } catch (e: any) {
-    console.error("❌ [CRM Fetch] Ошибка при запросе в CRM:", e?.response?.data || e.message);
+    console.error("❌ [CRM Fetch] Ошибка API RetailCRM:", e?.response?.data || e.message);
   }
   return null;
 }
 
-// Поиск заказа в локальной БД с паузами
-async function findOrderWithRetry(orderId: string | null, address: string | null, retries = 3, delayMs = 2500) {
+// Безопасный поиск по локальной БД
+async function findOrderLocal(orderId: string | null, address: string | null, retries = 3, delayMs = 2000) {
   for (let i = 0; i < retries; i++) {
-    let order = null;
-
+    // Если есть ID — ищем ТОЛЬКО по ID. Никаких адресов!
     if (orderId) {
-      order = await prisma.order.findFirst({
+      const order = await prisma.order.findFirst({
         where: {
           OR: [
-            { crmId: orderId },
-            { externalId: orderId },
-            { crmId: `#${orderId}` },
-            { externalId: `#${orderId}` },
+            { crmId: orderId }, { externalId: orderId },
+            { crmId: `#${orderId}` }, { externalId: `#${orderId}` },
           ],
         },
       });
+      if (order) return order;
+    } 
+    // Если ID нет, но есть адрес — ищем по умному куску адреса
+    else if (address) {
+      // Вырезаем "Россия, Москва", чтобы не ловить ложные совпадения
+      const cleanAddr = address
+        .replace(/россия,?/i, "")
+        .replace(/москва,?/i, "")
+        .replace(/г\.?\s*москва,?/i, "")
+        .trim();
+
+      const shortAddress = cleanAddr.substring(0, 18).trim();
+
+      if (shortAddress.length > 4) {
+        const order = await prisma.order.findFirst({
+          where: {
+            status: { in: ["NEW", "ASSIGNED"] },
+            address: { contains: shortAddress, mode: "insensitive" },
+          },
+        });
+        if (order) return order;
+      }
     }
 
-    if (!order && address) {
-      const shortAddress = address.substring(0, 15).trim();
-      order = await prisma.order.findFirst({
-        where: {
-          status: { in: ["NEW", "ASSIGNED"] },
-          address: { contains: shortAddress, mode: "insensitive" },
-        },
-      });
-    }
-
-    if (order) return order;
-
-    if (i < retries - 1) {
-      console.log(`⏳ Заказ ${orderId || ''} пока не найден в БД. Ждем ${delayMs / 1000} сек (попытка ${i + 1}/${retries})...`);
+    // Если это не последняя попытка и мы ищем по ID — подождем крон
+    if (i < retries - 1 && orderId) {
+      console.log(`⏳ Заказ ${orderId} не найден локально. Попытка ${i + 1}/${retries}, ждем ${delayMs / 1000} сек...`);
       await new Promise(res => setTimeout(res, delayMs));
+    } else if (!orderId) {
+      break; // По адресу не циклим
     }
   }
-  
   return null;
 }
-
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-
     if (!body.message) return NextResponse.json({ status: "ignored_no_message" });
 
     const text = body.message.text || body.message.caption;
@@ -168,13 +165,8 @@ export async function POST(req: Request) {
       }
     }
 
-    if (!isAllowed) {
-        return NextResponse.json({ status: "ignored_wrong_chat" });
-    }
-
-    if (!/Номер заказа/i.test(text)) {
-      return NextResponse.json({ status: "ignored_not_order" });
-    }
+    if (!isAllowed) return NextResponse.json({ status: "ignored_wrong_chat" });
+    if (!/Номер заказа/i.test(text)) return NextResponse.json({ status: "ignored_not_order" });
 
     const { orderId, name, phone, address } = parseOrderText(text);
     console.log("📦 Распарсили:", { orderId, name, phone, address });
@@ -182,24 +174,23 @@ export async function POST(req: Request) {
     if (!orderId && !address) return NextResponse.json({ status: "not_enough_data" });
     if (!phone && !name) return NextResponse.json({ status: "no_contacts" });
 
-    // 1. Ищем локально с ожиданием
-    let targetOrder = await findOrderWithRetry(orderId, address);
+    // 1. Ищем в нашей локальной базе данных
+    let targetOrder = await findOrderLocal(orderId, address);
 
-    // 2. 🔥 ФОЛБЭК: Если локально не нашли, дергаем CRM напрямую!
+    // 2. ФОЛБЭК: Если по ID локально не нашли, забираем его напрямую из RetailCRM
     if (!targetOrder && orderId) {
       targetOrder = await fetchAndUpsertFromCrm(orderId);
     }
 
-    // 3. Если и в CRM не нашли — сдаемся
     if (!targetOrder) {
-      console.log("⚠️ Заказ так и не появился в базе и не найден в CRM.");
+      console.log("⚠️ Заказ не найден ни в БД, ни в CRM.");
       await sendNotificationToAdmin(
-        `⚠️ Пришел контакт для заказа, но я не нашел его в базе и в CRM.\nИскал по: ${orderId ? `#${orderId}` : `адресу "${address?.substring(0, 20)}..."`}`
+        `⚠️ Пришел контакт, но заказ не найден ни у нас, ни в CRM:\nИскал по ID: ${orderId || "отсутствует"} или адресу.`
       );
       return NextResponse.json({ status: "order_not_found" });
     }
 
-    // 4. Обновляем данные получателя
+    // 3. Обновляем данные получателя
     const formattedPhone = normalizePhone(phone);
     console.log(`💾 Обновляем [${targetOrder.crmId}] -> Имя: ${name}, Тел: ${formattedPhone}`);
 
@@ -216,7 +207,7 @@ export async function POST(req: Request) {
       `✅ Обновлен заказ ${foundByText}\n👤 Имя: ${name || "—"}\n📞 Тел: ${formattedPhone || "—"}\n📍 Адрес: ${targetOrder.address}`
     );
 
-    console.log("🎉 Успешно!");
+    console.log("🎉 Успешно завершено!");
     return NextResponse.json({ success: true });
 
   } catch (error) {
