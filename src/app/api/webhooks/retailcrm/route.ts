@@ -7,44 +7,45 @@ import { applyUniversalEtaShift } from "@/lib/eta";
 const CRM_URL = process.env.RETAILCRM_API_URL;
 
 // Умный поиск заказа с ретраями по ОБОИМ ключам (Bunch и Meura)
-async function fetchOrderFromCrm(orderId: string, retryCount = 0): Promise<CrmOrder | null> {
+// 🔥 ИДЕАЛЬНЫЙ ФОЛБЭК: Работает в точности как ваш RetailCRM вебхук
+async function fetchAndUpsertFromCrm(orderId: string) {
   const keys = [
     process.env.RETAILCRM_API_KEY,        // Ключ Bunch
     process.env.RETAILCRM_API_KEY_MEURA   // Ключ Meura
-  ].filter(Boolean); // Убираем пустые, если ключа нет
+  ].filter(Boolean);
 
   if (!CRM_URL || keys.length === 0) return null;
 
-  const searchTypes = ["id", "externalId", "number"];
+  const searchTypes = ["externalId", "number", "id"];
+  const searchValues = [orderId, `#${orderId}`]; // Ищем и чистый номер, и с решеткой
 
-  // Перебираем оба ключа (сначала Bunch, потом Meura)
+  console.log(`🔍 [CRM Fetch] Ищем заказ ${orderId} напрямую (проверяем Bunch и Meura)...`);
+
   for (const key of keys) {
     for (const byType of searchTypes) {
-      try {
-        const res = await axios.get(`${CRM_URL}/api/v5/orders/${orderId}`, {
-          params: { apiKey: key, by: byType },
-          timeout: 8000,
-        });
-        if (res.data?.success && res.data?.order) {
-          return res.data.order; // Нашли заказ! Возвращаем его
-        }
-      } catch (e: unknown) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if ((e as any).response?.status !== 404) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          console.error(`[Webhook] Ошибка CRM API (${byType}):`, (e as any).message);
+      for (const val of searchValues) {
+        try {
+          const res = await axios.get(`${CRM_URL}/api/v5/orders/${encodeURIComponent(val)}`, {
+            params: { apiKey: key, by: byType },
+            timeout: 5000,
+          });
+          
+          if (res.data?.success && res.data?.order) {
+            console.log(`✅ [CRM Fetch] Нашли заказ ${val} (${byType})! Создаем локально...`);
+            const newOrder = await upsertOrder(res.data.order); 
+            return newOrder;
+          }
+        } catch (e: any) {
+          // Игнорируем 404 (просто не найдено), логируем только реальные ошибки сети
+          if (e?.response?.status !== 404) {
+             console.error(`❌ [CRM Fetch] Ошибка API (${byType}=${val}):`, e.message);
+          }
         }
       }
     }
   }
 
-  // Если ни по одному ключу не найдено, возможно это задержка базы данных самой CRM
-  if (retryCount < 2) {
-    console.log(`[Webhook] Заказ ${orderId} пока не доступен в API. Ждем 3 сек (попытка ${retryCount + 1})...`);
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-    return fetchOrderFromCrm(orderId, retryCount + 1);
-  }
-
+  console.log(`❌ [CRM Fetch] Заказ ${orderId} не найден в RetailCRM ни по одному из ключей.`);
   return null;
 }
 
@@ -149,4 +150,8 @@ export async function POST(req: Request) {
     console.error("[Webhook] Критическая ошибка:", e);
     return NextResponse.json({ ok: false, error: String(e) }, { status: 500 });
   }
+}
+
+function fetchOrderFromCrm(orderId: string): CrmOrder | PromiseLike<CrmOrder | null> | null {
+  throw new Error("Function not implemented.");
 }
