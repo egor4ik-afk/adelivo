@@ -821,7 +821,7 @@ export function DashboardClient({ user }: { user: User }) {
       const mMatch = text.match(/(\d+)\s*мин/);
       if (mMatch) ms += parseInt(mMatch[1], 10) * 60000;
       // 🔥 Теперь пешему прибавляем 1 минуту на точку
-      return routeType === "auto" ? ms + (12 * 60 * 1000) : ms + (4 * 60 * 1000);
+      return routeType === "auto" ? ms + (4 * 60 * 1000) : ms + (4 * 60 * 1000);
     };
 
     const [year, month, day] = filterDate.split("-").map(Number);
