@@ -255,12 +255,24 @@ export function DashboardClient({ user }: { user: User }) {
     if (lv !== null) setIsListVisible(lv === "true");
     const dv = localStorage.getItem("fo_detailVisible");
     if (dv !== null) setIsDetailVisible(dv === "true");
+
+    // 🔥 ЗАГРУЗКА состояния чекбоксов
+    const shC = localStorage.getItem("fo_showCouriers"); if (shC !== null) setShowCouriers(shC === "true");
+    const shH = localStorage.getItem("fo_showHomes"); if (shH !== null) setShowHomes(shH === "true");
+    const shCN = localStorage.getItem("fo_showCourierNames"); if (shCN !== null) setShowCourierNames(shCN === "true");
+    const shT = localStorage.getItem("fo_showTime"); if (shT !== null) setShowTime(shT === "true");
   }, []);
 
   useEffect(() => { localStorage.setItem("fo_filterDate", filterDate); }, [filterDate]);
   useEffect(() => { localStorage.setItem("fo_tableOpen", String(tableOpen)); }, [tableOpen]);
   useEffect(() => { localStorage.setItem("fo_listVisible", String(isListVisible)); }, [isListVisible]);
   useEffect(() => { localStorage.setItem("fo_detailVisible", String(isDetailVisible)); }, [isDetailVisible]);
+
+  // 🔥 СОХРАНЕНИЕ состояния чекбоксов при их изменении
+  useEffect(() => { localStorage.setItem("fo_showCouriers", String(showCouriers)); }, [showCouriers]);
+  useEffect(() => { localStorage.setItem("fo_showHomes", String(showHomes)); }, [showHomes]);
+  useEffect(() => { localStorage.setItem("fo_showCourierNames", String(showCourierNames)); }, [showCourierNames]);
+  useEffect(() => { localStorage.setItem("fo_showTime", String(showTime)); }, [showTime]);
 
   useEffect(() => {
     if (selectedId) {
@@ -694,7 +706,8 @@ export function DashboardClient({ user }: { user: User }) {
             createdAt: o.route.createdAt,
             updatedAt: o.route.updatedAt || o.changedAt || o.createdAt,
             baseArrivalTime: o.route.baseArrivalTime,
-            estimatedReturnTime: o.route.estimatedReturnTime
+            estimatedReturnTime: o.route.estimatedReturnTime,
+            sortOrder: o.route.sortOrder || 0 // 🔥 Берем sortOrder из БД
           });
         }
         routesMap.get(o.route.id).orders.push(o);
@@ -706,12 +719,60 @@ export function DashboardClient({ user }: { user: User }) {
     });
 
     return Array.from(routesMap.values()).sort((a, b) => {
+      // 🔥 Сначала сортируем по нашему кастомному порядку
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+      
       const timeA = new Date(a.createdAt || a.updatedAt || 0).getTime();
       const timeB = new Date(b.createdAt || b.updatedAt || 0).getTime();
       if (timeB !== timeA) return timeB - timeA;
       return b.name.localeCompare(a.name);
     });
   }, [orders, filterDate]);
+
+  // ==========================================
+  // 🔥 ФУНКЦИИ ДЛЯ DRAG AND DROP
+  // ==========================================
+  const handleRouteDragStart = (e: React.DragEvent, id: string) => {
+    e.dataTransfer.setData("routeId", id);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleRouteDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleRouteDrop = async (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    const sourceId = e.dataTransfer.getData("routeId");
+    if (!sourceId || sourceId === targetId) return;
+
+    // Клонируем список маршрутов для расчета новых индексов
+    const items = [...existingRoutes];
+    const sourceIdx = items.findIndex(r => r.id === sourceId);
+    const targetIdx = items.findIndex(r => r.id === targetId);
+
+    if (sourceIdx === -1 || targetIdx === -1) return;
+
+    // Переставляем элементы в массиве
+    const [movedItem] = items.splice(sourceIdx, 1);
+    items.splice(targetIdx, 0, movedItem);
+
+    // Рассчитываем новые sortOrder
+    const payload = items.map((r, i) => ({ id: r.id, sortOrder: i }));
+
+    // Отправляем запрос на сохранение нового порядка
+    try {
+      await fetch('/api/routes/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: payload })
+      });
+      fetchData(); // Перезапрашиваем данные с бэкенда для обновления UI
+    } catch (err) {
+      console.error("Ошибка при сортировке маршрутов", err);
+    }
+  };
 
   useEffect(() => {
     if (selectedId && ymapRef.current && !previewGeo && !isBulkMode) {
@@ -1085,58 +1146,73 @@ export function DashboardClient({ user }: { user: User }) {
 
             
             return (
-              <div key={r.id} onClick={() => {
-                setBulkSelectedIds(r.orders.map((o: any) => o.id));
-                setBulkCourier(String(r.courierId));
-                setEditingRouteId(r.id);
-                setRouteTabMode("new");
-                setRouteType(rCourier?.isAuto ? "auto" : "mt");
-              }} style={{ background: "#fafaf8", border: "1px solid #e8e6df", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}>
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    {typeIcon} {r.name}
-                    {isDraft && <span style={{ background: "#fef3c7", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>Черновик</span>}
-
-                    {delaysCount > 0 && (
-                      <span style={{ background: "#fef2f2", color: "#d94040", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #fecaca" }}>
-                        ⚠️ Опаздывает ({delaysCount})
-                      </span>
-                    )}
-
-                    <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 500 }}>изм. {new Date(r.updatedAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</span>
+              <div 
+                key={r.id} 
+                draggable // 🔥 РАЗРЕШАЕМ ПЕРЕТАСКИВАТЬ
+                onDragStart={(e) => handleRouteDragStart(e, r.id)}
+                onDragOver={handleRouteDragOver}
+                onDrop={(e) => handleRouteDrop(e, r.id)}
+                onClick={() => {
+                  setBulkSelectedIds(r.orders.map((o: any) => o.id));
+                  setBulkCourier(String(r.courierId));
+                  setEditingRouteId(r.id);
+                  setRouteTabMode("new");
+                  setRouteType(rCourier?.isAuto ? "auto" : "mt");
+                }} 
+                style={{ background: "#fafaf8", border: "1px solid #e8e6df", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}
+              >
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                  {/* Иконка Drag & Drop */}
+                  <div style={{ fontSize: 16, color: "#d1d5db", cursor: "grab", marginTop: 2, paddingRight: 4 }} title="Потяните для изменения порядка">
+                    ⠿
                   </div>
-                  <div style={{ fontSize: 12, color: "#6b6860", marginTop: 4 }}>
-                    Курьер: {courierName} · {deliveredCount}/{r.orders.length} точек
-                  </div>
+                  
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      {typeIcon} {r.name}
+                      {isDraft && <span style={{ background: "#fef3c7", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>Черновик</span>}
 
-                  {(actualDepartureMs || finishedMs || r.baseArrivalTime || estimatedBaseReturn) && (
-                    <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-
-                      {actualDepartureMs && (
-                        <span style={{ fontSize: 11, background: "#fffbeb", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #fde68a" }}>
-                          📦 Выехал: {new Date(actualDepartureMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
+                      {delaysCount > 0 && (
+                        <span style={{ background: "#fef2f2", color: "#d94040", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #fecaca" }}>
+                          ⚠️ Опаздывает ({delaysCount})
                         </span>
                       )}
 
-                      {r.baseArrivalTime && (
-                        <span style={{ fontSize: 11, background: "#eef3ff", color: "#4a7aff", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #bfdbfe" }}>
-                          🏠 На базе: {r.baseArrivalTime}
-                        </span>
-                      )}
-
-                      {finishedMs && (
-                        <span style={{ fontSize: 11, background: "#ecfdf5", color: "#10b981", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #a7f3d0" }}>
-                          ✅ Завершил: {new Date(finishedMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      )}
-
-                      {estimatedBaseReturn && (
-                        <span style={{ fontSize: 11, background: "#f5f4f0", color: "#a8a49c", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #e8e6df" }}>
-                          🏠 Возврат: {estimatedBaseReturn}</span>
-                      )}
-
+                      <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 500 }}>изм. {new Date(r.updatedAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
-                  )}
+                    <div style={{ fontSize: 12, color: "#6b6860", marginTop: 4 }}>
+                      Курьер: {courierName} · {deliveredCount}/{r.orders.length} точек
+                    </div>
+
+                    {(actualDepartureMs || finishedMs || r.baseArrivalTime || estimatedBaseReturn) && (
+                      <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+
+                        {actualDepartureMs && (
+                          <span style={{ fontSize: 11, background: "#fffbeb", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #fde68a" }}>
+                            📦 Выехал: {new Date(actualDepartureMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
+
+                        {r.baseArrivalTime && (
+                          <span style={{ fontSize: 11, background: "#eef3ff", color: "#4a7aff", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #bfdbfe" }}>
+                            🏠 На базе: {r.baseArrivalTime}
+                          </span>
+                        )}
+
+                        {finishedMs && (
+                          <span style={{ fontSize: 11, background: "#ecfdf5", color: "#10b981", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #a7f3d0" }}>
+                            ✅ Завершил: {new Date(finishedMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
+
+                        {estimatedBaseReturn && (
+                          <span style={{ fontSize: 11, background: "#f5f4f0", color: "#a8a49c", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #e8e6df" }}>
+                            🏠 Возврат: {estimatedBaseReturn}</span>
+                        )}
+
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div style={{ fontSize: 20, color: "#a8a49c" }}>✏️</div>
               </div>

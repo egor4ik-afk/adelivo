@@ -5,7 +5,7 @@ import { NAV_HEIGHT } from "@/components/CourierNav";
 
 interface RouteOrder {
   id: string; externalId: string; crmId: string; address: string; status: string;
-  lat: number | null; lng: number | null; // 🔥 ДОБАВЛЕНЫ КООРДИНАТЫ ДЛЯ ТОЧНЫХ МАРШРУТОВ
+  lat: number | null; lng: number | null;
   name: string | null; 
   slotRaw: string | null; slotFrom: string | null; slotTo: string | null;
   recipientPhone: string | null;
@@ -31,23 +31,24 @@ const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> =
   DELIVERED: { label: "✅ Доставлен", color: "#6b6860", bg: "#f5f4f0" },
 };
 
+const STORE_COORDS = "55.749511,37.596205";
+
 export default function CourierRoutesPage() {
   const [orders, setOrders] = useState<RouteOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedRoutes, setExpandedRoutes] = useState<Record<string, boolean>>({});
   const [showPast, setShowPast] = useState(false);
   const [uploading, setUploading] = useState<Record<string, boolean>>({}); 
-  const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({}); // 🔥 Стейт для спойлеров состава
-  // В начало компонента, рядом с другими useState
-const [collapsedOrders, setCollapsedOrders] = useState<Record<string, boolean>>({});
+  const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
+  const [collapsedOrders, setCollapsedOrders] = useState<Record<string, boolean>>({});
 
-// Функция-хелпер для переключения состояния заказа
-const toggleOrder = (orderId: string) => {
-  setCollapsedOrders(prev => ({
-    ...prev,
-    [orderId]: !prev[orderId]
-  }));
-};
+  const toggleOrder = (orderId: string) => {
+    setCollapsedOrders(prev => ({
+      ...prev,
+      [orderId]: !prev[orderId]
+    }));
+  };
+
   const fetchOrders = async () => {
     try {
       const res = await fetch("/api/courier/my-orders");
@@ -62,12 +63,62 @@ const toggleOrder = (orderId: string) => {
     return () => clearInterval(iv);
   }, []);
 
-  const handleStatusChange = async (id: string, newStatus: string) => {
+  // 🔥 Утилита для запросов с таймаутом
+  const fetchWithTimeout = async (resource: string, options: RequestInit & { timeout?: number }) => {
+    const { timeout = 20000 } = options;
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    const response = await fetch(resource, { ...options, signal: controller.signal });
+    clearTimeout(id);
+    return response;
+  };
+
+  // 🔥 Обновленная смена статуса с ретраями
+  const handleStatusChange = async (id: string, newStatus: string, routeBaseTime?: string | null) => {
+    if (newStatus === "IN_DELIVERY" && routeBaseTime) {
+      const [bH, bM] = routeBaseTime.split(':').map(Number);
+      const now = new Date();
+      const moscowTime = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Moscow" }));
+      const baseTime = new Date(moscowTime.getFullYear(), moscowTime.getMonth(), moscowTime.getDate(), bH, bM, 0, 0);
+      if (baseTime.getTime() - moscowTime.getTime() > 60 * 60 * 1000) {
+        alert("Слишком рано! Отметиться 'В пути' можно не раньше чем за час до установленного времени 'На базе'.");
+        return;
+      }
+    }
+
+    const prevOrders = [...orders];
     setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o));
-    await fetch(`/api/orders/${id}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: newStatus }),
-    });
+
+    let success = false;
+    let attempts = 0;
+    const maxAttempts = newStatus === "DELIVERED" ? 3 : 1; 
+
+    while (attempts < maxAttempts && !success) {
+      attempts++;
+      try {
+        const res = await fetchWithTimeout(`/api/orders/${id}`, {
+          method: "PATCH", 
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: newStatus }),
+          timeout: 20000 
+        });
+
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.error || `Ошибка сервера ${res.status}`);
+        }
+        success = true;
+      } catch (error: any) {
+        if (attempts >= maxAttempts) {
+          setOrders(prevOrders);
+          alert(error.name === "AbortError" 
+            ? "Сервер не ответил за 20 секунд. Проверьте интернет и попробуйте еще раз." 
+            : `Ошибка изменения статуса: ${error.message}`);
+          return;
+        }
+        await new Promise(r => setTimeout(r, 1500)); 
+      }
+    }
   };
 
   const toggleRoute = (routeId: string) => {
@@ -182,7 +233,6 @@ const toggleOrder = (orderId: string) => {
     });
   };
 
-  // 🔥 ПОМОЩНИК ДЛЯ ПОЛУЧЕНИЯ КООРДИНАТ ИЛИ АДРЕСА
   const getRoutePointCoords = (order: RouteOrder) => {
     if (order.lat && order.lng) return `${order.lat},${order.lng}`;
     return encodeURIComponent(order.address);
@@ -213,7 +263,21 @@ const toggleOrder = (orderId: string) => {
       <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 16 }}>
 
         {todayRouteKeys.map((rId) => {
-          const routePoints = todayGrouped[rId].sort((a, b) => (a.routeOrder || 0) - (b.routeOrder || 0));
+          // 🔥 СОРТИРОВКА: В процессе (1), Ожидает (2), Доставлен (3)
+          const getStatusWeight = (status: string) => {
+            if (status === 'IN_DELIVERY') return 1;
+            if (status === 'ASSIGNED' || status === 'NEW') return 2;
+            if (status === 'DELIVERED') return 3;
+            return 4;
+          };
+
+          const routePoints = todayGrouped[rId].sort((a, b) => {
+            const weightA = getStatusWeight(a.status);
+            const weightB = getStatusWeight(b.status);
+            if (weightA !== weightB) return weightA - weightB;
+            return (a.routeOrder || 0) - (b.routeOrder || 0);
+          });
+
           const routeObj = routePoints[0]?.route;
           const routeName = routeObj ? routeObj.name : "Без маршрута";
           const routeLink = routeObj?.link ?? null;
@@ -224,13 +288,9 @@ const toggleOrder = (orderId: string) => {
           const isAllDelivered = delivered === total && total > 0; 
           
           const isExpanded = expandedRoutes[rId] ?? !isAllDelivered;
-
           const routePriceTotal = routePoints.reduce((sum, o) => sum + (o.price || 0), 0);
-
           const firstOrderStatus = routePoints[0]?.status;
           const showAdvice = firstOrderStatus === "ASSIGNED" || firstOrderStatus === "NEW";
-
-          const STORE_COORDS = "55.749511,37.596205";
 
           return (
             <div key={rId} style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
@@ -320,27 +380,48 @@ const toggleOrder = (orderId: string) => {
                   const opComment = rawOp.split("\n").filter(line => !line.startsWith("💡")).join("\n").trim();
                   const isDelivered = o.status === "DELIVERED";
                   const actualTime = formatDeliveredTime(o.deliveredAt || null);
-
                   const cleanPhoneForTg = phone !== "—" ? phone.replace(/[^\d+]/g, "") : "";
                   
+                  // 🔥 ТЕКСТ СМС И ТЕЛЕГРАМ С РАСЧЕТОМ +-10 МИНУТ
                   let timeText = "в ближайшее время";
-                  if (o.eta) {
-                    timeText = `примерно в ${o.eta}`;
+                  if (o.eta && o.eta.includes(":")) {
+                    const [h, m] = o.eta.split(':').map(Number);
+                    if (!isNaN(h) && !isNaN(m)) {
+                      const d = new Date();
+                      d.setHours(h, m, 0, 0);
+                      const start = new Date(d.getTime() - 10 * 60000);
+                      const end = new Date(d.getTime() + 10 * 60000);
+                      const format = (dt: Date) => `${dt.getHours().toString().padStart(2, '0')}:${dt.getMinutes().toString().padStart(2, '0')}`;
+                      
+                      timeText = `${format(start)}-${format(end)} (тайминг +-10 мин от расчетного)`;
+                    } else {
+                      timeText = `${o.eta} (тайминг +-10 мин от расчетного)`;
+                    }
                   } else if (o.slotRaw) {
                     timeText = o.slotRaw;
                   }
                   
-                  const messageText = `Здравствуйте 😊 это курьер с цветочного, буду у вас ${timeText}`;
+                  const messageText = `Здравствуйте! Я курьер сервиса по доставке цветов BUNCH 😊 Примерное время доставки ${timeText}`;
                   const encodedMsg = encodeURIComponent(messageText);
 
-                  // 🔥 КООРДИНАТЫ И МИНИ-МАРШРУТЫ (с mode=routes)
                   const isFirst = idx === 0;
                   const isLast = idx === routePoints.length - 1;
                   const prevAddressStr = isFirst ? STORE_COORDS : getRoutePointCoords(routePoints[idx - 1]);
                   const currentAddressStr = getRoutePointCoords(o);
 
-                  // ОПРЕДЕЛЯЕМ, СВЕРНУТ ЛИ ЗАКАЗ
                   const isCollapsed = collapsedOrders[o.id] !== undefined ? collapsedOrders[o.id] : isDelivered;
+
+                  // ОПРЕДЕЛЯЕМ БЛОКИРОВКУ КНОПКИ "В ПУТИ"
+                  let isTooEarly = false;
+                  if (routeObj?.baseArrivalTime) {
+                    const [bH, bM] = routeObj.baseArrivalTime.split(':').map(Number);
+                    const now = new Date();
+                    const moscowTime = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Moscow" }));
+                    const baseTime = new Date(moscowTime.getFullYear(), moscowTime.getMonth(), moscowTime.getDate(), bH, bM, 0, 0);
+                    isTooEarly = (baseTime.getTime() - moscowTime.getTime()) > 60 * 60 * 1000;
+                  }
+
+                  const borderColor = o.status === "DELIVERED" ? "#10b981" : (o.status === "IN_DELIVERY" ? "#f59e0b" : "#4a7aff");
 
                   return (
                     <div
@@ -350,80 +431,89 @@ const toggleOrder = (orderId: string) => {
                         background: "#fff",
                         borderRadius: 12,
                         border: "1px solid #e8e6df",
+                        borderLeft: `6px solid ${borderColor}`,
                         overflow: "hidden",
-                        boxShadow: isCollapsed ? "none" : "0 2px 8px rgba(0,0,0,0.05)",
+                        boxShadow: isCollapsed ? "0 1px 4px rgba(0,0,0,0.06)" : "0 4px 14px rgba(0,0,0,0.08)",
                         opacity: isDelivered ? 0.7 : 1,
+                        transition: "all 0.2s"
                       }}
                     >
-                      {/* КЛИКАБЕЛЬНЫЙ ЗАГОЛОВОК (ДРОПДАУН) */}
                       <div 
                         onClick={() => toggleOrder(o.id)}
                         style={{ 
                           padding: "12px 16px", 
                           cursor: "pointer",
                           display: "flex", 
-                          alignItems: "center", 
+                          alignItems: "flex-start", 
                           gap: 10,
                           background: isCollapsed ? "#fff" : "#fafaf8" 
                         }}
                       >
                         {o.routeOrder && (
                           <div style={{
-                            width: 22, height: 22, borderRadius: "50%",
+                            width: 24, height: 24, borderRadius: "50%",
                             background: st.bg, color: st.color,
                             display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: 11, fontWeight: 700, flexShrink: 0
+                            fontSize: 12, fontWeight: 700, flexShrink: 0, marginTop: 2
                           }}>
                             {o.routeOrder}
                           </div>
                         )}
                         
-                        <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
                           <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", lineHeight: 1.3 }}>
                             {o.address}
                           </div>
+                          
+                          {(o.name || phone !== "—") && (
+                            <div style={{ fontSize: 13, fontWeight: 600, color: "#4a7aff", display: "flex", flexWrap: "wrap", gap: 4 }}>
+                              {o.name && <span>👤 {o.name}</span>}
+                              {o.name && phone !== "—" && <span>·</span>}
+                              {phone !== "—" && <span>📞 {phone}</span>}
+                            </div>
+                          )}
+
                           <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ color: (isDelivered && actualTime) ? "#10b981" : "inherit" }}>
+                            <span style={{ color: (isDelivered && actualTime) ? "#10b981" : "inherit", fontWeight: 500 }}>
                               {(isDelivered && actualTime) ? `✅ Доставлен в ${actualTime}` : (o.slotRaw ?? "Время не указано")}
                             </span>
                             {o.eta && !isDelivered && (
-                              <span style={{ background: "#eef3ff", color: "#4a7aff", padding: "1px 6px", borderRadius: 4, fontWeight: 600, fontSize: 10 }}>
+                              <span style={{ background: "#eef3ff", color: "#4a7aff", padding: "2px 6px", borderRadius: 4, fontWeight: 700, fontSize: 10 }}>
                                 ~{o.eta}
                               </span>
                             )}
                           </div>
                         </div>
 
-                        <div style={{ fontSize: 12, color: "#a8a49c", transform: isCollapsed ? "none" : "rotate(180deg)", transition: "transform 0.2s" }}>
+                        <div style={{ fontSize: 12, color: "#a8a49c", transform: isCollapsed ? "none" : "rotate(180deg)", transition: "transform 0.2s", marginTop: 4 }}>
                           ▼
                         </div>
                       </div>
 
-                      {/* РАЗВОРАЧИВАЕМЫЕ ДЕТАЛИ ЗАКАЗА */}
                       {!isCollapsed && (
                         <div style={{ padding: "12px 16px 16px", borderTop: "1px solid #f0efe9" }}>
                           
-                          {/* ID и Выбор Статуса */}
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                            <div style={{ fontSize: 10, color: "#a8a49c", fontFamily: "monospace" }}>
+                            <div style={{ fontSize: 10, color: "#a8a49c", fontFamily: "monospace", fontWeight: 600 }}>
                               {o.externalId ?? o.crmId}
                             </div>
                             <select
                               value={o.status}
                               onClick={e => e.stopPropagation()}
-                              onChange={(e) => handleStatusChange(o.id, e.target.value)}
+                              onChange={(e) => handleStatusChange(o.id, e.target.value, routeObj?.baseArrivalTime)}
                               style={{
                                 background: st.bg, color: st.color, border: "none", padding: "6px 10px", borderRadius: 8,
                                 fontSize: 11, fontWeight: 700, outline: "none", cursor: "pointer", WebkitAppearance: "none",
                               }}
                             >
                               <option value="ASSIGNED">Назначен</option>
-                              <option value="IN_DELIVERY">🚀 В пути</option>
+                              <option value="IN_DELIVERY" disabled={isTooEarly}>
+                                {isTooEarly ? "⏳ Рано для статуса В пути" : "🚀 В пути"}
+                              </option>
                               <option value="DELIVERED">✅ Доставлен</option>
                             </select>
                           </div>
 
-                          {/* Ссылки на Яндекс.Карты и Цена */}
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 12 }}>
                             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                               <a 
@@ -450,7 +540,6 @@ const toggleOrder = (orderId: string) => {
                             )}
                           </div>
 
-                          {/* Состав заказа */}
                           {o.items && o.items.trim() && (
                             <div style={{ marginBottom: 10, background: "#fafaf8", borderRadius: 8, padding: 10, border: "1px solid #e8e6df" }}>
                               {(() => {
@@ -491,7 +580,6 @@ const toggleOrder = (orderId: string) => {
                             </div>
                           )}
 
-                          {/* Блок загрузки Фото */}
                           <div style={{ marginBottom: 10 }}>
                             {uploading[o.id] ? (
                               <div style={{ textAlign: "center", padding: "14px", background: "#fafaf8", borderRadius: 8, color: "#a8a49c", fontWeight: 600, fontSize: 13 }}>
@@ -539,56 +627,45 @@ const toggleOrder = (orderId: string) => {
                             )}
                           </div>
 
-                          {/* Блок Получателя */}
+                          {/* Блок Связи и Комментария клиента */}
                           <div style={{ background: "#f5f4f0", borderRadius: 8, padding: 10, marginBottom: opComment ? 8 : 0 }}>
-                            <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 4 }}>
-                              Получатель
-                            </div>
-                            
-                            {o.name && (
-                              <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a18", marginBottom: 4 }}>
-                                👤 {o.name}
+                            {cleanPhoneForTg && (
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: o.comment ? 8 : 0 }}>
+                                <span style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", fontWeight: 600, marginRight: 4 }}>
+                                  Написать:
+                                </span>
+                                <a 
+                                  href={`https://t.me/${cleanPhoneForTg}?text=${encodedMsg}`} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  title="Написать в Telegram"
+                                  style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#2AABEE", width: 28, height: 28, borderRadius: "50%", textDecoration: "none", boxShadow: "0 2px 4px rgba(42, 171, 238, 0.3)" }}
+                                >
+                                  <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff">
+                                    <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z"/>
+                                  </svg>
+                                </a>
+
+                                <a 
+                                  href={`sms:${cleanPhoneForTg}?body=${encodedMsg}`}
+                                  title="Отправить SMS"
+                                  style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#34C759", width: 28, height: 28, borderRadius: "50%", textDecoration: "none", boxShadow: "0 2px 4px rgba(52, 199, 89, 0.3)" }}
+                                >
+                                  <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff">
+                                    <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
+                                  </svg>
+                                </a>
                               </div>
                             )}
 
-                            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                              <div style={{ fontSize: 13, fontWeight: 600 }}>
-                                {phone !== "—"
-                                  ? <a href={`tel:${phone}`} style={{ color: "#4a7aff", textDecoration: "none" }}>📞 {phone}</a>
-                                  : <span style={{ color: "#1a1a18" }}>—</span>}
-                              </div>
-
-                              {cleanPhoneForTg && (
-                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                  <a 
-                                    href={`https://t.me/${cleanPhoneForTg}?text=${encodedMsg}`} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
-                                    title="Написать в Telegram"
-                                    style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#2AABEE", width: 28, height: 28, borderRadius: "50%", textDecoration: "none", boxShadow: "0 2px 4px rgba(42, 171, 238, 0.3)" }}
-                                  >
-                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff">
-                                      <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z"/>
-                                    </svg>
-                                  </a>
-
-                                  <a 
-                                    href={`sms:${cleanPhoneForTg}?body=${encodedMsg}`}
-                                    title="Отправить SMS"
-                                    style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#34C759", width: 28, height: 28, borderRadius: "50%", textDecoration: "none", boxShadow: "0 2px 4px rgba(52, 199, 89, 0.3)" }}
-                                  >
-                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff">
-                                      <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
-                                    </svg>
-                                  </a>
-                                </div>
-                              )}
-                            </div>
-
                             {o.comment && (
-                              <div style={{ fontSize: 12, color: "#d94040", marginTop: 6, fontWeight: 500 }}>
+                              <div style={{ fontSize: 12, color: "#d94040", fontWeight: 600 }}>
                                 ⚠ {o.comment}
                               </div>
+                            )}
+                            
+                            {!cleanPhoneForTg && !o.comment && (
+                              <div style={{ fontSize: 11, color: "#a8a49c" }}>Дополнительной информации нет</div>
                             )}
                           </div>
 

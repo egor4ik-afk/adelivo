@@ -217,19 +217,20 @@ model NotificationLog {
 }
 
 model Route {
-  id              String   @id @default(uuid())
-  name            String   
-  link            String?  @db.Text 
-  date            String   
-  departureAdvice String?
-  courierId       Int
-  courier         Courier  @relation(fields: [courierId], references: [id])
-  baseArrivalTime String?  // 🔥 ДОБАВЛЕНО: Время, когда курьер планирует быть на базе
-  estimatedReturnTime String?  // 🔥 НОВОЕ ПОЛЕ: Плановое прибытие обратно на базу
-  orders    Order[]
-  isDraft         Boolean  @default(false) // 🔥 ДОБАВЛЕНО
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                  String   @id @default(uuid())
+  name                String   
+  link                String?  @db.Text 
+  date                String   
+  departureAdvice     String?
+  courierId           Int
+  courier             Courier  @relation(fields: [courierId], references: [id])
+  baseArrivalTime     String?
+  estimatedReturnTime String?
+  sortOrder           Int      @default(0)
+  orders              Order[]
+  isDraft             Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }
 
 model Conversation {

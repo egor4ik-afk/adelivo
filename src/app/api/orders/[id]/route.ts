@@ -21,6 +21,27 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     const order = await prisma.order.findUnique({ where: { id }, include: { route: true } });
     if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+    // 🔥 ЗАЩИТА: Нельзя нажать "В пути" раньше чем за час до базы
+    if (body.status === "IN_DELIVERY" && order.route?.baseArrivalTime) {
+      const [baseH, baseM] = order.route?.baseArrivalTime.split(':').map(Number);
+      const now = new Date();
+      const moscowNow = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Moscow" }));
+      
+      const baseTimeMs = new Date(
+        moscowNow.getFullYear(), moscowNow.getMonth(), moscowNow.getDate(), 
+        baseH, baseM, 0, 0
+      ).getTime();
+      
+      // Считаем разницу в часах
+      const diffHours = (baseTimeMs - moscowNow.getTime()) / (1000 * 60 * 60);
+      
+      if (diffHours > 1) {
+        return NextResponse.json({ 
+          error: "Слишком рано! Начать маршрут можно не раньше чем за час до прибытия на базу." 
+        }, { status: 400 });
+      }
+    }
+
     const updateData: any = {};
 
     // ОБРАБОТКА ДАТЫ ДОСТАВКИ
