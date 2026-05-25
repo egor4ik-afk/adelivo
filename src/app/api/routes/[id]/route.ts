@@ -2,16 +2,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { notify } from "@/lib/notifications"; // 🔥 ДОБАВЛЕНО: импорт уведомлений
 
 export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const user = await getSession();
+  const user = await getSession(); // 🔥 ВОЗВРАЩАЕМ КАК БЫЛО
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const { id } = await context.params;
     const body = await req.json();
 
-    // 1. Получаем старый маршрут вместе с данными курьера (для уведомления)
     const oldRoute = await prisma.route.findUnique({
       where: { id },
       include: { courier: true }
@@ -21,28 +21,36 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       return NextResponse.json({ error: "Route not found" }, { status: 404 });
     }
 
-    // 2. Обновляем данные маршрута в БД
     const updatedRoute = await prisma.route.update({
       where: { id },
       data: { 
         baseArrivalTime: body.baseArrivalTime,
-        // 🔥 ДОБАВЛЕНО: теперь поле сохраняется при обновлении маршрута
         estimatedReturnTime: body.estimatedReturnTime 
       }
     });
 
-    // 3. Отправляем уведомление в Telegram, если время действительно поменялось
+    // Отправляем уведомления, если время прибытия на базу было указано впервые или изменено
     if (body.baseArrivalTime && oldRoute.baseArrivalTime !== body.baseArrivalTime) {
+      
+      // 🔥 1. ПУШ ОПЕРАТОРАМ: Маршрут принят, время указано
+      await notify({
+        type: "route.accepted",
+        routeName: oldRoute.name,
+        courierName: oldRoute.courier?.fullName || "Курьер",
+        baseTime: body.baseArrivalTime
+      }).catch(e => console.error("[PUSH] Ошибка отправки:", e));
+
+      // 🔥 2. УВЕДОМЛЕНИЕ В TELEGRAM
       const tgToken = process.env.TELEGRAM_BOT_TOKEN;
       const tgChat  = process.env.TELEGRAM_ADMIN_CHAT_ID;
       
       if (tgToken && tgChat) {
         const msg = [
-          `🏠 *Изменено время прибытия на базу*`,
+          `🏠 *Курьер принял маршрут и указал время на базе*`,
           ``,
           `👤 *Курьер:* ${oldRoute.courier?.fullName || "Неизвестен"}`,
           `🛣 *Маршрут:* ${oldRoute.name || "Без названия"}`,
-          `🕒 *Новое время:* ${body.baseArrivalTime}`
+          `🕒 *Время прибытия:* ${body.baseArrivalTime}`
         ].join("\n");
 
         fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
@@ -52,9 +60,6 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         }).catch(e => console.error("[TG] Ошибка уведомления (база):", e));
       }
     }
-
-    // 💡 Здесь в будущем можно вызывать функцию полного перерасчета маршрута (Яндекс), 
-    // так как стартовое время изменилось!
 
     return NextResponse.json(updatedRoute);
   } catch (error) {

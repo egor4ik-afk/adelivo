@@ -8,10 +8,11 @@ export type NotificationEvent =
   | { type: "order.updated"; order: OrderPayload; previousStatus?: string; changes?: any }
   | { type: "address.invalid"; orders: InvalidOrderPayload[] }
   | { type: "route.assigned"; userId: string; routeId: string; pointsCount: number }
+  | { type: "route.accepted"; routeName: string; courierName: string; baseTime: string } // 🔥 ВОТ ЭТА СТРОКА
   | { type: "custom"; userId: string; title: string; body: string; url?: string }
   | { type: "chat.private"; senderName: string; text: string; targetUserId: string; conversationId: string }
   | { type: "chat.global"; senderName: string; text: string; senderId: string };
-
+  
 interface OrderPayload {
   id: string;
   crmId: string;

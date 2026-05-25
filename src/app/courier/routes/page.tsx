@@ -288,6 +288,17 @@ export default function CourierRoutesPage() {
           const isAllDelivered = delivered === total && total > 0; 
           
           const isExpanded = expandedRoutes[rId] ?? !isAllDelivered;
+          
+          // 🔥 ДОБАВЛЕНО: Запрос времени при разворачивании маршрута
+          const onRouteHeaderClick = async () => {
+            if (!isExpanded && !routeObj?.baseArrivalTime) {
+              const inputTime = window.prompt("Укажите время прибытия на базу (например, 14:30):", "");
+              if (inputTime) {
+                await handleBaseTimeChange(rId, inputTime); // Это вызовет PATCH и отправит пуш
+              }
+            }
+            toggleRoute(rId); // Разворачиваем карточку в любом случае
+          };
           const routePriceTotal = routePoints.reduce((sum, o) => sum + (o.price || 0), 0);
           const firstOrderStatus = routePoints[0]?.status;
           const showAdvice = firstOrderStatus === "ASSIGNED" || firstOrderStatus === "NEW";
@@ -295,8 +306,8 @@ export default function CourierRoutesPage() {
           return (
             <div key={rId} style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
 
-              <div style={{ padding: "14px 16px", background: "#fafaf8", borderBottom: isExpanded ? "1px solid #e8e6df" : "none" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", cursor: "pointer", marginBottom: isExpanded ? 12 : 0 }} onClick={() => toggleRoute(rId)}>
+<div style={{ padding: "14px 16px", background: "#fafaf8", borderBottom: isExpanded ? "1px solid #e8e6df" : "none" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", cursor: "pointer", marginBottom: isExpanded ? 12 : 0 }} onClick={onRouteHeaderClick}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18" }}>
                       Маршрут {routeName} <span style={{fontSize: 12, color: "#a8a49c", fontWeight: 500}}>({routePriceTotal} ₽)</span>
