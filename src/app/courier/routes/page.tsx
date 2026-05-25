@@ -393,9 +393,9 @@ export default function CourierRoutesPage() {
                       const end = new Date(d.getTime() + 10 * 60000);
                       const format = (dt: Date) => `${dt.getHours().toString().padStart(2, '0')}:${dt.getMinutes().toString().padStart(2, '0')}`;
                       
-                      timeText = `${format(start)}-${format(end)} (тайминг +-10 мин от расчетного)`;
+                      timeText = `${format(start)}-${format(end)}`; // ← Оставили только интервал (например, 10:20-10:40)
                     } else {
-                      timeText = `${o.eta} (тайминг +-10 мин от расчетного)`;
+                      timeText = `${o.eta}`; // ← И здесь только время, если оно пришло не в стандартном формате
                     }
                   } else if (o.slotRaw) {
                     timeText = o.slotRaw;
@@ -465,11 +465,46 @@ export default function CourierRoutesPage() {
                             {o.address}
                           </div>
                           
+                          {/* 🔥 ПОЛУЧАТЕЛЬ И КРУПНЫЕ КНОПКИ НА ОДНОЙ ЛИНИИ */}
                           {(o.name || phone !== "—") && (
-                            <div style={{ fontSize: 13, fontWeight: 600, color: "#4a7aff", display: "flex", flexWrap: "wrap", gap: 4 }}>
-                              {o.name && <span>👤 {o.name}</span>}
-                              {o.name && phone !== "—" && <span>·</span>}
-                              {phone !== "—" && <span>📞 {phone}</span>}
+                            <div style={{ fontSize: 13, fontWeight: 600, color: "#4a7aff", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 2 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                {o.name && <span>👤 {o.name}</span>}
+                                {o.name && phone !== "—" && <span style={{ color: "#a8a49c" }}>·</span>}
+                                {phone !== "—" && (
+                                  <a href={`tel:${phone}`} onClick={e => e.stopPropagation()} style={{ color: "#4a7aff", textDecoration: "none" }}>
+                                    📞 {phone}
+                                  </a>
+                                )}
+                              </div>
+
+                              {cleanPhoneForTg && (
+                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                  <a 
+                                    href={`https://t.me/${cleanPhoneForTg}?text=${encodedMsg}`} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    onClick={e => e.stopPropagation()} 
+                                    title="Написать в Telegram"
+                                    style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#2AABEE", width: 30, height: 30, borderRadius: "50%", textDecoration: "none", boxShadow: "0 2px 4px rgba(42, 171, 238, 0.3)" }}
+                                  >
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="#ffffff">
+                                      <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z"/>
+                                    </svg>
+                                  </a>
+
+                                  <a 
+                                    href={`sms:${cleanPhoneForTg}?body=${encodedMsg}`}
+                                    title="Отправить SMS"
+                                    onClick={e => e.stopPropagation()} 
+                                    style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#34C759", width: 30, height: 30, borderRadius: "50%", textDecoration: "none", boxShadow: "0 2px 4px rgba(52, 199, 89, 0.3)" }}
+                                  >
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="#ffffff">
+                                      <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
+                                    </svg>
+                                  </a>
+                                </div>
+                              )}
                             </div>
                           )}
 
@@ -627,48 +662,16 @@ export default function CourierRoutesPage() {
                             )}
                           </div>
 
-                          {/* Блок Связи и Комментария клиента */}
-                          <div style={{ background: "#f5f4f0", borderRadius: 8, padding: 10, marginBottom: opComment ? 8 : 0 }}>
-                            {cleanPhoneForTg && (
-                              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: o.comment ? 8 : 0 }}>
-                                <span style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", fontWeight: 600, marginRight: 4 }}>
-                                  Написать:
-                                </span>
-                                <a 
-                                  href={`https://t.me/${cleanPhoneForTg}?text=${encodedMsg}`} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  title="Написать в Telegram"
-                                  style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#2AABEE", width: 28, height: 28, borderRadius: "50%", textDecoration: "none", boxShadow: "0 2px 4px rgba(42, 171, 238, 0.3)" }}
-                                >
-                                  <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff">
-                                    <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z"/>
-                                  </svg>
-                                </a>
-
-                                <a 
-                                  href={`sms:${cleanPhoneForTg}?body=${encodedMsg}`}
-                                  title="Отправить SMS"
-                                  style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#34C759", width: 28, height: 28, borderRadius: "50%", textDecoration: "none", boxShadow: "0 2px 4px rgba(52, 199, 89, 0.3)" }}
-                                >
-                                  <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff">
-                                    <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
-                                  </svg>
-                                </a>
-                              </div>
-                            )}
-
-                            {o.comment && (
+                          {/* Комментарий клиента */}
+                          {o.comment && (
+                            <div style={{ background: "#fdf8f6", borderRadius: 8, padding: 10, border: "1px solid #fce8e3", marginBottom: opComment ? 8 : 0 }}>
                               <div style={{ fontSize: 12, color: "#d94040", fontWeight: 600 }}>
                                 ⚠ {o.comment}
                               </div>
-                            )}
-                            
-                            {!cleanPhoneForTg && !o.comment && (
-                              <div style={{ fontSize: 11, color: "#a8a49c" }}>Дополнительной информации нет</div>
-                            )}
-                          </div>
+                            </div>
+                          )}
 
+                          {/* Заметка оператора */}
                           {opComment && (
                             <div style={{
                               background: "#fffbeb", borderRadius: 8, padding: 10,
