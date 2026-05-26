@@ -73,7 +73,7 @@ export default function CourierRoutesPage() {
     return response;
   };
 
-  // 🔥 Обновленная смена статуса с ретраями
+  // 🔥 Обновленная смена статуса с ретраями и защитой времени
   const handleStatusChange = async (id: string, newStatus: string, routeBaseTime?: string | null) => {
     if (newStatus === "IN_DELIVERY" && routeBaseTime) {
       const [bH, bM] = routeBaseTime.split(':').map(Number);
@@ -210,7 +210,28 @@ export default function CourierRoutesPage() {
     todayGrouped[key].push(o);
   });
   
+  // 🔥 НОВАЯ СОРТИРОВКА САМИХ МАРШРУТОВ ПО СТАТУСУ
+  const getRouteStatusWeight = (rId: string) => {
+    const points = todayGrouped[rId];
+    if (!points || points.length === 0) return 4;
+
+    const hasInDelivery = points.some(p => p.status === 'IN_DELIVERY');
+    if (hasInDelivery) return 1;
+
+    const allDelivered = points.every(p => p.status === 'DELIVERED');
+    if (allDelivered) return 3;
+
+    return 2;
+  };
+
   const todayRouteKeys = Object.keys(todayGrouped).sort((a, b) => {
+    const weightA = getRouteStatusWeight(a);
+    const weightB = getRouteStatusWeight(b);
+    
+    if (weightA !== weightB) {
+      return weightA - weightB; 
+    }
+
     const routeA = todayGrouped[a][0]?.route;
     const routeB = todayGrouped[b][0]?.route;
     const timeA = routeA?.createdAt ? new Date(routeA.createdAt).getTime() : 0;
@@ -263,20 +284,8 @@ export default function CourierRoutesPage() {
       <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 16 }}>
 
         {todayRouteKeys.map((rId) => {
-          // 🔥 СОРТИРОВКА: В процессе (1), Ожидает (2), Доставлен (3)
-          const getStatusWeight = (status: string) => {
-            if (status === 'IN_DELIVERY') return 1;
-            if (status === 'ASSIGNED' || status === 'NEW') return 2;
-            if (status === 'DELIVERED') return 3;
-            return 4;
-          };
-
-          const routePoints = todayGrouped[rId].sort((a, b) => {
-            const weightA = getStatusWeight(a.status);
-            const weightB = getStatusWeight(b.status);
-            if (weightA !== weightB) return weightA - weightB;
-            return (a.routeOrder || 0) - (b.routeOrder || 0);
-          });
+          // 🔥 СТРОГАЯ СОРТИРОВКА ТОЧЕК: Только по физическому порядку маршрута
+          const routePoints = todayGrouped[rId].sort((a, b) => (a.routeOrder || 0) - (b.routeOrder || 0));
 
           const routeObj = routePoints[0]?.route;
           const routeName = routeObj ? routeObj.name : "Без маршрута";
@@ -289,16 +298,17 @@ export default function CourierRoutesPage() {
           
           const isExpanded = expandedRoutes[rId] ?? !isAllDelivered;
           
-          // 🔥 ДОБАВЛЕНО: Запрос времени при разворачивании маршрута
+          // 🔥 ЛОГИКА: Запрос времени при разворачивании маршрута
           const onRouteHeaderClick = async () => {
             if (!isExpanded && !routeObj?.baseArrivalTime) {
               const inputTime = window.prompt("Укажите время прибытия на базу (например, 14:30):", "");
               if (inputTime) {
-                await handleBaseTimeChange(rId, inputTime); // Это вызовет PATCH и отправит пуш
+                await handleBaseTimeChange(rId, inputTime); 
               }
             }
-            toggleRoute(rId); // Разворачиваем карточку в любом случае
+            toggleRoute(rId); 
           };
+
           const routePriceTotal = routePoints.reduce((sum, o) => sum + (o.price || 0), 0);
           const firstOrderStatus = routePoints[0]?.status;
           const showAdvice = firstOrderStatus === "ASSIGNED" || firstOrderStatus === "NEW";
@@ -306,7 +316,7 @@ export default function CourierRoutesPage() {
           return (
             <div key={rId} style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
 
-<div style={{ padding: "14px 16px", background: "#fafaf8", borderBottom: isExpanded ? "1px solid #e8e6df" : "none" }}>
+              <div style={{ padding: "14px 16px", background: "#fafaf8", borderBottom: isExpanded ? "1px solid #e8e6df" : "none" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", cursor: "pointer", marginBottom: isExpanded ? 12 : 0 }} onClick={onRouteHeaderClick}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18" }}>
@@ -393,21 +403,10 @@ export default function CourierRoutesPage() {
                   const actualTime = formatDeliveredTime(o.deliveredAt || null);
                   const cleanPhoneForTg = phone !== "—" ? phone.replace(/[^\d+]/g, "") : "";
                   
-                  // 🔥 ТЕКСТ СМС И ТЕЛЕГРАМ С РАСЧЕТОМ +-10 МИНУТ
+                  // 🔥 ПРОСТОЙ ТЕКСТ ДЛЯ СМС БЕЗ 10 МИНУТ
                   let timeText = "в ближайшее время";
-                  if (o.eta && o.eta.includes(":")) {
-                    const [h, m] = o.eta.split(':').map(Number);
-                    if (!isNaN(h) && !isNaN(m)) {
-                      const d = new Date();
-                      d.setHours(h, m, 0, 0);
-                      const start = new Date(d.getTime() - 10 * 60000);
-                      const end = new Date(d.getTime() + 10 * 60000);
-                      const format = (dt: Date) => `${dt.getHours().toString().padStart(2, '0')}:${dt.getMinutes().toString().padStart(2, '0')}`;
-                      
-                      timeText = `${format(start)}-${format(end)}`; // ← Оставили только интервал (например, 10:20-10:40)
-                    } else {
-                      timeText = `${o.eta}`; // ← И здесь только время, если оно пришло не в стандартном формате
-                    }
+                  if (o.eta) {
+                    timeText = `${o.eta}`;
                   } else if (o.slotRaw) {
                     timeText = o.slotRaw;
                   }
@@ -476,7 +475,7 @@ export default function CourierRoutesPage() {
                             {o.address}
                           </div>
                           
-                          {/* 🔥 ПОЛУЧАТЕЛЬ И КРУПНЫЕ КНОПКИ НА ОДНОЙ ЛИНИИ */}
+                          {/* 🔥 ПОЛУЧАТЕЛЬ И КРУПНЫЕ КНОПКИ (30px) НА ОДНОЙ ЛИНИИ */}
                           {(o.name || phone !== "—") && (
                             <div style={{ fontSize: 13, fontWeight: 600, color: "#4a7aff", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 2 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -673,7 +672,6 @@ export default function CourierRoutesPage() {
                             )}
                           </div>
 
-                          {/* Комментарий клиента */}
                           {o.comment && (
                             <div style={{ background: "#fdf8f6", borderRadius: 8, padding: 10, border: "1px solid #fce8e3", marginBottom: opComment ? 8 : 0 }}>
                               <div style={{ fontSize: 12, color: "#d94040", fontWeight: 600 }}>
@@ -682,7 +680,6 @@ export default function CourierRoutesPage() {
                             </div>
                           )}
 
-                          {/* Заметка оператора */}
                           {opComment && (
                             <div style={{
                               background: "#fffbeb", borderRadius: 8, padding: 10,
