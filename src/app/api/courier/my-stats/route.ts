@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 
-// Помощник для перевода Date в строку YYYY-MM-DD
 function toYMD(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
@@ -15,13 +14,13 @@ export async function GET(req: Request) {
     const courier = await prisma.courier.findFirst({ where: { email: session.email } });
     if (!courier) return NextResponse.json({ error: "Courier not found" }, { status: 404 });
 
-    // 1. Текущая неделя (считаем из Order, так как они еще не удалены)
+    // 1. Текущая неделя (из Order)
     const today = new Date();
     const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
     const monday = new Date(today);
     monday.setDate(today.getDate() - dayOfWeek + 1);
     const mondayStr = toYMD(monday);
-
+    
     const weeklyOrders = await prisma.order.findMany({
       where: { 
         courierId: courier.id, 
@@ -33,11 +32,10 @@ export async function GET(req: Request) {
     const weekCount = weeklyOrders.length;
     const weekTotal = Math.round(weeklyOrders.reduce((sum, o) => sum + (o.price || 0), 0) * 1.06);
 
-    // 2. История выплат (CourierPayment) - здесь лежат данные после твоего скрипта
+    // 2. История (из CourierPayment)
     const payments = await prisma.courierPayment.findMany({
       where: { courierId: courier.id },
-      orderBy: { date: 'desc' },
-      take: 20 // Берем последние 20 смен
+      orderBy: { date: 'desc' }
     });
 
     const historyTotal = payments.reduce((sum, p) => sum + p.amount, 0);
@@ -50,7 +48,7 @@ export async function GET(req: Request) {
       allTimeTotal: historyTotal + weekTotal,
       konsolPhone: courier.konsolPhone,
       isLinked: !!courier.konsolContractorId,
-      // 🔥 Теперь фронтенд получит массив pastShifts и красиво его отрисует
+      // Возвращаем историю для фронта
       pastShifts: payments.map(p => ({
         id: p.id,
         date: p.date,

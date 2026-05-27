@@ -84,7 +84,7 @@ export function CouriersClient({ user }: { user: any }) {
   const [routesDate, setRoutesDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }));
   const [expandedCouriers, setExpandedCouriers] = useState<Record<number, boolean>>({});
 
-  const [showInactiveOnly, setShowInactiveOnly] = useState(false);
+  const [showAll, setShowAll] = useState(false);
 
   const scheduleScrollRef = useRef<HTMLDivElement>(null);
 
@@ -187,7 +187,7 @@ export function CouriersClient({ user }: { user: any }) {
   };
 
   const toggleShift = async (courierId: number, date: string, isWorking: boolean) => {
-    setCouriers(prev => prev.map(c => c.id === courierId ? { ...c, shifts: isWorking ? [...c.shifts, { id: "temp", date, startTime: "10:00", endTime: "22:00", priority: 3 }] : c.shifts.filter(s => s.date !== date) } : c));
+    setCouriers(prev => prev.map(c => c.id === courierId ? { ...c, shifts: isWorking ? [...c.shifts, { id: "temp", date, startTime: "10:00", endTime: "22:00" }] : c.shifts.filter(s => s.date !== date) } : c));
     await fetch("/api/couriers/shifts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ courierId, date, isWorking, startTime: "10:00", endTime: "22:00", priority: 3 }) });
   };
 
@@ -240,11 +240,10 @@ export function CouriersClient({ user }: { user: any }) {
   };
 
   const filtered = couriers.filter(c => {
-    if (!c.isActive) return false;
     if (search && !c.fullName.toLowerCase().includes(search.toLowerCase())) return false;
-    const isInactive = c.shifts?.length === 0;
-    if (showInactiveOnly) return isInactive;
-    return true;
+    const hasShift = (c as any).shifts && (c as any).shifts.length > 0;
+    if (showAll) return true;
+    return hasShift;
   });
 
   const calcSortedAndFiltered = [...filtered].filter(c => {
@@ -554,15 +553,15 @@ export function CouriersClient({ user }: { user: any }) {
               </button>
             )}
             <button 
-              onClick={() => setShowInactiveOnly(!showInactiveOnly)}
+              onClick={() => setShowAll(!showAll)}
               style={{
-                background: showInactiveOnly ? "#fef2f2" : "#fff",
-                border: `1px solid ${showInactiveOnly ? "#d94040" : "#e8e6df"}`,
-                color: showInactiveOnly ? "#d94040" : "#6b6860",
-                padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600
+                background: showAll ? "#eef3ff" : "#fff",
+                border: `1px solid ${showAll ? "#4a7aff" : "#e8e6df"}`,
+                padding: "8px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700,
+                color: showAll ? "#4a7aff" : "#6b6860", cursor: "pointer"
               }}
             >
-              {showInactiveOnly ? "Показать всех" : "Только неактивные"}
+              {showAll ? "✅ Только активные" : "👥 Показать всех"}
             </button>
             <input type="text" placeholder="Поиск курьера..." value={search} onChange={e => setSearch(e.target.value)} style={{ ...s.input, width: isMobile ? "100%" : "auto" }} />
             <button style={{ ...s.syncBtn, width: isMobile ? "100%" : "auto" }} onClick={() => fetchAll()}>🔄 Обновить</button>
