@@ -84,6 +84,8 @@ export function CouriersClient({ user }: { user: any }) {
   const [routesDate, setRoutesDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }));
   const [expandedCouriers, setExpandedCouriers] = useState<Record<number, boolean>>({});
 
+  const [showInactiveOnly, setShowInactiveOnly] = useState(false);
+
   const scheduleScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -240,6 +242,8 @@ export function CouriersClient({ user }: { user: any }) {
   const filtered = couriers.filter(c => {
     if (!c.isActive) return false;
     if (search && !c.fullName.toLowerCase().includes(search.toLowerCase())) return false;
+    const isInactive = c.shifts?.length === 0;
+    if (showInactiveOnly) return isInactive;
     return true;
   });
 
@@ -549,6 +553,17 @@ export function CouriersClient({ user }: { user: any }) {
                 ✅ Оплатить локально ({selectedPays.length})
               </button>
             )}
+            <button 
+              onClick={() => setShowInactiveOnly(!showInactiveOnly)}
+              style={{
+                background: showInactiveOnly ? "#fef2f2" : "#fff",
+                border: `1px solid ${showInactiveOnly ? "#d94040" : "#e8e6df"}`,
+                color: showInactiveOnly ? "#d94040" : "#6b6860",
+                padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600
+              }}
+            >
+              {showInactiveOnly ? "Показать всех" : "Только неактивные"}
+            </button>
             <input type="text" placeholder="Поиск курьера..." value={search} onChange={e => setSearch(e.target.value)} style={{ ...s.input, width: isMobile ? "100%" : "auto" }} />
             <button style={{ ...s.syncBtn, width: isMobile ? "100%" : "auto" }} onClick={() => fetchAll()}>🔄 Обновить</button>
           </div>

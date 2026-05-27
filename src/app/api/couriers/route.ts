@@ -7,8 +7,19 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+    const dateStr = twoWeeksAgo.toISOString().split('T')[0];
+
     const couriers = await prisma.courier.findMany({
-      include: { shifts: true, payments: true, routes: true },
+      include: {
+        shifts: {
+          where: { date: { gte: dateStr } },
+          take: 1 // Достаточно знать, что хоть одна смена была
+        },
+        payments: true,
+        routes: true,
+      },
       orderBy: { fullName: "asc" },
     });
 
