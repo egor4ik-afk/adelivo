@@ -72,7 +72,10 @@ export function CouriersClient({ user }: { user: any }) {
     const d = new Date(scheduleWeekStart); d.setDate(d.getDate() + i); return d.toISOString().split("T")[0];
   });
   const [sortDate, setSortDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }));
-  const [sortMode, setSortMode] = useState<"orders" | "rating" | "alpha">("orders");
+  const [sortMode, setSortMode] = useState<"orders" | "rating" | "alpha">(() => {
+    if (typeof window === "undefined") return "orders";
+    return (localStorage.getItem("courierSortMode") as "orders" | "rating" | "alpha") || "orders";
+  });
 
   const [weekStart, setWeekStart] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() - (d.getDay() === 0 ? 6 : d.getDay() - 1));
@@ -597,12 +600,15 @@ export function CouriersClient({ user }: { user: any }) {
 
               {/* Переключатель сортировки */}
               <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 600 }}>Сортировка:</span>
-              {(["orders", "rating", "alpha"] as const).map(mode => {
+              {(new (["orders", "rating", "alpha"]) as const).map(mode => {
                 const labels = { orders: "📦 Заказы", rating: "⭐ Рейтинг", alpha: "🔤 Алфавит" };
                 return (
                   <button
                     key={mode}
-                    onClick={() => setSortMode(mode)}
+                    onClick={() => {
+                      setSortMode(mode);
+                      localStorage.setItem("courierSortMode", mode);
+                    }}
                     style={{
                       padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600,
                       cursor: "pointer", border: "1px solid",
