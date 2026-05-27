@@ -16,19 +16,22 @@ const ALLOWED_TOPICS = [4, 5];
 async function sendNotificationToAdmin(text: string) {
   const token = TELEGRAM_BOT_TOKEN?.replace(/\s+/g, "")?.replace(/^bot/i, "");
   const chatId = ADMIN_CHAT_ID?.replace(/\s+/g, "");
+  const proxyUrl = process.env.PROXY_URL; // 🔥 Достаем URL прокси
 
-  if (!token || !chatId) {
-    console.log("⚠️ Пропуск отправки: нет токена или ID чата");
+  if (!token || !chatId || !proxyUrl) {
+    console.log("⚠️ Пропуск отправки: нет токена, ID чата или PROXY_URL");
     return;
   }
 
-  const url = `https://api.telegram.org/bot${token}/sendMessage`;
-
   try {
-    await axios.post(url, { chat_id: chatId, text }, { timeout: 5000 });
+    // 🔥 Стучимся в твой прокси-сервер
+    await axios.post(proxyUrl, {
+      token: token,
+      method: "sendMessage",
+      payload: { chat_id: chatId, text }
+    }, { timeout: 5000 });
   } catch (err: any) {
-    // Улучшили логирование ошибки ТГ, чтобы видеть точную причину
-    console.error("❌ Ошибка отправки уведомления админу в ТГ:", JSON.stringify(err?.response?.data || err.message));
+    console.error("❌ Ошибка отправки уведомления админу в ТГ через прокси:", JSON.stringify(err?.response?.data || err.message));
   }
 }
 

@@ -96,12 +96,19 @@ export async function GET(request: Request) {
           `🏃 *Курьер:* ${order.courier || "Не назначен"}`
         ].join("\n");
 
-        // Отправляем в ТГ
-        await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chat_id: tgChat, text: msg, parse_mode: "Markdown" }),
-        });
+        const proxyUrl = process.env.PROXY_URL;
+        if (proxyUrl) {
+          // 🔥 Отправляем через ПРОКСИ
+          await fetch(proxyUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+              token: tgToken,
+              method: "sendMessage",
+              payload: { chat_id: tgChat, text: msg, parse_mode: "Markdown" }
+            }),
+          });
+        }
 
         // Ставим галочку, что уведомили
         await prisma.order.update({

@@ -40,11 +40,12 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         baseTime: body.baseArrivalTime
       }).catch(e => console.error("[PUSH] Ошибка отправки:", e));
 
-      // 🔥 2. УВЕДОМЛЕНИЕ В TELEGRAM
+      // 🔥 2. УВЕДОМЛЕНИЕ В TELEGRAM ЧЕРЕЗ ПРОКСИ
       const tgToken = process.env.TELEGRAM_BOT_TOKEN;
       const tgChat  = process.env.TELEGRAM_ADMIN_CHAT_ID;
+      const proxyUrl = process.env.PROXY_URL; // 🔥 URL прокси
       
-      if (tgToken && tgChat) {
+      if (proxyUrl && tgToken && tgChat) {
         const msg = [
           `🏠 *Курьер принял маршрут и указал время на базе*`,
           ``,
@@ -53,10 +54,14 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
           `🕒 *Время прибытия:* ${body.baseArrivalTime}`
         ].join("\n");
 
-        fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+        fetch(proxyUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chat_id: tgChat, text: msg, parse_mode: "Markdown" }),
+          body: JSON.stringify({ 
+            token: tgToken,
+            method: "sendMessage",
+            payload: { chat_id: tgChat, text: msg, parse_mode: "Markdown" }
+          }),
         }).catch(e => console.error("[TG] Ошибка уведомления (база):", e));
       }
     }
