@@ -88,7 +88,7 @@ export function CouriersClient({ user }: { user: any }) {
   const [routesDate, setRoutesDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }));
   const [expandedCouriers, setExpandedCouriers] = useState<Record<number, boolean>>({});
 
-  const [onlyActive, setOnlyActive] = useState(false);
+  const [onlyActive, setOnlyActive] = useState(true);
 
   const scheduleScrollRef = useRef<HTMLDivElement>(null);
 
