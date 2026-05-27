@@ -600,7 +600,7 @@ export function CouriersClient({ user }: { user: any }) {
 
               {/* Переключатель сортировки */}
               <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 600 }}>Сортировка:</span>
-              {(new (["orders", "rating", "alpha"]) as const).map(mode => {
+              {(["orders", "rating", "alpha"] as const).map(mode => {
                 const labels = { orders: "📦 Заказы", rating: "⭐ Рейтинг", alpha: "🔤 Алфавит" };
                 return (
                   <button
