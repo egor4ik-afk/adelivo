@@ -33,6 +33,30 @@ const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> =
 
 const STORE_COORDS = "55.749511,37.596205";
 
+// 🔥 ХЕЛПЕР ДЛЯ РАСЧЕТА РЕКОМЕНДОВАННОГО ВРЕМЕНИ
+const getAdviceText = (route: any, firstSlot: string | null) => {
+  try {
+    let baseTimeStr = null;
+    if (route?.departureAdvice) {
+      const match = route.departureAdvice.match(/до (\d{2}:\d{2})/);
+      if (match) baseTimeStr = match[1];
+    } 
+    if (!baseTimeStr && firstSlot) {
+      const match = firstSlot.match(/(\d{2}:\d{2})/);
+      if (match) baseTimeStr = match[1];
+    }
+
+    if (baseTimeStr) {
+      const [h, m] = baseTimeStr.split(':').map(Number);
+      const d1 = new Date(); d1.setHours(h - 1, m, 0);
+      const d2 = new Date(); d2.setHours(h, m + 30, 0);
+      const fmt = (d: Date) => `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+      return `Желательно с ${fmt(d1)} до ${fmt(d2)}`;
+    }
+  } catch(e) {}
+  return "Укажите примерное время";
+};
+
 export default function CourierRoutesPage() {
   const [orders, setOrders] = useState<RouteOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,6 +65,10 @@ export default function CourierRoutesPage() {
   const [uploading, setUploading] = useState<Record<string, boolean>>({}); 
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
   const [collapsedOrders, setCollapsedOrders] = useState<Record<string, boolean>>({});
+
+  // 🔥 СТЕЙТ ДЛЯ БАННЕРОВ ПРИНЯТИЯ МАРШРУТА
+  const [acceptingRouteId, setAcceptingRouteId] = useState<string | null>(null);
+  const [acceptTime, setAcceptTime] = useState("");
 
   const toggleOrder = (orderId: string) => {
     setCollapsedOrders(prev => ({
@@ -63,7 +91,6 @@ export default function CourierRoutesPage() {
     return () => clearInterval(iv);
   }, []);
 
-  // 🔥 Утилита для запросов с таймаутом
   const fetchWithTimeout = async (resource: string, options: RequestInit & { timeout?: number }) => {
     const { timeout = 20000 } = options;
     const controller = new AbortController();
@@ -73,7 +100,6 @@ export default function CourierRoutesPage() {
     return response;
   };
 
-  // 🔥 Обновленная смена статуса с ретраями и защитой времени
   const handleStatusChange = async (id: string, newStatus: string, routeBaseTime?: string | null) => {
     if (newStatus === "IN_DELIVERY" && routeBaseTime) {
       const [bH, bM] = routeBaseTime.split(':').map(Number);
@@ -210,7 +236,6 @@ export default function CourierRoutesPage() {
     todayGrouped[key].push(o);
   });
   
-  // 🔥 НОВАЯ СОРТИРОВКА САМИХ МАРШРУТОВ ПО СТАТУСУ
   const getRouteStatusWeight = (rId: string) => {
     const points = todayGrouped[rId];
     if (!points || points.length === 0) return 4;
@@ -227,10 +252,7 @@ export default function CourierRoutesPage() {
   const todayRouteKeys = Object.keys(todayGrouped).sort((a, b) => {
     const weightA = getRouteStatusWeight(a);
     const weightB = getRouteStatusWeight(b);
-    
-    if (weightA !== weightB) {
-      return weightA - weightB; 
-    }
+    if (weightA !== weightB) return weightA - weightB; 
 
     const routeA = todayGrouped[a][0]?.route;
     const routeB = todayGrouped[b][0]?.route;
@@ -259,6 +281,12 @@ export default function CourierRoutesPage() {
     return encodeURIComponent(order.address);
   };
 
+  // 🔥 НАХОДИМ НЕПРИНЯТЫЕ МАРШРУТЫ (Где нет baseArrivalTime)
+  const unacceptedRouteKeys = todayRouteKeys.filter(rId => {
+    const route = todayGrouped[rId][0]?.route;
+    return route && !route.baseArrivalTime;
+  });
+
   return (
     <div style={{
       display: "flex", flexDirection: "column", background: "#f5f4f0",
@@ -281,12 +309,75 @@ export default function CourierRoutesPage() {
         </div>
       </div>
 
+      {/* 🔥 БАННЕРЫ НОВЫХ МАРШРУТОВ */}
+      {unacceptedRouteKeys.length > 0 && (
+        <div style={{ padding: "16px 12px 0", display: "flex", flexDirection: "column", gap: 12 }}>
+          {unacceptedRouteKeys.map(rId => {
+            const routePoints = todayGrouped[rId];
+            const routeObj = routePoints[0]?.route;
+            const isAccepting = acceptingRouteId === rId;
+            const adviceText = getAdviceText(routeObj, routePoints[0]?.slotRaw);
+
+            return (
+              <div key={`banner-${rId}`} style={{ background: "#fff", border: "2px solid #4a7aff", borderRadius: 12, padding: 16, boxShadow: "0 4px 12px rgba(74, 122, 255, 0.15)" }}>
+                {!isAccepting ? (
+                  <>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                      <div style={{ fontWeight: 800, color: "#1a1a18", fontSize: 16 }}>
+                        🆕 Новый маршрут
+                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 700, background: "#eef3ff", color: "#4a7aff", padding: "4px 8px", borderRadius: 6 }}>
+                        {routePoints.length} точек
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 14, color: "#6b6860", marginBottom: 16, fontWeight: 500 }}>
+                      Маршрут <span style={{fontWeight: 700, color: "#1a1a18"}}>{routeObj?.name}</span> назначен. Вы можете посмотреть точки ниже.
+                    </div>
+                    <button 
+                      onClick={() => { setAcceptingRouteId(rId); setAcceptTime(""); }}
+                      style={{ background: "#4a7aff", color: "#fff", width: "100%", padding: "12px", borderRadius: 8, fontSize: 15, fontWeight: 700, border: "none", cursor: "pointer", boxShadow: "0 2px 6px rgba(74, 122, 255, 0.3)" }}
+                    >
+                      ✅ Принять маршрут
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontWeight: 800, color: "#1a1a18", marginBottom: 6, fontSize: 16 }}>
+                      Укажите время на базе
+                    </div>
+                    <div style={{ fontSize: 13, color: "#d94040", marginBottom: 16, fontWeight: 600 }}>
+                      🕒 {adviceText}
+                    </div>
+                    <div style={{ display: "flex", gap: 10 }}>
+                      <input 
+                        type="time" 
+                        value={acceptTime}
+                        onChange={e => setAcceptTime(e.target.value)}
+                        style={{ flex: 1, padding: "12px", borderRadius: 8, border: "1px solid #e8e6df", fontSize: 16, background: "#fafaf8", outline: "none", color: "#1a1a18", fontWeight: 700 }}
+                      />
+                      <button 
+                        onClick={() => {
+                          if (!acceptTime) return alert("Пожалуйста, выберите время прибытия");
+                          handleBaseTimeChange(rId, acceptTime);
+                          setAcceptingRouteId(null);
+                        }}
+                        style={{ background: "#10b981", color: "#fff", padding: "0 24px", borderRadius: 8, fontWeight: 700, border: "none", cursor: "pointer", boxShadow: "0 2px 6px rgba(16, 185, 129, 0.3)" }}
+                      >
+                        ОК
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* СПИСОК МАРШРУТОВ */}
       <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 16 }}>
-
         {todayRouteKeys.map((rId) => {
-          // 🔥 СТРОГАЯ СОРТИРОВКА ТОЧЕК: Только по физическому порядку маршрута
           const routePoints = todayGrouped[rId].sort((a, b) => (a.routeOrder || 0) - (b.routeOrder || 0));
-
           const routeObj = routePoints[0]?.route;
           const routeName = routeObj ? routeObj.name : "Без маршрута";
           const routeLink = routeObj?.link ?? null;
@@ -298,14 +389,8 @@ export default function CourierRoutesPage() {
           
           const isExpanded = expandedRoutes[rId] ?? !isAllDelivered;
           
-          // 🔥 ЛОГИКА: Запрос времени при разворачивании маршрута
-          const onRouteHeaderClick = async () => {
-            if (!isExpanded && !routeObj?.baseArrivalTime) {
-              const inputTime = window.prompt("Укажите время прибытия на базу (например, 14:30):", "");
-              if (inputTime) {
-                await handleBaseTimeChange(rId, inputTime); 
-              }
-            }
+          // 🔥 БОЛЬШЕ НЕТ PROMPT. Просто раскрываем.
+          const onRouteHeaderClick = () => {
             toggleRoute(rId); 
           };
 
@@ -319,16 +404,19 @@ export default function CourierRoutesPage() {
               <div style={{ padding: "14px 16px", background: "#fafaf8", borderBottom: isExpanded ? "1px solid #e8e6df" : "none" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", cursor: "pointer", marginBottom: isExpanded ? 12 : 0 }} onClick={onRouteHeaderClick}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18" }}>
-                      Маршрут {routeName} <span style={{fontSize: 12, color: "#a8a49c", fontWeight: 500}}>({routePriceTotal} ₽)</span>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8 }}>
+                      Маршрут {routeName} 
+                      {!routeObj?.baseArrivalTime && (
+                        <span style={{ fontSize: 10, background: "#facc15", color: "#78350f", padding: "2px 6px", borderRadius: 4, fontWeight: 800, textTransform: "uppercase" }}>Не принят</span>
+                      )}
                     </div>
-                    <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 2 }}>
-                      {delivered}/{total} доставлено
+                    <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 4 }}>
+                      {delivered}/{total} доставлено • <span style={{fontWeight: 600, color: "#6b6860"}}>{routePriceTotal} ₽</span>
                     </div>
 
                     {advice && showAdvice && (
                       <div style={{
-                        marginTop: 8, padding: "10px 12px", background: "#fffbeb",
+                        marginTop: 10, padding: "10px 12px", background: "#fffbeb",
                         border: "1px solid #fde68a", borderRadius: 10, display: "flex", gap: 8, alignItems: "center"
                       }}>
                         <span style={{ fontSize: 18 }}>⏰</span>
@@ -353,7 +441,7 @@ export default function CourierRoutesPage() {
                   </div>
                 </div>
 
-                {isExpanded && (
+                {isExpanded && routeObj?.baseArrivalTime && (
                   <div style={{ display: "flex", gap: 8, alignItems: "center", borderTop: "1px dashed #e8e6df", paddingTop: 12 }} onClick={e => e.stopPropagation()}>
                     <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 600 }}>На базе в:</span>
@@ -403,7 +491,6 @@ export default function CourierRoutesPage() {
                   const actualTime = formatDeliveredTime(o.deliveredAt || null);
                   const cleanPhoneForTg = phone !== "—" ? phone.replace(/[^\d+]/g, "") : "";
                   
-                  // 🔥 ПРОСТОЙ ТЕКСТ ДЛЯ СМС БЕЗ 10 МИНУТ
                   let timeText = "в ближайшее время";
                   if (o.eta) {
                     timeText = `${o.eta}`;
@@ -421,7 +508,6 @@ export default function CourierRoutesPage() {
 
                   const isCollapsed = collapsedOrders[o.id] !== undefined ? collapsedOrders[o.id] : isDelivered;
 
-                  // ОПРЕДЕЛЯЕМ БЛОКИРОВКУ КНОПКИ "В ПУТИ"
                   let isTooEarly = false;
                   if (routeObj?.baseArrivalTime) {
                     const [bH, bM] = routeObj.baseArrivalTime.split(':').map(Number);
@@ -475,7 +561,6 @@ export default function CourierRoutesPage() {
                             {o.address}
                           </div>
                           
-                          {/* 🔥 ПОЛУЧАТЕЛЬ И КРУПНЫЕ КНОПКИ (30px) НА ОДНОЙ ЛИНИИ */}
                           {(o.name || phone !== "—") && (
                             <div style={{ fontSize: 13, fontWeight: 600, color: "#4a7aff", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 2 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
