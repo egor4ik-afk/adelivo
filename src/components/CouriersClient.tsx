@@ -72,6 +72,7 @@ export function CouriersClient({ user }: { user: any }) {
     const d = new Date(scheduleWeekStart); d.setDate(d.getDate() + i); return d.toISOString().split("T")[0];
   });
   const [sortDate, setSortDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }));
+  const [sortMode, setSortMode] = useState<"orders" | "rating" | "alpha">("orders");
 
   const [weekStart, setWeekStart] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() - (d.getDay() === 0 ? 6 : d.getDay() - 1));
@@ -84,7 +85,7 @@ export function CouriersClient({ user }: { user: any }) {
   const [routesDate, setRoutesDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }));
   const [expandedCouriers, setExpandedCouriers] = useState<Record<number, boolean>>({});
 
-  const [showAll, setShowAll] = useState(false);
+  const [onlyActive, setOnlyActive] = useState(false);
 
   const scheduleScrollRef = useRef<HTMLDivElement>(null);
 
@@ -241,9 +242,30 @@ export function CouriersClient({ user }: { user: any }) {
 
   const filtered = couriers.filter(c => {
     if (search && !c.fullName.toLowerCase().includes(search.toLowerCase())) return false;
-    const hasShift = (c as any).shifts && (c as any).shifts.length > 0;
-    if (showAll) return true;
-    return hasShift;
+    if (!onlyActive) return true;
+    const hasRecentShift = c.shifts && c.shifts.length > 0;
+    return hasRecentShift;
+  });
+
+  const scheduleSorted = [...filtered].sort((a, b) => {
+    // Всегда: курьеры со сменами на ТЕКУЩЕЙ неделе — наверху
+    const aHasWeekShift = a.shifts.some(s => scheduleDates.includes(s.date));
+    const bHasWeekShift = b.shifts.some(s => scheduleDates.includes(s.date));
+    if (aHasWeekShift && !bHasWeekShift) return -1;
+    if (!aHasWeekShift && bHasWeekShift) return 1;
+
+    // Внутри каждой группы — по выбранному режиму
+    if (sortMode === "orders") {
+      const aCount = getCount(a.id, sortDate);
+      const bCount = getCount(b.id, sortDate);
+      if (aCount !== bCount) return bCount - aCount;
+    } else if (sortMode === "rating") {
+      const aPri = a.priority ?? 3;
+      const bPri = b.priority ?? 3;
+      if (aPri !== bPri) return bPri - aPri;
+    }
+
+    return a.fullName.localeCompare(b.fullName);
   });
 
   const calcSortedAndFiltered = [...filtered].filter(c => {
@@ -504,14 +526,6 @@ export function CouriersClient({ user }: { user: any }) {
     finally { setLoading(false); }
   };
 
-  const scheduleSorted = [...filtered].sort((a, b) => {
-    const aCount = getCount(a.id, sortDate); const bCount = getCount(b.id, sortDate);
-    if (aCount !== bCount) return bCount - aCount;
-    const aWorks = a.shifts.some(s => s.date === sortDate); const bWorks = b.shifts.some(s => s.date === sortDate);
-    if (aWorks && !bWorks) return -1; if (!aWorks && bWorks) return 1;
-    return a.fullName.localeCompare(b.fullName);
-  });
-
   const globalFreeOrders = orders.filter(o => !o.routeId && getODate(o) === routesDate && o.status !== "DELIVERED" && o.status !== "CANCELLED");
 
   const allAvailableKeys = calcSortedAndFiltered.flatMap(c =>
@@ -553,15 +567,15 @@ export function CouriersClient({ user }: { user: any }) {
               </button>
             )}
             <button 
-              onClick={() => setShowAll(!showAll)}
+              onClick={() => setOnlyActive(!onlyActive)}
               style={{
-                background: showAll ? "#eef3ff" : "#fff",
-                border: `1px solid ${showAll ? "#4a7aff" : "#e8e6df"}`,
+                background: onlyActive ? "#eef3ff" : "#fff",
+                border: `1px solid ${onlyActive ? "#4a7aff" : "#e8e6df"}`,
                 padding: "8px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700,
-                color: showAll ? "#4a7aff" : "#6b6860", cursor: "pointer"
+                color: onlyActive ? "#4a7aff" : "#6b6860", cursor: "pointer"
               }}
             >
-              {showAll ? "✅ Только активные" : "👥 Показать всех"}
+              {onlyActive ? "👥 Показать всех" : "✅ Только активные"}
             </button>
             <input type="text" placeholder="Поиск курьера..." value={search} onChange={e => setSearch(e.target.value)} style={{ ...s.input, width: isMobile ? "100%" : "auto" }} />
             <button style={{ ...s.syncBtn, width: isMobile ? "100%" : "auto" }} onClick={() => fetchAll()}>🔄 Обновить</button>
@@ -571,12 +585,41 @@ export function CouriersClient({ user }: { user: any }) {
         {/* --- ГРАФИК --- */}
         {activeTab === "schedule" && (
           <div style={s.tableWrap} ref={scheduleScrollRef}>
-            <div style={{ display: "flex", alignItems: "center", padding: "12px 16px", background: "#fff", borderBottom: "1px solid #e8e6df" }}>
+            <div style={{ display: "flex", alignItems: "center", padding: "12px 16px", background: "#fff", borderBottom: "1px solid #e8e6df", gap: 12, flexWrap: "wrap" }}>
               <button style={s.arrowBtn} onClick={() => setScheduleWeekStart(d => new Date(d.getTime() - 7 * 86400000))}>◀ Неделя</button>
-              <span style={{ fontWeight: 700, fontSize: 14, margin: "0 16px", textTransform: "capitalize", color: "#1a1a18" }}>
+              <span style={{ fontWeight: 700, fontSize: 14, textTransform: "capitalize", color: "#1a1a18" }}>
                 {scheduleWeekStart.toLocaleDateString('ru', { month: 'long', year: 'numeric' })}
               </span>
               <button style={s.arrowBtn} onClick={() => setScheduleWeekStart(d => new Date(d.getTime() + 7 * 86400000))}>Неделя ▶</button>
+
+              {/* Разделитель */}
+              <div style={{ width: 1, height: 20, background: "#e8e6df", margin: "0 4px" }} />
+
+              {/* Переключатель сортировки */}
+              <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 600 }}>Сортировка:</span>
+              {(["orders", "rating", "alpha"] as const).map(mode => {
+                const labels = { orders: "📦 Заказы", rating: "⭐ Рейтинг", alpha: "🔤 Алфавит" };
+                return (
+                  <button
+                    key={mode}
+                    onClick={() => setSortMode(mode)}
+                    style={{
+                      padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600,
+                      cursor: "pointer", border: "1px solid",
+                      background: sortMode === mode ? "#4a7aff" : "#fff",
+                      color: sortMode === mode ? "#fff" : "#6b6860",
+                      borderColor: sortMode === mode ? "#4a7aff" : "#e8e6df",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {labels[mode]}
+                  </button>
+                );
+              })}
+
+              <span style={{ fontSize: 11, color: "#a8a49c", marginLeft: "auto" }}>
+                Клик по дню — сортировать по нему
+              </span>
             </div>
             {/* Таблица графика сокращена для удобства, она работает как раньше... */}
             <table style={s.table}>

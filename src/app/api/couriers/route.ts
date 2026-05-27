@@ -2,20 +2,24 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// 🔥 Говорим Next.js НИКОГДА не кэшировать этот запрос (всегда свежие данные)
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const twoWeeksAgo = new Date();
-    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-    const dateStr = twoWeeksAgo.toISOString().split('T')[0];
+    // Fetch shifts in a ±4 week window so navigation works in both directions
+    const from = new Date();
+    from.setDate(from.getDate() - 28);
+    const to = new Date();
+    to.setDate(to.getDate() + 28);
+
+    const fromStr = from.toISOString().split("T")[0];
+    const toStr   = to.toISOString().split("T")[0];
 
     const couriers = await prisma.courier.findMany({
       include: {
         shifts: {
-          where: { date: { gte: dateStr } },
-          take: 1 // Достаточно знать, что хоть одна смена была
+          where: { date: { gte: fromStr, lte: toStr } },
+          // ❌ NO take: 1 — we need all shifts in range
         },
         payments: true,
         routes: true,
@@ -23,13 +27,15 @@ export async function GET() {
       orderBy: { fullName: "asc" },
     });
 
-    // 🔥 ГЕОЛОКАЦИЯ: Скрываем координаты, если они старше 60 минут (1 часа)
     const ONE_HOUR_MS = 60 * 60 * 1000;
     const now = Date.now();
 
     const processedCouriers = couriers.map(c => {
-      if (c.locationUpdatedAt && (now - new Date(c.locationUpdatedAt).getTime() > ONE_HOUR_MS)) {
-        return { ...c, lat: null, lng: null }; 
+      if (
+        c.locationUpdatedAt &&
+        now - new Date(c.locationUpdatedAt).getTime() > ONE_HOUR_MS
+      ) {
+        return { ...c, lat: null, lng: null };
       }
       return c;
     });
