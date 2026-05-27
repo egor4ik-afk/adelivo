@@ -12,13 +12,12 @@ export async function GET() {
       orderBy: { fullName: "asc" },
     });
 
-    // 🔥 ГЕОЛОКАЦИЯ: Скрываем координаты, если они старше 10 минут
-    const TEN_MINUTES_MS = 10 * 60 * 1000;
+    // 🔥 ГЕОЛОКАЦИЯ: Скрываем координаты, если они старше 60 минут (1 часа)
+    const ONE_HOUR_MS = 60 * 60 * 1000;
     const now = Date.now();
 
     const processedCouriers = couriers.map(c => {
-      // Prisma возвращает даты как объекты Date, поэтому можно сразу брать getTime()
-      if (c.locationUpdatedAt && (now - new Date(c.locationUpdatedAt).getTime() > TEN_MINUTES_MS)) {
+      if (c.locationUpdatedAt && (now - new Date(c.locationUpdatedAt).getTime() > ONE_HOUR_MS)) {
         return { ...c, lat: null, lng: null }; 
       }
       return c;

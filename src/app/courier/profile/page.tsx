@@ -1,6 +1,6 @@
 // src/app/courier/profile/page.tsx
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { usePushNotifications } from "@/components/usePushNotifications";
 import { IMaskInput } from "react-imask";
 import imageCompression from "browser-image-compression";
@@ -23,6 +23,7 @@ interface Stats {
   allTimeTotal: number;
   konsolPhone: string | null;
   isLinked: boolean;
+  pastShifts?: { id: string; date: string; earned: number; ordersCount: number }[]; // 🔥 ДОБАВЛЕНО ДЛЯ ИСТОРИИ
 }
 
 const TIME_OPTIONS: string[] = [];
@@ -108,6 +109,9 @@ export default function CourierProfilePage() {
   const [saving, setSaving] = useState(false);
   const [myShifts, setMyShifts] = useState<any[]>([]);
 
+  // 🔥 Стейт для новых вкладок недель
+  const [activeWeekTab, setActiveWeekTab] = useState<"prev" | "current" | "next">("current");
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
@@ -118,10 +122,40 @@ export default function CourierProfilePage() {
   const { state: pushState, subscribe, unsubscribe } = usePushNotifications();
   const isSubscribed = pushState === "granted";
 
-  const scheduleDates = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(); d.setDate(d.getDate() + i); 
-    return d.toISOString().split("T")[0];
-  });
+  // 🔥 МАТЕМАТИКА КАЛЕНДАРЯ (МОСКОВСКОЕ ВРЕМЯ)
+  const moscowNow = useMemo(() => {
+    const now = new Date();
+    return new Date(now.toLocaleString("en-US", { timeZone: "Europe/Moscow" }));
+  }, []);
+
+  const weekDays = useMemo(() => {
+    const currentDay = moscowNow.getDay();
+    const distanceToMonday = currentDay === 0 ? 6 : currentDay - 1;
+    const currentMonday = new Date(moscowNow);
+    currentMonday.setDate(moscowNow.getDate() - distanceToMonday);
+
+    let targetMonday = new Date(currentMonday);
+    if (activeWeekTab === "prev") targetMonday.setDate(currentMonday.getDate() - 7);
+    if (activeWeekTab === "next") targetMonday.setDate(currentMonday.getDate() + 7);
+
+    const days = [];
+    const dayNames = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+
+    for (let i = 0; i < 7; i++) {
+      const dayDate = new Date(targetMonday);
+      dayDate.setDate(targetMonday.getDate() + i);
+      const isoString = dayDate.toLocaleDateString("en-CA");
+      const label = dayDate.toLocaleDateString("ru-RU", { day: "numeric", month: "long" }).replace(" г.", "");
+
+      days.push({
+        dateStr: isoString,
+        dayName: dayNames[i],
+        dateLabel: label,
+        isToday: isoString === moscowNow.toLocaleDateString("en-CA"),
+      });
+    }
+    return days;
+  }, [activeWeekTab, moscowNow]);
 
   const loadData = () => {
     fetch("/api/profile").then(r => r.json()).then(data => {
@@ -137,8 +171,12 @@ export default function CourierProfilePage() {
       setStats(data);
     });
 
-    const from = scheduleDates[0];
-    const to = scheduleDates[6];
+    // 🔥 РАСШИРЯЕМ ДИАПАЗОН ЗАГРУЗКИ СМЕН ДЛЯ 3-Х НЕДЕЛЬ
+    const fromD = new Date(moscowNow); fromD.setDate(fromD.getDate() - 14);
+    const toD = new Date(moscowNow); toD.setDate(toD.getDate() + 14);
+    const from = fromD.toISOString().split("T")[0];
+    const to = toD.toISOString().split("T")[0];
+    
     fetch(`/api/courier/my-shifts?from=${from}&to=${to}`).then(r => r.json()).then(data => {
       if (Array.isArray(data)) setMyShifts(data);
     });
@@ -294,11 +332,6 @@ export default function CourierProfilePage() {
     setPwaPrompt(null);
   };
 
-  const formatDay = (dateStr: string) => {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString("ru", { weekday: "short", day: "2-digit", month: "long" });
-  };
-
   if (!profile) return <div style={{ padding: 20, textAlign: "center", color: "#a8a49c" }}>Загрузка профиля...</div>;
 
   return (
@@ -332,7 +365,6 @@ export default function CourierProfilePage() {
           </p>
         </div>
 
-        {/* 🔥 РЕКЛАМНЫЙ БЛОК / ЛОГОТИП */}
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", opacity: 0.5, flexShrink: 0 }}>
           <img src="/favicon.svg" alt="App Logo" style={{ width: 24, height: 24 }} />
           <span style={{ fontSize: 9, fontWeight: 800, color: "#1a1a18", marginTop: 2, textTransform: "uppercase", letterSpacing: "0.5px" }}>EventWave</span>
@@ -389,25 +421,87 @@ export default function CourierProfilePage() {
           </div>
         )}
 
+        {/* 🔥 ИСТОРИЯ ДОХОДА ЗА СМЕНЫ */}
+        <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+          <h2 style={{ margin: "0 0 12px 0", fontSize: 14, fontWeight: 700, color: "#1a1a18", textTransform: "uppercase" }}>💰 Доход за смены</h2>
+          
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {stats?.pastShifts && stats.pastShifts.length > 0 ? (
+              stats.pastShifts.map(s => {
+                const shiftDate = new Date(s.date);
+                const dateFormatted = shiftDate.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
+
+                return (
+                  <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", borderRadius: 10, background: "#fafaf8", border: "1px solid #e8e6df" }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a18" }}>{dateFormatted}</div>
+                      <div style={{ fontSize: 11, color: "#a8a49c", marginTop: 2 }}>{s.ordersCount} заказов доставлено</div>
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: "#10b981", background: "#ecfdf5", padding: "4px 10px", borderRadius: 6 }}>
+                      +{s.earned} ₽
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div style={{ textAlign: "center", padding: "20px 0", color: "#a8a49c", fontSize: 13 }}>
+                Данные по закрытым сменам пока недоступны
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 🔥 ОБНОВЛЕННЫЙ ГРАФИК РАБОТЫ (ПО НЕДЕЛЯМ) */}
         <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
           <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", margin: "0 0 12px 0", textTransform: "uppercase" }}>📅 График работы</h2>
+          
+          <div style={{ display: "flex", background: "#f5f4f0", padding: 4, borderRadius: 10, marginBottom: 14 }}>
+            {(["prev", "current", "next"] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveWeekTab(tab)}
+                style={{
+                  flex: 1, border: "none", padding: "8px", borderRadius: 8, fontSize: 12,
+                  fontWeight: activeWeekTab === tab ? 700 : 500,
+                  background: activeWeekTab === tab ? "#fff" : "transparent",
+                  color: activeWeekTab === tab ? "#1a1a18" : "#a8a49c",
+                  cursor: "pointer", transition: "all 0.15s",
+                  boxShadow: activeWeekTab === tab ? "0 1px 3px rgba(0,0,0,0.05)" : "none"
+                }}
+              >
+                {tab === "prev" ? "Прошлая" : tab === "current" ? "Текущая" : "Следующая"}
+              </button>
+            ))}
+          </div>
+
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {scheduleDates.map(date => {
-              const shift = myShifts.find(s => s.date === date);
+            {weekDays.map(day => {
+              const shift = myShifts.find(s => s.date === day.dateStr);
               const isWorking = !!shift;
 
               return (
-                <div key={date} style={{ background: isWorking ? "#f0fdf4" : "#fafaf8", padding: "14px 16px", borderRadius: 12, border: isWorking ? "1px solid #a7f3d0" : "1px solid #e8e6df", transition: "all 0.2s" }}>
+                <div key={day.dateStr} style={{ background: isWorking ? "#f0fdf4" : "#fafaf8", padding: "14px 16px", borderRadius: 12, border: isWorking ? "1px solid #a7f3d0" : "1px solid #e8e6df", transition: "all 0.2s" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", textTransform: "capitalize" }}>
-                      {formatDay(date)}
-                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{
+                        width: 32, height: 32, borderRadius: 8,
+                        background: day.isToday ? "#4a7aff" : (isWorking ? "#fff" : "#e8e6df"),
+                        color: day.isToday ? "#fff" : (isWorking ? "#4a7aff" : "#6b6860"),
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 12, fontWeight: 700
+                      }}>
+                        {day.dayName}
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", textTransform: "capitalize" }}>
+                        {day.dateLabel}
+                      </div>
+                    </div>
                     
                     <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
                       <span style={{ fontSize: 13, fontWeight: 600, color: isWorking ? "#10b981" : "#a8a49c" }}>
                         {isWorking ? "На смене" : "Выходной"}
                       </span>
-                      <input type="checkbox" checked={isWorking} onChange={(e) => updateShift(date, { isWorking: e.target.checked, startTime: shift?.startTime || "10:00", endTime: shift?.endTime || "22:00" })} style={{ width: 20, height: 20, accentColor: "#10b981" }} />
+                      <input type="checkbox" checked={isWorking} onChange={(e) => updateShift(day.dateStr, { isWorking: e.target.checked, startTime: shift?.startTime || "10:00", endTime: shift?.endTime || "22:00" })} style={{ width: 20, height: 20, accentColor: "#10b981" }} />
                     </label>
                   </div>
 
@@ -416,11 +510,11 @@ export default function CourierProfilePage() {
                       <span style={{ fontSize: 13, color: "#059669", fontWeight: 600, flex: 1 }}>Часы работы:</span>
                       
                       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <select value={shift.startTime || "10:00"} onChange={(e) => updateShift(date, { isWorking: true, startTime: e.target.value, endTime: shift.endTime })} style={{ width: "80px", padding: "6px 4px", borderRadius: 8, border: "1px solid #a7f3d0", outline: "none", fontSize: 16, background: "#fff", color: "#065f46", fontWeight: 700, textAlign: "center" }}>
+                        <select value={shift.startTime || "10:00"} onChange={(e) => updateShift(day.dateStr, { isWorking: true, startTime: e.target.value, endTime: shift.endTime })} style={{ width: "80px", padding: "6px 4px", borderRadius: 8, border: "1px solid #a7f3d0", outline: "none", fontSize: 16, background: "#fff", color: "#065f46", fontWeight: 700, textAlign: "center" }}>
                           {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
                         <span style={{ color: "#059669", fontWeight: 700 }}>-</span>
-                        <select value={shift.endTime || "22:00"} onChange={(e) => updateShift(date, { isWorking: true, startTime: shift.startTime, endTime: e.target.value })} style={{ width: "80px", padding: "6px 4px", borderRadius: 8, border: "1px solid #a7f3d0", outline: "none", fontSize: 16, background: "#fff", color: "#065f46", fontWeight: 700, textAlign: "center" }}>
+                        <select value={shift.endTime || "22:00"} onChange={(e) => updateShift(day.dateStr, { isWorking: true, startTime: shift.startTime, endTime: e.target.value })} style={{ width: "80px", padding: "6px 4px", borderRadius: 8, border: "1px solid #a7f3d0", outline: "none", fontSize: 16, background: "#fff", color: "#065f46", fontWeight: 700, textAlign: "center" }}>
                           {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
                       </div>

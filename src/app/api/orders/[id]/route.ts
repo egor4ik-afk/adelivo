@@ -1,1 +1,275 @@
-// src/app/api/orders/[id]/route.ts\n\nimport { NextRequest, NextResponse } from "next/server";\nimport { prisma } from "@/lib/prisma";\nimport { getSession } from "@/lib/auth";\nimport { updateCrmOrder, updateCrmOrderDeliveryPrice } from "@/lib/crm";\nimport { OrderStatus } from "@prisma/client";\nimport { applyUniversalEtaShift } from "@/lib/eta";\nimport { notify } from "@/lib/notifications"; \n\nconst STORE_COORDS = "55.749511,37.596205";\n\nexport async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {\n  const user = await getSession(req as any);\n  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });\n\n  try {\n    const { id } = await context.params;\n    const body = await req.json();\n\n    const order = await prisma.order.findUnique({ where: { id }, include: { route: true } });\n    if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });\n\n    // 🔥 ЗАЩИТА: Нельзя нажать "В пути" раньше чем за час до базы\n    if (body.status === "IN_DELIVERY" && order.route?.baseArrivalTime) {\n      const [baseH, baseM] = order.route?.baseArrivalTime.split(\':\').map(Number);\n      const now = new Date();\n      const moscowNow = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Moscow" }));\n      \n      const baseTimeMs = new Date(\n        moscowNow.getFullYear(), moscowNow.getMonth(), moscowNow.getDate(), \n        baseH, baseM, 0, 0\n      ).getTime();\n      \n      // Считаем разницу в часах\n      const diffHours = (baseTimeMs - moscowNow.getTime()) / (1000 * 60 * 60);\n      \n      if (diffHours > 1) {\n        return NextResponse.json({ \n          error: "Слишком рано! Начать маршрут можно не раньше чем за час до прибытия на базу." \n        }, { status: 400 });\n      }\n    }\n\n    const updateData: any = {};\n\n    // ОБРАБОТКА ДАТЫ ДОСТАВКИ\n    if (body.deliveryDate !== undefined) {\n      updateData.deliveryDate = body.deliveryDate ? new Date(body.deliveryDate) : null;\n    }\n\n    if (body.status !== undefined) {\n      updateData.status = body.status;\n      updateData.changedAt = new Date();\n      \n      if (body.status === "IN_DELIVERY" && (order.status !== "IN_DELIVERY" || !order.pickedUpAt)) {\n        updateData.pickedUpAt = new Date();\n      }\n      \n      if (body.status === "NEW") {\n        updateData.pickedUpAt = null;\n        updateData.eta = null;\n        updateData.deliveredAt = null;\n      } else if (body.status === "ASSIGNED") {\n        updateData.pickedUpAt = null;\n        updateData.deliveredAt = null;\n      } else if (body.status === "DELIVERED") {\n        if (!order.deliveredAt) {\n          updateData.deliveredAt = new Date(); \n        }\n      }\n    }\n\n    if (body.deliveredAt !== undefined) {\n      updateData.deliveredAt = body.deliveredAt ? new Date(body.deliveredAt) : null;\n    }\n    \n    if (body.eta !== undefined && body.status !== "DELIVERED") {\n      updateData.eta = body.eta;\n    }\n    \n    if (body.opComment !== undefined) updateData.opComment = body.opComment;\n    if (body.address !== undefined) updateData.address = body.address;\n    if (body.recipientPhone !== undefined) updateData.recipientPhone = body.recipientPhone;\n    if (body.slotRaw !== undefined) updateData.slotRaw = body.slotRaw;\n    if (body.comment !== undefined) updateData.comment = body.comment;\n    if (body.items !== undefined) updateData.items = body.items;\n    if (body.routeId !== undefined) updateData.routeId = body.routeId;\n    if (body.routeOrder !== undefined) updateData.routeOrder = body.routeOrder;\n    if (body.costPrice !== undefined) updateData.costPrice = body.costPrice;\n\n    // СНИМАЕМ ФЛАГ ТОЛЬКО ПРИ РУЧНОМ ВВОДЕ ЦЕНЫ\n    if (body.price !== undefined) {\n      updateData.price = body.price;\n      updateData.wrongPrice = false; \n    }\n\n    let finalPrice: number | undefined = body.price;\n    if (body.courier !== undefined) {\n      if (body.courier) {\n        const numericId = Number(body.courier);\n        const dbCourier = await prisma.courier.findFirst({\n          where: isNaN(numericId) ? { fullName: body.courier } : { id: numericId },\n        });\n        updateData.courier = dbCourier?.fullName ?? body.courier;\n        updateData.courierId = dbCourier?.id ?? null;\n\n        if (dbCourier && dbCourier.id !== order.courierId) {\n          let basePrice = order.price && order.price > 0 ? order.price : 500;\n          if (order.courierId) {\n             const oldCourier = await prisma.courier.findUnique({ where: { id: order.courierId } });\n             if (oldCourier?.isAuto && basePrice >= 600) basePrice -= 100;\n          }\n          finalPrice = basePrice + (dbCourier.isAuto ? 100 : 0);\n          updateData.price = finalPrice;\n        }\n      } else {\n        updateData.courier = null; updateData.courierId = null; updateData.courierLink = null;\n        if (order.courierId) {\n           const oldCourier = await prisma.courier.findUnique({ where: { id: order.courierId } });\n           if (oldCourier?.isAuto && order.price && order.price >= 600) {\n               finalPrice = order.price - 100;\n               updateData.price = finalPrice;\n           }\n        }\n      }\n    }\n\n    const rttMode = updateData.courierId \n      ? ((await prisma.courier.findUnique({ where: { id: updateData.courierId } }))?.isAuto ? "auto" : "mt") \n      : "auto";\n    const freshCoords = await prisma.order.findUnique({ where: { id }, select: { lat: true, lng: true }});\n    const finalCourier = updateData.courier !== undefined ? updateData.courier : order.courier;\n    if (finalCourier && (body.courier !== undefined || body.address !== undefined)) {\n      if (freshCoords?.lat && freshCoords?.lng) {\n        updateData.courierLink = `https://yandex.ru/maps/?mode=routes&rtext=${STORE_COORDS}~${freshCoords.lat},${freshCoords.lng}&rtt=${rttMode}`;\n      }\n    }\n\n    const newCourierId = updateData.courierId as number | undefined;\n    if (newCourierId && newCourierId !== order.courierId) {\n      if (order.routeId) {\n        const siblingsCount = await prisma.order.count({ where: { routeId: order.routeId, id: { not: id } }});\n        if (siblingsCount === 0) await prisma.route.deleteMany({ where: { id: order.routeId } });\n      }\n      \n      const rawDate = updateData.deliveryDate || order.deliveryDate || order.crmCreatedAt || new Date();\n      const orderDate = (rawDate instanceof Date ? rawDate : new Date(rawDate))\n           .toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" });\n      const routeDay = orderDate.split("-")[2];\n      const prefix = `M-${routeDay}`;\n\n      const routes = await prisma.route.findMany({ where: { name: { startsWith: prefix }, date: orderDate }, select: { name: true }});\n      let maxNum = 0;\n      for (const r of routes) {\n        const match = r.name.match(new RegExp(`^${prefix}(\\\d+)$`));\n        if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10));\n      }\n      const newRoute = await prisma.route.create({\n        data: { \n            name: `${prefix}${(maxNum + 1).toString().padStart(3, "0")}`, \n            link: updateData.courierLink, \n            date: orderDate, \n            courierId: newCourierId,\n            estimatedReturnTime: body.estimatedReturnTime || null\n        },\n      });\n      updateData.routeId = newRoute.id; updateData.routeOrder = 1;\n      if (order.status === "NEW") updateData.status = "ASSIGNED";\n    }\n\n    // 🔥 ВОЗВРАЩЕННЫЙ БЛОК: Снятие курьера\n    if ((body.courier === "" || body.courier === null) && order.courierId !== null) {\n      if (order.status === "ASSIGNED" && body.status === undefined) updateData.status = "NEW";\n      updateData.pickedUpAt = null;\n      if (order.routeId) {\n        const siblingsCount = await prisma.order.count({ where: { routeId: order.routeId, id: { not: id } }});\n        if (siblingsCount === 0) await prisma.route.deleteMany({ where: { id: order.routeId } });\n        updateData.routeId = null; updateData.routeOrder = null;\n      }\n    }\n\n    // 🔥 НОВЫЙ БЛОК: Безопасный выход из маршрута при смене даты\n    const oldDate = order.deliveryDate ? new Date(order.deliveryDate).toISOString().split(\'T\')[0] : null;\n    const newDate = updateData.deliveryDate ? new Date(updateData.deliveryDate).toISOString().split(\'T\')[0] : null;\n    const dateChanged = body.deliveryDate !== undefined && oldDate !== newDate;\n\n    if (dateChanged && order.routeId) {\n      const siblingsCount = await prisma.order.count({ where: { routeId: order.routeId, id: { not: id } }});\n      if (siblingsCount === 0) {\n         await prisma.route.deleteMany({ where: { id: order.routeId } });\n      }\n      updateData.routeId = null; \n      updateData.routeOrder = null;\n    }\n\n    if (body.photoUrl !== undefined) updateData.photoUrl = body.photoUrl;\n\n    const finalStatus = updateData.status !== undefined ? updateData.status : order.status;\n    const finalCourierId = updateData.courierId !== undefined ? updateData.courierId : order.courierId;\n    \n    if (finalStatus === "NEW" || finalCourierId === null) {\n      updateData.eta = null;\n    }\n\n    let updatedOrder = order;\n    if (Object.keys(updateData).length > 0) {\n      updatedOrder = await prisma.order.update({ where: { id }, data: updateData, include: { route: true } });\n    }\n\n    if (body.estimatedReturnTime !== undefined && updatedOrder.routeId) {\n      await prisma.route.update({\n        where: { id: updatedOrder.routeId },\n        data: { estimatedReturnTime: body.estimatedReturnTime }\n      });\n    }\n\n    const changes = {\n      statusChanged:         order.status         !== updatedOrder.status,\n      courierChanged:        (order.courierId ?? 0) !== (updatedOrder.courierId ?? 0),\n      dateChanged:           dateChanged,\n      slotChanged:           (order.slotRaw    ?? "") !== (updatedOrder.slotRaw    ?? ""),\n      addressChanged:        (order.address    ?? "") !== (updatedOrder.address    ?? ""),\n      commentChanged:        (order.comment    ?? "") !== (updatedOrder.comment    ?? ""),\n      opCommentChanged:      (order.opComment  ?? "") !== (updatedOrder.opComment  ?? ""),\n      itemsChanged:          (order.items      ?? "") !== (updatedOrder.items      ?? ""),\n      recipientPhoneChanged: (order.recipientPhone ?? "") !== (updatedOrder.recipientPhone ?? ""),\n    };\n\n    if (Object.values(changes).some(Boolean)) {\n      notify({\n        type: "order.updated",\n        order: updatedOrder as any,\n        previousStatus: changes.statusChanged ? order.status : undefined,\n        changes,\n      }).catch(console.error);\n    }\n\n    const statusChanged = body.status !== undefined && order.status !== body.status;\n    if (statusChanged && (body.status === "IN_DELIVERY" || body.status === "DELIVERED")) {\n       await applyUniversalEtaShift(id, body.status, body.eta);\n    }\n\n    const tgToken = process.env.TELEGRAM_BOT_TOKEN;\n    const tgChat  = process.env.TELEGRAM_ADMIN_CHAT_ID;\n    const proxyUrl = process.env.PROXY_URL; // 🔥 URL прокси\n\n    if (proxyUrl && tgToken && tgChat && body.photoUrl && body.photoUrl !== order.photoUrl) {\n        fetch(proxyUrl, {\n          method: "POST", \n          headers: { "Content-Type": "application/json" },\n          body: JSON.stringify({ \n            token: tgToken,\n            method: "sendPhoto",\n            payload: { \n              chat_id: tgChat, \n              photo: body.photoUrl, \n              caption: `📸 *Фото к заказу ${order.externalId || order.crmId}*\\n📍 *Адрес:* ${order.address}`, \n              parse_mode: "Markdown" \n            }\n          }),\n        }).catch(() => {});\n    }\n\n    if (finalPrice !== undefined && order.crmId) await updateCrmOrderDeliveryPrice(order.crmId, finalPrice);\n    let crmStatus = body.status ?? updateData.status;\n    if (crmStatus === "ASSIGNED") crmStatus = undefined;\n    \n    await updateCrmOrder(order.crmId, { status: crmStatus as OrderStatus | undefined, courier: updateData.courier ?? body.courier, opComment: body.opComment, address: body.address });\n\n    return NextResponse.json(updatedOrder);\n  } catch (e) {\n    return NextResponse.json({ error: String(e) }, { status: 500 });\n  }\n}
+// src/app/api/orders/[id]/route.ts
+
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { getSession } from "@/lib/auth";
+import { updateCrmOrder, updateCrmOrderDeliveryPrice } from "@/lib/crm";
+import { OrderStatus } from "@prisma/client";
+import { applyUniversalEtaShift } from "@/lib/eta";
+import { notify } from "@/lib/notifications"; 
+
+const STORE_COORDS = "55.749511,37.596205";
+
+export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const user = await getSession(req as any);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  try {
+    const { id } = await context.params;
+    const body = await req.json();
+
+    const order = await prisma.order.findUnique({ where: { id }, include: { route: true } });
+    if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    // 🔥 ЗАЩИТА: Нельзя нажать "В пути" раньше чем за час до базы
+    if (body.status === "IN_DELIVERY" && order.route?.baseArrivalTime) {
+      const [baseH, baseM] = order.route?.baseArrivalTime.split(':').map(Number);
+      const now = new Date();
+      const moscowNow = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Moscow" }));
+      
+      const baseTimeMs = new Date(
+        moscowNow.getFullYear(), moscowNow.getMonth(), moscowNow.getDate(), 
+        baseH, baseM, 0, 0
+      ).getTime();
+      
+      // Считаем разницу в часах
+      const diffHours = (baseTimeMs - moscowNow.getTime()) / (1000 * 60 * 60);
+      
+      if (diffHours > 1) {
+        return NextResponse.json({ 
+          error: "Слишком рано! Начать маршрут можно не раньше чем за час до прибытия на базу." 
+        }, { status: 400 });
+      }
+    }
+
+    const updateData: any = {};
+
+    // ОБРАБОТКА ДАТЫ ДОСТАВКИ
+    if (body.deliveryDate !== undefined) {
+      updateData.deliveryDate = body.deliveryDate ? new Date(body.deliveryDate) : null;
+    }
+
+    if (body.status !== undefined) {
+      updateData.status = body.status;
+      updateData.changedAt = new Date();
+      
+      if (body.status === "IN_DELIVERY" && (order.status !== "IN_DELIVERY" || !order.pickedUpAt)) {
+        updateData.pickedUpAt = new Date();
+      }
+      
+      if (body.status === "NEW") {
+        updateData.pickedUpAt = null;
+        updateData.eta = null;
+        updateData.deliveredAt = null;
+      } else if (body.status === "ASSIGNED") {
+        updateData.pickedUpAt = null;
+        updateData.deliveredAt = null;
+      } else if (body.status === "DELIVERED") {
+        if (!order.deliveredAt) {
+          updateData.deliveredAt = new Date(); 
+        }
+      }
+    }
+
+    if (body.deliveredAt !== undefined) {
+      updateData.deliveredAt = body.deliveredAt ? new Date(body.deliveredAt) : null;
+    }
+    
+    if (body.eta !== undefined && body.status !== "DELIVERED") {
+      updateData.eta = body.eta;
+    }
+    
+    if (body.opComment !== undefined) updateData.opComment = body.opComment;
+    if (body.address !== undefined) updateData.address = body.address;
+    if (body.recipientPhone !== undefined) updateData.recipientPhone = body.recipientPhone;
+    if (body.slotRaw !== undefined) updateData.slotRaw = body.slotRaw;
+    if (body.comment !== undefined) updateData.comment = body.comment;
+    if (body.items !== undefined) updateData.items = body.items;
+    if (body.routeId !== undefined) updateData.routeId = body.routeId;
+    if (body.routeOrder !== undefined) updateData.routeOrder = body.routeOrder;
+    if (body.costPrice !== undefined) updateData.costPrice = body.costPrice;
+
+    // СНИМАЕМ ФЛАГ ТОЛЬКО ПРИ РУЧНОМ ВВОДЕ ЦЕНЫ
+    if (body.price !== undefined) {
+      updateData.price = body.price;
+      updateData.wrongPrice = false; 
+    }
+
+    let finalPrice: number | undefined = body.price;
+    if (body.courier !== undefined) {
+      if (body.courier) {
+        const numericId = Number(body.courier);
+        const dbCourier = await prisma.courier.findFirst({
+          where: isNaN(numericId) ? { fullName: body.courier } : { id: numericId },
+        });
+        updateData.courier = dbCourier?.fullName ?? body.courier;
+        updateData.courierId = dbCourier?.id ?? null;
+
+        if (dbCourier && dbCourier.id !== order.courierId) {
+          let basePrice = order.price && order.price > 0 ? order.price : 500;
+          if (order.courierId) {
+             const oldCourier = await prisma.courier.findUnique({ where: { id: order.courierId } });
+             if (oldCourier?.isAuto && basePrice >= 600) basePrice -= 100;
+          }
+          finalPrice = basePrice + (dbCourier.isAuto ? 100 : 0);
+          updateData.price = finalPrice;
+        }
+      } else {
+        updateData.courier = null; updateData.courierId = null; updateData.courierLink = null;
+        if (order.courierId) {
+           const oldCourier = await prisma.courier.findUnique({ where: { id: order.courierId } });
+           if (oldCourier?.isAuto && order.price && order.price >= 600) {
+               finalPrice = order.price - 100;
+               updateData.price = finalPrice;
+           }
+        }
+      }
+    }
+
+    const rttMode = updateData.courierId 
+      ? ((await prisma.courier.findUnique({ where: { id: updateData.courierId } }))?.isAuto ? "auto" : "mt") 
+      : "auto";
+    const freshCoords = await prisma.order.findUnique({ where: { id }, select: { lat: true, lng: true }});
+    const finalCourier = updateData.courier !== undefined ? updateData.courier : order.courier;
+    if (finalCourier && (body.courier !== undefined || body.address !== undefined)) {
+      if (freshCoords?.lat && freshCoords?.lng) {
+        updateData.courierLink = `https://yandex.ru/maps/?mode=routes&rtext=${STORE_COORDS}~${freshCoords.lat},${freshCoords.lng}&rtt=${rttMode}`;
+      }
+    }
+
+    const newCourierId = updateData.courierId as number | undefined;
+    if (newCourierId && newCourierId !== order.courierId) {
+      if (order.routeId) {
+        const siblingsCount = await prisma.order.count({ where: { routeId: order.routeId, id: { not: id } }});
+        if (siblingsCount === 0) await prisma.route.deleteMany({ where: { id: order.routeId } });
+      }
+      
+      const rawDate = updateData.deliveryDate || order.deliveryDate || order.crmCreatedAt || new Date();
+      const orderDate = (rawDate instanceof Date ? rawDate : new Date(rawDate))
+           .toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" });
+      const routeDay = orderDate.split("-")[2];
+      const prefix = `M-${routeDay}`;
+
+      const routes = await prisma.route.findMany({ where: { name: { startsWith: prefix }, date: orderDate }, select: { name: true }});
+      let maxNum = 0;
+      for (const r of routes) {
+        const match = r.name.match(new RegExp(`^${prefix}(\\d+)$`));
+        if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10));
+      }
+      const newRoute = await prisma.route.create({
+        data: { 
+            name: `${prefix}${(maxNum + 1).toString().padStart(3, "0")}`, 
+            link: updateData.courierLink, 
+            date: orderDate, 
+            courierId: newCourierId,
+            estimatedReturnTime: body.estimatedReturnTime || null
+        },
+      });
+      updateData.routeId = newRoute.id; updateData.routeOrder = 1;
+      if (order.status === "NEW") updateData.status = "ASSIGNED";
+    }
+
+    // 🔥 ВОЗВРАЩЕННЫЙ БЛОК: Снятие курьера
+    if ((body.courier === "" || body.courier === null) && order.courierId !== null) {
+      if (order.status === "ASSIGNED" && body.status === undefined) updateData.status = "NEW";
+      updateData.pickedUpAt = null;
+      if (order.routeId) {
+        const siblingsCount = await prisma.order.count({ where: { routeId: order.routeId, id: { not: id } }});
+        if (siblingsCount === 0) await prisma.route.deleteMany({ where: { id: order.routeId } });
+        updateData.routeId = null; updateData.routeOrder = null;
+      }
+    }
+
+    // 🔥 НОВЫЙ БЛОК: Безопасный выход из маршрута при смене даты
+    const oldDate = order.deliveryDate ? new Date(order.deliveryDate).toISOString().split('T')[0] : null;
+    const newDate = updateData.deliveryDate ? new Date(updateData.deliveryDate).toISOString().split('T')[0] : null;
+    const dateChanged = body.deliveryDate !== undefined && oldDate !== newDate;
+
+    if (dateChanged && order.routeId) {
+      const siblingsCount = await prisma.order.count({ where: { routeId: order.routeId, id: { not: id } }});
+      if (siblingsCount === 0) {
+         await prisma.route.deleteMany({ where: { id: order.routeId } });
+      }
+      updateData.routeId = null; 
+      updateData.routeOrder = null;
+    }
+
+    if (body.photoUrl !== undefined) updateData.photoUrl = body.photoUrl;
+
+    const finalStatus = updateData.status !== undefined ? updateData.status : order.status;
+    const finalCourierId = updateData.courierId !== undefined ? updateData.courierId : order.courierId;
+    
+    if (finalStatus === "NEW" || finalCourierId === null) {
+      updateData.eta = null;
+    }
+
+    let updatedOrder = order;
+    if (Object.keys(updateData).length > 0) {
+      updatedOrder = await prisma.order.update({ where: { id }, data: updateData, include: { route: true } });
+    }
+
+    if (body.estimatedReturnTime !== undefined && updatedOrder.routeId) {
+      await prisma.route.update({
+        where: { id: updatedOrder.routeId },
+        data: { estimatedReturnTime: body.estimatedReturnTime }
+      });
+    }
+
+    const changes = {
+      statusChanged:         order.status         !== updatedOrder.status,
+      courierChanged:        (order.courierId ?? 0) !== (updatedOrder.courierId ?? 0),
+      dateChanged:           dateChanged,
+      slotChanged:           (order.slotRaw    ?? "") !== (updatedOrder.slotRaw    ?? ""),
+      addressChanged:        (order.address    ?? "") !== (updatedOrder.address    ?? ""),
+      commentChanged:        (order.comment    ?? "") !== (updatedOrder.comment    ?? ""),
+      opCommentChanged:      (order.opComment  ?? "") !== (updatedOrder.opComment  ?? ""),
+      itemsChanged:          (order.items      ?? "") !== (updatedOrder.items      ?? ""),
+      recipientPhoneChanged: (order.recipientPhone ?? "") !== (updatedOrder.recipientPhone ?? ""),
+    };
+
+    if (Object.values(changes).some(Boolean)) {
+      notify({
+        type: "order.updated",
+        order: updatedOrder as any,
+        previousStatus: changes.statusChanged ? order.status : undefined,
+        changes,
+      }).catch(console.error);
+    }
+
+    const statusChanged = body.status !== undefined && order.status !== body.status;
+    if (statusChanged && (body.status === "IN_DELIVERY" || body.status === "DELIVERED")) {
+       await applyUniversalEtaShift(id, body.status, body.eta);
+    }
+
+    const tgToken = process.env.TELEGRAM_BOT_TOKEN;
+    const tgChat  = process.env.TELEGRAM_ADMIN_CHAT_ID;
+    const proxyUrl = process.env.PROXY_URL; // 🔥 URL прокси
+
+    if (proxyUrl && tgToken && tgChat && body.photoUrl && body.photoUrl !== order.photoUrl) {
+        fetch(proxyUrl, {
+          method: "POST", 
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            token: tgToken,
+            method: "sendPhoto",
+            payload: { 
+              chat_id: tgChat, 
+              photo: body.photoUrl, 
+              caption: `📸 *Фото к заказу ${order.externalId || order.crmId}*\n📍 *Адрес:* ${order.address}`, 
+              parse_mode: "Markdown" 
+            }
+          }),
+        }).catch(() => {});
+    }
+
+    if (finalPrice !== undefined && order.crmId) await updateCrmOrderDeliveryPrice(order.crmId, finalPrice);
+    let crmStatus = body.status ?? updateData.status;
+    if (crmStatus === "ASSIGNED") crmStatus = undefined;
+    
+    await updateCrmOrder(order.crmId, { status: crmStatus as OrderStatus | undefined, courier: updateData.courier ?? body.courier, opComment: body.opComment, address: body.address });
+
+    return NextResponse.json(updatedOrder);
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 500 });
+  }
+}

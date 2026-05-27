@@ -140,12 +140,17 @@ model CourierShift {
 
   @@unique([courierId, date])
 }
+
 model CourierPayment {
-  id        String   @id @default(cuid())
-  courierId Int
-  date      String
+  id          String   @id @default(cuid())
+  courierId   Int
+  date        String
   
-  courier   Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  // 🔥 ДОБАВЛЕНО ДЛЯ ИСТОРИЧЕСКОЙ СТАТИСТИКИ
+  amount      Float    @default(0) 
+  ordersCount Int      @default(0) 
+
+  courier     Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
   
   @@unique([courierId, date])
 }
@@ -289,9 +294,13 @@ model KonsolTask {
   id             String   @id @default(cuid())
   courierId      Int
   konsolTaskId   String   
-  konsolActId    String?  
+  konsolActId    String?
   date           DateTime
   amount         Float    
+  
+  // 🔥 ДОБАВЛЕНО ДЛЯ ИСТОРИЧЕСКОЙ СТАТИСТИКИ
+  ordersCount    Int      @default(0) 
+
   status         String   @default("DRAFT")
   createdAt      DateTime @default(now())
   

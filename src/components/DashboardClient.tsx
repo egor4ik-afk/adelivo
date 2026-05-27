@@ -668,14 +668,23 @@ export function DashboardClient({ user }: { user: User }) {
     if (typeof window === "undefined" || !window.ymaps) return;
 
     dbCouriers.forEach(c => {
-      const ONLINE_THRESHOLD_MS = 5 * 60 * 1000;
-      const isLive = c.lat && c.lng && c.locationUpdatedAt && (Date.now() - new Date(c.locationUpdatedAt).getTime()) < ONLINE_THRESHOLD_MS;
-
+      // 🔥 Расчет онлайна: меньше 60 минут = онлайн
+      const diffMins = c.locationUpdatedAt 
+        ? Math.floor((Date.now() - new Date(c.locationUpdatedAt).getTime()) / 60000) 
+        : null;
+        
+      const isLive = diffMins !== null && diffMins < 60;
+      const timeAgoText = diffMins === 0 ? "только что" : `${diffMins} мин`;
+    
       if (showCouriers && c.lat && c.lng) {
         const pm = new window.ymaps.Placemark([c.lat, c.lng], {
-          balloonContentHeader: c.fullName, balloonContentBody: isLive ? "Текущее местоположение" : "Был недавно",
-          hintContent: `${c.fullName} (${isLive ? "в сети" : "офлайн"})`, iconCaption: c.fullName,
-        }, { preset: isLive ? "islands#blueWalkingIcon" : "islands#grayWalkingIcon" });
+          balloonContentHeader: c.fullName, 
+          balloonContentBody: isLive ? `Онлайн (${timeAgoText})` : "Был недавно",
+          hintContent: `${c.fullName} (${isLive ? timeAgoText : "офлайн"})`, 
+          iconCaption: c.fullName,
+        }, { 
+          preset: isLive ? "islands#blueWalkingIcon" : "islands#grayWalkingIcon" 
+        });
         coll.add(pm as any);
       }
 
