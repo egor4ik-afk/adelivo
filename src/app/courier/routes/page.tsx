@@ -71,7 +71,7 @@ export default function CourierRoutesPage() {
   const [uploading, setUploading] = useState<Record<string, boolean>>({}); 
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
   const [collapsedOrders, setCollapsedOrders] = useState<Record<string, boolean>>({});
-
+  const [acceptedLocally, setAcceptedLocally] = useState<Record<string, boolean>>({});
   const toggleOrder = (orderId: string) => {
     setCollapsedOrders(prev => ({
       ...prev,
@@ -286,7 +286,18 @@ export default function CourierRoutesPage() {
   };
 
   const unacceptedRouteKeys = todayRouteKeys.filter(rId => {
-    const route = todayGrouped[rId][0]?.route;
+    // 🔥 1. Моментально скрываем, если курьер уже нажал "Принять" в этой сессии
+    if (acceptedLocally[rId]) return false;
+    
+    const points = todayGrouped[rId];
+    if (!points || points.length === 0) return false;
+
+    // 🔥 2. Если курьер УЖЕ начал маршрут (есть статус В ПУТИ или ДОСТАВЛЕН), баннер больше не нужен
+    const hasStarted = points.some(p => p.status === "IN_DELIVERY" || p.status === "DELIVERED");
+    if (hasStarted) return false;
+
+    // 🔥 3. Если маршрут не начат, смотрим в поле базы
+    const route = points[0]?.route;
     return route && (route as any).isAccepted === false;
   });
 
@@ -344,6 +355,9 @@ export default function CourierRoutesPage() {
                 </div>
                 <button 
                   onClick={async () => {
+                    // 🔥 Запоминаем клик, чтобы баннер сразу исчез и не моргал при обновлении 
+                    setAcceptedLocally(prev => ({...prev, [rId]: true}));
+                    
                     setOrders(prev => prev.map(o => o.route?.id === rId ? { ...o, route: { ...o.route!, isAccepted: true } as any } : o));
                     try {
                       await fetch(`/api/routes/${rId}`, { method: "PATCH", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ isAccepted: true }) });

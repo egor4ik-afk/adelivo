@@ -1287,46 +1287,53 @@ export function DashboardClient({ user }: { user: User }) {
 
 {!isCalculatingRoute && departureAdvice && (
                 <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-                  {/* 🔥 Обертка для инпута и УМНОГО крестика */}
+                  {/* 🔥 Обертка для инпута и кнопок */}
                   <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
                       <input
                         type="time"
                         value={manualDepartureTime}
                         onChange={(e) => setManualDepartureTime(e.target.value)}
                         style={{
-                          padding: "4px 24px 4px 8px",
+                          padding: "4px 44px 4px 8px", // 🔥 Дали много места справа под 2 кнопки
                           borderRadius: 6, border: "1px solid #4a7aff",
                           outline: "none", fontWeight: 700, fontFamily: "monospace",
-                          fontSize: 13, color: "#4a7aff", background: "#fff", width: 94
+                          fontSize: 13, color: "#4a7aff", background: "#fff", width: 110
                         }}
                       />
                       
-                      {/* 🔥 Умная кнопка сброса: возвращает к БД или очищает */}
-                      {(() => {
-                        const currentRouteObj = editingRouteId ? existingRoutes.find((r: any) => r.id === editingRouteId) : null;
-                        const dbDepartureTime = currentRouteObj?.plannedDepartureTime || "";
-                        
-                        if (manualDepartureTime !== dbDepartureTime) {
+                      {/* 🔥 Контейнер с кнопками поверх инпута */}
+                      <div style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", display: "flex", gap: 6, alignItems: "center" }}>
+                        {(() => {
+                          const currentRouteObj = editingRouteId ? existingRoutes.find((r: any) => r.id === editingRouteId) : null;
+                          const dbDepartureTime = currentRouteObj?.plannedDepartureTime || "";
+                          
                           return (
-                            <button
-                              onClick={() => setManualDepartureTime(dbDepartureTime)}
-                              title={dbDepartureTime ? "Вернуть как в базе" : "Очистить время"}
-                              style={{
-                                position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
-                                background: "none", border: "none", color: "#d94040",
-                                cursor: "pointer", fontSize: dbDepartureTime ? 16 : 18, padding: 0, lineHeight: 1,
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                                opacity: 0.7, transition: "opacity 0.2s"
-                              }}
-                              onMouseEnter={(e) => e.currentTarget.style.opacity = "1"}
-                              onMouseLeave={(e) => e.currentTarget.style.opacity = "0.7"}
-                            >
-                              {dbDepartureTime ? "↺" : "×"}
-                            </button>
+                            <>
+                              {/* 1. Кнопка ↺ (вернуть из БД). Показывается только при редактировании, если мы изменили время */}
+                              {editingRouteId && manualDepartureTime !== dbDepartureTime && (
+                                <button
+                                  onClick={() => setManualDepartureTime(dbDepartureTime)}
+                                  title={`Вернуть время из БД (${dbDepartureTime || "пусто"})`}
+                                  style={{ background: "none", border: "none", color: "#4a7aff", cursor: "pointer", fontSize: 16, padding: 0, fontWeight: 700 }}
+                                >
+                                  ↺
+                                </button>
+                              )}
+                              
+                              {/* 2. Кнопка × (очистить всё). Показывается всегда, когда в инпуте хоть что-то есть */}
+                              {manualDepartureTime && (
+                                <button
+                                  onClick={() => setManualDepartureTime("")}
+                                  title="Очистить поле"
+                                  style={{ background: "none", border: "none", color: "#d94040", cursor: "pointer", fontSize: 18, padding: 0, lineHeight: 1 }}
+                                >
+                                  ×
+                                </button>
+                              )}
+                            </>
                           );
-                        }
-                        return null;
-                      })()}
+                        })()}
+                      </div>
                     </div>
 
                   {/* Описание того, почему выбрано такое время (без самого времени) */}
