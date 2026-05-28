@@ -1291,9 +1291,7 @@ export function DashboardClient({ user }: { user: User }) {
     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
       <span style={{ fontSize: 12, color: "#4a7aff", fontWeight: 700 }}>💡 Выезд:</span>
 
-      {/* Инпут с кнопкой сброса */}
-      // Было: position relative обёртка с absolute кнопкой внутри
-// Стало: flex-row, кнопка просто рядом
+  
 
 <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
   <input
