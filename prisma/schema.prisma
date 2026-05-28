@@ -229,7 +229,7 @@ model Route {
   departureAdvice     String?
   courierId           Int
   courier             Courier  @relation(fields: [courierId], references: [id])
-  plannedDepartureTime DateTime? // Новое поле для ручной правки времени выезда оператором
+  plannedDepartureTime String? // Новое поле для ручной правки времени выезда оператором
   baseArrivalTime     String?
   estimatedReturnTime String?
   sortOrder           Int      @default(0)
