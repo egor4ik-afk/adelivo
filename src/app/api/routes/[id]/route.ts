@@ -1,11 +1,10 @@
-// src/app/api/routes/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { notify } from "@/lib/notifications"; // 🔥 ДОБАВЛЕНО: импорт уведомлений
+import { notify } from "@/lib/notifications"; // 🔥 Импорт уведомлений
 
 export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const user = await getSession(); // 🔥 ВОЗВРАЩАЕМ КАК БЫЛО
+  const user = await getSession(); // Проверка сессии
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
@@ -25,7 +24,8 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       where: { id },
       data: { 
         baseArrivalTime: body.baseArrivalTime,
-        estimatedReturnTime: body.estimatedReturnTime 
+        estimatedReturnTime: body.estimatedReturnTime,
+        isAccepted: body.isAccepted // 🔥 ФИКС: Теперь статус принятия маршрута успешно сохраняется в БД!
       }
     });
 
@@ -43,7 +43,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       // 🔥 2. УВЕДОМЛЕНИЕ В TELEGRAM ЧЕРЕЗ ПРОКСИ
       const tgToken = process.env.TELEGRAM_BOT_TOKEN;
       const tgChat  = process.env.TELEGRAM_ADMIN_CHAT_ID;
-      const proxyUrl = process.env.PROXY_URL; // 🔥 URL прокси
+      const proxyUrl = process.env.PROXY_URL; // URL прокси
       
       if (proxyUrl && tgToken && tgChat) {
         const msg = [
