@@ -914,14 +914,20 @@ export function DashboardClient({ user }: { user: User }) {
     if (hasStarted && actualDepartureMs) {
       currentRunningMs = actualDepartureMs;
     } else if (!hasStarted && selectedRouteOrders.length > 0 && routeLegs.length > 0) {
-      // 🔥 Теперь предпросмотр берет время из инпута. 
-      // Если инпут пуст (например, при создании), берем авто-расчет для предпросмотра
-      const calcDep = departureAdvice?.match(/(\d{2}:\d{2})/)?.[0] ?? null;
-      const effectiveDep = manualDepartureTime || calcDep;
-
-      if (effectiveDep) {
-        const [bH, bM] = effectiveDep.split(':').map(Number);
+      if (manualDepartureTime) {
+        // 1. Если оператор задал время или нажал "Принять" — железно считаем от него
+        const [bH, bM] = manualDepartureTime.split(':').map(Number);
         currentRunningMs = new Date(year, month - 1, day, bH, bM, 0, 0).getTime();
+      } else {
+        // 2. Если инпут пустой (новый маршрут), берем расчет ИИ чисто для красивого превью!
+        const calcDep = departureAdvice?.match(/(\d{2}:\d{2})/)?.[0];
+        if (calcDep) {
+          const [bH, bM] = calcDep.split(':').map(Number);
+          currentRunningMs = new Date(year, month - 1, day, bH, bM, 0, 0).getTime();
+        } else {
+          // 3. Если ИИ еще не посчитал (или сломался), фолбэк на текущее время
+          currentRunningMs = Date.now();
+        }
       }
     }
 
@@ -1281,38 +1287,47 @@ export function DashboardClient({ user }: { user: User }) {
 
 {!isCalculatingRoute && departureAdvice && (
                 <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 12, color: "#4a7aff", fontWeight: 700 }}>💡 Выезд:</span>
-                    <input
-                      type="time"
-                      value={manualDepartureTime}
-                      onChange={(e) => setManualDepartureTime(e.target.value)}
-                      style={{
-                        padding: "2px 6px", borderRadius: 6, border: "1px solid #4a7aff",
-                        outline: "none", fontWeight: 700, fontFamily: "monospace",
-                        fontSize: 12, color: "#4a7aff", background: "#fff", width: 88
-                      }}
-                    />
-
-                    {/* 🔥 Вытаскиваем рассчитанное время для подсказки справа */}
-                    {(() => {
-                      const calcDep = departureAdvice.match(/(\d{2}:\d{2})/)?.[0];
-                      if (calcDep && calcDep !== manualDepartureTime) {
-                        return (
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#fef2f2", padding: "2px 6px", borderRadius: 6, border: "1px dashed #fca5a5" }}>
-                            <span style={{ fontSize: 11, color: "#d94040", fontWeight: 600 }}>Расчет: {calcDep}</span>
+                  {/* 🔥 Обертка для инпута и УМНОГО крестика */}
+                  <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                      <input
+                        type="time"
+                        value={manualDepartureTime}
+                        onChange={(e) => setManualDepartureTime(e.target.value)}
+                        style={{
+                          padding: "4px 24px 4px 8px",
+                          borderRadius: 6, border: "1px solid #4a7aff",
+                          outline: "none", fontWeight: 700, fontFamily: "monospace",
+                          fontSize: 13, color: "#4a7aff", background: "#fff", width: 94
+                        }}
+                      />
+                      
+                      {/* 🔥 Умная кнопка сброса: возвращает к БД или очищает */}
+                      {(() => {
+                        const currentRouteObj = editingRouteId ? existingRoutes.find((r: any) => r.id === editingRouteId) : null;
+                        const dbDepartureTime = currentRouteObj?.plannedDepartureTime || "";
+                        
+                        if (manualDepartureTime !== dbDepartureTime) {
+                          return (
                             <button
-                              onClick={() => setManualDepartureTime(calcDep)}
-                              style={{ background: "#d94040", border: "none", color: "#fff", padding: "3px 8px", borderRadius: 4, fontSize: 10, cursor: "pointer", fontWeight: 700, transition: "0.2s" }}
+                              onClick={() => setManualDepartureTime(dbDepartureTime)}
+                              title={dbDepartureTime ? "Вернуть как в базе" : "Очистить время"}
+                              style={{
+                                position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
+                                background: "none", border: "none", color: "#d94040",
+                                cursor: "pointer", fontSize: dbDepartureTime ? 16 : 18, padding: 0, lineHeight: 1,
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                opacity: 0.7, transition: "opacity 0.2s"
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.opacity = "1"}
+                              onMouseLeave={(e) => e.currentTarget.style.opacity = "0.7"}
                             >
-                              Принять
+                              {dbDepartureTime ? "↺" : "×"}
                             </button>
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
-                  </div>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
 
                   {/* Описание того, почему выбрано такое время (без самого времени) */}
                   <span style={{ fontSize: 11, color: "#4a7aff" }}>
