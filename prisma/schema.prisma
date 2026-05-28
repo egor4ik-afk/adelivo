@@ -236,6 +236,7 @@ model Route {
   isDraft             Boolean  @default(false)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+  isAccepted          Boolean  @default(false)
 }
 
 model Conversation {

@@ -111,6 +111,8 @@ export default function CourierProfilePage() {
 
   // 🔥 Стейт для новых вкладок недель
   const [activeWeekTab, setActiveWeekTab] = useState<"prev" | "current" | "next">("current");
+  const [isScheduleOpen, setIsScheduleOpen] = useState(true);
+  const [isEarningsOpen, setIsEarningsOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -183,6 +185,13 @@ export default function CourierProfilePage() {
   };
 
   useEffect(() => {
+    // Загружаем состояние дропдаунов
+    const sOpen = localStorage.getItem("profileScheduleOpen");
+    if (sOpen !== null) setIsScheduleOpen(sOpen === "true");
+    
+    const eOpen = localStorage.getItem("profileEarningsOpen");
+    if (eOpen !== null) setIsEarningsOpen(eOpen === "true");
+    
     loadData();
 
     const standalone = window.matchMedia('(display-mode: standalone)').matches || ('standalone' in window.navigator && (window.navigator as any).standalone);
@@ -195,6 +204,18 @@ export default function CourierProfilePage() {
     window.addEventListener("beforeinstallprompt", handleBeforeInstall);
     return () => window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
   }, []);
+
+  const toggleSchedule = () => {
+    const val = !isScheduleOpen;
+    setIsScheduleOpen(val);
+    localStorage.setItem("profileScheduleOpen", String(val));
+  };
+
+  const toggleEarnings = () => {
+    const val = !isEarningsOpen;
+    setIsEarningsOpen(val);
+    localStorage.setItem("profileEarningsOpen", String(val));
+  };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -250,7 +271,7 @@ export default function CourierProfilePage() {
 
   const handleSaveProfile = async () => {
     setSaving(true);
-    const cleanPhone = newPhone.replace(/[^\d+]/g, "");
+    const cleanPhone = newPhone.replace(/[^\\d+]/g, "");
 
     try {
       await fetch("/api/profile", {
@@ -284,7 +305,7 @@ export default function CourierProfilePage() {
 
   const handleKonsolAction = async (action: "link" | "unlink") => {
     setKonsolLoading(true);
-    const phonePayload = action === "link" ? inputKonsolPhone.replace(/[^\d+]/g, "") : "";
+    const phonePayload = action === "link" ? inputKonsolPhone.replace(/[^\\d+]/g, "") : "";
   
     try {
       const res = await fetch("/api/profile", {
@@ -297,7 +318,7 @@ export default function CourierProfilePage() {
         alert(data.error);
       } else if (data.invited) {
         setKonsolModalOpen(false);
-        alert(`📲 Приглашение отправлено на ${inputKonsolPhone}!\n\nСсылка для регистрации:\n${data.onboarding_url}`);
+        alert(`📲 Приглашение отправлено на ${inputKonsolPhone}!\\n\\nСсылка для регистрации:\\n${data.onboarding_url}`);
         loadData();
       } else {
         setKonsolModalOpen(false);
@@ -319,7 +340,7 @@ export default function CourierProfilePage() {
     const ua = window.navigator.userAgent.toLowerCase();
     const isIOS = /iphone|ipad|ipod/.test(ua);
     if (isIOS && !isStandalone) {
-      alert("На iPhone уведомления работают только в установленном приложении.\n\nНажмите кнопку «Поделиться» ⍐ в браузере, а затем «На экран Домой» ➕.");
+      alert("На iPhone уведомления работают только в установленном приложении.\\n\\nНажмите кнопку «Поделиться» ⍐ в браузере, а затем «На экран Домой» ➕.");
       return;
     }
     try { await subscribe(); } catch (error) { alert("Браузер заблокировал уведомления."); }
@@ -421,111 +442,139 @@ export default function CourierProfilePage() {
           </div>
         )}
 
-        {/* 🔥 ИСТОРИЯ ДОХОДА ЗА СМЕНЫ */}
-        <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
-          <h2 style={{ margin: "0 0 12px 0", fontSize: 14, fontWeight: 700, color: "#1a1a18", textTransform: "uppercase" }}>💰 Доход за смены</h2>
-          
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {stats?.pastShifts && stats.pastShifts.length > 0 ? (
-              stats.pastShifts.map(s => {
-                const shiftDate = new Date(s.date);
-                const dateFormatted = shiftDate.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
-
-                return (
-                  <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", borderRadius: 10, background: "#fafaf8", border: "1px solid #e8e6df" }}>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a18" }}>{dateFormatted}</div>
-                      <div style={{ fontSize: 11, color: "#a8a49c", marginTop: 2 }}>{s.ordersCount} заказов доставлено</div>
-                    </div>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: "#10b981", background: "#ecfdf5", padding: "4px 10px", borderRadius: 6 }}>
-                      +{s.earned} ₽
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <div style={{ textAlign: "center", padding: "20px 0", color: "#a8a49c", fontSize: 13 }}>
-                Данные по закрытым сменам пока недоступны
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* 🔥 ОБНОВЛЕННЫЙ ГРАФИК РАБОТЫ (ПО НЕДЕЛЯМ) */}
+        {/* 🔥 ГРАФИК РАБОТЫ (ДРОПДАУН) */}
         <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
-          <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", margin: "0 0 12px 0", textTransform: "uppercase" }}>📅 График работы</h2>
+          <div onClick={toggleSchedule} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: isScheduleOpen ? 12 : 0 }}>
+            <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", margin: 0, textTransform: "uppercase" }}>📅 График работы</h2>
+            <div style={{ fontSize: 16, color: "#a8a49c", transform: isScheduleOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</div>
+          </div>
           
-          <div style={{ display: "flex", background: "#f5f4f0", padding: 4, borderRadius: 10, marginBottom: 14 }}>
-            {(["prev", "current", "next"] as const).map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveWeekTab(tab)}
-                style={{
-                  flex: 1, border: "none", padding: "8px", borderRadius: 8, fontSize: 12,
-                  fontWeight: activeWeekTab === tab ? 700 : 500,
-                  background: activeWeekTab === tab ? "#fff" : "transparent",
-                  color: activeWeekTab === tab ? "#1a1a18" : "#a8a49c",
-                  cursor: "pointer", transition: "all 0.15s",
-                  boxShadow: activeWeekTab === tab ? "0 1px 3px rgba(0,0,0,0.05)" : "none"
-                }}
-              >
-                {tab === "prev" ? "Прошлая" : tab === "current" ? "Текущая" : "Следующая"}
-              </button>
-            ))}
-          </div>
+          {isScheduleOpen && (
+            <>
+              <div style={{ display: "flex", background: "#f5f4f0", padding: 4, borderRadius: 10, marginBottom: 14 }}>
+                {(["prev", "current", "next"] as const).map(tab => (
+                  <button
+                    key={tab} onClick={() => setActiveWeekTab(tab)}
+                    style={{
+                      flex: 1, border: "none", padding: "8px", borderRadius: 8, fontSize: 12,
+                      fontWeight: activeWeekTab === tab ? 700 : 500,
+                      background: activeWeekTab === tab ? "#fff" : "transparent",
+                      color: activeWeekTab === tab ? "#1a1a18" : "#a8a49c",
+                      cursor: "pointer", transition: "all 0.15s",
+                      boxShadow: activeWeekTab === tab ? "0 1px 3px rgba(0,0,0,0.05)" : "none"
+                    }}
+                  >
+                    {tab === "prev" ? "Прошлая" : tab === "current" ? "Текущая" : "Следующая"}
+                  </button>
+                ))}
+              </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {weekDays.map(day => {
-              const shift = myShifts.find(s => s.date === day.dateStr);
-              const isWorking = !!shift;
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {weekDays.map(day => {
+                  const shift = myShifts.find(s => s.date === day.dateStr);
+                  const isWorking = !!shift;
+                  const isPast = day.dateStr < moscowNow.toLocaleDateString("en-CA");
+                  const pastStats = stats?.pastShifts?.find(s => s.date === day.dateStr);
 
-              return (
-                <div key={day.dateStr} style={{ background: isWorking ? "#f0fdf4" : "#fafaf8", padding: "14px 16px", borderRadius: 12, border: isWorking ? "1px solid #a7f3d0" : "1px solid #e8e6df", transition: "all 0.2s" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{
-                        width: 32, height: 32, borderRadius: 8,
-                        background: day.isToday ? "#4a7aff" : (isWorking ? "#fff" : "#e8e6df"),
-                        color: day.isToday ? "#fff" : (isWorking ? "#4a7aff" : "#6b6860"),
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: 12, fontWeight: 700
-                      }}>
-                        {day.dayName}
+                  return (
+                    <div key={day.dateStr} style={{ background: isWorking ? "#f0fdf4" : "#fafaf8", padding: "14px 16px", borderRadius: 12, border: isWorking ? "1px solid #a7f3d0" : "1px solid #e8e6df", transition: "all 0.2s" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div style={{
+                            width: 32, height: 32, borderRadius: 8,
+                            background: day.isToday ? "#4a7aff" : (isWorking ? "#fff" : "#e8e6df"),
+                            color: day.isToday ? "#fff" : (isWorking ? "#4a7aff" : "#6b6860"),
+                            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700
+                          }}>
+                            {day.dayName}
+                          </div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", textTransform: "capitalize" }}>
+                            {day.dateLabel}
+                          </div>
+                        </div>
+                        
+                        {isPast ? (
+                          <span style={{ fontSize: 13, fontWeight: 600, color: isWorking ? "#10b981" : "#a8a49c" }}>
+                            {isWorking ? "Отработал" : "Выходной"}
+                          </span>
+                        ) : (
+                          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: isWorking ? "#10b981" : "#a8a49c" }}>
+                              {isWorking ? "На смене" : "Выходной"}
+                            </span>
+                            <input type="checkbox" checked={isWorking} onChange={(e) => updateShift(day.dateStr, { isWorking: e.target.checked, startTime: shift?.startTime || "10:00", endTime: shift?.endTime || "22:00" })} style={{ width: 20, height: 20, accentColor: "#10b981" }} />
+                          </label>
+                        )}
                       </div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", textTransform: "capitalize" }}>
-                        {day.dateLabel}
-                      </div>
+
+                      {/* Если день прошел, курьер работал и есть данные о доходе */}
+                      {isPast && isWorking && (
+                        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed #d1fae5", fontSize: 13, color: "#065f46", fontWeight: 600 }}>
+                          {pastStats ? (
+                            <>Заработано: <span style={{ color: "#059669", fontWeight: 800 }}>+{pastStats.earned} ₽</span> ({pastStats.ordersCount} заказов)</>
+                          ) : (
+                            <span style={{ color: "#a8a49c" }}>Данные о доходе рассчитываются...</span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Если день будущий или сегодняшний - даем редактировать время */}
+                      {!isPast && isWorking && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 14, paddingTop: 14, borderTop: "1px solid #d1fae5", flexWrap: "wrap" }}>
+                          <span style={{ fontSize: 13, color: "#059669", fontWeight: 600, flex: 1 }}>Часы работы:</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                            <select value={shift.startTime || "10:00"} onChange={(e) => updateShift(day.dateStr, { isWorking: true, startTime: e.target.value, endTime: shift.endTime })} style={{ width: "80px", padding: "6px 4px", borderRadius: 8, border: "1px solid #a7f3d0", outline: "none", fontSize: 16, background: "#fff", color: "#065f46", fontWeight: 700, textAlign: "center" }}>
+                              {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                            <span style={{ color: "#059669", fontWeight: 700 }}>-</span>
+                            <select value={shift.endTime || "22:00"} onChange={(e) => updateShift(day.dateStr, { isWorking: true, startTime: shift.startTime, endTime: e.target.value })} style={{ width: "80px", padding: "6px 4px", borderRadius: 8, border: "1px solid #a7f3d0", outline: "none", fontSize: 16, background: "#fff", color: "#065f46", fontWeight: 700, textAlign: "center" }}>
+                              {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    
-                    <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: isWorking ? "#10b981" : "#a8a49c" }}>
-                        {isWorking ? "На смене" : "Выходной"}
-                      </span>
-                      <input type="checkbox" checked={isWorking} onChange={(e) => updateShift(day.dateStr, { isWorking: e.target.checked, startTime: shift?.startTime || "10:00", endTime: shift?.endTime || "22:00" })} style={{ width: 20, height: 20, accentColor: "#10b981" }} />
-                    </label>
-                  </div>
-
-                  {isWorking && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 14, paddingTop: 14, borderTop: "1px solid #d1fae5", flexWrap: "wrap" }}>
-                      <span style={{ fontSize: 13, color: "#059669", fontWeight: 600, flex: 1 }}>Часы работы:</span>
-                      
-                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <select value={shift.startTime || "10:00"} onChange={(e) => updateShift(day.dateStr, { isWorking: true, startTime: e.target.value, endTime: shift.endTime })} style={{ width: "80px", padding: "6px 4px", borderRadius: 8, border: "1px solid #a7f3d0", outline: "none", fontSize: 16, background: "#fff", color: "#065f46", fontWeight: 700, textAlign: "center" }}>
-                          {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                        <span style={{ color: "#059669", fontWeight: 700 }}>-</span>
-                        <select value={shift.endTime || "22:00"} onChange={(e) => updateShift(day.dateStr, { isWorking: true, startTime: shift.startTime, endTime: e.target.value })} style={{ width: "80px", padding: "6px 4px", borderRadius: 8, border: "1px solid #a7f3d0", outline: "none", fontSize: 16, background: "#fff", color: "#065f46", fontWeight: 700, textAlign: "center" }}>
-                          {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
 
+        {/* 🔥 ИСТОРИЯ ДОХОДА (ДРОПДАУН, ЗАКРЫТ ПО УМОЛЧАНИЮ) */}
+        <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+          <div onClick={toggleEarnings} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: isEarningsOpen ? 12 : 0 }}>
+            <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", margin: 0, textTransform: "uppercase" }}>💰 Доход за все смены</h2>
+            <div style={{ fontSize: 16, color: "#a8a49c", transform: isEarningsOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</div>
+          </div>
+          
+          {isEarningsOpen && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {stats?.pastShifts && stats.pastShifts.length > 0 ? (
+                stats.pastShifts.map(s => {
+                  const shiftDate = new Date(s.date);
+                  const dateFormatted = shiftDate.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
+                  return (
+                    <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", borderRadius: 10, background: "#fafaf8", border: "1px solid #e8e6df" }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1a18" }}>{dateFormatted}</div>
+                        <div style={{ fontSize: 11, color: "#a8a49c", marginTop: 2 }}>{s.ordersCount} заказов доставлено</div>
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: "#10b981", background: "#ecfdf5", padding: "4px 10px", borderRadius: 6 }}>
+                        +{s.earned} ₽
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{ textAlign: "center", padding: "20px 0", color: "#a8a49c", fontSize: 13 }}>
+                  Данные по закрытым сменам пока недоступны
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0" }}>
           <div>
             <div style={{ fontSize: 13, color: "#a8a49c" }}>Push-уведомления</div>
