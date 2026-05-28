@@ -724,7 +724,8 @@ export function DashboardClient({ user }: { user: User }) {
             updatedAt: o.route.updatedAt || o.changedAt || o.createdAt,
             baseArrivalTime: o.route.baseArrivalTime,
             estimatedReturnTime: o.route.estimatedReturnTime,
-            sortOrder: o.route.sortOrder || 0 // 🔥 Берем sortOrder из БД
+            plannedDepartureTime: o.route.plannedDepartureTime, // 🔥 ДОБАВЛЕНО: Прокидываем время из базы
+            sortOrder: o.route.sortOrder || 0
           });
         }
         routesMap.get(o.route.id).orders.push(o);
