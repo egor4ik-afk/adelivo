@@ -25,6 +25,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       data: { 
         baseArrivalTime: body.baseArrivalTime,
         estimatedReturnTime: body.estimatedReturnTime,
+        plannedDepartureTime: body.plannedDepartureTime, // 🔥 Разрешаем сохранять время выезда
         isAccepted: body.isAccepted // 🔥 ФИКС: Теперь статус принятия маршрута успешно сохраняется в БД!
       }
     });

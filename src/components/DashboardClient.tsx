@@ -201,10 +201,10 @@ export function DashboardClient({ user }: { user: User }) {
   const [routeTotals, setRouteTotals] = useState<{ time: string, dist: string } | null>(null);
   const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
   const [departureAdvice, setDepartureAdvice] = useState<string | null>(null);
-  
+
   // 🔥 ДОБАВЛЯЕМ ЭТИ ДВЕ СТРОКИ:
-  const [manualEstTime, setManualEstTime] = useState("");
-  const [isEstTimeEdited, setIsEstTimeEdited] = useState(false);
+  const [manualDepartureTime, setManualDepartureTime] = useState("");
+  const [isDepartureEdited, setIsDepartureEdited] = useState(false);
 
   // Находим функцию handleQuickStatusChange и заменяем её целиком
   const handleQuickStatusChange = async (id: string, newStatus: string, calculatedEta?: string) => {
@@ -677,21 +677,21 @@ export function DashboardClient({ user }: { user: User }) {
 
     dbCouriers.forEach(c => {
       // 🔥 Расчет онлайна: меньше 60 минут = онлайн
-      const diffMins = c.locationUpdatedAt 
-        ? Math.floor((Date.now() - new Date(c.locationUpdatedAt).getTime()) / 60000) 
+      const diffMins = c.locationUpdatedAt
+        ? Math.floor((Date.now() - new Date(c.locationUpdatedAt).getTime()) / 60000)
         : null;
-        
+
       const isLive = diffMins !== null && diffMins < 60;
       const timeAgoText = diffMins === 0 ? "только что" : `${diffMins} мин`;
-    
+
       if (showCouriers && c.lat && c.lng) {
         const pm = new window.ymaps.Placemark([c.lat, c.lng], {
-          balloonContentHeader: c.fullName, 
+          balloonContentHeader: c.fullName,
           balloonContentBody: isLive ? `Онлайн (${timeAgoText})` : "Был недавно",
-          hintContent: `${c.fullName} (${isLive ? timeAgoText : "офлайн"})`, 
+          hintContent: `${c.fullName} (${isLive ? timeAgoText : "офлайн"})`,
           iconCaption: c.fullName,
-        }, { 
-          preset: isLive ? "islands#blueWalkingIcon" : "islands#grayWalkingIcon" 
+        }, {
+          preset: isLive ? "islands#blueWalkingIcon" : "islands#grayWalkingIcon"
         });
         coll.add(pm as any);
       }
@@ -738,7 +738,7 @@ export function DashboardClient({ user }: { user: User }) {
     return Array.from(routesMap.values()).sort((a, b) => {
       // 🔥 Сначала сортируем по нашему кастомному порядку
       if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
-      
+
       const timeA = new Date(a.createdAt || a.updatedAt || 0).getTime();
       const timeB = new Date(b.createdAt || b.updatedAt || 0).getTime();
       if (timeB !== timeA) return timeB - timeA;
@@ -915,8 +915,12 @@ export function DashboardClient({ user }: { user: User }) {
     } else if (!hasStarted && selectedRouteOrders.length > 0 && routeLegs.length > 0) {
       const currentRoute = editingRouteId ? existingRoutes.find((r: any) => r.id === editingRouteId) : null;
 
-      if (currentRoute?.baseArrivalTime) {
-        const [bH, bM] = currentRoute.baseArrivalTime.split(':').map(Number);
+      const effectiveDep = isDepartureEdited
+        ? manualDepartureTime
+        : (currentRoute?.plannedDepartureTime ?? null);
+
+      if (effectiveDep) {
+        const [bH, bM] = effectiveDep.split(':').map(Number);
         currentRunningMs = new Date(year, month - 1, day, bH, bM, 0, 0).getTime();
       } else if (departureAdvice) {
         const match = departureAdvice.match(/Выехать до (\d{2}):(\d{2})/);
@@ -971,6 +975,9 @@ export function DashboardClient({ user }: { user: User }) {
   }, [selectedRouteOrders, routeLegs, routeType, filterDate, editingRouteId, existingRoutes, departureAdvice, returnToBase]);
 
   const calculatedEtas = calculatedEtasData.etas;
+
+  // 🔥 ДОБАВЛЯЕМ ЭТОТ БЛОК
+
 
   const generateYandexUrl = (ordersToRoute: DashboardOrder[], type: "auto" | "mt", rtb: boolean) => {
     const validOrders = ordersToRoute.filter(o => o.lat && o.lng && !o.isInvalid);
@@ -1062,9 +1069,12 @@ export function DashboardClient({ user }: { user: User }) {
     }
 
     // 🔥 БЕРЕМ ВРЕМЯ ИЗ ИНПУТА
-    const finalEstTime = isEstTimeEdited
-  ? manualEstTime
-  : (calculatedEtasData.baseReturnTime !== "—" ? calculatedEtasData.baseReturnTime : null);
+    const calcDep = departureAdvice?.match(/Выехать до (\d{2}:\d{2})/)?.[1] ?? null;
+const finalDepartureTime = isDepartureEdited ? manualDepartureTime : calcDep;
+const finalReturnTime = calculatedEtasData.baseReturnTime !== "—"
+  ? calculatedEtasData.baseReturnTime
+  : null;
+
     try {
       const res = await fetch(`/api/routes/assign`, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -1074,8 +1084,9 @@ export function DashboardClient({ user }: { user: User }) {
           routeType, returnToBase, oldRouteId: editingRouteId, departureAdvice, isDraft,
           routeEtas: etasPayload,
           routeDate: filterDate,
-          estimatedReturnTime: finalEstTime,
-
+          plannedDepartureTime: finalDepartureTime,   // ← совет «когда выехать»
+          estimatedReturnTime: finalReturnTime,        // ← авто-расчёт возврата
+          // baseArrivalTime НЕ трогаем — это поле курьера
         })
       });
       if (!res.ok) throw new Error("Ошибка сервера");
@@ -1100,11 +1111,11 @@ export function DashboardClient({ user }: { user: User }) {
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16, background: "#f5f4f0", padding: 4, borderRadius: 10 }}>
-      <button
+        <button
           onClick={() => {
             setRouteTabMode("new"); setEditingRouteId(null); setBulkSelectedIds([]); setBulkCourier("");
             setRouteType("mt");
-            setManualEstTime(""); setIsEstTimeEdited(false);
+            setManualDepartureTime(""); setIsDepartureEdited(false);
           }}
           style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", background: routeTabMode === "new" ? "#fff" : "transparent", color: routeTabMode === "new" ? "#1a1a18" : "#a8a49c", boxShadow: routeTabMode === "new" ? "0 2px 8px rgba(0,0,0,0.05)" : "none", transition: "all 0.2s" }}
         >
@@ -1164,10 +1175,10 @@ export function DashboardClient({ user }: { user: User }) {
               return false;
             }).length;
 
-            
+
             return (
-              <div 
-                key={r.id} 
+              <div
+                key={r.id}
                 draggable // 🔥 РАЗРЕШАЕМ ПЕРЕТАСКИВАТЬ
                 onDragStart={(e) => handleRouteDragStart(e, r.id)}
                 onDragOver={handleRouteDragOver}
@@ -1178,9 +1189,11 @@ export function DashboardClient({ user }: { user: User }) {
                   setEditingRouteId(r.id);
                   setRouteTabMode("new");
                   setRouteType(rCourier?.isAuto ? "auto" : "mt");
-                  setManualEstTime(r.estimatedReturnTime || "");
-                  setIsEstTimeEdited(!!r.estimatedReturnTime);
-                }} 
+
+                  // 🔥 Подгружаем время из редактируемого маршрута
+                  setManualDepartureTime(r.plannedDepartureTime || "");
+                  setIsDepartureEdited(!!r.plannedDepartureTime);
+                }}
                 style={{ background: "#fafaf8", border: "1px solid #e8e6df", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}
               >
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
@@ -1188,7 +1201,7 @@ export function DashboardClient({ user }: { user: User }) {
                   <div style={{ fontSize: 16, color: "#d1d5db", cursor: "grab", marginTop: 2, paddingRight: 4 }} title="Потяните для изменения порядка">
                     ⠿
                   </div>
-                  
+
                   <div>
                     <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       {typeIcon} {r.name}
@@ -1267,39 +1280,50 @@ export function DashboardClient({ user }: { user: User }) {
           </div>
 
           {routeTotals && (
-  <div style={{ fontSize: 13, color: "#1a1a18", background: "#eef3ff", padding: "12px 14px", borderRadius: 8, marginBottom: 16, fontWeight: 600 }}>
-    {isCalculatingRoute ? "⏳ Считаем время в пути..." : `🏁 Итого: ~${routeTotals.time} (${routeTotals.dist})`}
+            <div style={{ fontSize: 13, color: "#1a1a18", background: "#eef3ff", padding: "12px 14px", borderRadius: 8, marginBottom: 16, fontWeight: 600 }}>
+              {isCalculatingRoute
+                ? "⏳ Считаем время в пути..."
+                : `🏁 Итого: ~${routeTotals.time} (${routeTotals.dist})`}
 
-    {!isCalculatingRoute && departureAdvice && (
-      <div style={{ marginTop: 6, fontSize: 12, color: "#4a7aff", fontWeight: 700 }}>
-        💡 {departureAdvice}
-      </div>
-    )}
+              {!isCalculatingRoute && departureAdvice && (
+                <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12, color: "#4a7aff", fontWeight: 700 }}>💡 Выехать до</span>
+                  <input
+                    type="time"
+                    value={isDepartureEdited
+                      ? manualDepartureTime
+                      : (departureAdvice.match(/(\d{2}:\d{2})/)?.[0] || "")}
+                    onChange={(e) => {
+                      setManualDepartureTime(e.target.value);
+                      setIsDepartureEdited(true);
+                    }}
+                    style={{
+                      padding: "2px 6px", borderRadius: 6, border: "1px solid #4a7aff",
+                      outline: "none", fontWeight: 700, fontFamily: "monospace",
+                      fontSize: 12, color: "#4a7aff", background: "#fff", width: 88
+                    }}
+                  />
+                  <span style={{ fontSize: 11, color: "#4a7aff" }}>
+                    {departureAdvice.replace(/Выехать до \d{2}:\d{2}/, "").trim()}
+                  </span>
+                  {isDepartureEdited && (
+                    <button
+                      onClick={() => { setIsDepartureEdited(false); setManualDepartureTime(""); }}
+                      style={{ background: "none", border: "none", color: "#4a7aff", fontSize: 10, cursor: "pointer", textDecoration: "underline" }}
+                    >
+                      Авто
+                    </button>
+                  )}
+                </div>
+              )}
 
-    {!isCalculatingRoute && (
-      <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 12, borderTop: "1px dashed #bfdbfe", paddingTop: 12, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: "#1a1a18" }}>🕒 Назначить время на базу:</span>
-        <input
-          type="time"
-          value={isEstTimeEdited ? manualEstTime : (calculatedEtasData.baseReturnTime !== "—" ? calculatedEtasData.baseReturnTime : "")}
-          onChange={(e) => {
-            setManualEstTime(e.target.value);
-            setIsEstTimeEdited(true);
-          }}
-          style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontWeight: 700, fontFamily: "monospace", fontSize: 13, color: "#1a1a18", background: "#fff" }}
-        />
-        {isEstTimeEdited && (
-          <button
-            onClick={() => { setIsEstTimeEdited(false); setManualEstTime(""); }}
-            style={{ background: "none", border: "none", color: "#4a7aff", fontSize: 11, cursor: "pointer", textDecoration: "underline" }}
-          >
-            Авто-расчет
-          </button>
-        )}
-      </div>
-    )}
-  </div>
-)}
+              {!isCalculatingRoute && returnToBase && calculatedEtasData.baseReturnTime !== "—" && (
+                <div style={{ marginTop: 6, fontSize: 11, color: "#a8a49c", fontWeight: 600 }}>
+                  🏠 Расчётное время на базе: {calculatedEtasData.baseReturnTime}
+                </div>
+              )}
+            </div>
+          )}
 
           <div style={{ display: "flex", gap: 10, marginBottom: 20, flexDirection: "column" }}>
             <button onClick={optimizeRoute} style={{ ...s.actionBtn, background: "#f4f7ff", color: "#4a7aff", border: "1px solid #c9d8ff" }}>✨ Умная оптимизация (Время + Расстояние)</button>
