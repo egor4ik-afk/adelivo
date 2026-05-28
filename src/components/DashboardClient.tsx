@@ -1287,42 +1287,47 @@ export function DashboardClient({ user }: { user: User }) {
 
 {!isCalculatingRoute && departureAdvice && (
                 <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-                  {/* 🔥 Обертка для инпута и кнопок */}
-                  <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 12, color: "#4a7aff", fontWeight: 700 }}>💡 Выезд:</span>
+                    
+                    {/* 🔥 Обертка для инпута и кнопок сброса/возврата */}
+                    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
                       <input
                         type="time"
                         value={manualDepartureTime}
                         onChange={(e) => setManualDepartureTime(e.target.value)}
                         style={{
-                          padding: "4px 44px 4px 8px", // 🔥 Дали много места справа под 2 кнопки
+                          padding: "4px 70px 4px 8px", // Оставили место справа под кнопки и часы браузера
                           borderRadius: 6, border: "1px solid #4a7aff",
                           outline: "none", fontWeight: 700, fontFamily: "monospace",
-                          fontSize: 13, color: "#4a7aff", background: "#fff", width: 110
+                          fontSize: 13, color: "#4a7aff", background: "#fff", width: 140
                         }}
                       />
                       
-                      {/* 🔥 Контейнер с кнопками поверх инпута */}
-                      <div style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", display: "flex", gap: 6, alignItems: "center" }}>
+                      {/* 🔥 Контейнер с кнопками × и ↺. Сдвинут влево (right: 32), чтобы не закрывать иконку часов */}
+                      <div style={{ position: "absolute", right: 32, top: "50%", transform: "translateY(-50%)", display: "flex", gap: 6, alignItems: "center" }}>
                         {(() => {
                           const currentRouteObj = editingRouteId ? existingRoutes.find((r: any) => r.id === editingRouteId) : null;
                           const dbDepartureTime = currentRouteObj?.plannedDepartureTime || "";
                           
                           return (
                             <>
-                              {/* 1. Кнопка ↺ (вернуть из БД). Показывается только при редактировании, если мы изменили время */}
+                              {/* 1. Кнопка ↺ (вернуть из БД). Показывается, если время изменено */}
                               {editingRouteId && manualDepartureTime !== dbDepartureTime && (
                                 <button
+                                  type="button"
                                   onClick={() => setManualDepartureTime(dbDepartureTime)}
                                   title={`Вернуть время из БД (${dbDepartureTime || "пусто"})`}
-                                  style={{ background: "none", border: "none", color: "#4a7aff", cursor: "pointer", fontSize: 16, padding: 0, fontWeight: 700 }}
+                                  style={{ background: "none", border: "none", color: "#4a7aff", cursor: "pointer", fontSize: 16, padding: 0, fontWeight: 700, lineHeight: 1 }}
                                 >
                                   ↺
                                 </button>
                               )}
                               
-                              {/* 2. Кнопка × (очистить всё). Показывается всегда, когда в инпуте хоть что-то есть */}
+                              {/* 2. Кнопка × (очистить). Показывается, если поле не пустое */}
                               {manualDepartureTime && (
                                 <button
+                                  type="button"
                                   onClick={() => setManualDepartureTime("")}
                                   title="Очистить поле"
                                   style={{ background: "none", border: "none", color: "#d94040", cursor: "pointer", fontSize: 18, padding: 0, lineHeight: 1 }}
@@ -1335,6 +1340,27 @@ export function DashboardClient({ user }: { user: User }) {
                         })()}
                       </div>
                     </div>
+
+                    {/* 🔥 Блок с авто-расчетом и кнопкой "Принять" (справа от инпута) */}
+                    {(() => {
+                      const calcDep = departureAdvice.match(/(\d{2}:\d{2})/)?.[0];
+                      if (calcDep && calcDep !== manualDepartureTime) {
+                        return (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#fef2f2", padding: "4px 8px", borderRadius: 6, border: "1px dashed #fca5a5" }}>
+                            <span style={{ fontSize: 11, color: "#d94040", fontWeight: 600 }}>Расчет: {calcDep}</span>
+                            <button
+                              type="button"
+                              onClick={() => setManualDepartureTime(calcDep)}
+                              style={{ background: "#d94040", border: "none", color: "#fff", padding: "4px 10px", borderRadius: 4, fontSize: 11, cursor: "pointer", fontWeight: 700, transition: "0.2s", boxShadow: "0 2px 4px rgba(217,64,64,0.2)" }}
+                            >
+                              Принять
+                            </button>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
 
                   {/* Описание того, почему выбрано такое время (без самого времени) */}
                   <span style={{ fontSize: 11, color: "#4a7aff" }}>
