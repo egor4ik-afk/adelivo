@@ -484,15 +484,33 @@ export default function CourierRoutesPage() {
                   const isDelivered = o.status === "DELIVERED";
                   const actualTime = formatDeliveredTime(o.deliveredAt || null);
                   const cleanPhoneForTg = phone !== "—" ? phone.replace(/[^\d+]/g, "") : "";
-                  
                   let timeText = "в ближайшее время";
                   if (o.eta) {
-                    timeText = `${o.eta}`;
+                    // Ищем часы и минуты в строке ETA
+                    const match = o.eta.match(/(\d{1,2}):(\d{2})/);
+                    if (match) {
+                      const h = parseInt(match[1], 10);
+                      const m = parseInt(match[2], 10);
+                      
+                      // -10 минут
+                      const d1 = new Date(); 
+                      d1.setHours(h, m - 10, 0);
+                      // +10 минут
+                      const d2 = new Date(); 
+                      d2.setHours(h, m + 10, 0);
+                      
+                      const fmt = (d: Date) => `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+                      
+                      timeText = `с ${fmt(d1)} до ${fmt(d2)}`;
+                    } else {
+                      timeText = o.eta;
+                    }
                   } else if (o.slotRaw) {
                     timeText = o.slotRaw;
                   }
                   
-                  const messageText = `Здравствуйте! Я курьер сервиса по доставке цветов BUNCH 😊 Примерное время доставки ${timeText}`;
+                  // 🔥 Обновленный текст с новыми смайлами
+                  const messageText = `😊 Здравствуйте! Это курьер сервиса по доставке цветов BUNCH 🌸🌺 Примерное время доставки: ${timeText}`;
                   const encodedMsg = encodeURIComponent(messageText);
 
                   const isFirst = idx === 0;

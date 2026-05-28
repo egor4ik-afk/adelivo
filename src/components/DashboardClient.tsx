@@ -201,6 +201,10 @@ export function DashboardClient({ user }: { user: User }) {
   const [routeTotals, setRouteTotals] = useState<{ time: string, dist: string } | null>(null);
   const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
   const [departureAdvice, setDepartureAdvice] = useState<string | null>(null);
+  
+  // 🔥 ДОБАВЛЯЕМ ЭТИ ДВЕ СТРОКИ:
+  const [manualBaseTime, setManualBaseTime] = useState("");
+  const [isTimeManuallyEdited, setIsTimeManuallyEdited] = useState(false);  
 
   // Находим функцию handleQuickStatusChange и заменяем её целиком
   const handleQuickStatusChange = async (id: string, newStatus: string, calculatedEta?: string) => {
@@ -968,6 +972,15 @@ export function DashboardClient({ user }: { user: User }) {
 
   const calculatedEtas = calculatedEtasData.etas;
 
+  // 🔥 ДОБАВЛЯЕМ ЭТОТ БЛОК
+  useEffect(() => {
+    // Если оператор не вбивал время руками, автоматически подставляем расчетное
+    if (!isTimeManuallyEdited && calculatedEtasData.baseReturnTime && calculatedEtasData.baseReturnTime !== "—") {
+      setManualBaseTime(calculatedEtasData.baseReturnTime);
+    }
+  }, [calculatedEtasData.baseReturnTime, isTimeManuallyEdited]);
+
+
   const generateYandexUrl = (ordersToRoute: DashboardOrder[], type: "auto" | "mt", rtb: boolean) => {
     const validOrders = ordersToRoute.filter(o => o.lat && o.lng && !o.isInvalid);
     if (validOrders.length === 0) return null;
@@ -1057,8 +1070,8 @@ export function DashboardClient({ user }: { user: User }) {
       }
     }
 
-    // 🔥 ДОБАВЛЯЕМ ПОЛУЧЕНИЕ ВРЕМЕНИ ВОЗВРАТА
-    const returnTime = calculatedEtasData.baseReturnTime !== "—" ? calculatedEtasData.baseReturnTime : null;
+    // 🔥 БЕРЕМ ВРЕМЯ ИЗ ИНПУТА
+    const finalBaseTime = manualBaseTime || (calculatedEtasData.baseReturnTime !== "—" ? calculatedEtasData.baseReturnTime : null);
 
     try {
       const res = await fetch(`/api/routes/assign`, {
@@ -1069,8 +1082,9 @@ export function DashboardClient({ user }: { user: User }) {
           routeType, returnToBase, oldRouteId: editingRouteId, departureAdvice, isDraft,
           routeEtas: etasPayload,
           routeDate: filterDate,
-          estimatedReturnTime: calculatedEtasData.baseReturnTime !== "—" ? calculatedEtasData.baseReturnTime : null,
-                })
+          estimatedReturnTime: finalBaseTime,
+          baseArrivalTime: finalBaseTime // 🔥 Сохраняем точное время на базу
+        })
       });
       if (!res.ok) throw new Error("Ошибка сервера");
       setBulkCourier(""); setBulkSelectedIds([]); setEditingRouteId(null);
@@ -1094,10 +1108,11 @@ export function DashboardClient({ user }: { user: User }) {
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16, background: "#f5f4f0", padding: 4, borderRadius: 10 }}>
-        <button
+      <button
           onClick={() => {
             setRouteTabMode("new"); setEditingRouteId(null); setBulkSelectedIds([]); setBulkCourier("");
             setRouteType("mt");
+            setManualBaseTime(""); setIsTimeManuallyEdited(false); // 🔥 Добавили сброс
           }}
           style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", background: routeTabMode === "new" ? "#fff" : "transparent", color: routeTabMode === "new" ? "#1a1a18" : "#a8a49c", boxShadow: routeTabMode === "new" ? "0 2px 8px rgba(0,0,0,0.05)" : "none", transition: "all 0.2s" }}
         >
@@ -1171,6 +1186,10 @@ export function DashboardClient({ user }: { user: User }) {
                   setEditingRouteId(r.id);
                   setRouteTabMode("new");
                   setRouteType(rCourier?.isAuto ? "auto" : "mt");
+                  
+                  // 🔥 Подгружаем время из редактируемого маршрута
+                  setManualBaseTime(r.baseArrivalTime || "");
+                  setIsTimeManuallyEdited(!!r.baseArrivalTime); 
                 }} 
                 style={{ background: "#fafaf8", border: "1px solid #e8e6df", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}
               >
@@ -1265,12 +1284,31 @@ export function DashboardClient({ user }: { user: User }) {
                 <div style={{ marginTop: 6, fontSize: 12, color: "#4a7aff", fontWeight: 700 }}>💡 {departureAdvice}</div>
               )}
 
-              {!isCalculatingRoute && editingRouteId && existingRoutes.find((r: any) => r.id === editingRouteId)?.baseArrivalTime && (
-                <div style={{
-                  marginTop: 8, fontSize: 12, color: "#92400e", background: "#fffbeb",
-                  padding: "4px 8px", borderRadius: 6, display: "inline-block", border: "1px solid #fde68a"
-                }}>
-                  🏠 Будет на базе в: {existingRoutes.find((r: any) => r.id === editingRouteId)?.baseArrivalTime}
+              {/* 🔥 ПОЛЕ ВВОДА ВРЕМЕНИ ОПЕРАТОРОМ */}
+              {!isCalculatingRoute && (
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 12, borderTop: "1px dashed #bfdbfe", paddingTop: 12 }}>
+                  <span style={{fontSize: 12, fontWeight: 700, color: "#1a1a18"}}>🏠 Время на базу:</span>
+                  <input
+                    type="time"
+                    value={manualBaseTime}
+                    onChange={(e) => {
+                      setManualBaseTime(e.target.value);
+                      setIsTimeManuallyEdited(true); // Запоминаем, что оператор вмешался
+                    }}
+                    style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontWeight: 700, fontFamily: "monospace", fontSize: 13, color: "#1a1a18", background: "#fff" }}
+                  />
+                  {isTimeManuallyEdited && (
+                    <button
+                      onClick={() => {
+                        // Сброс к автоматическому расчету
+                        setIsTimeManuallyEdited(false);
+                        setManualBaseTime(calculatedEtasData.baseReturnTime !== "—" ? calculatedEtasData.baseReturnTime : "");
+                      }}
+                      style={{ background: "none", border: "none", color: "#4a7aff", fontSize: 11, cursor: "pointer", textDecoration: "underline" }}
+                    >
+                      Авто-расчет
+                    </button>
+                  )}
                 </div>
               )}
             </div>
