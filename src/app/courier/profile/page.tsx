@@ -108,6 +108,8 @@ export default function CourierProfilePage() {
 
   const [saving, setSaving] = useState(false);
   const [myShifts, setMyShifts] = useState<any[]>([]);
+  // 🔥 ДОБАВЛЯЕМ СТЕЙТ ДЛЯ ЗАКАЗОВ
+  const [myOrders, setMyOrders] = useState<any[]>([]);
 
   // 🔥 Стейт для новых вкладок недель
   const [activeWeekTab, setActiveWeekTab] = useState<"prev" | "current" | "next">("current");
@@ -181,6 +183,11 @@ export default function CourierProfilePage() {
     
     fetch(`/api/courier/my-shifts?from=${from}&to=${to}`).then(r => r.json()).then(data => {
       if (Array.isArray(data)) setMyShifts(data);
+    });
+
+    // 🔥 ДОБАВЛЯЕМ ЗАГРУЗКУ ЗАКАЗОВ ДЛЯ РАСЧЕТА ТЕКУЩЕЙ НЕДЕЛИ
+    fetch("/api/courier/my-orders").then(r => r.json()).then(data => {
+      if (Array.isArray(data)) setMyOrders(data);
     });
   };
 
@@ -271,7 +278,7 @@ export default function CourierProfilePage() {
 
   const handleSaveProfile = async () => {
     setSaving(true);
-    const cleanPhone = newPhone.replace(/[^\\d+]/g, "");
+    const cleanPhone = newPhone.replace(/[^\d+]/g, "");
 
     try {
       await fetch("/api/profile", {
@@ -305,7 +312,7 @@ export default function CourierProfilePage() {
 
   const handleKonsolAction = async (action: "link" | "unlink") => {
     setKonsolLoading(true);
-    const phonePayload = action === "link" ? inputKonsolPhone.replace(/[^\\d+]/g, "") : "";
+    const phonePayload = action === "link" ? inputKonsolPhone.replace(/[^\d+]/g, "") : "";
   
     try {
       const res = await fetch("/api/profile", {
@@ -318,7 +325,7 @@ export default function CourierProfilePage() {
         alert(data.error);
       } else if (data.invited) {
         setKonsolModalOpen(false);
-        alert(`📲 Приглашение отправлено на ${inputKonsolPhone}!\\n\\nСсылка для регистрации:\\n${data.onboarding_url}`);
+        alert(`📲 Приглашение отправлено на ${inputKonsolPhone}!\n\nСсылка для регистрации:\n${data.onboarding_url}`);
         loadData();
       } else {
         setKonsolModalOpen(false);
@@ -340,7 +347,7 @@ export default function CourierProfilePage() {
     const ua = window.navigator.userAgent.toLowerCase();
     const isIOS = /iphone|ipad|ipod/.test(ua);
     if (isIOS && !isStandalone) {
-      alert("На iPhone уведомления работают только в установленном приложении.\\n\\nНажмите кнопку «Поделиться» ⍐ в браузере, а затем «На экран Домой» ➕.");
+      alert("На iPhone уведомления работают только в установленном приложении.\n\nНажмите кнопку «Поделиться» ⍐ в браузере, а затем «На экран Домой» ➕.");
       return;
     }
     try { await subscribe(); } catch (error) { alert("Браузер заблокировал уведомления."); }
@@ -442,7 +449,7 @@ export default function CourierProfilePage() {
           </div>
         )}
 
-        {/* 🔥 ГРАФИК РАБОТЫ (ДРОПДАУН) */}
+        {/* 🔥 ГРАФИК РАБОТЫ (ДРОПДАУН, ВЕРХНИЙ БЛОК) */}
         <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
           <div onClick={toggleSchedule} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: isScheduleOpen ? 12 : 0 }}>
             <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", margin: 0, textTransform: "uppercase" }}>📅 График работы</h2>
@@ -507,18 +514,29 @@ export default function CourierProfilePage() {
                         )}
                       </div>
 
-                      {/* Если день прошел, курьер работал и есть данные о доходе */}
+                      {/* 🔥 ВЫВОД ЗАРАБОТКА (ИСТОРИЯ ИЛИ НА ЛЕТУ) */}
                       {isPast && isWorking && (
                         <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed #d1fae5", fontSize: 13, color: "#065f46", fontWeight: 600 }}>
-                          {pastStats ? (
-                            <>Заработано: <span style={{ color: "#059669", fontWeight: 800 }}>+{pastStats.earned} ₽</span> ({pastStats.ordersCount} заказов)</>
-                          ) : (
-                            <span style={{ color: "#a8a49c" }}>Данные о доходе рассчитываются...</span>
-                          )}
+                          {(() => {
+                            if (pastStats) {
+                              return <>Заработано: <span style={{ color: "#059669", fontWeight: 800 }}>+{pastStats.earned} ₽</span> ({pastStats.ordersCount} заказов)</>;
+                            }
+                            
+                            // Считаем на лету из доставленных заказов этого дня
+                            const dayOrders = myOrders.filter(o => o.status === "DELIVERED" && (o.deliveryDate?.startsWith(day.dateStr) || o.route?.date === day.dateStr));
+                            const dayOrdersCount = dayOrders.length;
+                            const dayEarned = Math.round(dayOrders.reduce((sum, o) => sum + (o.price || 0), 0) * 1.06);
+
+                            if (dayOrdersCount > 0) {
+                              return <>Предварительно: <span style={{ color: "#059669", fontWeight: 800 }}>+{dayEarned} ₽</span> ({dayOrdersCount} заказов)</>;
+                            }
+
+                            return <span style={{ color: "#a8a49c" }}>Доставленных заказов нет</span>;
+                          })()}
                         </div>
                       )}
 
-                      {/* Если день будущий или сегодняшний - даем редактировать время */}
+                      {/* РЕДАКТИРОВАНИЕ ВРЕМЕНИ ТОЛЬКО ДЛЯ ТЕКУЩИХ И БУДУЩИХ ДНЕЙ */}
                       {!isPast && isWorking && (
                         <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 14, paddingTop: 14, borderTop: "1px solid #d1fae5", flexWrap: "wrap" }}>
                           <span style={{ fontSize: 13, color: "#059669", fontWeight: 600, flex: 1 }}>Часы работы:</span>
@@ -541,7 +559,7 @@ export default function CourierProfilePage() {
           )}
         </div>
 
-        {/* 🔥 ИСТОРИЯ ДОХОДА (ДРОПДАУН, ЗАКРЫТ ПО УМОЛЧАНИЮ) */}
+        {/* 🔥 ИСТОРИЯ ДОХОДА (ДРОПДАУН, СНИЗУ, ЗАКРЫТ ПО УМОЛЧАНИЮ) */}
         <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
           <div onClick={toggleEarnings} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: isEarningsOpen ? 12 : 0 }}>
             <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", margin: 0, textTransform: "uppercase" }}>💰 Доход за все смены</h2>

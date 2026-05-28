@@ -13,11 +13,12 @@ const STORE_COORDS = `${STORE_LAT},${STORE_LNG}`;
 
 interface User { id: string; email: string; role: string; avatarUrl?: string | null; firstName?: string | null; lastName?: string | null; }
 interface DbCourier {
-  id: number; fullName: string; isActive: boolean; shifts: { date: string }[];
+  id: number; fullName: string; isActive: boolean; shifts: { date: string, startTime?: string, endTime?: string }[];
   lat?: number | null; lng?: number | null;
   homeLat?: number | null; homeLng?: number | null;
   locationUpdatedAt?: string | null;
   isAuto?: boolean;
+  priority?: number; // 🔥 ДОБАВЛЯЕМ ЭТУ СТРОКУ
 }
 
 export interface DashboardOrder {
@@ -351,7 +352,10 @@ export function DashboardClient({ user }: { user: User }) {
 
       if (shift || cnt > 0) {
         const flags = [];
-        if (shift) flags.push(`На смене ${shift.startTime || "10:00"}-${shift.endTime || "22:00"} (⭐${shift.priority || 3})`);
+        if (shift) {
+          // 🔥 БЕРЕМ c.priority ВМЕСТО shift.priority
+          flags.push(`На смене ${shift.startTime || "10:00"}-${shift.endTime || "22:00"} (⭐${c.priority ?? 3})`);
+        }
         if (cnt > 0) flags.push(`${cnt} зак.`);
         label += ` (${flags.join(", ")})`;
       }

@@ -278,10 +278,10 @@ export default function CourierRoutesPage() {
     return encodeURIComponent(order.address);
   };
 
+  // 🔥 ИСПОЛЬЗУЕМ ФЛАГ isAccepted
   const unacceptedRouteKeys = todayRouteKeys.filter(rId => {
     const route = todayGrouped[rId][0]?.route;
-    // Смотрим на флаг isAccepted. Если его еще нет в БД, fallback на старую логику (!route.baseArrivalTime)
-    return route && ((route as any).isAccepted === false || ((route as any).isAccepted === undefined && !route.baseArrivalTime));
+    return route && (route as any).isAccepted === false;
   });
 
   return (
@@ -312,7 +312,7 @@ export default function CourierRoutesPage() {
           {unacceptedRouteKeys.map(rId => {
             const routePoints = todayGrouped[rId];
             const routeObj = routePoints[0]?.route;
-            
+
             return (
               <div key={`banner-${rId}`} style={{ background: "#fff", border: "2px solid #4a7aff", borderRadius: 12, padding: 16, boxShadow: "0 4px 12px rgba(74, 122, 255, 0.15)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -324,14 +324,15 @@ export default function CourierRoutesPage() {
                   </div>
                 </div>
                 <div style={{ fontSize: 14, color: "#6b6860", marginBottom: 16, fontWeight: 500 }}>
-                  Маршрут <span style={{fontWeight: 700, color: "#1a1a18"}}>{routeObj?.name}</span> назначен. <br/>
+                  Маршрут <span style={{fontWeight: 700, color: "#1a1a18"}}>{routeObj?.name}</span> назначен. Вы можете посмотреть заказы ниже.<br/>
                   {routeObj?.baseArrivalTime && (
-                     <span style={{ color: "#d94040", fontWeight: 700 }}>(Нужно забрать в {routeObj.baseArrivalTime})</span>
+                     <span style={{ color: "#d94040", fontWeight: 700, display: "inline-block", marginTop: 4 }}>
+                       (Нужно забрать в {routeObj.baseArrivalTime})
+                     </span>
                   )}
                 </div>
                 <button 
                   onClick={async () => {
-                    // Отмечаем как принятый локально и на сервере
                     setOrders(prev => prev.map(o => o.route?.id === rId ? { ...o, route: { ...o.route!, isAccepted: true } as any } : o));
                     try {
                       await fetch(`/api/routes/${rId}`, { method: "PATCH", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ isAccepted: true }) });
@@ -413,45 +414,31 @@ export default function CourierRoutesPage() {
                   </div>
                 </div>
 
-                {isExpanded && routeObj?.baseArrivalTime && (() => {
-                  const lastPoint = routePoints[routePoints.length - 1];
-                  let minTimeStr = "12:00";
-                  if (lastPoint?.slotRaw) {
-                    const match = lastPoint.slotRaw.match(/(\d{2}:\d{2})/g);
-                    if (match && match.length > 0) {
-                        const lastTime = match[match.length - 1];
-                        const [h, m] = lastTime.split(':').map(Number);
-                        const d = new Date(); d.setHours(h, m + 30, 0);
-                        minTimeStr = `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
-                    }
-                  }
-                  return (
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", borderTop: "1px dashed #e8e6df", paddingTop: 12 }} onClick={e => e.stopPropagation()}>
-                      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 600 }}>На базе в:</span>
-                          <select
-                            value={routeObj?.baseArrivalTime || ""}
-                            onChange={(e) => handleBaseTimeChange(rId, e.target.value)}
-                            style={{
-                              border: "1px solid #e8e6df", borderRadius: 6, padding: "4px 8px",
-                              fontSize: 13, fontWeight: 600, color: "#1a1a18", background: "#fff",
-                              outline: "none", cursor: "pointer", minWidth: "90px"
-                            }}
-                          >
-                            <option value="" disabled>Выбрать...</option>
-                            {routeObj?.baseArrivalTime && Number(routeObj.baseArrivalTime.split(':')[1]) % 10 !== 0 && (
-                              <option value={routeObj.baseArrivalTime}>{routeObj.baseArrivalTime}</option>
-                            )}
-                            {Array.from({ length: 96 }).map((_, i) => {
-                              const hour = Math.floor(i / 6) + 8;
-                              const min = (i % 6) * 10;
-                              const val = `${hour.toString().padStart(2, "0")}:${min.toString().padStart(2, "0")}`;
-                              return <option key={val} value={val}>{val}</option>;
-                            })}
-                          </select>
-                        </div>
-                        <span style={{ fontSize: 10, color: "#d94040", marginLeft: 55, fontWeight: 600 }}>Подсказка: не раньше {minTimeStr}</span>
+                {isExpanded && routeObj?.baseArrivalTime && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px dashed #e8e6df", paddingTop: 12 }} onClick={e => e.stopPropagation()}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 600 }}>На базе в:</span>
+                        <select
+                          value={routeObj?.baseArrivalTime || ""}
+                          onChange={(e) => handleBaseTimeChange(rId, e.target.value)}
+                          style={{
+                            border: "1px solid #e8e6df", borderRadius: 6, padding: "4px 8px",
+                            fontSize: 13, fontWeight: 600, color: "#1a1a18", background: "#fff",
+                            outline: "none", cursor: "pointer", minWidth: "90px"
+                          }}
+                        >
+                          <option value="" disabled>Выбрать...</option>
+                          {routeObj?.baseArrivalTime && Number(routeObj.baseArrivalTime.split(':')[1]) % 10 !== 0 && (
+                            <option value={routeObj.baseArrivalTime}>{routeObj.baseArrivalTime}</option>
+                          )}
+                          {Array.from({ length: 96 }).map((_, i) => {
+                            const hour = Math.floor(i / 6) + 8;
+                            const min = (i % 6) * 10;
+                            const val = `${hour.toString().padStart(2, "0")}:${min.toString().padStart(2, "0")}`;
+                            return <option key={val} value={val}>{val}</option>;
+                          })}
+                        </select>
                       </div>
                       <button
                         onClick={() => handlePickupAll(rId)}
@@ -464,8 +451,27 @@ export default function CourierRoutesPage() {
                         🚀 Забрал все
                       </button>
                     </div>
-                  );
-                })()}
+                    {/* Вычисление и рендер подсказки */}
+                    {(() => {
+                      let minTimeStr = "12:00";
+                      const lastPoint = routePoints[routePoints.length - 1];
+                      if (lastPoint?.slotRaw) {
+                         const match = lastPoint.slotRaw.match(/(\d{2}:\d{2})/g);
+                         if (match && match.length > 0) {
+                            const lastTime = match[match.length - 1];
+                            const [h, m] = lastTime.split(':').map(Number);
+                            const d = new Date(); d.setHours(h, m + 30, 0);
+                            minTimeStr = `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+                         }
+                      }
+                      return (
+                        <div style={{ fontSize: 10, color: "#d94040", fontWeight: 600, paddingLeft: 66 }}>
+                          Подсказка: не раньше {minTimeStr}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
 
               {isExpanded && (

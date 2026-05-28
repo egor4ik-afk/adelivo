@@ -81,10 +81,28 @@ export function RouteEditor({
     <div style={{ border: hasChanges ? "2px solid #4a7aff" : "1px solid #f0efe9", borderRadius: 12, padding: isMobile ? 12 : 16, background: hasChanges ? "#f4f7ff" : "#fff", transition: "all 0.3s", position: "relative" }}>
       
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
         <div>
           <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>
             Маршрут {routeName} {hasChanges && <span style={{ color: "#4a7aff", fontSize: 12, marginLeft: 8 }}>*не сохранено</span>}
           </h4>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
+            <span style={{fontSize: 12, fontWeight: 600, color: "#6b6860"}}>Время на базу:</span>
+            <input 
+              type="time" 
+              defaultValue={route?.baseArrivalTime || ""} 
+              onBlur={async (e) => {
+                 try {
+                   await fetch(`/api/routes/${routeId}`, { 
+                     method: "PATCH", headers: {"Content-Type": "application/json"}, 
+                     body: JSON.stringify({ baseArrivalTime: e.target.value }) 
+                   });
+                 } catch (err) {}
+              }}
+              style={{ padding: "2px 6px", borderRadius: 6, border: "1px solid #e8e6df", outline: "none", fontWeight: 700, fontFamily: "monospace", fontSize: 13 }}
+            />
+          </div>
+        </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
             <span style={{fontSize: 12, fontWeight: 600, color: "#6b6860"}}>Время прибытия на базу:</span>
             <input 
