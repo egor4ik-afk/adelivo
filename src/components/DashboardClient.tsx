@@ -203,8 +203,8 @@ export function DashboardClient({ user }: { user: User }) {
   const [departureAdvice, setDepartureAdvice] = useState<string | null>(null);
   
   // 🔥 ДОБАВЛЯЕМ ЭТИ ДВЕ СТРОКИ:
-  const [manualBaseTime, setManualBaseTime] = useState("");
-  const [isTimeManuallyEdited, setIsTimeManuallyEdited] = useState(false);  
+  const [manualEstTime, setManualEstTime] = useState("");
+  const [isEstTimeEdited, setIsEstTimeEdited] = useState(false);
 
   // Находим функцию handleQuickStatusChange и заменяем её целиком
   const handleQuickStatusChange = async (id: string, newStatus: string, calculatedEta?: string) => {
@@ -972,15 +972,6 @@ export function DashboardClient({ user }: { user: User }) {
 
   const calculatedEtas = calculatedEtasData.etas;
 
-  // 🔥 ДОБАВЛЯЕМ ЭТОТ БЛОК
-  useEffect(() => {
-    // Если оператор не вбивал время руками, автоматически подставляем расчетное
-    if (!isTimeManuallyEdited && calculatedEtasData.baseReturnTime && calculatedEtasData.baseReturnTime !== "—") {
-      setManualBaseTime(calculatedEtasData.baseReturnTime);
-    }
-  }, [calculatedEtasData.baseReturnTime, isTimeManuallyEdited]);
-
-
   const generateYandexUrl = (ordersToRoute: DashboardOrder[], type: "auto" | "mt", rtb: boolean) => {
     const validOrders = ordersToRoute.filter(o => o.lat && o.lng && !o.isInvalid);
     if (validOrders.length === 0) return null;
@@ -1071,8 +1062,9 @@ export function DashboardClient({ user }: { user: User }) {
     }
 
     // 🔥 БЕРЕМ ВРЕМЯ ИЗ ИНПУТА
-    const finalBaseTime = manualBaseTime || (calculatedEtasData.baseReturnTime !== "—" ? calculatedEtasData.baseReturnTime : null);
-
+    const finalEstTime = isEstTimeEdited
+  ? manualEstTime
+  : (calculatedEtasData.baseReturnTime !== "—" ? calculatedEtasData.baseReturnTime : null);
     try {
       const res = await fetch(`/api/routes/assign`, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -1082,8 +1074,8 @@ export function DashboardClient({ user }: { user: User }) {
           routeType, returnToBase, oldRouteId: editingRouteId, departureAdvice, isDraft,
           routeEtas: etasPayload,
           routeDate: filterDate,
-          estimatedReturnTime: finalBaseTime,
-          baseArrivalTime: finalBaseTime // 🔥 Сохраняем точное время на базу
+          estimatedReturnTime: finalEstTime,
+
         })
       });
       if (!res.ok) throw new Error("Ошибка сервера");
@@ -1112,7 +1104,7 @@ export function DashboardClient({ user }: { user: User }) {
           onClick={() => {
             setRouteTabMode("new"); setEditingRouteId(null); setBulkSelectedIds([]); setBulkCourier("");
             setRouteType("mt");
-            setManualBaseTime(""); setIsTimeManuallyEdited(false); // 🔥 Добавили сброс
+            setManualEstTime(""); setIsEstTimeEdited(false);
           }}
           style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", background: routeTabMode === "new" ? "#fff" : "transparent", color: routeTabMode === "new" ? "#1a1a18" : "#a8a49c", boxShadow: routeTabMode === "new" ? "0 2px 8px rgba(0,0,0,0.05)" : "none", transition: "all 0.2s" }}
         >
@@ -1186,10 +1178,8 @@ export function DashboardClient({ user }: { user: User }) {
                   setEditingRouteId(r.id);
                   setRouteTabMode("new");
                   setRouteType(rCourier?.isAuto ? "auto" : "mt");
-                  
-                  // 🔥 Подгружаем время из редактируемого маршрута
-                  setManualBaseTime(r.baseArrivalTime || "");
-                  setIsTimeManuallyEdited(!!r.baseArrivalTime); 
+                  setManualEstTime(r.estimatedReturnTime || "");
+                  setIsEstTimeEdited(!!r.estimatedReturnTime);
                 }} 
                 style={{ background: "#fafaf8", border: "1px solid #e8e6df", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}
               >
@@ -1277,42 +1267,39 @@ export function DashboardClient({ user }: { user: User }) {
           </div>
 
           {routeTotals && (
-            <div style={{ fontSize: 13, color: "#1a1a18", background: "#eef3ff", padding: "12px 14px", borderRadius: 8, marginBottom: 16, fontWeight: 600 }}>
-              {isCalculatingRoute ? "⏳ Считаем время в пути..." : `🏁 Итого: ~${routeTotals.time} (${routeTotals.dist})`}
+  <div style={{ fontSize: 13, color: "#1a1a18", background: "#eef3ff", padding: "12px 14px", borderRadius: 8, marginBottom: 16, fontWeight: 600 }}>
+    {isCalculatingRoute ? "⏳ Считаем время в пути..." : `🏁 Итого: ~${routeTotals.time} (${routeTotals.dist})`}
 
-              {!isCalculatingRoute && departureAdvice && (
-                <div style={{ marginTop: 6, fontSize: 12, color: "#4a7aff", fontWeight: 700 }}>💡 {departureAdvice}</div>
-              )}
+    {!isCalculatingRoute && departureAdvice && (
+      <div style={{ marginTop: 6, fontSize: 12, color: "#4a7aff", fontWeight: 700 }}>
+        💡 {departureAdvice}
+      </div>
+    )}
 
-              {/* 🔥 ПОЛЕ ВВОДА ВРЕМЕНИ ОПЕРАТОРОМ */}
-              {!isCalculatingRoute && (
-                <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 12, borderTop: "1px dashed #bfdbfe", paddingTop: 12 }}>
-                  <span style={{fontSize: 12, fontWeight: 700, color: "#1a1a18"}}>🏠 Время на базу:</span>
-                  <input
-                    type="time"
-                    value={manualBaseTime}
-                    onChange={(e) => {
-                      setManualBaseTime(e.target.value);
-                      setIsTimeManuallyEdited(true); // Запоминаем, что оператор вмешался
-                    }}
-                    style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontWeight: 700, fontFamily: "monospace", fontSize: 13, color: "#1a1a18", background: "#fff" }}
-                  />
-                  {isTimeManuallyEdited && (
-                    <button
-                      onClick={() => {
-                        // Сброс к автоматическому расчету
-                        setIsTimeManuallyEdited(false);
-                        setManualBaseTime(calculatedEtasData.baseReturnTime !== "—" ? calculatedEtasData.baseReturnTime : "");
-                      }}
-                      style={{ background: "none", border: "none", color: "#4a7aff", fontSize: 11, cursor: "pointer", textDecoration: "underline" }}
-                    >
-                      Авто-расчет
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+    {!isCalculatingRoute && (
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 12, borderTop: "1px dashed #bfdbfe", paddingTop: 12, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "#1a1a18" }}>🕒 Назначить время на базу:</span>
+        <input
+          type="time"
+          value={isEstTimeEdited ? manualEstTime : (calculatedEtasData.baseReturnTime !== "—" ? calculatedEtasData.baseReturnTime : "")}
+          onChange={(e) => {
+            setManualEstTime(e.target.value);
+            setIsEstTimeEdited(true);
+          }}
+          style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontWeight: 700, fontFamily: "monospace", fontSize: 13, color: "#1a1a18", background: "#fff" }}
+        />
+        {isEstTimeEdited && (
+          <button
+            onClick={() => { setIsEstTimeEdited(false); setManualEstTime(""); }}
+            style={{ background: "none", border: "none", color: "#4a7aff", fontSize: 11, cursor: "pointer", textDecoration: "underline" }}
+          >
+            Авто-расчет
+          </button>
+        )}
+      </div>
+    )}
+  </div>
+)}
 
           <div style={{ display: "flex", gap: 10, marginBottom: 20, flexDirection: "column" }}>
             <button onClick={optimizeRoute} style={{ ...s.actionBtn, background: "#f4f7ff", color: "#4a7aff", border: "1px solid #c9d8ff" }}>✨ Умная оптимизация (Время + Расстояние)</button>
