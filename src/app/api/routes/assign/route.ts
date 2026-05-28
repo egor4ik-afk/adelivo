@@ -19,6 +19,8 @@ export async function POST(req: Request) {
     let fallbackReturnTime = null;
     let fallbackAdvice = null;
     let fallbackIsDraft = false;
+    let fallbackPlannedTime = null; // 🔥 1. ДОБАВИЛИ ПЕРЕМЕННУЮ
+    
 
     if (oldRouteId) {
       // 🔥 ДОБАВЛЕНО: Подтягиваем старого курьера маршрута, чтобы знать, авто он или нет
@@ -31,6 +33,7 @@ export async function POST(req: Request) {
         existingRouteName = oldRoute.name;
         fallbackReturnTime = oldRoute.estimatedReturnTime;
         fallbackAdvice = oldRoute.departureAdvice;
+        fallbackPlannedTime = oldRoute.plannedDepartureTime; // 🔥 2. СОХРАНИЛИ СТАРОЕ ВРЕМЯ
         fallbackIsDraft = oldRoute.isDraft;
       }
       
