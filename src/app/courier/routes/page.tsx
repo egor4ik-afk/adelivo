@@ -466,25 +466,6 @@ export default function CourierRoutesPage() {
                         🚀 Забрал все
                       </button>
                     </div>
-                    {/* Вычисление и рендер подсказки */}
-                    {(() => {
-                      let minTimeStr = "12:00";
-                      const lastPoint = routePoints[routePoints.length - 1];
-                      if (lastPoint?.slotRaw) {
-                         const match = lastPoint.slotRaw.match(/(\d{2}:\d{2})/g);
-                         if (match && match.length > 0) {
-                            const lastTime = match[match.length - 1];
-                            const [h, m] = lastTime.split(':').map(Number);
-                            const d = new Date(); d.setHours(h, m + 30, 0);
-                            minTimeStr = `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
-                         }
-                      }
-                      return (
-                        <div style={{ fontSize: 10, color: "#d94040", fontWeight: 600, paddingLeft: 66 }}>
-                          Подсказка: не раньше {minTimeStr}
-                        </div>
-                      );
-                    })()}
                   </div>
                 )}
               </div>

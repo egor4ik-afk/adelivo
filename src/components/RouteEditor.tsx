@@ -18,7 +18,10 @@ export function RouteEditor({
   const [orders, setOrders] = useState<any[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
   const [saving, setSaving] = useState(false);
+  
+  // Стейты для времени
   const [baseTime, setBaseTime] = useState(route?.baseArrivalTime || "");
+  const [plannedTime, setPlannedTime] = useState(route?.plannedDepartureTime || ""); // 🔥 НОВОЕ ПОЛЕ
 
   useEffect(() => {
     if (!hasChanges) {
@@ -29,7 +32,8 @@ export function RouteEditor({
   // Обновляем локальный стейт, если пропсы изменились
   useEffect(() => {
     setBaseTime(route?.baseArrivalTime || "");
-  }, [route?.baseArrivalTime]);
+    setPlannedTime(route?.plannedDepartureTime || ""); // 🔥 НОВОЕ ПОЛЕ
+  }, [route?.baseArrivalTime, route?.plannedDepartureTime]);
 
   const move = (idx: number, dir: number) => {
     const arr = [...orders];
@@ -81,21 +85,34 @@ export function RouteEditor({
   };
 
   const handleTimeBlur = async () => {
-    if (baseTime === route?.baseArrivalTime) return; // Ничего не изменилось
+    if (baseTime === route?.baseArrivalTime) return; 
     try {
       await fetch(`/api/routes/${routeId}`, { 
         method: "PATCH", 
         headers: {"Content-Type": "application/json"}, 
         body: JSON.stringify({ baseArrivalTime: baseTime }) 
       });
-      // Опционально: можно вызвать onSaved(), чтобы родитель обновил данные
     } catch (err) {
-      alert("Не удалось сохранить время");
-      setBaseTime(route?.baseArrivalTime || ""); // Возвращаем обратно при ошибке
+      alert("Не удалось сохранить время прибытия");
+      setBaseTime(route?.baseArrivalTime || ""); 
     }
   };
 
-  // Исключаем точки, которые уже добавлены в этот маршрут
+  // 🔥 ФУНКЦИЯ ДЛЯ СОХРАНЕНИЯ НОВОГО ПОЛЯ ВРЕМЕНИ
+  const handlePlannedTimeBlur = async () => {
+    if (plannedTime === route?.plannedDepartureTime) return; 
+    try {
+      await fetch(`/api/routes/${routeId}`, { 
+        method: "PATCH", 
+        headers: {"Content-Type": "application/json"}, 
+        body: JSON.stringify({ plannedDepartureTime: plannedTime }) 
+      });
+    } catch (err) {
+      alert("Не удалось сохранить время отправления");
+      setPlannedTime(route?.plannedDepartureTime || ""); 
+    }
+  };
+
   const availableToADD = globalFreeOrders.filter((free: any) => !orders.find(lo => lo.id === free.id));
 
   return (
@@ -107,15 +124,33 @@ export function RouteEditor({
           <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>
             Маршрут {routeName} {hasChanges && <span style={{ color: "#4a7aff", fontSize: 12, marginLeft: 8 }}>*не сохранено</span>}
           </h4>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
-            <span style={{fontSize: 12, fontWeight: 600, color: "#6b6860"}}>Время прибытия на базу:</span>
-            <input 
-              type="time" 
-              value={baseTime} 
-              onChange={(e) => setBaseTime(e.target.value)}
-              onBlur={handleTimeBlur}
-              style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #e8e6df", outline: "none", fontWeight: 700, fontFamily: "monospace", fontSize: 13 }}
-            />
+          
+          {/* Контейнер для полей времени */}
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 8 }}>
+            
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <span style={{fontSize: 12, fontWeight: 600, color: "#6b6860"}}>На базе:</span>
+              <input 
+                type="time" 
+                value={baseTime} 
+                onChange={(e) => setBaseTime(e.target.value)}
+                onBlur={handleTimeBlur}
+                style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #e8e6df", outline: "none", fontWeight: 700, fontFamily: "monospace", fontSize: 13 }}
+              />
+            </div>
+
+            {/* 🔥 НОВОЕ ПОЛЕ В ИНТЕРФЕЙСЕ */}
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <span style={{fontSize: 12, fontWeight: 600, color: "#d94040"}}>Забрать до:</span>
+              <input 
+                type="time" 
+                value={plannedTime} 
+                onChange={(e) => setPlannedTime(e.target.value)}
+                onBlur={handlePlannedTimeBlur}
+                style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #fca5a5", outline: "none", fontWeight: 700, fontFamily: "monospace", fontSize: 13, background: "#fef2f2", color: "#d94040" }}
+              />
+            </div>
+
           </div>
         </div>
 
@@ -170,7 +205,6 @@ export function RouteEditor({
 
               <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", marginBottom: 10, lineHeight: 1.4, flex: 1 }}>{o.address}</div>
 
-              {/* 🔥 ФОТООТЧЕТ ОТ КУРЬЕРА ДЛЯ ОПЕРАТОРА */}
               {o.photoUrl && (
                 <div style={{ marginBottom: 12, position: "relative" }}>
                   <div style={{ fontSize: 11, color: "#10b981", fontWeight: 700, marginBottom: 4 }}>

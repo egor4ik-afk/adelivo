@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     const { 
       orderIds, courierId, returnToBase = false, routeDate, 
       oldRouteId, departureAdvice, isDraft, routeEtas, 
-      estimatedReturnTime 
+      estimatedReturnTime, plannedDepartureTime // 🔥 ДОБАВИЛИ СЮДА 
     } = body;
 
     let existingRouteName = null;
@@ -119,6 +119,7 @@ export async function POST(req: Request) {
         name: routeName, 
         link, 
         date: finalRouteDate, 
+        plannedDepartureTime,
         departureAdvice: departureAdvice !== undefined ? departureAdvice : fallbackAdvice, 
         courierId: Number(courierId),
         isDraft: isDraft !== undefined ? isDraft : fallbackIsDraft,
