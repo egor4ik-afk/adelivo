@@ -455,15 +455,34 @@ export default function CourierRoutesPage() {
                     {(() => {
                       let minTimeStr = "12:00";
                       const lastPoint = routePoints[routePoints.length - 1];
-                      if (lastPoint?.slotRaw) {
-                         const match = lastPoint.slotRaw.match(/(\d{2}:\d{2})/g);
-                         if (match && match.length > 0) {
-                            const lastTime = match[match.length - 1];
-                            const [h, m] = lastTime.split(':').map(Number);
+                      
+                      // 1. Берем расчетное время от Яндекса (ETA) или парсим слот
+                      let baseTimeForHint = lastPoint?.eta; 
+
+                      // 2. Если ETA нет, вытаскиваем НАЧАЛО слота (а не конец)
+                      if (!baseTimeForHint && lastPoint?.slotRaw) {
+                         const timeMatch = lastPoint.slotRaw.match(/(\d{1,2}):(\d{2})/);
+                         if (timeMatch) {
+                           baseTimeForHint = timeMatch[0]; // из "14:00-16:00" берем "14:00"
+                         } else {
+                           const hourMatch = lastPoint.slotRaw.match(/(\d{1,2})\s*-/);
+                           if (hourMatch) {
+                             baseTimeForHint = `${hourMatch[1].padStart(2, '0')}:00`; // из "14-16" берем "14:00"
+                           }
+                         }
+                      }
+
+                      // 3. Прибавляем 30 минут на дорогу до базы
+                      if (baseTimeForHint) {
+                         const match = baseTimeForHint.match(/(\d{1,2}):(\d{2})/);
+                         if (match) {
+                            const h = parseInt(match[1], 10);
+                            const m = parseInt(match[2], 10);
                             const d = new Date(); d.setHours(h, m + 30, 0);
                             minTimeStr = `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
                          }
                       }
+
                       return (
                         <div style={{ fontSize: 10, color: "#d94040", fontWeight: 600, paddingLeft: 66 }}>
                           Подсказка: не раньше {minTimeStr}
