@@ -913,20 +913,14 @@ export function DashboardClient({ user }: { user: User }) {
     if (hasStarted && actualDepartureMs) {
       currentRunningMs = actualDepartureMs;
     } else if (!hasStarted && selectedRouteOrders.length > 0 && routeLegs.length > 0) {
-      const currentRoute = editingRouteId ? existingRoutes.find((r: any) => r.id === editingRouteId) : null;
-
-      const effectiveDep = isDepartureEdited
-        ? manualDepartureTime
-        : (currentRoute?.plannedDepartureTime ?? null);
+      // 🔥 Теперь предпросмотр берет время из инпута. 
+      // Если инпут пуст (например, при создании), берем авто-расчет для предпросмотра
+      const calcDep = departureAdvice?.match(/(\d{2}:\d{2})/)?.[0] ?? null;
+      const effectiveDep = manualDepartureTime || calcDep;
 
       if (effectiveDep) {
         const [bH, bM] = effectiveDep.split(':').map(Number);
         currentRunningMs = new Date(year, month - 1, day, bH, bM, 0, 0).getTime();
-      } else if (departureAdvice) {
-        const match = departureAdvice.match(/Выехать до (\d{2}):(\d{2})/);
-        if (match) {
-          currentRunningMs = new Date(year, month - 1, day, Number(match[1]), Number(match[2]), 0, 0).getTime();
-        }
       }
     }
 
@@ -1068,12 +1062,12 @@ export function DashboardClient({ user }: { user: User }) {
       }
     }
 
-    // 🔥 БЕРЕМ ВРЕМЯ ИЗ ИНПУТА
-    const calcDep = departureAdvice?.match(/Выехать до (\d{2}:\d{2})/)?.[1] ?? null;
-const finalDepartureTime = isDepartureEdited ? manualDepartureTime : calcDep;
-const finalReturnTime = calculatedEtasData.baseReturnTime !== "—"
-  ? calculatedEtasData.baseReturnTime
-  : null;
+    // 🔥 БЕРЕМ ВРЕМЯ СТРОГО ИЗ ИНПУТА. 
+    // Если инпут пустой (человек не задал и не нажал "Принять"), в базу улетит null.
+    const finalDepartureTime = manualDepartureTime || null;
+    const finalReturnTime = calculatedEtasData.baseReturnTime !== "—"
+      ? calculatedEtasData.baseReturnTime
+      : null;
 
     try {
       const res = await fetch(`/api/routes/assign`, {
@@ -1084,9 +1078,8 @@ const finalReturnTime = calculatedEtasData.baseReturnTime !== "—"
           routeType, returnToBase, oldRouteId: editingRouteId, departureAdvice, isDraft,
           routeEtas: etasPayload,
           routeDate: filterDate,
-          plannedDepartureTime: finalDepartureTime,   // ← совет «когда выехать»
-          estimatedReturnTime: finalReturnTime,        // ← авто-расчёт возврата
-          // baseArrivalTime НЕ трогаем — это поле курьера
+          plannedDepartureTime: finalDepartureTime,   // Строго инпут
+          estimatedReturnTime: finalReturnTime,       // Авто-расчёт возврата
         })
       });
       if (!res.ok) throw new Error("Ошибка сервера");
@@ -1285,35 +1278,45 @@ const finalReturnTime = calculatedEtasData.baseReturnTime !== "—"
                 ? "⏳ Считаем время в пути..."
                 : `🏁 Итого: ~${routeTotals.time} (${routeTotals.dist})`}
 
-              {!isCalculatingRoute && departureAdvice && (
-                <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 12, color: "#4a7aff", fontWeight: 700 }}>💡 Выехать до</span>
-                  <input
-                    type="time"
-                    value={isDepartureEdited
-                      ? manualDepartureTime
-                      : (departureAdvice.match(/(\d{2}:\d{2})/)?.[0] || "")}
-                    onChange={(e) => {
-                      setManualDepartureTime(e.target.value);
-                      setIsDepartureEdited(true);
-                    }}
-                    style={{
-                      padding: "2px 6px", borderRadius: 6, border: "1px solid #4a7aff",
-                      outline: "none", fontWeight: 700, fontFamily: "monospace",
-                      fontSize: 12, color: "#4a7aff", background: "#fff", width: 88
-                    }}
-                  />
+{!isCalculatingRoute && departureAdvice && (
+                <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 12, color: "#4a7aff", fontWeight: 700 }}>💡 Выезд:</span>
+                    <input
+                      type="time"
+                      value={manualDepartureTime}
+                      onChange={(e) => setManualDepartureTime(e.target.value)}
+                      style={{
+                        padding: "2px 6px", borderRadius: 6, border: "1px solid #4a7aff",
+                        outline: "none", fontWeight: 700, fontFamily: "monospace",
+                        fontSize: 12, color: "#4a7aff", background: "#fff", width: 88
+                      }}
+                    />
+
+                    {/* 🔥 Вытаскиваем рассчитанное время для подсказки справа */}
+                    {(() => {
+                      const calcDep = departureAdvice.match(/(\d{2}:\d{2})/)?.[0];
+                      if (calcDep && calcDep !== manualDepartureTime) {
+                        return (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#fef2f2", padding: "2px 6px", borderRadius: 6, border: "1px dashed #fca5a5" }}>
+                            <span style={{ fontSize: 11, color: "#d94040", fontWeight: 600 }}>Расчет: {calcDep}</span>
+                            <button
+                              onClick={() => setManualDepartureTime(calcDep)}
+                              style={{ background: "#d94040", border: "none", color: "#fff", padding: "3px 8px", borderRadius: 4, fontSize: 10, cursor: "pointer", fontWeight: 700, transition: "0.2s" }}
+                            >
+                              Принять
+                            </button>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
+
+                  {/* Описание того, почему выбрано такое время (без самого времени) */}
                   <span style={{ fontSize: 11, color: "#4a7aff" }}>
-                    {departureAdvice.replace(/Выехать до \d{2}:\d{2}/, "").trim()}
+                    {departureAdvice.replace(/Выехать до \d{2}:\d{2}/, "").replace("—", "").trim()}
                   </span>
-                  {isDepartureEdited && (
-                    <button
-                      onClick={() => { setIsDepartureEdited(false); setManualDepartureTime(""); }}
-                      style={{ background: "none", border: "none", color: "#4a7aff", fontSize: 10, cursor: "pointer", textDecoration: "underline" }}
-                    >
-                      Авто
-                    </button>
-                  )}
                 </div>
               )}
 
