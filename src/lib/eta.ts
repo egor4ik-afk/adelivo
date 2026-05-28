@@ -44,26 +44,50 @@ export async function applyUniversalEtaShift(orderId: string, newStatus: string,
         }
       } else {
         if (order.routeOrder === 1) {
-          let driveTimeMins = 30; 
-          const adviceSource = order.route?.departureAdvice || order.opComment || "";
-          const matches = [...adviceSource.matchAll(/Выехать до\s*(\d{1,2}):(\d{2}).*?к\s*(\d{1,2}):(\d{2})/g)];
-          
-          if (matches.length > 0) {
-            const lastMatch = matches[matches.length - 1];
-            const depMins = parseInt(lastMatch[1], 10) * 60 + parseInt(lastMatch[2], 10);
-            const arrMins = parseInt(lastMatch[3], 10) * 60 + parseInt(lastMatch[4], 10);
-            driveTimeMins = ((arrMins - depMins) + 1440) % 1440;
-          }
-          
-          let baseMins = getCurrentMskMinutes();
+          let baseMins = getCurrentMskMinutes(); // Фактическое время выезда
           if (order.pickedUpAt) {
               const d = new Date(order.pickedUpAt);
               baseMins = ((d.getUTCHours() + 3) % 24) * 60 + d.getUTCMinutes();
           }
 
-          const newEtaMins = baseMins + driveTimeMins;
-          diffMinutesToShift = newEtaMins - oldEtaMins;
-          updatedCurrentEta = formatTimeStr(newEtaMins);
+          let diffCalculated = false;
+
+          // 🔥 НОВАЯ ЛОГИКА: Отталкиваемся от точного поля plannedDepartureTime
+          if (order.route?.plannedDepartureTime) {
+            const plannedMins = parseTimeStr(order.route.plannedDepartureTime);
+            if (plannedMins !== null) {
+              let rawDiff = baseMins - plannedMins;
+              
+              // На случай, если выезд был ночью (переход через 00:00)
+              if (rawDiff > 720) rawDiff -= 1440;
+              if (rawDiff < -720) rawDiff += 1440;
+
+              // Сдвигаем на разницу между фактом и планом
+              diffMinutesToShift = rawDiff; 
+              const newEtaMins = oldEtaMins + diffMinutesToShift;
+              updatedCurrentEta = formatTimeStr(newEtaMins);
+              diffCalculated = true;
+            }
+          }
+
+          // 🔥 СТАРЫЙ ФОЛБЭК: Если поля нет или оно кривое - парсим регулярками как раньше
+          if (!diffCalculated) {
+            let driveTimeMins = 30; 
+            const adviceSource = order.route?.departureAdvice || order.opComment || "";
+            const matches = [...adviceSource.matchAll(/Выехать до\s*(\d{1,2}):(\d{2}).*?к\s*(\d{1,2}):(\d{2})/g)];
+            
+            if (matches.length > 0) {
+              const lastMatch = matches[matches.length - 1];
+              const depMins = parseInt(lastMatch[1], 10) * 60 + parseInt(lastMatch[2], 10);
+              const arrMins = parseInt(lastMatch[3], 10) * 60 + parseInt(lastMatch[4], 10);
+              driveTimeMins = ((arrMins - depMins) + 1440) % 1440;
+            }
+            
+            const newEtaMins = baseMins + driveTimeMins;
+            diffMinutesToShift = newEtaMins - oldEtaMins;
+            updatedCurrentEta = formatTimeStr(newEtaMins);
+          }
+
         } else {
           return; 
         }
@@ -103,8 +127,7 @@ export async function applyUniversalEtaShift(orderId: string, newStatus: string,
         }
       }
 
-      // 🔥 ЛОГИКА ДЛЯ МАРШРУТА: Сдвигаем ТОЛЬКО если значение уже есть.
-      // Никаких прикидок и выдуманных +30 минут здесь больше нет.
+      // 🔥 ЛОГИКА ДЛЯ МАРШРУТА: Сдвигаем время на базе ТОЛЬКО если значение уже есть.
       if (order.route?.estimatedReturnTime) {
         const routeMins = parseTimeStr(order.route.estimatedReturnTime);
         if (routeMins !== null) {
@@ -117,5 +140,7 @@ export async function applyUniversalEtaShift(orderId: string, newStatus: string,
         }
       }
     }
-  } catch (err) { console.error(`[ETA UNIVERSAL] Ошибка:`, err); }
+  } catch (err) { 
+    console.error(`[ETA UNIVERSAL] Ошибка:`, err); 
+  }
 }

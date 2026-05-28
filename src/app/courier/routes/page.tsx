@@ -331,14 +331,14 @@ export default function CourierRoutesPage() {
                 </div>
                 <div style={{ fontSize: 14, color: "#6b6860", marginBottom: 16, fontWeight: 500 }}>
                   Маршрут <span style={{fontWeight: 700, color: "#1a1a18"}}>{routeObj?.name}</span> назначен. Вы можете посмотреть заказы ниже.<br/>
-                  {/* 🔥 Баннер теперь использует plannedDepartureTime или departureAdvice */}
-                  {routeObj?.plannedDepartureTime ? (
+                  {/* 🔥 Исправленный баннер: строгая проверка на наличие планового времени */}
+                  {routeObj?.plannedDepartureTime && routeObj.plannedDepartureTime !== "—" && routeObj.plannedDepartureTime.trim() !== "" ? (
                      <span style={{ color: "#d94040", fontWeight: 700, display: "inline-block", marginTop: 4 }}>
-                       (Нужно забрать в {routeObj.plannedDepartureTime})
+                       Нужно забрать в {routeObj.plannedDepartureTime}
                      </span>
                   ) : routeObj?.departureAdvice ? (
                      <span style={{ color: "#d94040", fontWeight: 700, display: "inline-block", marginTop: 4 }}>
-                       ({routeObj.departureAdvice})
+                       {routeObj.departureAdvice}
                      </span>
                   ) : null}
                 </div>
@@ -368,7 +368,8 @@ export default function CourierRoutesPage() {
           const routeLink = routeObj?.link ?? null;
           
           // 🔥 Совет для шапки маршрута
-          const advice = routeObj?.plannedDepartureTime 
+          // 🔥 Исправленный совет для шапки маршрута
+          const advice = routeObj?.plannedDepartureTime && routeObj.plannedDepartureTime !== "—" && routeObj.plannedDepartureTime.trim() !== ""
             ? `Забрать не позднее ${routeObj.plannedDepartureTime}` 
             : (routeObj?.departureAdvice ?? null);
 
