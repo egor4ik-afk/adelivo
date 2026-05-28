@@ -20,6 +20,7 @@ interface RouteOrder {
   route?: {
     id: string; name: string; link: string | null; date: string;
     departureAdvice: string | null;
+    plannedDepartureTime?: string | null; // 🔥 НОВОЕ ПОЛЕ
     baseArrivalTime?: string | null;
     createdAt?: string;
     isAccepted?: boolean;
@@ -37,6 +38,10 @@ const STORE_COORDS = "55.749511,37.596205";
 // 🔥 ХЕЛПЕР ДЛЯ РАСЧЕТА РЕКОМЕНДОВАННОГО ВРЕМЕНИ
 const getAdviceText = (route: any, firstSlot: string | null) => {
   try {
+    if (route?.plannedDepartureTime) {
+      return `Забрать не позднее ${route.plannedDepartureTime}`;
+    }
+
     let baseTimeStr = null;
     if (route?.departureAdvice) {
       const match = route.departureAdvice.match(/до (\d{2}:\d{2})/);
@@ -97,14 +102,16 @@ export default function CourierRoutesPage() {
     return response;
   };
 
-  const handleStatusChange = async (id: string, newStatus: string, routeBaseTime?: string | null) => {
-    if (newStatus === "IN_DELIVERY" && routeBaseTime) {
-      const [bH, bM] = routeBaseTime.split(':').map(Number);
+  const handleStatusChange = async (id: string, newStatus: string, checkTime?: string | null) => {
+    // 🔥 Блокируем смену и на В ПУТИ, и на ДОСТАВЛЕН, если слишком рано
+    if ((newStatus === "IN_DELIVERY" || newStatus === "DELIVERED") && checkTime) {
+      const [bH, bM] = checkTime.split(':').map(Number);
       const now = new Date();
       const moscowTime = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Moscow" }));
       const baseTime = new Date(moscowTime.getFullYear(), moscowTime.getMonth(), moscowTime.getDate(), bH, bM, 0, 0);
       if (baseTime.getTime() - moscowTime.getTime() > 60 * 60 * 1000) {
-        alert("Слишком рано! Отметиться 'В пути' можно не раньше чем за час до установленного времени 'На базе'.");
+        const statusName = newStatus === "IN_DELIVERY" ? "'В пути'" : "'Доставлен'";
+        alert(`Слишком рано! Отметиться ${statusName} можно не раньше чем за час до установленного времени.`);
         return;
       }
     }
@@ -278,7 +285,6 @@ export default function CourierRoutesPage() {
     return encodeURIComponent(order.address);
   };
 
-  // 🔥 ИСПОЛЬЗУЕМ ФЛАГ isAccepted
   const unacceptedRouteKeys = todayRouteKeys.filter(rId => {
     const route = todayGrouped[rId][0]?.route;
     return route && (route as any).isAccepted === false;
@@ -306,7 +312,7 @@ export default function CourierRoutesPage() {
         </div>
       </div>
 
-      {/* 🔥 БАННЕРЫ НОВЫХ МАРШРУТОВ */}
+      {/* БАННЕРЫ НОВЫХ МАРШРУТОВ */}
       {unacceptedRouteKeys.length > 0 && (
         <div style={{ padding: "16px 12px 0", display: "flex", flexDirection: "column", gap: 12 }}>
           {unacceptedRouteKeys.map(rId => {
@@ -325,11 +331,16 @@ export default function CourierRoutesPage() {
                 </div>
                 <div style={{ fontSize: 14, color: "#6b6860", marginBottom: 16, fontWeight: 500 }}>
                   Маршрут <span style={{fontWeight: 700, color: "#1a1a18"}}>{routeObj?.name}</span> назначен. Вы можете посмотреть заказы ниже.<br/>
-                  {routeObj?.baseArrivalTime && (
+                  {/* 🔥 Баннер теперь использует plannedDepartureTime или departureAdvice */}
+                  {routeObj?.plannedDepartureTime ? (
                      <span style={{ color: "#d94040", fontWeight: 700, display: "inline-block", marginTop: 4 }}>
-                       (Нужно забрать в {routeObj.baseArrivalTime})
+                       (Нужно забрать в {routeObj.plannedDepartureTime})
                      </span>
-                  )}
+                  ) : routeObj?.departureAdvice ? (
+                     <span style={{ color: "#d94040", fontWeight: 700, display: "inline-block", marginTop: 4 }}>
+                       ({routeObj.departureAdvice})
+                     </span>
+                  ) : null}
                 </div>
                 <button 
                   onClick={async () => {
@@ -355,7 +366,11 @@ export default function CourierRoutesPage() {
           const routeObj = routePoints[0]?.route;
           const routeName = routeObj ? routeObj.name : "Без маршрута";
           const routeLink = routeObj?.link ?? null;
-          const advice = routeObj?.departureAdvice ?? null;
+          
+          // 🔥 Совет для шапки маршрута
+          const advice = routeObj?.plannedDepartureTime 
+            ? `Забрать не позднее ${routeObj.plannedDepartureTime}` 
+            : (routeObj?.departureAdvice ?? null);
 
           const delivered = routePoints.filter(o => o.status === "DELIVERED").length;
           const total = routePoints.length;
@@ -486,21 +501,13 @@ export default function CourierRoutesPage() {
                   const cleanPhoneForTg = phone !== "—" ? phone.replace(/[^\d+]/g, "") : "";
                   let timeText = "в ближайшее время";
                   if (o.eta) {
-                    // Ищем часы и минуты в строке ETA
                     const match = o.eta.match(/(\d{1,2}):(\d{2})/);
                     if (match) {
                       const h = parseInt(match[1], 10);
                       const m = parseInt(match[2], 10);
-                      
-                      // -10 минут
-                      const d1 = new Date(); 
-                      d1.setHours(h, m - 10, 0);
-                      // +10 минут
-                      const d2 = new Date(); 
-                      d2.setHours(h, m + 10, 0);
-                      
+                      const d1 = new Date(); d1.setHours(h, m - 10, 0);
+                      const d2 = new Date(); d2.setHours(h, m + 10, 0);
                       const fmt = (d: Date) => `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
-                      
                       timeText = `с ${fmt(d1)} до ${fmt(d2)}`;
                     } else {
                       timeText = o.eta;
@@ -509,7 +516,6 @@ export default function CourierRoutesPage() {
                     timeText = o.slotRaw;
                   }
                   
-                  // 🔥 Обновленный текст с новыми смайлами
                   const messageText = `😊 Здравствуйте! Это курьер сервиса по доставке цветов BUNCH 🌸🌺 Примерное время доставки: ${timeText}`;
                   const encodedMsg = encodeURIComponent(messageText);
 
@@ -520,9 +526,10 @@ export default function CourierRoutesPage() {
 
                   const isCollapsed = collapsedOrders[o.id] !== undefined ? collapsedOrders[o.id] : isDelivered;
 
+                  // 🔥 Проверка на слишком раннее изменение статуса теперь использует plannedDepartureTime
                   let isTooEarly = false;
-                  if (routeObj?.baseArrivalTime) {
-                    const [bH, bM] = routeObj.baseArrivalTime.split(':').map(Number);
+                  if (routeObj?.plannedDepartureTime) {
+                    const [bH, bM] = routeObj.plannedDepartureTime.split(':').map(Number);
                     const now = new Date();
                     const moscowTime = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Moscow" }));
                     const baseTime = new Date(moscowTime.getFullYear(), moscowTime.getMonth(), moscowTime.getDate(), bH, bM, 0, 0);
@@ -642,7 +649,8 @@ export default function CourierRoutesPage() {
                             <select
                               value={o.status}
                               onClick={e => e.stopPropagation()}
-                              onChange={(e) => handleStatusChange(o.id, e.target.value, routeObj?.baseArrivalTime)}
+                              // 🔥 Передаем plannedDepartureTime для проверки времени
+                              onChange={(e) => handleStatusChange(o.id, e.target.value, routeObj?.plannedDepartureTime)}
                               style={{
                                 background: st.bg, color: st.color, border: "none", padding: "6px 10px", borderRadius: 8,
                                 fontSize: 11, fontWeight: 700, outline: "none", cursor: "pointer", WebkitAppearance: "none",
@@ -652,7 +660,9 @@ export default function CourierRoutesPage() {
                               <option value="IN_DELIVERY" disabled={isTooEarly}>
                                 {isTooEarly ? "⏳ Рано для статуса В пути" : "🚀 В пути"}
                               </option>
-                              <option value="DELIVERED">✅ Доставлен</option>
+                              <option value="DELIVERED" disabled={isTooEarly}>
+                                {isTooEarly ? "⏳ Рано для статуса Доставлен" : "✅ Доставлен"}
+                              </option>
                             </select>
                           </div>
 
