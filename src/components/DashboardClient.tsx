@@ -973,7 +973,7 @@ export function DashboardClient({ user }: { user: User }) {
     });
 
     return { etas, baseReturnTime };
-  }, [selectedRouteOrders, routeLegs, routeType, filterDate, editingRouteId, existingRoutes, departureAdvice, returnToBase]);
+  }, [selectedRouteOrders, routeLegs, routeType, filterDate, editingRouteId, existingRoutes, departureAdvice, returnToBase, manualDepartureTime]);
 
   const calculatedEtas = calculatedEtasData.etas;
 
@@ -1292,41 +1292,43 @@ export function DashboardClient({ user }: { user: User }) {
       <span style={{ fontSize: 12, color: "#4a7aff", fontWeight: 700 }}>💡 Выезд:</span>
 
       {/* Инпут с кнопкой сброса */}
-      <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
-        <input
-          type="time"
-          value={manualDepartureTime}
-          onChange={(e) => setManualDepartureTime(e.target.value)}
-          style={{
-            padding: "4px 26px 4px 8px",
-            borderRadius: 6, border: "1px solid #4a7aff",
-            outline: "none", fontWeight: 700, fontFamily: "monospace",
-            fontSize: 13, color: "#4a7aff", background: "#fff", width: 94
-          }}
-        />
-        {(() => {
-          const dbTime = (editingRouteId
-            ? existingRoutes.find((r: any) => r.id === editingRouteId)
-            : null)?.plannedDepartureTime || "";
-          if (manualDepartureTime === dbTime) return null;
-          return (
-            <button
-              onClick={() => setManualDepartureTime(dbTime)}
-              title={dbTime ? `Вернуть: ${dbTime}` : "Очистить"}
-              style={{
-                position: "absolute", right: 5, top: "50%", transform: "translateY(-50%)",
-                background: "none", border: "none", color: "#a8a49c",
-                cursor: "pointer", fontSize: 16, padding: 0, lineHeight: 1,
-                opacity: 0.7, transition: "opacity 0.15s"
-              }}
-              onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
-              onMouseLeave={e => (e.currentTarget.style.opacity = "0.7")}
-            >
-              {dbTime ? "↺" : "×"}
-            </button>
-          );
-        })()}
-      </div>
+      // Было: position relative обёртка с absolute кнопкой внутри
+// Стало: flex-row, кнопка просто рядом
+
+<div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+  <input
+    type="time"
+    value={manualDepartureTime}
+    onChange={(e) => setManualDepartureTime(e.target.value)}
+    style={{
+      padding: "4px 6px",
+      borderRadius: 6, border: "1px solid #4a7aff",
+      outline: "none", fontWeight: 700, fontFamily: "monospace",
+      fontSize: 13, color: "#4a7aff", background: "#fff", width: 106
+    }}
+  />
+  {(() => {
+    const dbTime = (editingRouteId
+      ? existingRoutes.find((r: any) => r.id === editingRouteId)
+      : null)?.plannedDepartureTime || "";
+    if (manualDepartureTime === dbTime) return null;
+    return (
+      <button
+        onClick={() => setManualDepartureTime(dbTime)}
+        title={dbTime ? `Вернуть: ${dbTime}` : "Очистить"}
+        style={{
+          background: "none", border: "none", color: "#a8a49c",
+          cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1,
+          opacity: 0.7, transition: "opacity 0.15s", flexShrink: 0
+        }}
+        onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
+        onMouseLeave={e => (e.currentTarget.style.opacity = "0.7")}
+      >
+        {dbTime ? "↺" : "×"}
+      </button>
+    );
+  })()}
+</div>
 
       {/* Кликабельный чип с расчётным временем */}
       {(() => {
