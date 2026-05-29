@@ -352,6 +352,7 @@ export default function CourierRoutesPage() {
 
           const routePriceTotal = routePoints.reduce((sum, o) => sum + (o.price || 0), 0);
           const hasStarted = routePoints.some(p => p.status === "IN_DELIVERY" || p.status === "DELIVERED");
+          const isRouteAccepted = (routeObj as any)?.isAccepted !== false || acceptedLocally[rId];
 
           // 🔥 Ищем точное время выезда с базы
           let pickedUpTimeStr = null;
@@ -375,19 +376,16 @@ export default function CourierRoutesPage() {
                   
                   {/* ЛЕВАЯ ЧАСТЬ — инфо */}
                   <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       Маршрут {routeName}
                       
-                      {/* 🔥 Интерактивная кнопка "Не принят" */}
-                      {!routeObj?.baseArrivalTime && !(routeObj as any)?.isAccepted && !acceptedLocally[rId] && (
+                      {/* 🔥 Желтая кнопка "Принять время" */}
+                      {/* Показывается ТОЛЬКО если синего баннера нет (isRouteAccepted === true) и если оператор реально изменил время */}
+                      {isRouteAccepted && !routeObj?.baseArrivalTime /* ТУТ ТВОЕ УСЛОВИЕ ИЗМЕНЕНИЯ ВРЕМЕНИ */ && (
                         <button 
                           onClick={async (e) => {
                             e.stopPropagation();
-                            setAcceptedLocally(prev => ({...prev, [rId]: true}));
-                            setOrders(prev => prev.map(o => o.route?.id === rId ? { ...o, route: { ...o.route!, isAccepted: true } as any } : o));
-                            try {
-                              await fetch(`/api/routes/${rId}`, { method: "PATCH", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ isAccepted: true }) });
-                            } catch(err) {}
+                            // Твоя логика подтверждения нового времени курьером
                           }}
                           style={{ fontSize: 10, background: "#facc15", color: "#78350f", padding: "4px 8px", borderRadius: 6, fontWeight: 800, textTransform: "uppercase", border: "none", cursor: "pointer", boxShadow: "0 2px 4px rgba(250,204,21,0.3)" }}
                         >
@@ -465,7 +463,8 @@ export default function CourierRoutesPage() {
                   </div>
 
                 </div>
-                {isExpanded && (
+                {/* 🔥 Панель скрывается, если курьер уже нажал "Забрал все" (!hasStarted) и если висит синий баннер (isRouteAccepted) */}
+                {isExpanded && isRouteAccepted && !hasStarted && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px dashed #e8e6df", paddingTop: 12 }} onClick={e => e.stopPropagation()}>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
