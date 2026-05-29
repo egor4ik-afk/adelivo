@@ -426,10 +426,17 @@ export function DashboardClient({ user }: { user: User }) {
     return slotA.localeCompare(slotB);
   });
 
-  const MAP_EXCLUDED_STATUSES = ["CANCELLED", "RETURNED"];
   // 🔥 Исключаем оба варианта из отображения на карте
-  const filteredForMap = filtered.filter(o => !MAP_EXCLUDED_STATUSES.includes(o.status) && !/самовывоз|большой афанасьевский 39/i.test(o.address ?? ""));
-  const tableOrders = [...filtered].sort((a, b) => {
+  const MAP_EXCLUDED_STATUSES = ["CANCELLED", "RETURNED"];
+
+  const filteredForMap = useMemo(() => {
+    return filtered.filter(o => 
+      !MAP_EXCLUDED_STATUSES.includes(o.status) && 
+      !/самовывоз|большой афанасьевский 39/i.test(o.address ?? "") &&
+      o.lat && o.lng // 🔥 Защита от краша карты (если нет координат)
+    );
+  }, [filtered]);
+    const tableOrders = [...filtered].sort((a, b) => {
     let valA: any = (a as any)[sortConfig.key] ?? "";
     let valB: any = (b as any)[sortConfig.key] ?? "";
     if (sortConfig.key === "changedAt") {
