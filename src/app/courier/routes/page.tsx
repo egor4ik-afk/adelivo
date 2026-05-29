@@ -462,18 +462,6 @@ export default function CourierRoutesPage() {
                     )}
 
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0, marginLeft: 8 }}>
-                    {routeLink && (
-                      <a
-                        href={routeLink} target="_blank" rel="noopener noreferrer"
-                        onClick={e => e.stopPropagation()}
-                        style={{ fontSize: 11, background: "#facc15", color: "#1a1a18", padding: "5px 10px", borderRadius: 7, textDecoration: "none", fontWeight: 700, whiteSpace: "nowrap" }}
-                      >
-                        📍 Карты
-                      </a>
-                    )}
-                    <div style={{ fontSize: 18, color: "#a8a49c", transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</div>
-                  </div>
                 </div>
 
                 {isExpanded && (
