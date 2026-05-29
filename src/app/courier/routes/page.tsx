@@ -40,7 +40,7 @@ const STORE_COORDS = "55.749511,37.596205";
 const getAdviceText = (route: any, firstSlot: string | null) => {
   try {
     if (route?.plannedDepartureTime) {
-      return `Забрать не позднее ${route.plannedDepartureTime}`;
+      return `Забрать в ${route.plannedDepartureTime}`;
     }
 
     let baseTimeStr = null;
@@ -381,21 +381,21 @@ export default function CourierRoutesPage() {
           const routeObj = routePoints[0]?.route;
           const routeName = routeObj ? routeObj.name : "Без маршрута";
           const routeLink = routeObj?.link ?? null;
-
+          
           // 🔥 Совет для шапки маршрута
           // 🔥 Исправленный совет для шапки маршрута
           const advice = routeObj?.plannedDepartureTime && routeObj.plannedDepartureTime !== "—" && routeObj.plannedDepartureTime.trim() !== ""
-            ? `Забрать не позднее ${routeObj.plannedDepartureTime}`
+            ? `Забрать не позднее ${routeObj.plannedDepartureTime}` 
             : (routeObj?.departureAdvice ?? null);
 
           const delivered = routePoints.filter(o => o.status === "DELIVERED").length;
           const total = routePoints.length;
-          const isAllDelivered = delivered === total && total > 0;
-
+          const isAllDelivered = delivered === total && total > 0; 
+          
           const isExpanded = expandedRoutes[rId] ?? !isAllDelivered;
-
+          
           const onRouteHeaderClick = () => {
-            toggleRoute(rId);
+            toggleRoute(rId); 
           };
 
           const routePriceTotal = routePoints.reduce((sum, o) => sum + (o.price || 0), 0);
@@ -406,73 +406,100 @@ export default function CourierRoutesPage() {
             <div key={rId} style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
 
               <div style={{ padding: "14px 16px", background: "#fafaf8", borderBottom: isExpanded ? "1px solid #e8e6df" : "none" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", cursor: "pointer", marginBottom: isExpanded ? 12 : 0 }} onClick={onRouteHeaderClick}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0, marginLeft: 8 }}>
-                      {(() => {
-                        // Маршрут БЕЗ возврата на базу — строим из точек сами
-                        const validPoints = routePoints.filter(o => o.lat && o.lng);
-                        const routeUrl = validPoints.length > 0
-                          ? `https://yandex.ru/maps/?rtext=${[STORE_COORDS, ...validPoints.map(o => `${o.lat},${o.lng}`)].join("~")}&rtt=mt`
-                          : routeLink;
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", cursor: "pointer", marginBottom: isExpanded ? 12 : 0 }} onClick={onRouteHeaderClick}>
+  
+  {/* ЛЕВАЯ ЧАСТЬ — инфо */}
+  <div style={{ flex: 1, minWidth: 0 }}>
+    <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8 }}>
+      Маршрут {routeName}
+      {!routeObj?.baseArrivalTime && !(routeObj as any)?.isAccepted && (
+        <span style={{ fontSize: 10, background: "#facc15", color: "#78350f", padding: "2px 6px", borderRadius: 4, fontWeight: 800, textTransform: "uppercase" }}>Не принят</span>
+      )}
+    </div>
+    <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 4 }}>
+      {delivered}/{total} доставлено • <span style={{ fontWeight: 600, color: "#6b6860" }}>{routePriceTotal} ₽</span>
+    </div>
+    {advice && showAdvice && (
+      <div style={{ marginTop: 10, padding: "10px 12px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, display: "flex", gap: 8, alignItems: "center" }}>
+        <span style={{ fontSize: 18 }}>⏰</span>
+        <div style={{ fontSize: 13, color: "#78350f", fontWeight: 700 }}>{advice}</div>
+      </div>
+    )}
+  </div>
 
-                        // На базу — от последней точки до базы
-                        const last = validPoints[validPoints.length - 1];
-                        const toBaseUrl = last
-                          ? `https://yandex.ru/maps/?mode=routes&rtext=${last.lat},${last.lng}~${STORE_COORDS}&rtt=mt`
-                          : null;
+  {/* ПРАВАЯ ЧАСТЬ — кнопки + стрелка */}
+  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0, marginLeft: 8 }}>
+    {(() => {
+      const validPoints = routePoints.filter(o => o.lat && o.lng);
+      const routeUrl = validPoints.length > 0
+        ? `https://yandex.ru/maps/?rtext=${[STORE_COORDS, ...validPoints.map(o => `${o.lat},${o.lng}`)].join("~")}&rtt=mt`
+        : routeLink;
+      const last = validPoints[validPoints.length - 1];
+      const toBaseUrl = last
+        ? `https://yandex.ru/maps/?mode=routes&rtext=${last.lat},${last.lng}~${STORE_COORDS}&rtt=mt`
+        : null;
+      return (
+        <>
+          {routeUrl && (
+            <a href={routeUrl} target="_blank" rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              style={{ fontSize: 13, background: "#facc15", color: "#1a1a18", padding: "7px 14px", borderRadius: 8, textDecoration: "none", fontWeight: 800, whiteSpace: "nowrap" }}
+            >
+              📍 Маршрут
+            </a>
+          )}
+          {toBaseUrl && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 1 }}>
+              <a href={toBaseUrl} target="_blank" rel="noopener noreferrer"
+                onClick={e => e.stopPropagation()}
+                style={{ fontSize: 11, background: "#f5f4f0", color: "#6b6860", padding: "5px 10px", borderRadius: 7, textDecoration: "none", fontWeight: 700, whiteSpace: "nowrap" }}
+              >
+                🏠 На базу
+              </a>
+              {routeObj?.estimatedReturnTime && (
+                <span style={{ fontSize: 10, color: "#a8a49c", fontWeight: 600 }}>{routeObj.estimatedReturnTime}</span>
+              )}
+            </div>
+          )}
+        </>
+      );
+    })()}
+    <div style={{ fontSize: 18, color: "#a8a49c", transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</div>
+  </div>
 
-                          return (
-                            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-                              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                                  {toBaseUrl && (
-                                    <a href={toBaseUrl} target="_blank" rel="noopener noreferrer"
-                                      onClick={e => e.stopPropagation()}
-                                      style={{ fontSize: 11, background: "#f5f4f0", color: "#6b6860", padding: "5px 10px", borderRadius: 7, textDecoration: "none", fontWeight: 700, whiteSpace: "nowrap" }}
-                                    >
-                                      🏠 На базу
-                                    </a>
-                                  )}
-                                  {routeObj?.estimatedReturnTime && (
-                                    <span style={{ fontSize: 10, color: "#a8a49c", fontWeight: 600 }}>{routeObj.estimatedReturnTime}</span>
-                                  )}
-                                </div>
-                          
-                                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                                  <div style={{ fontSize: 16, color: "#a8a49c", transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</div>
-                                  {routeUrl && (
-                                    <a href={routeUrl} target="_blank" rel="noopener noreferrer"
-                                      onClick={e => e.stopPropagation()}
-                                      style={{ fontSize: 13, background: "#facc15", color: "#1a1a18", padding: "7px 14px", borderRadius: 8, textDecoration: "none", fontWeight: 800, whiteSpace: "nowrap" }}
-                                    >
-                                      📍 Маршрут
-                                    </a>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                      })()}
-                    </div>
-                    <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 4 }}>
-                      {delivered}/{total} доставлено • <span style={{ fontWeight: 600, color: "#6b6860" }}>{routePriceTotal} ₽</span>
-                    </div>
-
-                    {advice && showAdvice && (
-                      <div style={{
-                        marginTop: 10, padding: "10px 12px", background: "#fffbeb",
-                        border: "1px solid #fde68a", borderRadius: 10, display: "flex", gap: 8, alignItems: "center"
-                      }}>
-                        <span style={{ fontSize: 18 }}>⏰</span>
-                        <div>
-                          <div style={{ fontSize: 13, color: "#78350f", fontWeight: 700 }}>{advice}</div>
-                        </div>
+</div>
+{isExpanded && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px dashed #e8e6df", paddingTop: 12 }} onClick={e => e.stopPropagation()}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 600 }}>До базы:</span>
+                        <select
+                          value={routeObj?.baseArrivalTime || ""}
+                          onChange={(e) => handleBaseTimeChange(rId, e.target.value)}
+                          style={{ border: "1px solid #e8e6df", borderRadius: 6, padding: "4px 8px", fontSize: 13, fontWeight: 600, color: "#1a1a18", background: "#fff", outline: "none", cursor: "pointer", minWidth: "90px" }}
+                        >
+                          <option value="" disabled>Выбрать...</option>
+                          {routeObj?.baseArrivalTime && Number(routeObj.baseArrivalTime.split(':')[1]) % 10 !== 0 && (
+                            <option value={routeObj.baseArrivalTime}>{routeObj.baseArrivalTime}</option>
+                          )}
+                          {Array.from({ length: 96 }).map((_, i) => {
+                            const hour = Math.floor(i / 6) + 8;
+                            const min = (i % 6) * 10;
+                            const val = `${hour.toString().padStart(2, "0")}:${min.toString().padStart(2, "0")}`;
+                            return <option key={val} value={val}>{val}</option>;
+                          })}
+                        </select>
                       </div>
-                    )}
-
+                      <button
+                        onClick={() => handlePickupAll(rId)}
+                        style={{ background: "#4a7aff", color: "#fff", border: "none", padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", boxShadow: "0 2px 6px rgba(74, 122, 255, 0.25)" }}
+                      >
+                        🚀 Забрал все
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
+
 
                 {isExpanded && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px dashed #e8e6df", paddingTop: 12 }} onClick={e => e.stopPropagation()}>
