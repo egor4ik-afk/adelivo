@@ -420,10 +420,10 @@ export default function CourierRoutesPage() {
       {delivered}/{total} доставлено • <span style={{ fontWeight: 600, color: "#6b6860" }}>{routePriceTotal} ₽</span>
     </div>
     {advice && showAdvice && (
-  <div style={{ fontSize: 12, color: "#a8a49c", padding: "8px 16px 12px", textAlign: "center" }}>
-    ⏰ <span style={{ fontWeight: 700, color: "#6b6860" }}>{advice}</span>
-  </div>
-)}
+      <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 6 }}>
+        ⏰ <span style={{ fontWeight: 700, color: "#78350f" }}>{advice}</span>
+      </div>
+    )}
   </div>
 
   {/* ПРАВАЯ ЧАСТЬ — кнопки + стрелка */}
