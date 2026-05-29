@@ -385,7 +385,7 @@ export default function CourierRoutesPage() {
           // 🔥 Совет для шапки маршрута
           // 🔥 Исправленный совет для шапки маршрута
           const advice = routeObj?.plannedDepartureTime && routeObj.plannedDepartureTime !== "—" && routeObj.plannedDepartureTime.trim() !== ""
-            ? `Забрать не позднее ${routeObj.plannedDepartureTime}` 
+            ? `Забрать в ${routeObj.plannedDepartureTime}` 
             : (routeObj?.departureAdvice ?? null);
 
           const delivered = routePoints.filter(o => o.status === "DELIVERED").length;
@@ -420,11 +420,10 @@ export default function CourierRoutesPage() {
       {delivered}/{total} доставлено • <span style={{ fontWeight: 600, color: "#6b6860" }}>{routePriceTotal} ₽</span>
     </div>
     {advice && showAdvice && (
-      <div style={{ marginTop: 10, padding: "10px 12px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, display: "flex", gap: 8, alignItems: "center" }}>
-        <span style={{ fontSize: 18 }}>⏰</span>
-        <div style={{ fontSize: 13, color: "#78350f", fontWeight: 700 }}>{advice}</div>
-      </div>
-    )}
+  <div style={{ fontSize: 12, color: "#a8a49c", padding: "8px 16px 12px", textAlign: "center" }}>
+    ⏰ <span style={{ fontWeight: 700, color: "#6b6860" }}>{advice}</span>
+  </div>
+)}
   </div>
 
   {/* ПРАВАЯ ЧАСТЬ — кнопки + стрелка */}
@@ -468,39 +467,6 @@ export default function CourierRoutesPage() {
   </div>
 
 </div>
-{isExpanded && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px dashed #e8e6df", paddingTop: 12 }} onClick={e => e.stopPropagation()}>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 600 }}>До базы:</span>
-                        <select
-                          value={routeObj?.baseArrivalTime || ""}
-                          onChange={(e) => handleBaseTimeChange(rId, e.target.value)}
-                          style={{ border: "1px solid #e8e6df", borderRadius: 6, padding: "4px 8px", fontSize: 13, fontWeight: 600, color: "#1a1a18", background: "#fff", outline: "none", cursor: "pointer", minWidth: "90px" }}
-                        >
-                          <option value="" disabled>Выбрать...</option>
-                          {routeObj?.baseArrivalTime && Number(routeObj.baseArrivalTime.split(':')[1]) % 10 !== 0 && (
-                            <option value={routeObj.baseArrivalTime}>{routeObj.baseArrivalTime}</option>
-                          )}
-                          {Array.from({ length: 96 }).map((_, i) => {
-                            const hour = Math.floor(i / 6) + 8;
-                            const min = (i % 6) * 10;
-                            const val = `${hour.toString().padStart(2, "0")}:${min.toString().padStart(2, "0")}`;
-                            return <option key={val} value={val}>{val}</option>;
-                          })}
-                        </select>
-                      </div>
-                      <button
-                        onClick={() => handlePickupAll(rId)}
-                        style={{ background: "#4a7aff", color: "#fff", border: "none", padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", boxShadow: "0 2px 6px rgba(74, 122, 255, 0.25)" }}
-                      >
-                        🚀 Забрал все
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-
                 {isExpanded && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px dashed #e8e6df", paddingTop: 12 }} onClick={e => e.stopPropagation()}>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
