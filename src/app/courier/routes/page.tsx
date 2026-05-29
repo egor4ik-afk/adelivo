@@ -15,14 +15,15 @@ interface RouteOrder {
   routeId: string | null; routeOrder: number | null;
   deliveryDate: string | null;
   deliveredAt?: string | null;
+  pickedUpAt?: string | null; // 🔥 ДОБАВЛЕНО ПОЛЕ ДЛЯ ФИКСАЦИИ ВРЕМЕНИ ВЫЕЗДА
   eta?: string | null;
   photoUrl?: string | null;
   route?: {
     id: string; name: string; link: string | null; date: string;
     departureAdvice: string | null;
-    plannedDepartureTime?: string | null; // 🔥 НОВОЕ ПОЛЕ
+    plannedDepartureTime?: string | null;
     baseArrivalTime?: string | null;
-    estimatedReturnTime?: string | null; // 🔥 добавить
+    estimatedReturnTime?: string | null;
     createdAt?: string;
     isAccepted?: boolean;
   } | null;
@@ -36,34 +37,6 @@ const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> =
 
 const STORE_COORDS = "55.749511,37.596205";
 
-// 🔥 ХЕЛПЕР ДЛЯ РАСЧЕТА РЕКОМЕНДОВАННОГО ВРЕМЕНИ
-const getAdviceText = (route: any, firstSlot: string | null) => {
-  try {
-    if (route?.plannedDepartureTime) {
-      return `Забрать в ${route.plannedDepartureTime}`;
-    }
-
-    let baseTimeStr = null;
-    if (route?.departureAdvice) {
-      const match = route.departureAdvice.match(/до (\d{2}:\d{2})/);
-      if (match) baseTimeStr = match[1];
-    }
-    if (!baseTimeStr && firstSlot) {
-      const match = firstSlot.match(/(\d{2}:\d{2})/);
-      if (match) baseTimeStr = match[1];
-    }
-
-    if (baseTimeStr) {
-      const [h, m] = baseTimeStr.split(':').map(Number);
-      const d1 = new Date(); d1.setHours(h - 1, m, 0);
-      const d2 = new Date(); d2.setHours(h, m + 30, 0);
-      const fmt = (d: Date) => `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-      return `Желательно с ${fmt(d1)} до ${fmt(d2)}`;
-    }
-  } catch (e) { }
-  return "Укажите примерное время";
-};
-
 export default function CourierRoutesPage() {
   const [orders, setOrders] = useState<RouteOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,11 +46,9 @@ export default function CourierRoutesPage() {
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
   const [collapsedOrders, setCollapsedOrders] = useState<Record<string, boolean>>({});
   const [acceptedLocally, setAcceptedLocally] = useState<Record<string, boolean>>({});
+  
   const toggleOrder = (orderId: string) => {
-    setCollapsedOrders(prev => ({
-      ...prev,
-      [orderId]: !prev[orderId]
-    }));
+    setCollapsedOrders(prev => ({ ...prev, [orderId]: !prev[orderId] }));
   };
 
   const fetchOrders = async () => {
@@ -104,7 +75,6 @@ export default function CourierRoutesPage() {
   };
 
   const handleStatusChange = async (id: string, newStatus: string, checkTime?: string | null) => {
-    // 🔥 Блокируем смену и на В ПУТИ, и на ДОСТАВЛЕН, если слишком рано
     if ((newStatus === "IN_DELIVERY" || newStatus === "DELIVERED") && checkTime) {
       const [bH, bM] = checkTime.split(':').map(Number);
       const now = new Date();
@@ -244,13 +214,10 @@ export default function CourierRoutesPage() {
   const getRouteStatusWeight = (rId: string) => {
     const points = todayGrouped[rId];
     if (!points || points.length === 0) return 4;
-
     const hasInDelivery = points.some(p => p.status === 'IN_DELIVERY');
     if (hasInDelivery) return 1;
-
     const allDelivered = points.every(p => p.status === 'DELIVERED');
     if (allDelivered) return 3;
-
     return 2;
   };
 
@@ -287,17 +254,11 @@ export default function CourierRoutesPage() {
   };
 
   const unacceptedRouteKeys = todayRouteKeys.filter(rId => {
-    // 🔥 1. Моментально скрываем, если курьер уже нажал "Принять" в этой сессии
     if (acceptedLocally[rId]) return false;
-
     const points = todayGrouped[rId];
     if (!points || points.length === 0) return false;
-
-    // 🔥 2. Если курьер УЖЕ начал маршрут (есть статус В ПУТИ или ДОСТАВЛЕН), баннер больше не нужен
     const hasStarted = points.some(p => p.status === "IN_DELIVERY" || p.status === "DELIVERED");
     if (hasStarted) return false;
-
-    // 🔥 3. Если маршрут не начат, смотрим в поле базы
     const route = points[0]?.route;
     return route && (route as any).isAccepted === false;
   });
@@ -343,7 +304,6 @@ export default function CourierRoutesPage() {
                 </div>
                 <div style={{ fontSize: 14, color: "#6b6860", marginBottom: 16, fontWeight: 500 }}>
                   Маршрут <span style={{ fontWeight: 700, color: "#1a1a18" }}>{routeObj?.name}</span> назначен. Вы можете посмотреть заказы ниже.<br />
-                  {/* 🔥 Исправленный баннер: строгая проверка на наличие планового времени */}
                   {routeObj?.plannedDepartureTime && routeObj.plannedDepartureTime !== "—" && routeObj.plannedDepartureTime.trim() !== "" ? (
                     <span style={{ color: "#d94040", fontWeight: 700, display: "inline-block", marginTop: 4 }}>
                       Нужно забрать в {routeObj.plannedDepartureTime}
@@ -356,9 +316,7 @@ export default function CourierRoutesPage() {
                 </div>
                 <button
                   onClick={async () => {
-                    // 🔥 Запоминаем клик, чтобы баннер сразу исчез и не моргал при обновлении 
                     setAcceptedLocally(prev => ({ ...prev, [rId]: true }));
-
                     setOrders(prev => prev.map(o => o.route?.id === rId ? { ...o, route: { ...o.route!, isAccepted: true } as any } : o));
                     try {
                       await fetch(`/api/routes/${rId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isAccepted: true }) });
@@ -381,12 +339,6 @@ export default function CourierRoutesPage() {
           const routeObj = routePoints[0]?.route;
           const routeName = routeObj ? routeObj.name : "Без маршрута";
           const routeLink = routeObj?.link ?? null;
-          
-          // 🔥 Совет для шапки маршрута
-          // 🔥 Исправленный совет для шапки маршрута
-          const advice = routeObj?.plannedDepartureTime && routeObj.plannedDepartureTime !== "—" && routeObj.plannedDepartureTime.trim() !== ""
-            ? `Забрать в ${routeObj.plannedDepartureTime}` 
-            : (routeObj?.departureAdvice ?? null);
 
           const delivered = routePoints.filter(o => o.status === "DELIVERED").length;
           const total = routePoints.length;
@@ -399,87 +351,120 @@ export default function CourierRoutesPage() {
           };
 
           const routePriceTotal = routePoints.reduce((sum, o) => sum + (o.price || 0), 0);
-          const firstOrderStatus = routePoints[0]?.status;
-          const showAdvice = firstOrderStatus === "ASSIGNED" || firstOrderStatus === "NEW";
+          const hasStarted = routePoints.some(p => p.status === "IN_DELIVERY" || p.status === "DELIVERED");
+
+          // 🔥 Ищем точное время выезда с базы
+          let pickedUpTimeStr = null;
+          if (hasStarted) {
+             const firstStarted = routePoints.find(p => p.pickedUpAt);
+             if (firstStarted?.pickedUpAt) {
+                 const d = new Date(firstStarted.pickedUpAt);
+                 pickedUpTimeStr = d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Moscow" });
+             }
+          }
+
+          const advice = routeObj?.plannedDepartureTime && routeObj.plannedDepartureTime !== "—" && routeObj.plannedDepartureTime.trim() !== ""
+            ? `Забрать в ${routeObj.plannedDepartureTime}` 
+            : (routeObj?.departureAdvice ?? null);
 
           return (
             <div key={rId} style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
 
               <div style={{ padding: "14px 16px", background: "#fafaf8", borderBottom: isExpanded ? "1px solid #e8e6df" : "none" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", cursor: "pointer", marginBottom: isExpanded ? 12 : 0 }} onClick={onRouteHeaderClick}>
-  
-  {/* ЛЕВАЯ ЧАСТЬ — инфо */}
-  <div style={{ flex: 1, minWidth: 0 }}>
-    <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8 }}>
-      Маршрут {routeName}
-      {!routeObj?.baseArrivalTime && !(routeObj as any)?.isAccepted && (
-        <span style={{ fontSize: 10, background: "#facc15", color: "#78350f", padding: "2px 6px", borderRadius: 4, fontWeight: 800, textTransform: "uppercase" }}>Не принят</span>
-      )}
-    </div>
-    
-    <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 4 }}>
-      {delivered}/{total} доставлено • <span style={{ fontWeight: 600, color: "#6b6860" }}>{routePriceTotal} ₽</span>
-    </div>
-    
-    {/* 🔥 Твоя желтая плашка — выглядит супер! */}
-    {advice && (
-      <div style={{ marginTop: 10, padding: "8px 12px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, display: "flex", gap: 8, alignItems: "center" }}>
-        <span style={{ fontSize: 16 }}>⏰</span>
-        <div style={{ fontSize: 13, color: "#78350f", fontWeight: 700 }}>{advice}</div>
-      </div>
-    )}
-  </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "stretch", cursor: "pointer", marginBottom: isExpanded ? 12 : 0 }} onClick={onRouteHeaderClick}>
+                  
+                  {/* ЛЕВАЯ ЧАСТЬ — инфо */}
+                  <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      Маршрут {routeName}
+                      
+                      {/* 🔥 Интерактивная кнопка "Не принят" */}
+                      {!routeObj?.baseArrivalTime && !(routeObj as any)?.isAccepted && !acceptedLocally[rId] && (
+                        <button 
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            setAcceptedLocally(prev => ({...prev, [rId]: true}));
+                            setOrders(prev => prev.map(o => o.route?.id === rId ? { ...o, route: { ...o.route!, isAccepted: true } as any } : o));
+                            try {
+                              await fetch(`/api/routes/${rId}`, { method: "PATCH", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ isAccepted: true }) });
+                            } catch(err) {}
+                          }}
+                          style={{ fontSize: 10, background: "#facc15", color: "#78350f", padding: "4px 8px", borderRadius: 6, fontWeight: 800, textTransform: "uppercase", border: "none", cursor: "pointer", boxShadow: "0 2px 4px rgba(250,204,21,0.3)" }}
+                        >
+                          Принять время
+                        </button>
+                      )}
+                    </div>
+                    
+                    <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 4 }}>
+                      {delivered}/{total} доставлено • <span style={{ fontWeight: 600, color: "#6b6860" }}>{routePriceTotal} ₽</span>
+                    </div>
+                    
+                    {/* 🔥 ТОНКИЕ ПЛАШКИ (Выезд / Факт) */}
+                    {pickedUpTimeStr ? (
+                      <div style={{ marginTop: 8, padding: "4px 8px", background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: 6, display: "inline-flex", gap: 6, alignItems: "center" }}>
+                        <span style={{ fontSize: 12 }}>✅</span>
+                        <div style={{ fontSize: 11, color: "#065f46", fontWeight: 700 }}>Забрал с базы в {pickedUpTimeStr}</div>
+                      </div>
+                    ) : advice ? (
+                      <div style={{ marginTop: 8, padding: "4px 8px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 6, display: "inline-flex", gap: 6, alignItems: "center" }}>
+                        <span style={{ fontSize: 12 }}>⏰</span>
+                        <div style={{ fontSize: 11, color: "#78350f", fontWeight: 700 }}>{advice}</div>
+                      </div>
+                    ) : null}
+                  </div>
 
-  {/* ПРАВАЯ ЧАСТЬ — кнопки + стрелка (выровнены по центру по вертикали) */}
-  <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0, marginLeft: 8 }}>
-    
-    {/* Контейнер только для кнопок (в столбик) */}
-    {(() => {
-      const validPoints = routePoints.filter(o => o.lat && o.lng);
-      const routeUrl = validPoints.length > 0
-        ? `https://yandex.ru/maps/?rtext=${[STORE_COORDS, ...validPoints.map(o => `${o.lat},${o.lng}`)].join("~")}&rtt=mt`
-        : routeLink;
-      const last = validPoints[validPoints.length - 1];
-      const toBaseUrl = last
-        ? `https://yandex.ru/maps/?mode=routes&rtext=${last.lat},${last.lng}~${STORE_COORDS}&rtt=mt`
-        : null;
-        
-      return (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-          {routeUrl && (
-            <a href={routeUrl} target="_blank" rel="noopener noreferrer"
-              onClick={e => e.stopPropagation()}
-              style={{ fontSize: 13, background: "#facc15", color: "#1a1a18", padding: "7px 14px", borderRadius: 8, textDecoration: "none", fontWeight: 800, whiteSpace: "nowrap" }}
-            >
-              📍 Маршрут
-            </a>
-          )}
-          
-          {toBaseUrl && (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
-              <a href={toBaseUrl} target="_blank" rel="noopener noreferrer"
-                onClick={e => e.stopPropagation()}
-                style={{ fontSize: 11, background: "#f5f4f0", color: "#6b6860", padding: "5px 10px", borderRadius: 7, textDecoration: "none", fontWeight: 700, whiteSpace: "nowrap" }}
-              >
-                🏠 На базу
-              </a>
-              {routeObj?.estimatedReturnTime && (
-                <span style={{ fontSize: 10, color: "#a8a49c", fontWeight: 600 }}>{routeObj.estimatedReturnTime}</span>
-              )}
-            </div>
-          )}
-        </div>
-      );
-    })()}
+                  {/* ПРАВАЯ ЧАСТЬ — кнопки + жирная стрелка внизу */}
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "space-between", flexShrink: 0, minHeight: "100%" }}>
+                    
+                    {(() => {
+                      const validPoints = routePoints.filter(o => o.lat && o.lng);
+                      const routeUrl = validPoints.length > 0
+                        ? `https://yandex.ru/maps/?rtext=${[STORE_COORDS, ...validPoints.map(o => `${o.lat},${o.lng}`)].join("~")}&rtt=mt`
+                        : routeLink;
+                      const last = validPoints[validPoints.length - 1];
+                      const toBaseUrl = last
+                        ? `https://yandex.ru/maps/?mode=routes&rtext=${last.lat},${last.lng}~${STORE_COORDS}&rtt=mt`
+                        : null;
+                        
+                      return (
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                          {/* Маршрут прячется, когда всё доставлено */}
+                          {routeUrl && !isAllDelivered && (
+                            <a href={routeUrl} target="_blank" rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              style={{ fontSize: 12, background: "#facc15", color: "#1a1a18", padding: "6px 12px", borderRadius: 8, textDecoration: "none", fontWeight: 800, whiteSpace: "nowrap", boxShadow: "0 2px 4px rgba(250,204,21,0.2)" }}
+                            >
+                              📍 Маршрут
+                            </a>
+                          )}
+                          
+                          {/* Возврат на базу появляется ТОЛЬКО когда всё доставлено */}
+                          {isAllDelivered && toBaseUrl && (
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+                              <a href={toBaseUrl} target="_blank" rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                style={{ fontSize: 12, background: "#e8e6df", color: "#1a1a18", padding: "6px 12px", borderRadius: 8, textDecoration: "none", fontWeight: 800, whiteSpace: "nowrap" }}
+                              >
+                                🏠 На базу
+                              </a>
+                              {routeObj?.estimatedReturnTime && (
+                                <span style={{ fontSize: 10, color: "#a8a49c", fontWeight: 600 }}>к {routeObj.estimatedReturnTime}</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
-    {/* 🔥 Стрелка отдельно — теперь она всегда по центру карточки и не уезжает вниз */}
-    <div style={{ fontSize: 18, color: "#a8a49c", transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
-      ▼
-    </div>
-    
-  </div>
+                    {/* 🔥 Жирная стрелка, прижатая к нижнему углу */}
+                    <div style={{ fontSize: 18, color: "#1a1a18", fontWeight: 900, transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s", marginTop: "auto", paddingTop: 10 }}>
+                      ▼
+                    </div>
+                    
+                  </div>
 
-</div>
+                </div>
                 {isExpanded && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px dashed #e8e6df", paddingTop: 12 }} onClick={e => e.stopPropagation()}>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -558,7 +543,6 @@ export default function CourierRoutesPage() {
 
                     const isCollapsed = collapsedOrders[o.id] !== undefined ? collapsedOrders[o.id] : isDelivered;
 
-                    // 🔥 Проверка на слишком раннее изменение статуса теперь использует plannedDepartureTime
                     let isTooEarly = false;
                     if (routeObj?.plannedDepartureTime) {
                       const [bH, bM] = routeObj.plannedDepartureTime.split(':').map(Number);
@@ -681,7 +665,6 @@ export default function CourierRoutesPage() {
                               <select
                                 value={o.status}
                                 onClick={e => e.stopPropagation()}
-                                // 🔥 Передаем plannedDepartureTime для проверки времени
                                 onChange={(e) => handleStatusChange(o.id, e.target.value, routeObj?.plannedDepartureTime)}
                                 style={{
                                   background: st.bg, color: st.color, border: "none", padding: "6px 10px", borderRadius: 8,
