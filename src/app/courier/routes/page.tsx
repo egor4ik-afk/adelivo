@@ -6,7 +6,7 @@ import { NAV_HEIGHT } from "@/components/CourierNav";
 interface RouteOrder {
   id: string; externalId: string; crmId: string; address: string; status: string;
   lat: number | null; lng: number | null;
-  name: string | null; 
+  name: string | null;
   slotRaw: string | null; slotFrom: string | null; slotTo: string | null;
   recipientPhone: string | null;
   price: number | null; wrongPrice?: boolean; items: string | null;
@@ -14,7 +14,7 @@ interface RouteOrder {
   opComment: string | null;
   routeId: string | null; routeOrder: number | null;
   deliveryDate: string | null;
-  deliveredAt?: string | null; 
+  deliveredAt?: string | null;
   eta?: string | null;
   photoUrl?: string | null;
   route?: {
@@ -22,6 +22,7 @@ interface RouteOrder {
     departureAdvice: string | null;
     plannedDepartureTime?: string | null; // 🔥 НОВОЕ ПОЛЕ
     baseArrivalTime?: string | null;
+    estimatedReturnTime?: string | null; // 🔥 добавить
     createdAt?: string;
     isAccepted?: boolean;
   } | null;
@@ -46,7 +47,7 @@ const getAdviceText = (route: any, firstSlot: string | null) => {
     if (route?.departureAdvice) {
       const match = route.departureAdvice.match(/до (\d{2}:\d{2})/);
       if (match) baseTimeStr = match[1];
-    } 
+    }
     if (!baseTimeStr && firstSlot) {
       const match = firstSlot.match(/(\d{2}:\d{2})/);
       if (match) baseTimeStr = match[1];
@@ -56,10 +57,10 @@ const getAdviceText = (route: any, firstSlot: string | null) => {
       const [h, m] = baseTimeStr.split(':').map(Number);
       const d1 = new Date(); d1.setHours(h - 1, m, 0);
       const d2 = new Date(); d2.setHours(h, m + 30, 0);
-      const fmt = (d: Date) => `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+      const fmt = (d: Date) => `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
       return `Желательно с ${fmt(d1)} до ${fmt(d2)}`;
     }
-  } catch(e) {}
+  } catch (e) { }
   return "Укажите примерное время";
 };
 
@@ -68,7 +69,7 @@ export default function CourierRoutesPage() {
   const [loading, setLoading] = useState(true);
   const [expandedRoutes, setExpandedRoutes] = useState<Record<string, boolean>>({});
   const [showPast, setShowPast] = useState(false);
-  const [uploading, setUploading] = useState<Record<string, boolean>>({}); 
+  const [uploading, setUploading] = useState<Record<string, boolean>>({});
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
   const [collapsedOrders, setCollapsedOrders] = useState<Record<string, boolean>>({});
   const [acceptedLocally, setAcceptedLocally] = useState<Record<string, boolean>>({});
@@ -121,16 +122,16 @@ export default function CourierRoutesPage() {
 
     let success = false;
     let attempts = 0;
-    const maxAttempts = newStatus === "DELIVERED" ? 3 : 1; 
+    const maxAttempts = newStatus === "DELIVERED" ? 3 : 1;
 
     while (attempts < maxAttempts && !success) {
       attempts++;
       try {
         const res = await fetchWithTimeout(`/api/orders/${id}`, {
-          method: "PATCH", 
+          method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status: newStatus }),
-          timeout: 20000 
+          timeout: 20000
         });
 
         if (!res.ok) {
@@ -141,12 +142,12 @@ export default function CourierRoutesPage() {
       } catch (error: any) {
         if (attempts >= maxAttempts) {
           setOrders(prevOrders);
-          alert(error.name === "AbortError" 
-            ? "Сервер не ответил за 20 секунд. Проверьте интернет и попробуйте еще раз." 
+          alert(error.name === "AbortError"
+            ? "Сервер не ответил за 20 секунд. Проверьте интернет и попробуйте еще раз."
             : `Ошибка изменения статуса: ${error.message}`);
           return;
         }
-        await new Promise(r => setTimeout(r, 1500)); 
+        await new Promise(r => setTimeout(r, 1500));
       }
     }
   };
@@ -177,7 +178,7 @@ export default function CourierRoutesPage() {
   };
 
   const handlePhotoUpload = async (orderId: string, file: File) => {
-    setUploading(prev => ({ ...prev, [orderId]: true })); 
+    setUploading(prev => ({ ...prev, [orderId]: true }));
     try {
       const imageCompression = (await import('browser-image-compression')).default;
       const compressedFile = await imageCompression(file, { maxSizeMB: 1, maxWidthOrHeight: 1280 });
@@ -185,12 +186,12 @@ export default function CourierRoutesPage() {
       const signRes = await fetch("/api/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          filename: `photo_${orderId}.jpg`, 
-          contentType: compressedFile.type || "image/jpeg" 
+        body: JSON.stringify({
+          filename: `photo_${orderId}.jpg`,
+          contentType: compressedFile.type || "image/jpeg"
         }),
       });
-      
+
       if (!signRes.ok) throw new Error("Не удалось получить ссылку от сервера");
       const { uploadUrl, fileUrl } = await signRes.json();
 
@@ -209,12 +210,12 @@ export default function CourierRoutesPage() {
       });
 
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, photoUrl: fileUrl } : o));
-      
+
     } catch (e) {
       console.error(e);
       alert("❌ Ошибка при загрузке фото. Проверьте интернет и попробуйте еще раз.");
     } finally {
-      setUploading(prev => ({ ...prev, [orderId]: false })); 
+      setUploading(prev => ({ ...prev, [orderId]: false }));
     }
   };
 
@@ -239,7 +240,7 @@ export default function CourierRoutesPage() {
     if (!todayGrouped[key]) todayGrouped[key] = [];
     todayGrouped[key].push(o);
   });
-  
+
   const getRouteStatusWeight = (rId: string) => {
     const points = todayGrouped[rId];
     if (!points || points.length === 0) return 4;
@@ -256,13 +257,13 @@ export default function CourierRoutesPage() {
   const todayRouteKeys = Object.keys(todayGrouped).sort((a, b) => {
     const weightA = getRouteStatusWeight(a);
     const weightB = getRouteStatusWeight(b);
-    if (weightA !== weightB) return weightA - weightB; 
+    if (weightA !== weightB) return weightA - weightB;
 
     const routeA = todayGrouped[a][0]?.route;
     const routeB = todayGrouped[b][0]?.route;
     const timeA = routeA?.createdAt ? new Date(routeA.createdAt).getTime() : 0;
     const timeB = routeB?.createdAt ? new Date(routeB.createdAt).getTime() : 0;
-    return timeB - timeA; 
+    return timeB - timeA;
   });
 
   const pastGrouped: Record<string, RouteOrder[]> = {};
@@ -275,8 +276,8 @@ export default function CourierRoutesPage() {
 
   const formatDeliveredTime = (dateString: string | null) => {
     if (!dateString) return null;
-    return new Date(dateString).toLocaleTimeString("ru-RU", { 
-      hour: '2-digit', minute: '2-digit', timeZone: "Europe/Moscow" 
+    return new Date(dateString).toLocaleTimeString("ru-RU", {
+      hour: '2-digit', minute: '2-digit', timeZone: "Europe/Moscow"
     });
   };
 
@@ -288,7 +289,7 @@ export default function CourierRoutesPage() {
   const unacceptedRouteKeys = todayRouteKeys.filter(rId => {
     // 🔥 1. Моментально скрываем, если курьер уже нажал "Принять" в этой сессии
     if (acceptedLocally[rId]) return false;
-    
+
     const points = todayGrouped[rId];
     if (!points || points.length === 0) return false;
 
@@ -313,7 +314,7 @@ export default function CourierRoutesPage() {
         <div>
           <h1 style={{ margin: 0, fontSize: 18, color: "#1a1a18" }}>Мои маршруты</h1>
           <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 4 }}>
-            На сегодня: {todayOrders.length} точек на сумму <span style={{fontWeight: 700, color: "#1a1a18"}}>{todayOrders.reduce((sum, o) => sum + (o.price || 0), 0)} ₽</span>
+            На сегодня: {todayOrders.length} точек на сумму <span style={{ fontWeight: 700, color: "#1a1a18" }}>{todayOrders.reduce((sum, o) => sum + (o.price || 0), 0)} ₽</span>
           </div>
         </div>
 
@@ -341,27 +342,27 @@ export default function CourierRoutesPage() {
                   </div>
                 </div>
                 <div style={{ fontSize: 14, color: "#6b6860", marginBottom: 16, fontWeight: 500 }}>
-                  Маршрут <span style={{fontWeight: 700, color: "#1a1a18"}}>{routeObj?.name}</span> назначен. Вы можете посмотреть заказы ниже.<br/>
+                  Маршрут <span style={{ fontWeight: 700, color: "#1a1a18" }}>{routeObj?.name}</span> назначен. Вы можете посмотреть заказы ниже.<br />
                   {/* 🔥 Исправленный баннер: строгая проверка на наличие планового времени */}
                   {routeObj?.plannedDepartureTime && routeObj.plannedDepartureTime !== "—" && routeObj.plannedDepartureTime.trim() !== "" ? (
-                     <span style={{ color: "#d94040", fontWeight: 700, display: "inline-block", marginTop: 4 }}>
-                       Нужно забрать в {routeObj.plannedDepartureTime}
-                     </span>
+                    <span style={{ color: "#d94040", fontWeight: 700, display: "inline-block", marginTop: 4 }}>
+                      Нужно забрать в {routeObj.plannedDepartureTime}
+                    </span>
                   ) : routeObj?.departureAdvice ? (
-                     <span style={{ color: "#d94040", fontWeight: 700, display: "inline-block", marginTop: 4 }}>
-                       {routeObj.departureAdvice}
-                     </span>
+                    <span style={{ color: "#d94040", fontWeight: 700, display: "inline-block", marginTop: 4 }}>
+                      {routeObj.departureAdvice}
+                    </span>
                   ) : null}
                 </div>
-                <button 
+                <button
                   onClick={async () => {
                     // 🔥 Запоминаем клик, чтобы баннер сразу исчез и не моргал при обновлении 
-                    setAcceptedLocally(prev => ({...prev, [rId]: true}));
-                    
+                    setAcceptedLocally(prev => ({ ...prev, [rId]: true }));
+
                     setOrders(prev => prev.map(o => o.route?.id === rId ? { ...o, route: { ...o.route!, isAccepted: true } as any } : o));
                     try {
-                      await fetch(`/api/routes/${rId}`, { method: "PATCH", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ isAccepted: true }) });
-                    } catch(e) {}
+                      await fetch(`/api/routes/${rId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isAccepted: true }) });
+                    } catch (e) { }
                   }}
                   style={{ background: "#4a7aff", color: "#fff", width: "100%", padding: "12px", borderRadius: 8, fontSize: 15, fontWeight: 700, border: "none", cursor: "pointer", boxShadow: "0 2px 6px rgba(74, 122, 255, 0.3)" }}
                 >
@@ -380,21 +381,21 @@ export default function CourierRoutesPage() {
           const routeObj = routePoints[0]?.route;
           const routeName = routeObj ? routeObj.name : "Без маршрута";
           const routeLink = routeObj?.link ?? null;
-          
+
           // 🔥 Совет для шапки маршрута
           // 🔥 Исправленный совет для шапки маршрута
           const advice = routeObj?.plannedDepartureTime && routeObj.plannedDepartureTime !== "—" && routeObj.plannedDepartureTime.trim() !== ""
-            ? `Забрать не позднее ${routeObj.plannedDepartureTime}` 
+            ? `Забрать не позднее ${routeObj.plannedDepartureTime}`
             : (routeObj?.departureAdvice ?? null);
 
           const delivered = routePoints.filter(o => o.status === "DELIVERED").length;
           const total = routePoints.length;
-          const isAllDelivered = delivered === total && total > 0; 
-          
+          const isAllDelivered = delivered === total && total > 0;
+
           const isExpanded = expandedRoutes[rId] ?? !isAllDelivered;
-          
+
           const onRouteHeaderClick = () => {
-            toggleRoute(rId); 
+            toggleRoute(rId);
           };
 
           const routePriceTotal = routePoints.reduce((sum, o) => sum + (o.price || 0), 0);
@@ -407,14 +408,45 @@ export default function CourierRoutesPage() {
               <div style={{ padding: "14px 16px", background: "#fafaf8", borderBottom: isExpanded ? "1px solid #e8e6df" : "none" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", cursor: "pointer", marginBottom: isExpanded ? 12 : 0 }} onClick={onRouteHeaderClick}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8 }}>
-                      Маршрут {routeName} 
-                      {!routeObj?.baseArrivalTime && !(routeObj as any)?.isAccepted && (
-                        <span style={{ fontSize: 10, background: "#facc15", color: "#78350f", padding: "2px 6px", borderRadius: 4, fontWeight: 800, textTransform: "uppercase" }}>Не принят</span>
-                      )}
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0, marginLeft: 8 }}>
+                      {(() => {
+                        // Маршрут БЕЗ возврата на базу — строим из точек сами
+                        const validPoints = routePoints.filter(o => o.lat && o.lng);
+                        const routeUrl = validPoints.length > 0
+                          ? `https://yandex.ru/maps/?rtext=${[STORE_COORDS, ...validPoints.map(o => `${o.lat},${o.lng}`)].join("~")}&rtt=mt`
+                          : routeLink;
+
+                        // На базу — от последней точки до базы
+                        const last = validPoints[validPoints.length - 1];
+                        const toBaseUrl = last
+                          ? `https://yandex.ru/maps/?mode=routes&rtext=${last.lat},${last.lng}~${STORE_COORDS}&rtt=mt`
+                          : null;
+
+                        return (
+                          <div style={{ display: "flex", gap: 6 }}>
+                            {routeUrl && (
+                              <a href={routeUrl} target="_blank" rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                style={{ fontSize: 11, background: "#facc15", color: "#1a1a18", padding: "5px 10px", borderRadius: 7, textDecoration: "none", fontWeight: 700, whiteSpace: "nowrap" }}
+                              >
+                                📍 Маршрут
+                              </a>
+                            )}
+                            {toBaseUrl && (
+                              <a href={toBaseUrl} target="_blank" rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                style={{ fontSize: 11, background: "#f5f4f0", color: "#6b6860", padding: "5px 10px", borderRadius: 7, textDecoration: "none", fontWeight: 700, whiteSpace: "nowrap" }}
+                              >
+                                🏠 На базу
+                              </a>
+                            )}
+                          </div>
+                        );
+                      })()}
+                      <div style={{ fontSize: 18, color: "#a8a49c", transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</div>
                     </div>
                     <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 4 }}>
-                      {delivered}/{total} доставлено • <span style={{fontWeight: 600, color: "#6b6860"}}>{routePriceTotal} ₽</span>
+                      {delivered}/{total} доставлено • <span style={{ fontWeight: 600, color: "#6b6860" }}>{routePriceTotal} ₽</span>
                     </div>
 
                     {advice && showAdvice && (
@@ -488,320 +520,324 @@ export default function CourierRoutesPage() {
               {isExpanded && (
                 <div style={{ display: "flex", flexDirection: "column" }}>
                   {routePoints.map((o, idx) => {
-                  const st = STATUS_MAP[o.status] || STATUS_MAP.ASSIGNED;
-                  const phone = o.recipientPhone || "—";
-                  const rawOp = o.opComment || "";
-                  const opComment = rawOp.split("\n").filter(line => !line.startsWith("💡")).join("\n").trim();
-                  const isDelivered = o.status === "DELIVERED";
-                  const actualTime = formatDeliveredTime(o.deliveredAt || null);
-                  const cleanPhoneForTg = phone !== "—" ? phone.replace(/[^\d+]/g, "") : "";
-                  let timeText = "в ближайшее время";
-                  if (o.eta) {
-                    const match = o.eta.match(/(\d{1,2}):(\d{2})/);
-                    if (match) {
-                      const h = parseInt(match[1], 10);
-                      const m = parseInt(match[2], 10);
-                      const d1 = new Date(); d1.setHours(h, m - 10, 0);
-                      const d2 = new Date(); d2.setHours(h, m + 10, 0);
-                      const fmt = (d: Date) => `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
-                      timeText = `с ${fmt(d1)} до ${fmt(d2)}`;
-                    } else {
-                      timeText = o.eta;
+                    const st = STATUS_MAP[o.status] || STATUS_MAP.ASSIGNED;
+                    const phone = o.recipientPhone || "—";
+                    const rawOp = o.opComment || "";
+                    const opComment = rawOp.split("\n").filter(line => !line.startsWith("💡")).join("\n").trim();
+                    const isDelivered = o.status === "DELIVERED";
+                    const actualTime = formatDeliveredTime(o.deliveredAt || null);
+                    const cleanPhoneForTg = phone !== "—" ? phone.replace(/[^\d+]/g, "") : "";
+                    let timeText = "в ближайшее время";
+                    if (o.eta) {
+                      const match = o.eta.match(/(\d{1,2}):(\d{2})/);
+                      if (match) {
+                        const h = parseInt(match[1], 10);
+                        const m = parseInt(match[2], 10);
+                        const d1 = new Date(); d1.setHours(h, m - 10, 0);
+                        const d2 = new Date(); d2.setHours(h, m + 10, 0);
+                        const fmt = (d: Date) => `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+                        timeText = `с ${fmt(d1)} до ${fmt(d2)}`;
+                      } else {
+                        timeText = o.eta;
+                      }
+                    } else if (o.slotRaw) {
+                      timeText = o.slotRaw;
                     }
-                  } else if (o.slotRaw) {
-                    timeText = o.slotRaw;
-                  }
-                  
-                  const messageText = `😊 Здравствуйте! Это курьер сервиса по доставке цветов BUNCH 🌸🌺 Примерное время доставки: ${timeText}`;
-                  const encodedMsg = encodeURIComponent(messageText);
 
-                  const isFirst = idx === 0;
-                  const isLast = idx === routePoints.length - 1;
-                  const prevAddressStr = isFirst ? STORE_COORDS : getRoutePointCoords(routePoints[idx - 1]);
-                  const currentAddressStr = getRoutePointCoords(o);
+                    const messageText = `😊 Здравствуйте! Это курьер сервиса по доставке цветов BUNCH 🌸🌺 Примерное время доставки: ${timeText}`;
+                    const encodedMsg = encodeURIComponent(messageText);
 
-                  const isCollapsed = collapsedOrders[o.id] !== undefined ? collapsedOrders[o.id] : isDelivered;
+                    const isFirst = idx === 0;
+                    const isLast = idx === routePoints.length - 1;
+                    const prevAddressStr = isFirst ? STORE_COORDS : getRoutePointCoords(routePoints[idx - 1]);
+                    const currentAddressStr = getRoutePointCoords(o);
 
-                  // 🔥 Проверка на слишком раннее изменение статуса теперь использует plannedDepartureTime
-                  let isTooEarly = false;
-                  if (routeObj?.plannedDepartureTime) {
-                    const [bH, bM] = routeObj.plannedDepartureTime.split(':').map(Number);
-                    const now = new Date();
-                    const moscowTime = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Moscow" }));
-                    const baseTime = new Date(moscowTime.getFullYear(), moscowTime.getMonth(), moscowTime.getDate(), bH, bM, 0, 0);
-                    isTooEarly = (baseTime.getTime() - moscowTime.getTime()) > 60 * 60 * 1000;
-                  }
+                    const isCollapsed = collapsedOrders[o.id] !== undefined ? collapsedOrders[o.id] : isDelivered;
 
-                  const borderColor = o.status === "DELIVERED" ? "#10b981" : (o.status === "IN_DELIVERY" ? "#f59e0b" : "#4a7aff");
+                    // 🔥 Проверка на слишком раннее изменение статуса теперь использует plannedDepartureTime
+                    let isTooEarly = false;
+                    if (routeObj?.plannedDepartureTime) {
+                      const [bH, bM] = routeObj.plannedDepartureTime.split(':').map(Number);
+                      const now = new Date();
+                      const moscowTime = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Moscow" }));
+                      const baseTime = new Date(moscowTime.getFullYear(), moscowTime.getMonth(), moscowTime.getDate(), bH, bM, 0, 0);
+                      isTooEarly = (baseTime.getTime() - moscowTime.getTime()) > 60 * 60 * 1000;
+                    }
 
-                  return (
-                    <div
-                      key={o.id}
-                      style={{
-                        margin: "8px 0",
-                        background: "#fff",
-                        borderRadius: 12,
-                        border: "1px solid #e8e6df",
-                        borderLeft: `6px solid ${borderColor}`,
-                        overflow: "hidden",
-                        boxShadow: isCollapsed ? "0 1px 4px rgba(0,0,0,0.06)" : "0 4px 14px rgba(0,0,0,0.08)",
-                        opacity: isDelivered ? 0.7 : 1,
-                        transition: "all 0.2s"
-                      }}
-                    >
-                      <div 
-                        onClick={() => toggleOrder(o.id)}
-                        style={{ 
-                          padding: "12px 16px", 
-                          cursor: "pointer",
-                          display: "flex", 
-                          alignItems: "flex-start", 
-                          gap: 10,
-                          background: isCollapsed ? "#fff" : "#fafaf8" 
+                    const borderColor = o.status === "DELIVERED" ? "#10b981" : (o.status === "IN_DELIVERY" ? "#f59e0b" : "#4a7aff");
+
+                    return (
+                      <div
+                        key={o.id}
+                        style={{
+                          margin: "8px 0",
+                          background: "#fff",
+                          borderRadius: 12,
+                          border: "1px solid #e8e6df",
+                          borderLeft: `6px solid ${borderColor}`,
+                          overflow: "hidden",
+                          boxShadow: isCollapsed ? "0 1px 4px rgba(0,0,0,0.06)" : "0 4px 14px rgba(0,0,0,0.08)",
+                          opacity: isDelivered ? 0.7 : 1,
+                          transition: "all 0.2s"
                         }}
                       >
-                        {o.routeOrder && (
-                          <div style={{
-                            width: 24, height: 24, borderRadius: "50%",
-                            background: st.bg, color: st.color,
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: 12, fontWeight: 700, flexShrink: 0, marginTop: 2
-                          }}>
-                            {o.routeOrder}
+                        <div
+                          onClick={() => toggleOrder(o.id)}
+                          style={{
+                            padding: "12px 16px",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "flex-start",
+                            gap: 10,
+                            background: isCollapsed ? "#fff" : "#fafaf8"
+                          }}
+                        >
+                          {o.routeOrder && (
+                            <div style={{
+                              width: 24, height: 24, borderRadius: "50%",
+                              background: st.bg, color: st.color,
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              fontSize: 12, fontWeight: 700, flexShrink: 0, marginTop: 2
+                            }}>
+                              {o.routeOrder}
+                            </div>
+                          )}
+
+                          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", lineHeight: 1.3 }}>
+                              {o.address}
+                            </div>
+
+                            {(o.name || phone !== "—") && (
+                              <div style={{ fontSize: 13, fontWeight: 600, color: "#4a7aff", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 2 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                  {o.name && <span>👤 {o.name}</span>}
+                                  {o.name && phone !== "—" && <span style={{ color: "#a8a49c" }}>·</span>}
+                                  {phone !== "—" && (
+                                    <a href={`tel:${phone}`} onClick={e => e.stopPropagation()} style={{ color: "#4a7aff", textDecoration: "none" }}>
+                                      📞 {phone}
+                                    </a>
+                                  )}
+                                </div>
+
+                                {cleanPhoneForTg && (
+                                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <a
+                                      href={`https://t.me/${cleanPhoneForTg}?text=${encodedMsg}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      onClick={e => e.stopPropagation()}
+                                      title="Написать в Telegram"
+                                      style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#2AABEE", width: 30, height: 30, borderRadius: "50%", textDecoration: "none", boxShadow: "0 2px 4px rgba(42, 171, 238, 0.3)" }}
+                                    >
+                                      <svg viewBox="0 0 24 24" width="16" height="16" fill="#ffffff">
+                                        <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z" />
+                                      </svg>
+                                    </a>
+
+                                    <a
+                                      href={`sms:${cleanPhoneForTg}?body=${encodedMsg}`}
+                                      title="Отправить SMS"
+                                      onClick={e => e.stopPropagation()}
+                                      style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#34C759", width: 30, height: 30, borderRadius: "50%", textDecoration: "none", boxShadow: "0 2px 4px rgba(52, 199, 89, 0.3)" }}
+                                    >
+                                      <svg viewBox="0 0 24 24" width="16" height="16" fill="#ffffff">
+                                        <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" />
+                                      </svg>
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
+                              <span style={{ color: (isDelivered && actualTime) ? "#10b981" : "inherit", fontWeight: 500 }}>
+                                {(isDelivered && actualTime) ? `✅ Доставлен в ${actualTime}` : (o.slotRaw ?? "Время не указано")}
+                              </span>
+                              {o.eta && !isDelivered && (
+                                <span style={{ background: "#eef3ff", color: "#4a7aff", padding: "2px 6px", borderRadius: 4, fontWeight: 700, fontSize: 10 }}>
+                                  ~{o.eta}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        )}
-                        
-                        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", lineHeight: 1.3 }}>
-                            {o.address}
+
+                          <div style={{ fontSize: 12, color: "#a8a49c", transform: isCollapsed ? "none" : "rotate(180deg)", transition: "transform 0.2s", marginTop: 4 }}>
+                            ▼
                           </div>
-                          
-                          {(o.name || phone !== "—") && (
-                            <div style={{ fontSize: 13, fontWeight: 600, color: "#4a7aff", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 2 }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                                {o.name && <span>👤 {o.name}</span>}
-                                {o.name && phone !== "—" && <span style={{ color: "#a8a49c" }}>·</span>}
-                                {phone !== "—" && (
-                                  <a href={`tel:${phone}`} onClick={e => e.stopPropagation()} style={{ color: "#4a7aff", textDecoration: "none" }}>
-                                    📞 {phone}
+                        </div>
+
+                        {!isCollapsed && (
+                          <div style={{ padding: "12px 16px 16px", borderTop: "1px solid #f0efe9" }}>
+
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                              <div style={{ fontSize: 10, color: "#a8a49c", fontFamily: "monospace", fontWeight: 600 }}>
+                                {o.externalId ?? o.crmId}
+                              </div>
+                              <select
+                                value={o.status}
+                                onClick={e => e.stopPropagation()}
+                                // 🔥 Передаем plannedDepartureTime для проверки времени
+                                onChange={(e) => handleStatusChange(o.id, e.target.value, routeObj?.plannedDepartureTime)}
+                                style={{
+                                  background: st.bg, color: st.color, border: "none", padding: "6px 10px", borderRadius: 8,
+                                  fontSize: 11, fontWeight: 700, outline: "none", cursor: "pointer", WebkitAppearance: "none",
+                                }}
+                              >
+                                <option value="ASSIGNED">Назначен</option>
+                                <option value="IN_DELIVERY" disabled={isTooEarly}>
+                                  {isTooEarly ? "⏳ Рано для статуса В пути" : "🚀 В пути"}
+                                </option>
+                                <option value="DELIVERED" disabled={isTooEarly}>
+                                  {isTooEarly ? "⏳ Рано для статуса Доставлен" : "✅ Доставлен"}
+                                </option>
+                              </select>
+                            </div>
+
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 12 }}>
+                              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                                <a
+                                  href={`https://yandex.ru/maps/?mode=routes&rtext=${prevAddressStr}~${currentAddressStr}`}
+                                  target="_blank"
+                                  style={{ fontSize: 11, background: "#eef3ff", color: "#4a7aff", padding: "4px 10px", borderRadius: 6, textDecoration: "none", fontWeight: 700, display: "inline-flex", alignItems: "center" }}
+                                >
+                                  📍 От {isFirst ? "базы" : "пред. точки"} сюда
+                                </a>
+                                {isLast && (
+                                  <a
+                                    href={`https://yandex.ru/maps/?mode=routes&rtext=${currentAddressStr}~${STORE_COORDS}`}
+                                    target="_blank"
+                                    style={{ fontSize: 11, background: "#f5f4f0", color: "#6b6860", padding: "4px 10px", borderRadius: 6, textDecoration: "none", fontWeight: 700, display: "inline-flex", alignItems: "center" }}
+                                  >
+                                    🏠 На базу
                                   </a>
                                 )}
                               </div>
+                              {o.price !== null && (
+                                <div style={{ fontSize: 12, whiteSpace: "nowrap", color: o.wrongPrice ? "#d94040" : "#a8a49c", fontWeight: o.wrongPrice ? 800 : 600 }}>
+                                  {o.price} ₽
+                                </div>
+                              )}
+                            </div>
 
-                              {cleanPhoneForTg && (
-                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                  <a 
-                                    href={`https://t.me/${cleanPhoneForTg}?text=${encodedMsg}`} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
-                                    onClick={e => e.stopPropagation()} 
-                                    title="Написать в Telegram"
-                                    style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#2AABEE", width: 30, height: 30, borderRadius: "50%", textDecoration: "none", boxShadow: "0 2px 4px rgba(42, 171, 238, 0.3)" }}
-                                  >
-                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="#ffffff">
-                                      <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z"/>
-                                    </svg>
-                                  </a>
+                            {o.items && o.items.trim() && (
+                              <div style={{ marginBottom: 10, background: "#fafaf8", borderRadius: 8, padding: 10, border: "1px solid #e8e6df" }}>
+                                {(() => {
+                                  const lines = o.items!.split('\n').map(l => l.trim()).filter(Boolean);
+                                  const isMany = lines.length >= 3;
+                                  const isItemExpanded = expandedItems[o.id];
 
-                                  <a 
-                                    href={`sms:${cleanPhoneForTg}?body=${encodedMsg}`}
-                                    title="Отправить SMS"
-                                    onClick={e => e.stopPropagation()} 
-                                    style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#34C759", width: 30, height: 30, borderRadius: "50%", textDecoration: "none", boxShadow: "0 2px 4px rgba(52, 199, 89, 0.3)" }}
-                                  >
-                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="#ffffff">
-                                      <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
-                                    </svg>
+                                  if (!isMany) {
+                                    return (
+                                      <>
+                                        <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 4, fontWeight: 600 }}>📦 Состав заказа</div>
+                                        <div style={{ fontSize: 12, color: "#1a1a18", lineHeight: 1.4 }}>
+                                          {lines.map((l, i) => <div key={i}>• {l}</div>)}
+                                        </div>
+                                      </>
+                                    );
+                                  }
+
+                                  return (
+                                    <>
+                                      <div
+                                        onClick={() => setExpandedItems(prev => ({ ...prev, [o.id]: !prev[o.id] }))}
+                                        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+                                      >
+                                        <div style={{ fontSize: 11, color: "#1a1a18", textTransform: "uppercase", fontWeight: 700 }}>
+                                          📦 Состав ({lines.length} позиций)
+                                        </div>
+                                        <div style={{ fontSize: 12, color: "#a8a49c" }}>{isItemExpanded ? "▲" : "▼"}</div>
+                                      </div>
+                                      {isItemExpanded && (
+                                        <div style={{ marginTop: 8, borderTop: "1px dashed #e8e6df", paddingTop: 8, fontSize: 12, color: "#1a1a18", lineHeight: 1.4 }}>
+                                          {lines.map((l, i) => <div key={i}>• {l}</div>)}
+                                        </div>
+                                      )}
+                                    </>
+                                  );
+                                })()}
+                              </div>
+                            )}
+
+                            <div style={{ marginBottom: 10 }}>
+                              {uploading[o.id] ? (
+                                <div style={{ textAlign: "center", padding: "14px", background: "#fafaf8", borderRadius: 8, color: "#a8a49c", fontWeight: 600, fontSize: 13 }}>
+                                  ⏳ Загрузка фото...
+                                </div>
+                              ) : (
+                                <div style={{ display: "flex", gap: 8 }}>
+                                  <label style={{
+                                    flex: 1, background: o.photoUrl ? "#ecfdf5" : "#fff",
+                                    border: `1px solid ${o.photoUrl ? "#10b981" : "#e8e6df"}`,
+                                    padding: "10px", borderRadius: 8, cursor: "pointer",
+                                    textAlign: "center", fontWeight: 700, fontSize: 13,
+                                    color: o.photoUrl ? "#10b981" : "#1a1a18"
+                                  }}>
+                                    <input
+                                      type="file" accept="image/*" capture="environment" style={{ display: "none" }}
+                                      onChange={(e) => { if (e.target.files?.[0]) handlePhotoUpload(o.id, e.target.files[0]); }}
+                                    />
+                                    📸 Камера
+                                  </label>
+
+                                  <label style={{
+                                    flex: 1, background: "#fff", border: "1px solid #e8e6df",
+                                    padding: "10px", borderRadius: 8, cursor: "pointer",
+                                    textAlign: "center", fontWeight: 700, fontSize: 13, color: "#1a1a18"
+                                  }}>
+                                    <input
+                                      type="file" accept="image/*" style={{ display: "none" }}
+                                      onChange={(e) => { if (e.target.files?.[0]) handlePhotoUpload(o.id, e.target.files[0]); }}
+                                    />
+                                    🖼️ Из альбома
+                                  </label>
+                                </div>
+                              )}
+
+                              {o.photoUrl && !uploading[o.id] && (
+                                <div style={{ marginTop: 8 }}>
+                                  <a href={o.photoUrl} target="_blank" rel="noopener noreferrer">
+                                    <img
+                                      src={o.photoUrl} alt="Фото заказа"
+                                      style={{ width: "100%", maxHeight: 180, objectFit: "cover", borderRadius: 8, border: "1px solid #e8e6df", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }}
+                                    />
                                   </a>
                                 </div>
                               )}
                             </div>
-                          )}
 
-                          <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ color: (isDelivered && actualTime) ? "#10b981" : "inherit", fontWeight: 500 }}>
-                              {(isDelivered && actualTime) ? `✅ Доставлен в ${actualTime}` : (o.slotRaw ?? "Время не указано")}
-                            </span>
-                            {o.eta && !isDelivered && (
-                              <span style={{ background: "#eef3ff", color: "#4a7aff", padding: "2px 6px", borderRadius: 4, fontWeight: 700, fontSize: 10 }}>
-                                ~{o.eta}
-                              </span>
+                            {o.comment && (
+                              <div style={{ background: "#fdf8f6", borderRadius: 8, padding: 10, border: "1px solid #fce8e3", marginBottom: opComment ? 8 : 0 }}>
+                                <div style={{ fontSize: 12, color: "#d94040", fontWeight: 600 }}>
+                                  ⚠ {o.comment}
+                                </div>
+                              </div>
+                            )}
+
+                            {opComment && (
+                              <div style={{
+                                background: "#fffbeb", borderRadius: 8, padding: 10,
+                                border: "1px solid #fde68a",
+                              }}>
+                                <div style={{ fontSize: 11, color: "#92400e", textTransform: "uppercase", marginBottom: 2, fontWeight: 600 }}>
+                                  📋 Заметка оператора
+                                </div>
+                                <div style={{ fontSize: 13, color: "#78350f", lineHeight: 1.4, whiteSpace: "pre-wrap" }}>
+                                  {opComment}
+                                </div>
+                              </div>
                             )}
                           </div>
-                        </div>
-
-                        <div style={{ fontSize: 12, color: "#a8a49c", transform: isCollapsed ? "none" : "rotate(180deg)", transition: "transform 0.2s", marginTop: 4 }}>
-                          ▼
-                        </div>
+                        )}
                       </div>
-
-                      {!isCollapsed && (
-                        <div style={{ padding: "12px 16px 16px", borderTop: "1px solid #f0efe9" }}>
-                          
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                            <div style={{ fontSize: 10, color: "#a8a49c", fontFamily: "monospace", fontWeight: 600 }}>
-                              {o.externalId ?? o.crmId}
-                            </div>
-                            <select
-                              value={o.status}
-                              onClick={e => e.stopPropagation()}
-                              // 🔥 Передаем plannedDepartureTime для проверки времени
-                              onChange={(e) => handleStatusChange(o.id, e.target.value, routeObj?.plannedDepartureTime)}
-                              style={{
-                                background: st.bg, color: st.color, border: "none", padding: "6px 10px", borderRadius: 8,
-                                fontSize: 11, fontWeight: 700, outline: "none", cursor: "pointer", WebkitAppearance: "none",
-                              }}
-                            >
-                              <option value="ASSIGNED">Назначен</option>
-                              <option value="IN_DELIVERY" disabled={isTooEarly}>
-                                {isTooEarly ? "⏳ Рано для статуса В пути" : "🚀 В пути"}
-                              </option>
-                              <option value="DELIVERED" disabled={isTooEarly}>
-                                {isTooEarly ? "⏳ Рано для статуса Доставлен" : "✅ Доставлен"}
-                              </option>
-                            </select>
-                          </div>
-
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 12 }}>
-                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                              <a 
-                                href={`https://yandex.ru/maps/?mode=routes&rtext=${prevAddressStr}~${currentAddressStr}`} 
-                                target="_blank" 
-                                style={{ fontSize: 11, background: "#eef3ff", color: "#4a7aff", padding: "4px 10px", borderRadius: 6, textDecoration: "none", fontWeight: 700, display: "inline-flex", alignItems: "center" }}
-                              >
-                                📍 От {isFirst ? "базы" : "пред. точки"} сюда
-                              </a>
-                              {isLast && (
-                                <a 
-                                  href={`https://yandex.ru/maps/?mode=routes&rtext=${currentAddressStr}~${STORE_COORDS}`} 
-                                  target="_blank" 
-                                  style={{ fontSize: 11, background: "#f5f4f0", color: "#6b6860", padding: "4px 10px", borderRadius: 6, textDecoration: "none", fontWeight: 700, display: "inline-flex", alignItems: "center" }}
-                                >
-                                  🏠 На базу
-                                </a>
-                              )}
-                            </div>
-                            {o.price !== null && (
-                              <div style={{ fontSize: 12, whiteSpace: "nowrap", color: o.wrongPrice ? "#d94040" : "#a8a49c", fontWeight: o.wrongPrice ? 800 : 600 }}>
-                                {o.price} ₽
-                              </div>
-                            )}
-                          </div>
-
-                          {o.items && o.items.trim() && (
-                            <div style={{ marginBottom: 10, background: "#fafaf8", borderRadius: 8, padding: 10, border: "1px solid #e8e6df" }}>
-                              {(() => {
-                                const lines = o.items!.split('\n').map(l => l.trim()).filter(Boolean);
-                                const isMany = lines.length >= 3;
-                                const isItemExpanded = expandedItems[o.id];
-
-                                if (!isMany) {
-                                  return (
-                                    <>
-                                      <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 4, fontWeight: 600 }}>📦 Состав заказа</div>
-                                      <div style={{ fontSize: 12, color: "#1a1a18", lineHeight: 1.4 }}>
-                                        {lines.map((l, i) => <div key={i}>• {l}</div>)}
-                                      </div>
-                                    </>
-                                  );
-                                }
-
-                                return (
-                                  <>
-                                    <div 
-                                      onClick={() => setExpandedItems(prev => ({ ...prev, [o.id]: !prev[o.id] }))}
-                                      style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
-                                    >
-                                      <div style={{ fontSize: 11, color: "#1a1a18", textTransform: "uppercase", fontWeight: 700 }}>
-                                        📦 Состав ({lines.length} позиций)
-                                      </div>
-                                      <div style={{ fontSize: 12, color: "#a8a49c" }}>{isItemExpanded ? "▲" : "▼"}</div>
-                                    </div>
-                                    {isItemExpanded && (
-                                      <div style={{ marginTop: 8, borderTop: "1px dashed #e8e6df", paddingTop: 8, fontSize: 12, color: "#1a1a18", lineHeight: 1.4 }}>
-                                        {lines.map((l, i) => <div key={i}>• {l}</div>)}
-                                      </div>
-                                    )}
-                                  </>
-                                );
-                              })()}
-                            </div>
-                          )}
-
-                          <div style={{ marginBottom: 10 }}>
-                            {uploading[o.id] ? (
-                              <div style={{ textAlign: "center", padding: "14px", background: "#fafaf8", borderRadius: 8, color: "#a8a49c", fontWeight: 600, fontSize: 13 }}>
-                                ⏳ Загрузка фото...
-                              </div>
-                            ) : (
-                              <div style={{ display: "flex", gap: 8 }}>
-                                <label style={{
-                                  flex: 1, background: o.photoUrl ? "#ecfdf5" : "#fff",
-                                  border: `1px solid ${o.photoUrl ? "#10b981" : "#e8e6df"}`,
-                                  padding: "10px", borderRadius: 8, cursor: "pointer",
-                                  textAlign: "center", fontWeight: 700, fontSize: 13,
-                                  color: o.photoUrl ? "#10b981" : "#1a1a18"
-                                }}>
-                                  <input
-                                    type="file" accept="image/*" capture="environment" style={{ display: "none" }}
-                                    onChange={(e) => { if (e.target.files?.[0]) handlePhotoUpload(o.id, e.target.files[0]); }}
-                                  />
-                                  📸 Камера
-                                </label>
-
-                                <label style={{
-                                  flex: 1, background: "#fff", border: "1px solid #e8e6df",
-                                  padding: "10px", borderRadius: 8, cursor: "pointer",
-                                  textAlign: "center", fontWeight: 700, fontSize: 13, color: "#1a1a18"
-                                }}>
-                                  <input
-                                    type="file" accept="image/*" style={{ display: "none" }}
-                                    onChange={(e) => { if (e.target.files?.[0]) handlePhotoUpload(o.id, e.target.files[0]); }}
-                                  />
-                                  🖼️ Из альбома
-                                </label>
-                              </div>
-                            )}
-
-                            {o.photoUrl && !uploading[o.id] && (
-                              <div style={{ marginTop: 8 }}>
-                                <a href={o.photoUrl} target="_blank" rel="noopener noreferrer">
-                                  <img 
-                                    src={o.photoUrl} alt="Фото заказа" 
-                                    style={{ width: "100%", maxHeight: 180, objectFit: "cover", borderRadius: 8, border: "1px solid #e8e6df", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }} 
-                                  />
-                                </a>
-                              </div>
-                            )}
-                          </div>
-
-                          {o.comment && (
-                            <div style={{ background: "#fdf8f6", borderRadius: 8, padding: 10, border: "1px solid #fce8e3", marginBottom: opComment ? 8 : 0 }}>
-                              <div style={{ fontSize: 12, color: "#d94040", fontWeight: 600 }}>
-                                ⚠ {o.comment}
-                              </div>
-                            </div>
-                          )}
-
-                          {opComment && (
-                            <div style={{
-                              background: "#fffbeb", borderRadius: 8, padding: 10,
-                              border: "1px solid #fde68a",
-                            }}>
-                              <div style={{ fontSize: 11, color: "#92400e", textTransform: "uppercase", marginBottom: 2, fontWeight: 600 }}>
-                                📋 Заметка оператора
-                              </div>
-                              <div style={{ fontSize: 13, color: "#78350f", lineHeight: 1.4, whiteSpace: "pre-wrap" }}>
-                                {opComment}
-                              </div>
-                            </div>
-                          )}
-
-                        </div>
-                      )}
+                    );
+                  })}
+                  {routeObj?.estimatedReturnTime && (
+                    <div style={{ fontSize: 12, color: "#a8a49c", padding: "8px 16px 12px", textAlign: "center" }}>
+                      🏠 Расчётное время возвращения на базу: <span style={{ fontWeight: 700, color: "#6b6860" }}>{routeObj.estimatedReturnTime}</span>
                     </div>
-                  );
-                })}
+                  )}
                 </div>
               )}
             </div>
@@ -846,10 +882,10 @@ export default function CourierRoutesPage() {
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                           <div>
                             <div style={{ fontSize: 10, color: "#a8a49c", fontFamily: "monospace" }}>{o.externalId ?? o.crmId}</div>
-                            <div style={{ 
-                                fontSize: 12, fontWeight: 600, color: (isDelivered && actualTime) ? "#10b981" : "#1a1a18" 
-                              }}>
-                                {(isDelivered && actualTime) ? `Доставлен в ${actualTime}` : (o.slotRaw ?? "Время не указано")}
+                            <div style={{
+                              fontSize: 12, fontWeight: 600, color: (isDelivered && actualTime) ? "#10b981" : "#1a1a18"
+                            }}>
+                              {(isDelivered && actualTime) ? `Доставлен в ${actualTime}` : (o.slotRaw ?? "Время не указано")}
                             </div>
                           </div>
                           <div style={{ fontSize: 11, background: st.bg, color: st.color, padding: "3px 8px", borderRadius: 6, fontWeight: 700 }}>
