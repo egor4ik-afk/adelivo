@@ -389,7 +389,7 @@ export default function CourierRoutesPage() {
                           }}
                           style={{ fontSize: 10, background: "#facc15", color: "#78350f", padding: "4px 8px", borderRadius: 6, fontWeight: 800, textTransform: "uppercase", border: "none", cursor: "pointer", boxShadow: "0 2px 4px rgba(250,204,21,0.3)" }}
                         >
-                          Принять время
+                          Принять время {routeObj?.plannedDepartureTime ? `${routeObj.plannedDepartureTime}` : ""}
                         </button>
                       )}
                     </div>
