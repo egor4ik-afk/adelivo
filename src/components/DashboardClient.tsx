@@ -1528,7 +1528,7 @@ export function DashboardClient({ user }: { user: User }) {
               );
             })()}
 
-            {routeLegs[selectedRouteOrders.length] && returnToBase && (
+            {routeLegs[selectedRouteOrders.length] && (
               <div style={{ fontSize: 11, color: "#a8a49c", paddingLeft: 46, paddingTop: 4 }}>
                 ↓ {routeLegs[selectedRouteOrders.length]} возврат на базу (Прибытие: {calculatedEtasData.baseReturnTime})
               </div>
