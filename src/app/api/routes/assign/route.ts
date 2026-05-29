@@ -12,20 +12,18 @@ export async function POST(req: Request) {
     const { 
       orderIds, courierId, returnToBase = false, routeDate, 
       oldRouteId, departureAdvice, isDraft, routeEtas, 
-      estimatedReturnTime, plannedDepartureTime
+      estimatedReturnTime, plannedDepartureTime // 🔥 ДОБАВИЛИ СЮДА 
     } = body;
 
     let existingRouteName = null;
     let fallbackReturnTime = null;
     let fallbackAdvice = null;
     let fallbackIsDraft = false;
-    let fallbackPlannedTime = null; 
+    let fallbackPlannedTime = null; // 🔥 1. ДОБАВИЛИ ПЕРЕМЕННУЮ
     
-    // 🔥 НОВЫЕ ПЕРЕМЕННЫЕ ДЛЯ ФИКСА БАГА С УВЕДОМЛЕНИЯМИ
-    let fallbackIsAccepted = false;
-    let oldRouteCourierId = null;
 
     if (oldRouteId) {
+      // 🔥 ДОБАВЛЕНО: Подтягиваем старого курьера маршрута, чтобы знать, авто он или нет
       const oldRoute = await prisma.route.findUnique({ 
         where: { id: oldRouteId },
         include: { courier: true } 
@@ -35,18 +33,8 @@ export async function POST(req: Request) {
         existingRouteName = oldRoute.name;
         fallbackReturnTime = oldRoute.estimatedReturnTime;
         fallbackAdvice = oldRoute.departureAdvice;
-        fallbackPlannedTime = oldRoute.plannedDepartureTime; 
+        fallbackPlannedTime = oldRoute.plannedDepartureTime; // 🔥 2. СОХРАНИЛИ СТАРОЕ ВРЕМЯ
         fallbackIsDraft = oldRoute.isDraft;
-        
-        oldRouteCourierId = oldRoute.courierId;
-        
-        // 🔥 Если курьер не поменялся, сохраняем статус "Принято", чтобы не вылезал синий баннер
-        if (oldRouteCourierId === Number(courierId)) {
-          fallbackIsAccepted = (oldRoute as any).isAccepted ?? false;
-        } else {
-          // Если маршрут передали другому курьеру, он должен принять его заново
-          fallbackIsAccepted = false;
-        }
       }
       
       const ordersToReset = await prisma.order.findMany({
@@ -56,6 +44,7 @@ export async function POST(req: Request) {
       for (const o of ordersToReset) {
         let resetPrice = o.price;
         
+        // 🔥 ИСПРАВЛЕНО: Если мы выкидываем заказ из авто-маршрута, снимаем 100р надбавки
         if (oldRoute?.courier?.isAuto && resetPrice && resetPrice >= 600) {
             resetPrice -= 100;
         }
@@ -66,7 +55,7 @@ export async function POST(req: Request) {
             courierId: null, courier: null, routeId: null, routeOrder: null,
             status: o.status === "ASSIGNED" ? "NEW" : o.status,
             eta: null,
-            price: resetPrice
+            price: resetPrice // 🔥 Сохраняем честную откаченную цену
           }
         });
         if (o.crmId) {
@@ -128,20 +117,18 @@ export async function POST(req: Request) {
       routeName = `${prefix}${(maxNum + 1).toString().padStart(3, '0')}`;
     }
 
-    // 🔥 СОЗДАЕМ МАРШРУТ, ПРОКИДЫВАЯ isAccepted ИЗ ПРОШЛОГО
-    const routeData: any = { 
-      name: routeName, 
-      link, 
-      date: finalRouteDate, 
-      plannedDepartureTime,
-      departureAdvice: departureAdvice !== undefined ? departureAdvice : fallbackAdvice, 
-      courierId: Number(courierId),
-      isDraft: isDraft !== undefined ? isDraft : fallbackIsDraft,
-      estimatedReturnTime: estimatedReturnTime !== undefined ? estimatedReturnTime : fallbackReturnTime,
-      isAccepted: fallbackIsAccepted 
-    };
-
-    const newRoute = await prisma.route.create({ data: routeData });
+    const newRoute = await prisma.route.create({
+      data: { 
+        name: routeName, 
+        link, 
+        date: finalRouteDate, 
+        plannedDepartureTime,
+        departureAdvice: departureAdvice !== undefined ? departureAdvice : fallbackAdvice, 
+        courierId: Number(courierId),
+        isDraft: isDraft !== undefined ? isDraft : fallbackIsDraft,
+        estimatedReturnTime: estimatedReturnTime !== undefined ? estimatedReturnTime : fallbackReturnTime
+      }
+    });
 
     for (let i = 0; i < orderIds.length; i++) {
       const orderToUpdate = sortedOrders.find((o: any) => o.id === orderIds[i]);
@@ -170,6 +157,7 @@ export async function POST(req: Request) {
            }
         }
 
+        // 🔥 ИСПРАВЛЕНО: Вместо жесткого массива, просто проверяем что была авто-цена >= 600
         if (oldCourierIsAuto && basePrice >= 600) {
             basePrice -= 100;
         }
@@ -195,21 +183,20 @@ export async function POST(req: Request) {
       }
     }
 
-    // 🔥 ИСКЛЮЧАЕМ ЛОЖНЫЕ УВЕДОМЛЕНИЯ: Отправляем Push ТОЛЬКО если маршрут реально новый 
-    // или если его назначили другому курьеру
-    const isActuallyNew = !oldRouteId || oldRouteCourierId !== Number(courierId);
-
-    if (isActuallyNew && courierDb?.email) {
-      const userObj = await prisma.user.findUnique({ where: { email: courierDb.email } });
-      if (userObj) {
-        await notify({
-          type: "route.assigned",
-          userId: userObj.id,
-          routeId: newRoute.name,
-          pointsCount: orderIds.length
-        });
-      }
+  // 🔥 ДОБАВЛЕНО: Отправка Push-уведомления курьеру о новом маршруте
+  if (courierDb?.email) {
+    const userObj = await prisma.user.findUnique({ where: { email: courierDb.email } });
+    if (userObj) {
+      await notify({
+        type: "route.assigned",
+        userId: userObj.id,
+        routeId: newRoute.name,
+        pointsCount: orderIds.length
+      });
     }
+  }
+
+  return NextResponse.json({ success: true, routeId: newRoute.id });
 
     return NextResponse.json({ success: true, routeId: newRoute.id });
   } catch (e: any) {
