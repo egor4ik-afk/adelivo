@@ -635,12 +635,19 @@ export function DashboardClient({ user }: { user: User }) {
           ? `${bulkIndex + 1}. ${slotLabelText}`
           : (late ? "⏰ " : "") + slotLabelText;
 
-        pm = new ymaps.Placemark([lat, lng], {
-          balloonContentHeader: order.externalId ?? order.crmId,
-          balloonContentBody: balloonBody,
-          hintContent: order.address ?? "—",
-          pinColor, slotLabel: finalSlotLabel, showLabel: displayName, labelText: order.courier ?? "",
-        }, { iconLayout: StretchyLayout, iconShape: { type: "Rectangle", coordinates: [[-40, -40], [40, 20]] }, iconOffset: [-15, -26] });
+          pm = new ymaps.Placemark([lat, lng], {
+            balloonContentHeader: order.externalId ?? order.crmId,
+            balloonContentBody: balloonBody,
+            hintContent: order.address ?? "—",
+            pinColor, slotLabel: finalSlotLabel, showLabel: displayName, labelText: order.courier ?? "",
+          }, { 
+            iconLayout: StretchyLayout, 
+            // 🔥 ИСПРАВЛЕНИЕ ХИТБОКСА (ОБЛАСТИ КЛИКА) 🔥
+            // 1. Делаем огромную зону клика относительно центра точки: 120px в ширину и захватываем всё вниз до +30px (где висит имя курьера)
+            iconShape: { type: "Rectangle", coordinates: [[-60, -40], [60, 30]] }, 
+            // 2. Идеально центрируем "стрелочку" плашки ровно над географической координатой заказа
+            iconOffset: [-45, -32] 
+          });
       } else {
         let preset = 'islands#dotIcon';
         let iconContent = undefined;

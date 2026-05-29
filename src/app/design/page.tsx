@@ -2,15 +2,12 @@
 "use client";
 import { useState } from "react";
 
-const STORE_COORDS = "55.749511,37.596205";
-
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
   ASSIGNED: { label: "Назначен", color: "#4a7aff", bg: "#eef3ff" },
   IN_DELIVERY: { label: "🚀 В пути", color: "#10b981", bg: "#ecfdf5" },
   DELIVERED: { label: "✅ Доставлен", color: "#6b6860", bg: "#f5f4f0" },
 };
 
-// Строгий интерфейс заказа для песочницы
 interface DesignOrder {
   id: string; externalId: string; address: string; status: string;
   name: string; recipientPhone: string; price: number | null; wrongPrice: boolean;
@@ -47,12 +44,14 @@ const initialOrders: DesignOrder[] = [
 
 export default function DesignSandboxPage() {
   // === ГЛОБАЛЬНЫЕ СТЕЙТЫ МАРШРУТА ===
-  const [isAccepted, setIsAccepted] = useState(false); // Управляет синим баннером
-  const [plannedTime, setPlannedTime] = useState<string | null>("14:30");
-  const [timeChangedByOperator, setTimeChangedByOperator] = useState(false); // Управляет желтой кнопкой
+  const [isAccepted, setIsAccepted] = useState(false);
   const [baseTime, setBaseTime] = useState("");
   const [isExpanded, setIsExpanded] = useState(true);
   
+  // 🔥 Новые стейты для логики "Прочитанного времени"
+  const [plannedTime, setPlannedTime] = useState<string | null>("14:30");
+  const [acknowledgedTime, setAcknowledgedTime] = useState<string | null>("14:30");
+
   // === СТЕЙТЫ ЗАКАЗОВ ===
   const [orders, setOrders] = useState<DesignOrder[]>(initialOrders);
   const [collapsedOrders, setCollapsedOrders] = useState<Record<string, boolean>>({ "3": true });
@@ -115,18 +114,21 @@ export default function DesignSandboxPage() {
   const setScenarioNewRoute = () => {
     setOrders(initialOrders.map(o => ({...o, status: "ASSIGNED", deliveredAt: null, pickedUpAt: null})));
     setIsAccepted(false);
-    setTimeChangedByOperator(false);
+    setPlannedTime("14:30");
+    setAcknowledgedTime("14:30");
   };
 
   const setScenarioAccepted = () => {
     setOrders(initialOrders.map(o => ({...o, status: "ASSIGNED", deliveredAt: null, pickedUpAt: null})));
     setIsAccepted(true);
-    setTimeChangedByOperator(false);
+    setPlannedTime("14:30");
+    setAcknowledgedTime("14:30");
   };
 
   const setScenarioInDelivery = () => {
     setIsAccepted(true);
-    setTimeChangedByOperator(false);
+    setPlannedTime("14:30");
+    setAcknowledgedTime("14:30");
     setOrders(initialOrders.map((o, i) => i === 0 ? {...o, status: "DELIVERED", deliveredAt: new Date().toISOString()} : {...o, status: "IN_DELIVERY", pickedUpAt: new Date().toISOString()}));
   };
 
@@ -146,7 +148,7 @@ export default function DesignSandboxPage() {
           <div style={{ fontSize: 12, color: "#a8a49c", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>Быстрые сценарии</div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <button onClick={setScenarioNewRoute} style={{ flex: 1, background: !isAccepted && !hasStarted ? "#4a7aff" : "#333", color: "#fff", border: "none", padding: "10px", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>
-              1. Новый маршрут (Синий баннер)
+              1. Новый (Синий баннер)
             </button>
             <button onClick={setScenarioAccepted} style={{ flex: 1, background: isAccepted && !hasStarted ? "#4a7aff" : "#333", color: "#fff", border: "none", padding: "10px", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>
               2. Принят (Выбор базы)
@@ -159,17 +161,19 @@ export default function DesignSandboxPage() {
 
         {/* ТОЧЕЧНЫЕ НАСТРОЙКИ */}
         <div style={{ borderTop: "1px dashed #444", paddingTop: 16 }}>
-          <div style={{ fontSize: 12, color: "#a8a49c", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>Точечные переключатели</div>
+          <div style={{ fontSize: 12, color: "#a8a49c", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>Проверка изменения времени</div>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", background: "#1a1a18", padding: "8px 12px", borderRadius: 8, fontSize: 13, border: "1px solid #333" }}>
-              <input type="checkbox" checked={!!plannedTime} onChange={e => setPlannedTime(e.target.checked ? "14:30" : null)} />
-              Задано время (14:30)
-            </label>
             <button 
-              onClick={() => { setIsAccepted(true); setTimeChangedByOperator(true); }} 
-              style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", background: timeChangedByOperator ? "#78350f" : "#1a1a18", color: timeChangedByOperator ? "#facc15" : "#fff", padding: "8px 12px", borderRadius: 8, fontSize: 13, border: `1px solid ${timeChangedByOperator ? "#facc15" : "#333"}`, fontWeight: 700 }}
+              onClick={() => setPlannedTime("15:00")} 
+              style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", background: plannedTime === "15:00" ? "#78350f" : "#1a1a18", color: plannedTime === "15:00" ? "#facc15" : "#fff", padding: "8px 12px", borderRadius: 8, fontSize: 13, border: `1px solid ${plannedTime === "15:00" ? "#facc15" : "#333"}`, fontWeight: 700 }}
             >
-              ⚠️ Эмулировать смену времени диспетчером
+              ⚠️ Диспетчер изменил время на 15:00
+            </button>
+            <button 
+              onClick={() => setPlannedTime("14:30")} 
+              style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", background: "#1a1a18", color: "#fff", padding: "8px 12px", borderRadius: 8, fontSize: 13, border: "1px solid #333", fontWeight: 700 }}
+            >
+              🔄 Вернуть на 14:30
             </button>
           </div>
         </div>
@@ -226,34 +230,60 @@ export default function DesignSandboxPage() {
                 <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
                   <div style={{ fontSize: 15, fontWeight: 800, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     Маршрут {routeObj.name}
-                    
-                    {/* ЖЕЛТАЯ КНОПКА: Появляется только если принят и время изменено оператором */}
-                    {timeChangedByOperator && isAccepted && (
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); setTimeChangedByOperator(false); }}
-                        style={{ fontSize: 10, background: "#facc15", color: "#78350f", padding: "4px 8px", borderRadius: 6, fontWeight: 800, textTransform: "uppercase", border: "none", cursor: "pointer", boxShadow: "0 2px 4px rgba(250,204,21,0.3)" }}
-                      >
-                        Принять время {plannedTime ? `${plannedTime}` : ""}
-                      </button>
-                    )}
                   </div>
                   
                   <div style={{ fontSize: 13, color: "#a8a49c", marginTop: 4 }}>
                     {delivered}/{total} доставлено • <span style={{ fontWeight: 600, color: "#6b6860" }}>{routePriceTotal} ₽</span>
                   </div>
                   
-                  {/* ПЛАШКА ВЫЕЗДА/ФАКТА */}
-                  {pickedUpTimeStr ? (
-                    <div style={{ marginTop: 10, padding: "4px 8px", background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: 6, display: "inline-flex", gap: 6, alignItems: "center" }}>
-                      <span style={{ fontSize: 14 }}>✅</span>
-                      <div style={{ fontSize: 12, color: "#065f46", fontWeight: 700 }}>Забрал с базы в {pickedUpTimeStr}</div>
-                    </div>
-                  ) : advice ? (
-                    <div style={{ marginTop: 10, padding: "4px 8px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 6, display: "inline-flex", gap: 6, alignItems: "center" }}>
-                      <span style={{ fontSize: 14 }}>⏰</span>
-                      <div style={{ fontSize: 12, color: "#78350f", fontWeight: 700 }}>{advice}</div>
-                    </div>
-                  ) : null}
+                  {/* 🔥 ИНТЕРАКТИВНЫЕ ПЛАШКИ (Выезд / Факт / Изменение времени) */}
+                  {(() => {
+                    // 1. Зеленая галка факта
+                    if (pickedUpTimeStr) {
+                      return (
+                        <div style={{ marginTop: 10, padding: "4px 8px", background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: 6, display: "inline-flex", gap: 6, alignItems: "center" }}>
+                          <span style={{ fontSize: 14 }}>✅</span>
+                          <div style={{ fontSize: 12, color: "#065f46", fontWeight: 700 }}>Забрал с базы в {pickedUpTimeStr}</div>
+                        </div>
+                      );
+                    }
+
+                    // 2. Желтая предупреждающая кнопка
+                    const isTimeChanged = isAccepted && plannedTime && acknowledgedTime !== plannedTime;
+
+                    if (isTimeChanged) {
+                      return (
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAcknowledgedTime(plannedTime); // Курьер "прочитал"
+                          }}
+                          style={{ 
+                            marginTop: 10, padding: "4px 10px", background: "#facc15", border: "1px solid #eab308", 
+                            borderRadius: 6, display: "inline-flex", gap: 6, alignItems: "center", cursor: "pointer", 
+                            boxShadow: "0 2px 8px rgba(250,204,21,0.5)", transition: "0.2s" 
+                          }}
+                        >
+                          <span style={{ fontSize: 14 }}>⚠️</span>
+                          <div style={{ fontSize: 12, color: "#78350f", fontWeight: 800, textTransform: "uppercase" }}>
+                            Изменилось: {plannedTime}
+                          </div>
+                        </button>
+                      );
+                    }
+
+                    // 3. Обычная спокойная плашка
+                    if (advice) {
+                      return (
+                        <div style={{ marginTop: 10, padding: "4px 8px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 6, display: "inline-flex", gap: 6, alignItems: "center" }}>
+                          <span style={{ fontSize: 14 }}>⏰</span>
+                          <div style={{ fontSize: 12, color: "#78350f", fontWeight: 700 }}>{advice}</div>
+                        </div>
+                      );
+                    }
+
+                    return null;
+                  })()}
                 </div>
 
                 {/* Правые кнопки маршрута */}
@@ -292,7 +322,7 @@ export default function DesignSandboxPage() {
               )}
             </div>
 
-            {/* СПИСОК ЗАКАЗОВ (Полная боевая версия со всеми иконками) */}
+            {/* СПИСОК ЗАКАЗОВ (Полная боевая версия) */}
             {isExpanded && (
               <div style={{ display: "flex", flexDirection: "column" }}>
                 {orders.map((o, idx) => {

@@ -46,6 +46,7 @@ export default function CourierRoutesPage() {
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
   const [collapsedOrders, setCollapsedOrders] = useState<Record<string, boolean>>({});
   const [acceptedLocally, setAcceptedLocally] = useState<Record<string, boolean>>({});
+  const [acknowledgedTimes, setAcknowledgedTimes] = useState<Record<string, string>>({});
   
   const toggleOrder = (orderId: string) => {
     setCollapsedOrders(prev => ({ ...prev, [orderId]: !prev[orderId] }));
@@ -54,7 +55,24 @@ export default function CourierRoutesPage() {
   const fetchOrders = async () => {
     try {
       const res = await fetch("/api/courier/my-orders");
-      if (res.ok) setOrders(await res.json());
+      if (res.ok) {
+        const fetchedOrders = await res.json();
+        setOrders(fetchedOrders);
+        
+        // 🔥 Автоматически помечаем текущее время как прочитанное при загрузке
+        setAcknowledgedTimes(prev => {
+          const newAcks = { ...prev };
+          fetchedOrders.forEach((o: any) => {
+            if (o.route?.id && o.route?.plannedDepartureTime) {
+              // Записываем только если еще нет записи, чтобы не затереть реакцию на изменения в онлайне
+              if (newAcks[o.route.id] === undefined) {
+                newAcks[o.route.id] = o.route.plannedDepartureTime;
+              }
+            }
+          });
+          return newAcks;
+        });
+      }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
@@ -376,40 +394,66 @@ export default function CourierRoutesPage() {
                   
                   {/* ЛЕВАЯ ЧАСТЬ — инфо */}
                   <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       Маршрут {routeName}
-                      
-                      {/* 🔥 Желтая кнопка "Принять время" */}
-                      {/* Показывается ТОЛЬКО если синего баннера нет (isRouteAccepted === true) и если оператор реально изменил время */}
-                      {isRouteAccepted && !routeObj?.baseArrivalTime /* ТУТ ТВОЕ УСЛОВИЕ ИЗМЕНЕНИЯ ВРЕМЕНИ */ && (
-                        <button 
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            // Твоя логика подтверждения нового времени курьером
-                          }}
-                          style={{ fontSize: 10, background: "#facc15", color: "#78350f", padding: "4px 8px", borderRadius: 6, fontWeight: 800, textTransform: "uppercase", border: "none", cursor: "pointer", boxShadow: "0 2px 4px rgba(250,204,21,0.3)" }}
-                        >
-                          Принять время {routeObj?.plannedDepartureTime ? `${routeObj.plannedDepartureTime}` : ""}
-                        </button>
-                      )}
                     </div>
                     
                     <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 4 }}>
                       {delivered}/{total} доставлено • <span style={{ fontWeight: 600, color: "#6b6860" }}>{routePriceTotal} ₽</span>
                     </div>
                     
-                    {/* 🔥 ТОНКИЕ ПЛАШКИ (Выезд / Факт) */}
-                    {pickedUpTimeStr ? (
-                      <div style={{ marginTop: 8, padding: "4px 8px", background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: 6, display: "inline-flex", gap: 6, alignItems: "center" }}>
-                        <span style={{ fontSize: 12 }}>✅</span>
-                        <div style={{ fontSize: 11, color: "#065f46", fontWeight: 700 }}>Забрал с базы в {pickedUpTimeStr}</div>
-                      </div>
-                    ) : advice ? (
-                      <div style={{ marginTop: 8, padding: "4px 8px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 6, display: "inline-flex", gap: 6, alignItems: "center" }}>
-                        <span style={{ fontSize: 12 }}>⏰</span>
-                        <div style={{ fontSize: 11, color: "#78350f", fontWeight: 700 }}>{advice}</div>
-                      </div>
-                    ) : null}
+                    {/* 🔥 ИНТЕРАКТИВНЫЕ ПЛАШКИ (Выезд / Факт / Изменение времени) */}
+                    {(() => {
+                      // 1. Если курьер уже забрал заказы — показываем зеленую галку факта
+                      if (pickedUpTimeStr) {
+                        return (
+                          <div style={{ marginTop: 8, padding: "4px 8px", background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: 6, display: "inline-flex", gap: 6, alignItems: "center" }}>
+                            <span style={{ fontSize: 12 }}>✅</span>
+                            <div style={{ fontSize: 11, color: "#065f46", fontWeight: 700 }}>Забрал с базы в {pickedUpTimeStr}</div>
+                          </div>
+                        );
+                      }
+
+                      const plannedTime = routeObj?.plannedDepartureTime;
+                      
+                      // 2. Проверяем, новое ли это время (если время задано, маршрут принят, и курьер еще не кликнул на него)
+                      // Чтобы не светилось при первой загрузке, мы зажигаем плашку только если acknowledgedTimes[rId] отличается от текущего
+                      const isTimeChanged = isRouteAccepted && plannedTime && acknowledgedTimes[rId] !== plannedTime && acknowledgedTimes[rId] !== undefined;
+
+                      if (isTimeChanged) {
+                        return (
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Курьер кликнул -> запоминаем, что он увидел это время
+                              setAcknowledgedTimes(prev => ({...prev, [rId]: plannedTime}));
+                            }}
+                            style={{ 
+                              marginTop: 8, padding: "4px 10px", background: "#facc15", border: "1px solid #eab308", 
+                              borderRadius: 6, display: "inline-flex", gap: 6, alignItems: "center", cursor: "pointer", 
+                              boxShadow: "0 2px 8px rgba(250,204,21,0.5)", transition: "0.2s" 
+                            }}
+                          >
+                            <span style={{ fontSize: 12 }}>⚠️</span>
+                            <div style={{ fontSize: 11, color: "#78350f", fontWeight: 800, textTransform: "uppercase" }}>
+                              Изменилось время: {plannedTime}
+                            </div>
+                          </button>
+                        );
+                      }
+
+                      // 3. Обычная спокойная плашка (если время не менялось или курьер его уже "принял" кликом)
+                      if (advice) {
+                        return (
+                          <div style={{ marginTop: 8, padding: "4px 8px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 6, display: "inline-flex", gap: 6, alignItems: "center" }}>
+                            <span style={{ fontSize: 12 }}>⏰</span>
+                            <div style={{ fontSize: 11, color: "#78350f", fontWeight: 700 }}>{advice}</div>
+                          </div>
+                        );
+                      }
+
+                      return null;
+                    })()}
                   </div>
 
                   {/* ПРАВАЯ ЧАСТЬ — кнопки + жирная стрелка внизу */}
