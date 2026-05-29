@@ -422,26 +422,34 @@ export default function CourierRoutesPage() {
                           ? `https://yandex.ru/maps/?mode=routes&rtext=${last.lat},${last.lng}~${STORE_COORDS}&rtt=mt`
                           : null;
 
-                        return (
-                          <div style={{ display: "flex", gap: 6 }}>
-                            {routeUrl && (
-                              <a href={routeUrl} target="_blank" rel="noopener noreferrer"
-                                onClick={e => e.stopPropagation()}
-                                style={{ fontSize: 11, background: "#facc15", color: "#1a1a18", padding: "5px 10px", borderRadius: 7, textDecoration: "none", fontWeight: 700, whiteSpace: "nowrap" }}
-                              >
-                                📍 Маршрут
-                              </a>
-                            )}
-                            {toBaseUrl && (
-                              <a href={toBaseUrl} target="_blank" rel="noopener noreferrer"
-                                onClick={e => e.stopPropagation()}
-                                style={{ fontSize: 11, background: "#f5f4f0", color: "#6b6860", padding: "5px 10px", borderRadius: 7, textDecoration: "none", fontWeight: 700, whiteSpace: "nowrap" }}
-                              >
-                                🏠 На базу
-                              </a>
-                            )}
-                          </div>
-                        );
+                          return (
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                                {toBaseUrl && (
+                                  <a href={toBaseUrl} target="_blank" rel="noopener noreferrer"
+                                    onClick={e => e.stopPropagation()}
+                                    style={{ fontSize: 11, background: "#f5f4f0", color: "#6b6860", padding: "5px 10px", borderRadius: 7, textDecoration: "none", fontWeight: 700, whiteSpace: "nowrap" }}
+                                  >
+                                    🏠 На базу
+                                  </a>
+                                )}
+                                {routeUrl && (
+                                  <a href={routeUrl} target="_blank" rel="noopener noreferrer"
+                                    onClick={e => e.stopPropagation()}
+                                    style={{ fontSize: 13, background: "#facc15", color: "#1a1a18", padding: "7px 14px", borderRadius: 8, textDecoration: "none", fontWeight: 800, whiteSpace: "nowrap" }}
+                                  >
+                                    📍 Маршрут
+                                  </a>
+                                )}
+                                <div style={{ fontSize: 18, color: "#a8a49c", transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</div>
+                              </div>
+                              {routeObj?.estimatedReturnTime && (
+                                <div style={{ fontSize: 11, color: "#a8a49c", textAlign: "right" }}>
+                                  🏠 на базе к <span style={{ fontWeight: 700, color: "#6b6860" }}>{routeObj.estimatedReturnTime}</span>
+                                </div>
+                              )}
+                            </div>
+                          );
                       })()}
                       <div style={{ fontSize: 18, color: "#a8a49c", transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</div>
                     </div>
