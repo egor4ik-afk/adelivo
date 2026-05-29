@@ -416,18 +416,24 @@ export default function CourierRoutesPage() {
         <span style={{ fontSize: 10, background: "#facc15", color: "#78350f", padding: "2px 6px", borderRadius: 4, fontWeight: 800, textTransform: "uppercase" }}>Не принят</span>
       )}
     </div>
+    
     <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 4 }}>
       {delivered}/{total} доставлено • <span style={{ fontWeight: 600, color: "#6b6860" }}>{routePriceTotal} ₽</span>
     </div>
-    {advice && showAdvice && (
-      <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 6 }}>
-        ⏰ <span style={{ fontWeight: 700, color: "#78350f" }}>{advice}</span>
+    
+    {/* 🔥 Твоя желтая плашка — выглядит супер! */}
+    {advice && (
+      <div style={{ marginTop: 10, padding: "8px 12px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, display: "flex", gap: 8, alignItems: "center" }}>
+        <span style={{ fontSize: 16 }}>⏰</span>
+        <div style={{ fontSize: 13, color: "#78350f", fontWeight: 700 }}>{advice}</div>
       </div>
     )}
   </div>
 
-  {/* ПРАВАЯ ЧАСТЬ — кнопки + стрелка */}
-  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0, marginLeft: 8 }}>
+  {/* ПРАВАЯ ЧАСТЬ — кнопки + стрелка (выровнены по центру по вертикали) */}
+  <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0, marginLeft: 8 }}>
+    
+    {/* Контейнер только для кнопок (в столбик) */}
     {(() => {
       const validPoints = routePoints.filter(o => o.lat && o.lng);
       const routeUrl = validPoints.length > 0
@@ -437,8 +443,9 @@ export default function CourierRoutesPage() {
       const toBaseUrl = last
         ? `https://yandex.ru/maps/?mode=routes&rtext=${last.lat},${last.lng}~${STORE_COORDS}&rtt=mt`
         : null;
+        
       return (
-        <>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
           {routeUrl && (
             <a href={routeUrl} target="_blank" rel="noopener noreferrer"
               onClick={e => e.stopPropagation()}
@@ -447,8 +454,9 @@ export default function CourierRoutesPage() {
               📍 Маршрут
             </a>
           )}
+          
           {toBaseUrl && (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 1 }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
               <a href={toBaseUrl} target="_blank" rel="noopener noreferrer"
                 onClick={e => e.stopPropagation()}
                 style={{ fontSize: 11, background: "#f5f4f0", color: "#6b6860", padding: "5px 10px", borderRadius: 7, textDecoration: "none", fontWeight: 700, whiteSpace: "nowrap" }}
@@ -460,10 +468,15 @@ export default function CourierRoutesPage() {
               )}
             </div>
           )}
-        </>
+        </div>
       );
     })()}
-    <div style={{ fontSize: 18, color: "#a8a49c", transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</div>
+
+    {/* 🔥 Стрелка отдельно — теперь она всегда по центру карточки и не уезжает вниз */}
+    <div style={{ fontSize: 18, color: "#a8a49c", transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
+      ▼
+    </div>
+    
   </div>
 
 </div>
