@@ -444,7 +444,7 @@ export default function CourierRoutesPage() {
                   </div>
                 </div>
 
-                {isExpanded && routeObj?.baseArrivalTime && (
+                {isExpanded && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px dashed #e8e6df", paddingTop: 12 }} onClick={e => e.stopPropagation()}>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
