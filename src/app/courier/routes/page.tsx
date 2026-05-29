@@ -63,10 +63,10 @@ export default function CourierRoutesPage() {
         setAcknowledgedTimes(prev => {
           const newAcks = { ...prev };
           fetchedOrders.forEach((o: any) => {
-            if (o.route?.id && o.route?.plannedDepartureTime) {
-              // Записываем только если еще нет записи, чтобы не затереть реакцию на изменения в онлайне
-              if (newAcks[o.route.id] === undefined) {
-                newAcks[o.route.id] = o.route.plannedDepartureTime;
+            // 🔥 ИСПРАВЛЕНИЕ: Используем имя маршрута (o.route.name)
+            if (o.route?.name && o.route?.plannedDepartureTime) {
+              if (newAcks[o.route.name] === undefined) {
+                newAcks[o.route.name] = o.route.plannedDepartureTime;
               }
             }
           });
@@ -76,7 +76,6 @@ export default function CourierRoutesPage() {
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
-
   useEffect(() => {
     fetchOrders();
     const iv = setInterval(fetchOrders, 15_000);
@@ -401,7 +400,6 @@ export default function CourierRoutesPage() {
                     <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 4 }}>
                       {delivered}/{total} доставлено • <span style={{ fontWeight: 600, color: "#6b6860" }}>{routePriceTotal} ₽</span>
                     </div>
-                    
                     {/* 🔥 ИНТЕРАКТИВНЫЕ ПЛАШКИ (Выезд / Факт / Изменение времени) */}
                     {(() => {
                       // 1. Если курьер уже забрал заказы — показываем зеленую галку факта
@@ -416,17 +414,16 @@ export default function CourierRoutesPage() {
 
                       const plannedTime = routeObj?.plannedDepartureTime;
                       
-                      // 2. Проверяем, новое ли это время (если время задано, маршрут принят, и курьер еще не кликнул на него)
-                      // Чтобы не светилось при первой загрузке, мы зажигаем плашку только если acknowledgedTimes[rId] отличается от текущего
-                      const isTimeChanged = isRouteAccepted && plannedTime && acknowledgedTimes[rId] !== plannedTime && acknowledgedTimes[rId] !== undefined;
+                      // 🔥 ИСПРАВЛЕНИЕ: Привязываемся к routeName, так как ID меняется при редактировании оператором!
+                      const isTimeChanged = isRouteAccepted && plannedTime && acknowledgedTimes[routeName] !== plannedTime && acknowledgedTimes[routeName] !== undefined;
 
                       if (isTimeChanged) {
                         return (
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
-                              // Курьер кликнул -> запоминаем, что он увидел это время
-                              setAcknowledgedTimes(prev => ({...prev, [rId]: plannedTime}));
+                              // 🔥 ИСПРАВЛЕНИЕ: Сохраняем по имени маршрута
+                              setAcknowledgedTimes(prev => ({...prev, [routeName]: plannedTime}));
                             }}
                             style={{ 
                               marginTop: 8, padding: "4px 10px", background: "#facc15", border: "1px solid #eab308", 

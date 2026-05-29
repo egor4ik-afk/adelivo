@@ -20,7 +20,7 @@ export async function POST(req: Request) {
     let fallbackAdvice = null;
     let fallbackIsDraft = false;
     let fallbackPlannedTime = null; 
-    let fallbackIsAccepted = false; // 🔥 ВОЗВРАЩАЕМ СОХРАНЕНИЕ ПРИНЯТИЯ
+    let fallbackIsAccepted = false; 
     
     // Переменные для контроля уведомлений
     let oldCourierId = null;
@@ -40,13 +40,11 @@ export async function POST(req: Request) {
         fallbackIsDraft = oldRoute.isDraft;
         oldCourierId = oldRoute.courierId;
 
-        // 🔥 Переносим статус isAccepted, только если курьер не поменялся
         if (oldRoute.courierId === Number(courierId)) {
             fallbackIsAccepted = oldRoute.isAccepted;
         }
       }
       
-      // Проверяем, изменился ли состав точек в маршруте
       const oldOrders = await prisma.order.findMany({
         where: { routeId: oldRouteId }
       });
@@ -55,7 +53,7 @@ export async function POST(req: Request) {
       const newOrderIdsStr = [...(orderIds || [])].sort().join(',');
       
       if (oldOrderIdsStr === newOrderIdsStr) {
-         pointsChanged = false; // Точки остались те же самые
+         pointsChanged = false; 
       }
 
       const ordersToReset = oldOrders.filter(o => !(orderIds || []).includes(o.id));
@@ -145,7 +143,7 @@ export async function POST(req: Request) {
         courierId: Number(courierId),
         isDraft: isDraft !== undefined ? isDraft : fallbackIsDraft,
         estimatedReturnTime: estimatedReturnTime !== undefined ? estimatedReturnTime : fallbackReturnTime,
-        isAccepted: fallbackIsAccepted // 🔥 Честно сохраняем поле из БД
+        isAccepted: fallbackIsAccepted 
       }
     });
 
@@ -201,27 +199,38 @@ export async function POST(req: Request) {
       }
     }
 
-    // 🔥 Логика определения необходимости пуша
+    // 🔥 УМНАЯ ОТПРАВКА PUSH-УВЕДОМЛЕНИЙ С CUSTOM ТИПОМ
     let shouldSendPush = false;
+    let isNewRoute = false;
 
-    // Отправляем пуш, если маршрут новый или сменился курьер
     if (!oldRouteId || oldCourierId !== Number(courierId)) {
       shouldSendPush = true;
-    } 
-    // Либо если курьер тот же, но диспетчер добавил/удалил точки
-    else if (pointsChanged) {
+      isNewRoute = true;
+    } else if (pointsChanged) {
       shouldSendPush = true;
+      isNewRoute = false;
     }
 
     if (shouldSendPush && courierDb?.email) {
       const userObj = await prisma.user.findUnique({ where: { email: courierDb.email } });
       if (userObj) {
-        await notify({
-          type: "route.assigned", // 🔥 Используем валидный тип
-          userId: userObj.id,
-          routeId: newRoute.name,
-          pointsCount: orderIds.length
-        });
+        if (isNewRoute) {
+          await notify({
+            type: "route.assigned",
+            userId: userObj.id,
+            routeId: newRoute.name,
+            pointsCount: orderIds.length
+          });
+        } else {
+          // Изменение состава — отправляем как custom с другим текстом
+          await notify({
+            type: "custom",
+            userId: userObj.id,
+            title: `✏️ Маршрут ${newRoute.name} изменён`,
+            body: `Точек: ${orderIds.length}. Проверьте обновлённый маршрут.`,
+            url: "/courier/routes"
+          });
+        }
       }
     }
 
