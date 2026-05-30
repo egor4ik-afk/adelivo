@@ -430,12 +430,24 @@ export function DashboardClient({ user }: { user: User }) {
   const MAP_EXCLUDED_STATUSES = ["CANCELLED", "RETURNED"];
 
   const filteredForMap = useMemo(() => {
-    return filtered.filter(o => 
+    const base = filtered.filter(o => 
       !MAP_EXCLUDED_STATUSES.includes(o.status) && 
       !/самовывоз|большой афанасьевский 39/i.test(o.address ?? "") &&
-      o.lat && o.lng // 🔥 Защита от краша карты (если нет координат)
+      o.lat && o.lng // Защита от краша карты
     );
-  }, [filtered]);
+
+    // 🔥 Если включен режим сборки маршрута, принудительно отображаем ВСЕ выбранные точки,
+    // даже если пользователь случайно переключил фильтр статуса или времени
+    if (isBulkMode && bulkSelectedIds.length > 0) {
+      const baseIds = new Set(base.map(o => o.id));
+      const extra = orders.filter(o => 
+        bulkSelectedIds.includes(o.id) && !baseIds.has(o.id) && o.lat && o.lng
+      );
+      return [...base, ...extra];
+    }
+
+    return base;
+  }, [filtered, isBulkMode, bulkSelectedIds, orders]);
     const tableOrders = [...filtered].sort((a, b) => {
     let valA: any = (a as any)[sortConfig.key] ?? "";
     let valB: any = (b as any)[sortConfig.key] ?? "";
@@ -472,7 +484,8 @@ export function DashboardClient({ user }: { user: User }) {
       const courierColl = new window.ymaps.GeoObjectCollection();
       map.geoObjects.add(courierColl);
 
-      const storePm = new window.ymaps.Placemark([STORE_LAT, STORE_LNG], { hintContent: "БАЗА: Большой Афанасьевский переулок, 39", iconCaption: "База" }, { preset: 'islands#blackDotIcon' });
+// 🔥 Сделали базу компактным синим домиком (отличается от обычных заказов)
+const storePm = new window.ymaps.Placemark([STORE_LAT, STORE_LNG], { hintContent: "БАЗА: Большой Афанасьевский переулок, 39", iconCaption: "База" }, { preset: 'islands#blueHomeIcon' });
       map.geoObjects.add(storePm as any);
 
       const constructorUrl = "/zones.kml";
@@ -596,7 +609,12 @@ export function DashboardClient({ user }: { user: User }) {
 
       const late = isOrderLate(order);
 
-      const displayTime = showTime && currentZoom >= 13 && !!order.slotRaw && selectedSlots.length === 0;
+      // 🔥 ЛОГИКА НЕСТАНДАРТНЫХ СЛОТОВ: Проверяем, входит ли слот в стандартные (из констант)
+      const isStandardSlot = SLOTS.some(s => s.from === order.slotFrom && s.to === order.slotTo);
+      const isOtherSlot = !!order.slotRaw && !isStandardSlot;
+
+      // 🔥 ОТОБРАЖЕНИЕ: Показываем время всегда (если зум позволяет), убрали ограничение selectedSlots.length === 0
+      const displayTime = showTime && currentZoom >= 13 && !!order.slotRaw;
       const displayName = showCourierNames && !!order.courier;
       const slotLabelText = order.slotRaw ? order.slotRaw.replace("с ", "").replace(" до ", "-") : "";
 
@@ -621,33 +639,38 @@ export function DashboardClient({ user }: { user: User }) {
 
       let pm;
 
-      if (displayTime) {
-        let pinColor = isSelected ? (previewGeo ? '#9ca3af' : '#1a1a18') : color;
-        if (isBulkMode && routeTabMode === "new") {
-          pinColor = isBulkSelected ? '#1a9e5c' : '#d1d5db';
-        }
+      // 🔥 Базовый цвет точки: нестандартные слоты всегда черные, остальные - свой цвет
+      const basePointColor = isOtherSlot ? '#1a1a18' : color;
 
-        if (late && !isSelected && !(isBulkMode && routeTabMode === "new" && !isBulkSelected)) {
+      if (displayTime) {
+        let pinColor = basePointColor;
+      
+        if (isBulkMode && routeTabMode === "new") {
+          if (isBulkSelected) {
+            pinColor = '#1a9e5c';
+          } else {
+            pinColor = '#d1d5db';
+          }
+        } else if (isSelected) {
+          pinColor = previewGeo ? '#9ca3af' : '#facc15';
+        } else if (late) {
           pinColor = '#d94040';
         }
-
+      
         const finalSlotLabel = (isBulkMode && routeTabMode === "new" && isBulkSelected)
           ? `${bulkIndex + 1}. ${slotLabelText}`
-          : (late ? "⏰ " : "") + slotLabelText;
-
-          pm = new ymaps.Placemark([lat, lng], {
-            balloonContentHeader: order.externalId ?? order.crmId,
-            balloonContentBody: balloonBody,
-            hintContent: order.address ?? "—",
-            pinColor, slotLabel: finalSlotLabel, showLabel: displayName, labelText: order.courier ?? "",
-          }, { 
-            iconLayout: StretchyLayout, 
-            // 🔥 ИСПРАВЛЕНИЕ ХИТБОКСА (ОБЛАСТИ КЛИКА) 🔥
-            // 1. Делаем огромную зону клика относительно центра точки: 120px в ширину и захватываем всё вниз до +30px (где висит имя курьера)
-            iconShape: { type: "Rectangle", coordinates: [[-60, -40], [60, 30]] }, 
-            // 2. Идеально центрируем "стрелочку" плашки ровно над географической координатой заказа
-            iconOffset: [-45, -32] 
-          });
+          : slotLabelText;
+      
+        pm = new ymaps.Placemark([lat, lng], {
+          balloonContentHeader: order.externalId ?? order.crmId,
+          balloonContentBody: balloonBody,
+          hintContent: order.address ?? "—",
+          pinColor, slotLabel: finalSlotLabel, showLabel: displayName, labelText: order.courier ?? "",
+        }, {
+          iconLayout: StretchyLayout,
+          iconShape: { type: "Rectangle", coordinates: [[-45, -38], [45, 22]] },
+          iconOffset: [-45, -38]
+        });
       } else {
         let preset = 'islands#dotIcon';
         let iconContent = undefined;
@@ -656,6 +679,7 @@ export function DashboardClient({ user }: { user: User }) {
           if (isBulkSelected) { preset = 'islands#greenIcon'; iconContent = `${bulkIndex + 1}`; }
           else { preset = 'islands#grayCircleDotIcon'; }
         } else {
+          // 🔥 Если заказ выбран, ставим стандартную желтую точку Яндекса
           if (isSelected) preset = previewGeo ? "islands#grayDotIcon" : "islands#yellowDotIcon";
           else if (late) preset = "islands#redIcon";
         }
@@ -665,7 +689,11 @@ export function DashboardClient({ user }: { user: User }) {
           balloonContentBody: balloonBody,
           hintContent: order.address ?? "—",
           iconCaption: (displayName) ? order.courier : undefined, iconContent
-        }, { preset, iconColor: (isBulkMode || isSelected || late) ? undefined : color });
+        }, { 
+          preset, 
+          // 🔥 И здесь тоже применяем черный цвет для нестандартных
+          iconColor: (isBulkMode || isSelected || late) ? undefined : basePointColor 
+        });
       }
 
       pm.events.add("click", () => {
