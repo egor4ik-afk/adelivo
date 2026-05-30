@@ -148,6 +148,7 @@ export function DashboardClient({ user }: { user: User }) {
   const multiRouteRef = useRef<any>(null); // Для создания нового маршрута
   // 🔥 ДОБАВЛЯЕМ ЭТО (Для текущих активных маршрутов):
   const activeRoutesRefs = useRef<any[]>([]);  const clickedFromMapRef = useRef(false);
+  const [showRouteLines, setShowRouteLines] = useState(true);
 
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
@@ -172,8 +173,13 @@ export function DashboardClient({ user }: { user: User }) {
   const [orders, setOrders] = useState<DashboardOrder[]>([]);
   const [dbCouriers, setDbCouriers] = useState<DbCourier[]>([]);
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
-  const [filterStatus, setFilterStatus] = useState("ALL");
-  const [filterCourier, setFilterCourier] = useState("ALL");
+// СТАЛО:
+const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+const [selectedCouriers, setSelectedCouriers] = useState<string[]>([]);
+
+// Также понадобятся два стейта для открытия/закрытия самих менюшек:
+const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(false);
+const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
   const [currentZoom, setCurrentZoom] = useState(11);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -371,16 +377,27 @@ export function DashboardClient({ user }: { user: User }) {
     });
   })();
 
-  const courierOptions = [{ value: "ALL", label: "Все курьеры" }, { value: "UNASSIGNED", label: "Не назначен" }, ...sortedCouriers];
+  const courierOptions = [{ value: "UNASSIGNED", label: "Не назначен" }, ...sortedCouriers];
 
   const dateAndStatusOrders = orders.filter(o => {
     const oDate = o.deliveryDate || (o.crmCreatedAt ? o.crmCreatedAt.split('T')[0] : null);
     if (oDate !== filterDate) return false;
-    if (filterStatus !== "ALL" && o.status !== filterStatus) return false;
-    if (filterCourier !== "ALL") {
-      if (filterCourier === "UNASSIGNED") return !o.courierId;
-      else return String(o.courierId) === filterCourier;
+
+    // 🔥 1. Мульти-фильтр по статусам
+    if (selectedStatuses.length > 0 && !selectedStatuses.includes(o.status)) {
+      return false;
     }
+
+    // 🔥 2. Мульти-фильтр по курьерам (с поддержкой UNASSIGNED)
+    if (selectedCouriers.length > 0) {
+      const isUnassignedMatch = selectedCouriers.includes("UNASSIGNED") && !o.courierId;
+      const isCourierMatch = selectedCouriers.includes(String(o.courierId));
+      
+      if (!isUnassignedMatch && !isCourierMatch) {
+        return false;
+      }
+    }
+
     return true;
   });
 
@@ -681,30 +698,49 @@ export function DashboardClient({ user }: { user: User }) {
           iconShape: { type: "Rectangle", coordinates: [[0, 0], [100, 65]] },
           iconColor: pinColor 
         });
-      } else {
+        } else {
         let preset = 'islands#dotIcon';
         let iconContent = undefined;
-
+        
+        // 🔥 ПО УМОЛЧАНИЮ точка всегда красится в цвет своего слота
+        let finalIconColor: string | undefined = basePointColor;
         if (isBulkMode && routeTabMode === "new") {
+          // --- РЕЖИМ: СОЗДАНИЕ НОВОГО МАРШРУТА ---
           if (isBulkSelected) { 
-            preset = 'islands#icon'; // 🔥 Меняем пресет, чтобы влезла цифра
+            preset = 'islands#icon'; // Меняем форму, чтобы внутрь влезла цифра
             iconContent = `${bulkIndex + 1}`; 
+            // Цвет остается finalIconColor (цвет слота)
+          } else { 
+            preset = 'islands#grayCircleDotIcon'; 
+            finalIconColor = undefined; // Делаем серыми (сбрасываем цвет)
           }
-          else { preset = 'islands#grayCircleDotIcon'; }
+
+        } else if (isBulkMode && routeTabMode === "current") {
+          // --- РЕЖИМ: ТЕКУЩИЕ МАРШРУТЫ ---
+          // Оставляем дефолтный 'islands#dotIcon' и цвет слота (finalIconColor)
+          // Ничего сбрасывать не нужно, они будут красивыми и цветными!
+
         } else {
-          if (isSelected) preset = previewGeo ? "islands#grayDotIcon" : "islands#yellowDotIcon";
-          else if (late) preset = "islands#redIcon";
+          // --- ОБЫЧНЫЙ РЕЖИМ (Дашборд без маршрутов) ---
+          if (isSelected) { 
+            preset = previewGeo ? "islands#grayDotIcon" : "islands#yellowDotIcon"; 
+            finalIconColor = undefined; // Желтый или серый пресет не нуждается в перекраске
+          } else if (late) { 
+            preset = "islands#redIcon"; 
+            finalIconColor = undefined; // Красный пресет не нуждается в перекраске
+          }
         }
 
         pm = new ymaps.Placemark([lat, lng], {
           balloonContentHeader: order.externalId ?? order.crmId,
           balloonContentBody: balloonBody,
           hintContent: order.address ?? "—",
-          iconCaption: (displayName) ? order.courier : undefined, iconContent
+          iconCaption: (displayName) ? order.courier : undefined, 
+          iconContent
         }, { 
           preset, 
-          // 🔥 И здесь тоже применяем родной цвет, если точка выбрана в маршрут
-          iconColor: (isBulkMode && routeTabMode === "new" && isBulkSelected) ? basePointColor : ((isBulkMode || isSelected || late) ? undefined : basePointColor)
+          // 🔥 Передаем нашу понятную переменную
+          iconColor: finalIconColor 
         });
       }
 
@@ -735,7 +771,8 @@ export function DashboardClient({ user }: { user: User }) {
       map.geoObjects.remove(multiRouteRef.current);
       multiRouteRef.current = null;
     }
-
+// 🔥 ДОБАВЛЯЕМ ПРОВЕРКУ showRouteLines
+    if (!showRouteLines) return;
     // 2. Рисуем новую линию, только если мы собираем маршрут и есть хотя бы 1 выбранный заказ
     if (isBulkMode && routeTabMode === "new" && bulkSelectedIds.length > 0) {
       // Собираем координаты по порядку кликов
@@ -792,7 +829,8 @@ export function DashboardClient({ user }: { user: User }) {
     // 1. Очищаем старые линии при каждом ререндере
     activeRoutesRefs.current.forEach(route => map.geoObjects.remove(route));
     activeRoutesRefs.current = [];
-
+    // 🔥 ДОБАВЛЯЕМ ПРОВЕРКУ showRouteLines
+    if (!showRouteLines) return;
     // 2. Включаем отрисовку, только если мы во вкладке текущих маршрутов
     // (Замени "current" на твое название вкладки, если оно другое, например "active")
     if (isBulkMode && routeTabMode === "current") {
@@ -850,7 +888,7 @@ export function DashboardClient({ user }: { user: User }) {
       });
     }
   }, [orders, isBulkMode, routeTabMode, mapReady]);
-  
+
   useEffect(() => {
     if (!mapReady || !couriersGeoObjectsRef.current) return;
     const coll = couriersGeoObjectsRef.current;
@@ -1825,12 +1863,77 @@ export function DashboardClient({ user }: { user: User }) {
         </button>
         <button onClick={() => router.push('/couriers')} style={s.navBtn}>🚚 Курьеры</button>
         <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={s.datePicker} />
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ ...s.nativeSelect, marginLeft: 8 }}>
-          {STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-        </select>
-        <select value={filterCourier} onChange={e => setFilterCourier(e.target.value)} style={{ ...s.nativeSelect, marginLeft: 4 }}>
-          {courierOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-        </select>
+        {/* МУЛЬТИ-ФИЛЬТР СТАТУСОВ */}
+        <div style={{ position: "relative" }}>
+          <button 
+            onClick={() => setIsStatusMenuOpen(!isStatusMenuOpen)}
+            style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}
+          >
+            Статусы: {selectedStatuses.length === 0 ? "Все" : `Выбрано (${selectedStatuses.length})`} ▼
+          </button>
+          
+          {isStatusMenuOpen && (
+            <>
+              <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setIsStatusMenuOpen(false)} />
+              <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#fff", border: "1px solid #d1d5db", borderRadius: 8, padding: 8, zIndex: 100, display: "flex", flexDirection: "column", gap: 6, minWidth: 160, boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+                {["NEW", "ASSIGNED", "IN_DELIVERY", "DELIVERED"].map(st => (
+                  <label key={st} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+                    <input 
+                      type="checkbox" 
+                      checked={selectedStatuses.includes(st)}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedStatuses([...selectedStatuses, st]);
+                        else setSelectedStatuses(selectedStatuses.filter(s => s !== st));
+                      }}
+                    />
+                    {st === "NEW" ? "Новые" : st === "ASSIGNED" ? "Назначены" : st === "IN_DELIVERY" ? "В пути" : "Доставлены"}
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+        {/* МУЛЬТИ-ФИЛЬТР КУРЬЕРОВ (Замена старого select) */}
+        <div style={{ position: "relative", marginLeft: 4 }}>
+          <button 
+            onClick={() => setIsCourierMenuOpen(!isCourierMenuOpen)}
+            // 🔥 Используем твои стили s.nativeSelect, чтобы кнопка не выбивалась из дизайна
+            style={{ ...s.nativeSelect, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, minWidth: 140, cursor: "pointer" }}
+          >
+            <span>{selectedCouriers.length === 0 ? "Все курьеры" : `Выбрано (${selectedCouriers.length})`}</span>
+            <span style={{ fontSize: 10 }}>▼</span>
+          </button>
+          
+          {isCourierMenuOpen && (
+            <>
+              {/* Невидимая подложка для закрытия по клику вне меню */}
+              <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setIsCourierMenuOpen(false)} />
+              
+              {/* Само выпадающее меню с галочками */}
+              <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#fff", border: "1px solid #d1d5db", borderRadius: 8, padding: 8, zIndex: 100, display: "flex", flexDirection: "column", gap: 6, minWidth: 200, maxHeight: 300, overflowY: "auto", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+                {courierOptions.map(c => {
+                  // Опцию "ALL" не рендерим как чекбокс, так как "Все" — это когда ничего не выбрано
+                  if (c.value === "ALL") return null; 
+                  
+                  return (
+                    <label key={c.value} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>
+                      <input 
+                        type="checkbox" 
+                        checked={selectedCouriers.includes(String(c.value))}
+                        onChange={(e) => {
+                          const val = String(c.value);
+                          if (e.target.checked) setSelectedCouriers([...selectedCouriers, val]);
+                          else setSelectedCouriers(selectedCouriers.filter(id => id !== val));
+                        }}
+                      />
+                      {c.label}
+                    </label>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
         <button
           onClick={() => {
             setIsBulkMode(!isBulkMode);
@@ -1866,6 +1969,21 @@ export function DashboardClient({ user }: { user: User }) {
             </label>
             <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 4, cursor: 'pointer' }}><input type="checkbox" checked={showCourierNames} onChange={e => setShowCourierNames(e.target.checked)} /> Имена</label>
             <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 4, cursor: 'pointer' }}><input type="checkbox" checked={showTime} onChange={e => setShowTime(e.target.checked)} /> Время</label>
+            {/* 🔥 Кнопка переключения линий маршрутов */}
+            <button
+              onClick={() => setShowRouteLines(!showRouteLines)}
+              title={showRouteLines ? "Скрыть линии маршрутов" : "Показать линии маршрутов"}
+              style={{
+                width: 24, height: 24, borderRadius: 6, marginLeft: 4, // Чуть отодвинули от текста
+                border: `1px solid ${showRouteLines ? "#4a7aff" : "#d1d5db"}`,
+                background: showRouteLines ? "#eff6ff" : "#fff",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: "pointer", transition: "all 0.15s", fontSize: 13,
+                opacity: showRouteLines ? 1 : 0.6, padding: 0
+              }}
+            >
+              🗺️
+            </button>
           </div>
         )}
         {invalid.length > 0 && <button style={s.alertBadge} onClick={() => { setAlertsOpen(!alertsOpen); setProfileOpen(false); }}>⚠ {!isMobile && `${invalid.length}`}</button>}
