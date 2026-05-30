@@ -819,25 +819,24 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
   // 🔥 ПАЛИТРА ЦВЕТОВ ДЛЯ АКТИВНЫХ МАРШРУТОВ
   const ROUTE_COLORS = ['#e6194B', '#3cb44b', '#4363d8', '#f58231', '#911eb4', '#42d4f4', '#f032e6', '#000075', '#a9a9a9'];
 
-  // 🔥 ЭФФЕКТ ДЛЯ ОТРИСОВКИ ВСЕХ ТЕКУЩИХ МАРШРУТОВ (РАБОТАЕТ ВЕЗДЕ)
+  // 🔥 ЭФФЕКТ ДЛЯ ОТРИСОВКИ ВСЕХ ТЕКУЩИХ МАРШРУТОВ (С УЧЕТОМ ФИЛЬТРОВ)
   useEffect(() => {
     if (!mapReady || typeof window === "undefined" || !(window as any).ymaps) return;
     const map = ymapRef.current;
     const ymaps = (window as any).ymaps;
     if (!map || !ymaps.multiRouter) return;
 
-    // 1. Очищаем старые линии при каждом ререндере
+    // Очищаем старые линии при каждом ререндере
     activeRoutesRefs.current.forEach(route => map.geoObjects.remove(route));
     activeRoutesRefs.current = [];
 
-    // 2. Если кнопка 🗺️ выключена - выходим
     if (!showRouteLines) return;
 
-    // 🔥 УБРАЛИ ПРОВЕРКУ isBulkMode. Теперь рисуем линии на любой вкладке!
     const routesMap = new Map<string, any[]>();
     
-    orders.forEach(o => {
-      // Берем только те точки, к которым курьер еще не доехал
+    // 🔥 1. ЗАМЕНИЛИ orders НА filteredForMap
+    // Теперь линии строятся только по тем точкам, которые прошли твои фильтры сверху!
+    filteredForMap.forEach(o => {
       if (o.routeId && (o.status === "ASSIGNED" || o.status === "IN_DELIVERY")) {
         if (!routesMap.has(o.routeId)) routesMap.set(o.routeId, []);
         routesMap.get(o.routeId)!.push(o);
@@ -877,8 +876,8 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
       }
     });
     
-  // 🔥 Из зависимостей тоже убрали isBulkMode и routeTabMode
-  }, [orders, showRouteLines, mapReady]);
+  // 🔥 2. ЗАМЕНИЛИ orders НА filteredForMap В ЗАВИСИМОСТЯХ
+  }, [filteredForMap, showRouteLines, mapReady]);
 
   useEffect(() => {
     if (!mapReady || !couriersGeoObjectsRef.current) return;
@@ -1866,7 +1865,7 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
           {isStatusMenuOpen && (
             <>
               <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setIsStatusMenuOpen(false)} />
-              <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#fff", border: "1px solid #d1d5db", borderRadius: 8, padding: 8, zIndex: 9999, display: "flex", flexDirection: "column", gap: 6, minWidth: 160, boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+              <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#fff", border: "1px solid #d1d5db", borderRadius: 8, padding: 8, zIndex: 100, display: "flex", flexDirection: "column", gap: 6, minWidth: 160, boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
                 {["NEW", "ASSIGNED", "IN_DELIVERY", "DELIVERED"].map(st => (
                   <label key={st} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
                     <input 
@@ -1901,7 +1900,7 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
               <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setIsCourierMenuOpen(false)} />
               
               {/* Само выпадающее меню с галочками */}
-              <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#fff", border: "1px solid #d1d5db", borderRadius: 8, padding: 8, zIndex: 999, display: "flex", flexDirection: "column", gap: 6, minWidth: 200, maxHeight: 300, overflowY: "auto", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+              <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#fff", border: "1px solid #d1d5db", borderRadius: 8, padding: 8, zIndex: 100, display: "flex", flexDirection: "column", gap: 6, minWidth: 200, maxHeight: 300, overflowY: "auto", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
                 {courierOptions.map(c => {
                   // Опцию "ALL" не рендерим как чекбокс, так как "Все" — это когда ничего не выбрано
                   if (c.value === "ALL") return null; 
