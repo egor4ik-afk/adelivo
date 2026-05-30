@@ -1875,7 +1875,7 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
           {isStatusMenuOpen && (
             <>
               <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setIsStatusMenuOpen(false)} />
-              <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#fff", border: "1px solid #d1d5db", borderRadius: 8, padding: 8, zIndex: 100, display: "flex", flexDirection: "column", gap: 6, minWidth: 160, boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+              <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#fff", border: "1px solid #d1d5db", borderRadius: 8, padding: 8, zIndex: 9999, display: "flex", flexDirection: "column", gap: 6, minWidth: 160, boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
                 {["NEW", "ASSIGNED", "IN_DELIVERY", "DELIVERED"].map(st => (
                   <label key={st} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
                     <input 
@@ -1910,7 +1910,7 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
               <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setIsCourierMenuOpen(false)} />
               
               {/* Само выпадающее меню с галочками */}
-              <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#fff", border: "1px solid #d1d5db", borderRadius: 8, padding: 8, zIndex: 100, display: "flex", flexDirection: "column", gap: 6, minWidth: 200, maxHeight: 300, overflowY: "auto", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+              <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#fff", border: "1px solid #d1d5db", borderRadius: 8, padding: 8, zIndex: 999, display: "flex", flexDirection: "column", gap: 6, minWidth: 200, maxHeight: 300, overflowY: "auto", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
                 {courierOptions.map(c => {
                   // Опцию "ALL" не рендерим как чекбокс, так как "Все" — это когда ничего не выбрано
                   if (c.value === "ALL") return null; 
