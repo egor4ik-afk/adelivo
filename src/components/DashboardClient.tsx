@@ -489,6 +489,7 @@ export function DashboardClient({ user }: { user: User }) {
         { hintContent: "БАЗА: Большой Афанасьевский переулок, 39" }, // Убрали iconCaption: "База"
         { preset: 'islands#grayDotIcon' } // Поставили аккуратный серый пин
       );
+      map.geoObjects.add(storePm as any);
 
       const constructorUrl = "/zones.kml";
       (window.ymaps as any).geoXml.load(constructorUrl)
@@ -1369,15 +1370,44 @@ export function DashboardClient({ user }: { user: User }) {
                             width: "100%"
                           }}
                         />
-                        {/* Скрытый список с шагом 10 минут, который браузер покажет как dropdown */}
+                        {/* Умный скрытый список: +/- 1 час от расчетного времени */}
                         <datalist id="time-options">
                           {(() => {
                             const times = [];
-                            for (let h = 8; h <= 23; h++) {
-                              for (let m = 0; m < 60; m += 10) {
-                                times.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+                            // Достаем расчетное время из подсказки
+                            const calcTime = departureAdvice?.match(/(\d{2}:\d{2})/)?.[0];
+
+                            if (calcTime) {
+                              const [h, m] = calcTime.split(':').map(Number);
+                              const centerMins = h * 60 + m;
+                              
+                              // Берем +/- 60 минут и округляем до десятков (чтобы шаг был красивым)
+                              const startMins = Math.floor((centerMins - 60) / 10) * 10;
+                              const endMins = Math.ceil((centerMins + 60) / 10) * 10;
+
+                              for (let mins = Math.max(0, startMins); mins <= Math.min(1430, endMins); mins += 10) {
+                                const hh = Math.floor(mins / 60);
+                                const mm = mins % 60;
+                                times.push(`${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`);
+                              }
+
+                              // Если само расчетное время не кратно 10 (например 14:32) - добавляем его тоже
+                              if (!times.includes(calcTime)) times.push(calcTime);
+                            } else {
+                              // Фолбэк на весь день, если вдруг расчетного времени нет
+                              for (let h = 8; h <= 23; h++) {
+                                for (let m = 0; m < 60; m += 10) {
+                                  times.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+                                }
                               }
                             }
+
+                            // Сохраняем введенное руками время в списке, чтобы браузер не ругался
+                            if (manualDepartureTime && manualDepartureTime.length === 5 && !times.includes(manualDepartureTime)) {
+                              times.push(manualDepartureTime);
+                            }
+
+                            times.sort();
                             return times.map(t => <option key={t} value={t} />);
                           })()}
                         </datalist>
