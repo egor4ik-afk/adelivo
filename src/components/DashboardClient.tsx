@@ -816,10 +816,10 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
     }
   }, [bulkSelectedIds, isBulkMode, routeTabMode, mapReady, orders]);
 
-  // 🔥 ПАЛИТРА ЦВЕТОВ ДЛЯ АКТИВНЫХ МАРШРУТОВ (9 контрастных цветов)
+  // 🔥 ПАЛИТРА ЦВЕТОВ ДЛЯ АКТИВНЫХ МАРШРУТОВ
   const ROUTE_COLORS = ['#e6194B', '#3cb44b', '#4363d8', '#f58231', '#911eb4', '#42d4f4', '#f032e6', '#000075', '#a9a9a9'];
 
-  // 🔥 ЭФФЕКТ ДЛЯ ОТРИСОВКИ ВСЕХ ТЕКУЩИХ МАРШРУТОВ
+  // 🔥 ЭФФЕКТ ДЛЯ ОТРИСОВКИ ВСЕХ ТЕКУЩИХ МАРШРУТОВ (РАБОТАЕТ ВЕЗДЕ)
   useEffect(() => {
     if (!mapReady || typeof window === "undefined" || !(window as any).ymaps) return;
     const map = ymapRef.current;
@@ -829,65 +829,56 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
     // 1. Очищаем старые линии при каждом ререндере
     activeRoutesRefs.current.forEach(route => map.geoObjects.remove(route));
     activeRoutesRefs.current = [];
-    // 🔥 ДОБАВЛЯЕМ ПРОВЕРКУ showRouteLines
+
+    // 2. Если кнопка 🗺️ выключена - выходим
     if (!showRouteLines) return;
-    // 2. Включаем отрисовку, только если мы во вкладке текущих маршрутов
-    // (Замени "current" на твое название вкладки, если оно другое, например "active")
-    if (isBulkMode && routeTabMode === "current") {
-      
-      // Группируем заказы по ID маршрута
-      const routesMap = new Map<string, any[]>();
-      
-      orders.forEach(o => {
-        // Берем только те точки, к которым курьер еще не доехал
-        if (o.routeId && (o.status === "ASSIGNED" || o.status === "IN_DELIVERY")) {
-          if (!routesMap.has(o.routeId)) routesMap.set(o.routeId, []);
-          routesMap.get(o.routeId)!.push(o);
-        }
+
+    // 🔥 УБРАЛИ ПРОВЕРКУ isBulkMode. Теперь рисуем линии на любой вкладке!
+    const routesMap = new Map<string, any[]>();
+    
+    orders.forEach(o => {
+      // Берем только те точки, к которым курьер еще не доехал
+      if (o.routeId && (o.status === "ASSIGNED" || o.status === "IN_DELIVERY")) {
+        if (!routesMap.has(o.routeId)) routesMap.set(o.routeId, []);
+        routesMap.get(o.routeId)!.push(o);
+      }
+    });
+
+    let colorIndex = 0;
+
+    routesMap.forEach((routeOrders, routeId) => {
+      routeOrders.sort((a, b) => (a.routeOrder || 0) - (b.routeOrder || 0));
+
+      const points = [];
+      points.push([STORE_LAT, STORE_LNG]); // Начинаем с базы
+
+      routeOrders.forEach(o => {
+        if (o.lat && o.lng) points.push([o.lat, o.lng]);
       });
 
-      let colorIndex = 0;
+      if (points.length > 1) {
+        const color = ROUTE_COLORS[colorIndex % ROUTE_COLORS.length];
+        colorIndex++;
 
-      // Рисуем линию для каждого маршрута
-      routesMap.forEach((routeOrders, routeId) => {
-        // Обязательно сортируем точки по порядку (routeOrder), чтобы линия не прыгала хаотично
-        routeOrders.sort((a, b) => (a.routeOrder || 0) - (b.routeOrder || 0));
-
-        const points = [];
-        points.push([STORE_LAT, STORE_LNG]); // Все маршруты начинаем с базы
-
-        // Добавляем координаты оставшихся точек
-        routeOrders.forEach(o => {
-          if (o.lat && o.lng) {
-            points.push([o.lat, o.lng]);
-          }
+        const multiRoute = new ymaps.multiRouter.MultiRoute({
+          referencePoints: points,
+          params: { routingMode: 'auto' }
+        }, {
+          wayPointVisible: false,
+          viaPointVisible: false,
+          boundsAutoApply: false,
+          routeActiveStrokeWidth: 3, 
+          routeActiveStrokeColor: color, 
+          routeActiveStrokeOpacity: 0.8 
         });
 
-        // Если в маршруте осталась хотя бы 1 точка (База -> Точка), рисуем
-        if (points.length > 1) {
-          const color = ROUTE_COLORS[colorIndex % ROUTE_COLORS.length];
-          colorIndex++;
-
-          const multiRoute = new ymaps.multiRouter.MultiRoute({
-            referencePoints: points,
-            params: { routingMode: 'auto' }
-          }, {
-            wayPointVisible: false, // Без стандартных меток
-            viaPointVisible: false,
-            boundsAutoApply: false, // Не прыгаем камерой
-            
-            // 🔥 ВИЗУАЛЬНЫЕ НАСТРОЙКИ (потоньше и цветные)
-            routeActiveStrokeWidth: 3, 
-            routeActiveStrokeColor: color, 
-            routeActiveStrokeOpacity: 0.8 // Чуть прозрачные, чтобы карта читалась лучше
-          });
-
-          map.geoObjects.add(multiRoute);
-          activeRoutesRefs.current.push(multiRoute);
-        }
-      });
-    }
-  }, [orders, isBulkMode, routeTabMode, mapReady]);
+        map.geoObjects.add(multiRoute);
+        activeRoutesRefs.current.push(multiRoute);
+      }
+    });
+    
+  // 🔥 Из зависимостей тоже убрали isBulkMode и routeTabMode
+  }, [orders, showRouteLines, mapReady]);
 
   useEffect(() => {
     if (!mapReady || !couriersGeoObjectsRef.current) return;
@@ -2332,7 +2323,7 @@ function CourierSearchSelect({ value, onChange, options }: { value: string, onCh
 
 const s: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", overflow: "hidden" },
-  topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 16px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 10, position: "relative", overflowX: "auto" },
+  topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 16px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 100, position: "relative", overflow: "visible", flexWrap: "wrap" },
   logo: { fontSize: 15, fontWeight: 600, color: "#1a1a18", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap", flexShrink: 0, minWidth: "max-content", marginRight: "auto" },
   navBtn: { padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#1a1a18", whiteSpace: "nowrap" },
   datePicker: { padding: "4px 8px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 11, outline: "none", color: "#1a1a18", background: "#fff", marginLeft: 8 },
@@ -2385,7 +2376,7 @@ const s: Record<string, React.CSSProperties> = {
 
 const sm: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", overflow: "hidden" },
-  topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 10px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 10, overflowX: "auto" },
+  topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 10px", minHeight: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 100, position: "relative", overflow: "visible", flexWrap: "wrap" },
   mobileSlotsWrap: { display: "flex", gap: 4, padding: "6px 10px", background: "#fff", borderBottom: "1px solid #e8e6df", overflowX: "auto", flexShrink: 0 },
   body: { display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", minHeight: 0 },
   map: { width: "100%", minHeight: 200 },
