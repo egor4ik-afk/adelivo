@@ -204,6 +204,7 @@ export function DashboardClient({ user }: { user: User }) {
 
   // 🔥 ДОБАВЛЯЕМ ЭТИ ДВЕ СТРОКИ:
   const [manualDepartureTime, setManualDepartureTime] = useState("");
+  const [showTimeDropdown, setShowTimeDropdown] = useState(false);
   const [isDepartureEdited, setIsDepartureEdited] = useState(false);
 
   // Находим функцию handleQuickStatusChange и заменяем её целиком
@@ -1342,75 +1343,109 @@ export function DashboardClient({ user }: { user: User }) {
 
 
                     <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-
-                      {/* 🔥 ГИБРИД: Текстовый ввод + Выпадающий список (datalist) */}
+                      
+                      {/* 🔥 КАСТОМНЫЙ ГИБРИД: Текстовый ввод + Ручной Dropdown */}
                       <div style={{ position: "relative", width: 106, flexShrink: 0 }}>
-                      <input
+                        <input
                           type="text"
-                          list="time-options"
                           placeholder="--:--"
                           maxLength={5}
                           value={manualDepartureTime || ""}
+                          // Скрываем меню, как только диспетчер начинает печатать руками
+                          onFocus={() => setShowTimeDropdown(false)} 
                           onChange={(e) => {
-                            // Оставляем только цифры и двоеточие
                             let val = e.target.value.replace(/[^\d:]/g, "");
-                            
-                            // Умная маска: автоматически ставим двоеточие после 2 цифр при печати
                             const isDeleting = (e.nativeEvent as InputEvent).inputType === "deleteContentBackward";
                             if (val.length === 2 && !val.includes(":") && !isDeleting) {
                               val += ":";
                             }
                             setManualDepartureTime(val);
                           }}
-                        style={{
-                          padding: "4px 6px",
-                          borderRadius: 6, border: "1px solid #4a7aff",
-                          outline: "none", fontWeight: 700, fontFamily: "monospace",
+                          style={{
+                            padding: "4px 24px 4px 6px", // Место под кастомную стрелочку
+                            borderRadius: 6, border: "1px solid #4a7aff",
+                            outline: "none", fontWeight: 700, fontFamily: "monospace",
                             fontSize: 13, color: "#4a7aff", background: "#fff",
                             width: "100%"
                           }}
                         />
-                        {/* Умный скрытый список: +/- 1 час от расчетного времени */}
-                        <datalist id="time-options">
-                          {(() => {
-                            const times = [];
-                            // Достаем расчетное время из подсказки
-                            const calcTime = departureAdvice?.match(/(\d{2}:\d{2})/)?.[0];
+                        
+                        {/* Кастомная область клика для стрелочки */}
+                        <div 
+                          onClick={() => setShowTimeDropdown(!showTimeDropdown)}
+                          style={{ 
+                            position: "absolute", right: 0, top: 0, bottom: 0, width: 24, 
+                            display: "flex", alignItems: "center", justifyContent: "center", 
+                            cursor: "pointer", color: "#4a7aff", fontSize: 10 
+                          }}
+                        >
+                          ▼
+                        </div>
 
-                            if (calcTime) {
-                              const [h, m] = calcTime.split(':').map(Number);
-                              const centerMins = h * 60 + m;
-                              
-                              // Берем +/- 60 минут и округляем до десятков (чтобы шаг был красивым)
-                              const startMins = Math.floor((centerMins - 60) / 10) * 10;
-                              const endMins = Math.ceil((centerMins + 60) / 10) * 10;
+                        {/* Наше меню, которое показывается ТОЛЬКО если showTimeDropdown === true */}
+                        {showTimeDropdown && (
+                          <>
+                            {/* Невидимая подложка на весь экран, чтобы меню закрывалось по клику вне его */}
+                            <div 
+                              style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 99 }} 
+                              onClick={() => setShowTimeDropdown(false)} 
+                            />
+                            
+                            <div style={{ 
+                              position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, 
+                              background: "#fff", border: "1px solid #4a7aff", borderRadius: 6, 
+                              zIndex: 100, maxHeight: 180, overflowY: "auto", 
+                              boxShadow: "0 4px 12px rgba(0,0,0,0.15)" 
+                            }}>
+                              {(() => {
+                                const times = [];
+                                const calcTime = departureAdvice?.match(/(\d{2}:\d{2})/)?.[0];
 
-                              for (let mins = Math.max(0, startMins); mins <= Math.min(1430, endMins); mins += 10) {
-                                const hh = Math.floor(mins / 60);
-                                const mm = mins % 60;
-                                times.push(`${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`);
-                              }
+                                if (calcTime) {
+                                  const [h, m] = calcTime.split(':').map(Number);
+                                  const centerMins = h * 60 + m;
+                                  const startMins = Math.floor((centerMins - 60) / 10) * 10;
+                                  const endMins = Math.ceil((centerMins + 60) / 10) * 10;
 
-                              // Если само расчетное время не кратно 10 (например 14:32) - добавляем его тоже
-                              if (!times.includes(calcTime)) times.push(calcTime);
-                            } else {
-                              // Фолбэк на весь день, если вдруг расчетного времени нет
-                              for (let h = 8; h <= 23; h++) {
-                                for (let m = 0; m < 60; m += 10) {
-                                  times.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+                                  for (let mins = Math.max(0, startMins); mins <= Math.min(1430, endMins); mins += 10) {
+                                    const hh = Math.floor(mins / 60);
+                                    const mm = mins % 60;
+                                    times.push(`${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`);
+                                  }
+                                  if (!times.includes(calcTime)) times.push(calcTime);
+                                } else {
+                                  for (let h = 8; h <= 23; h++) {
+                                    for (let m = 0; m < 60; m += 10) {
+                                      times.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+                                    }
+                                  }
                                 }
-                              }
-                            }
 
-                            // Сохраняем введенное руками время в списке, чтобы браузер не ругался
-                            if (manualDepartureTime && manualDepartureTime.length === 5 && !times.includes(manualDepartureTime)) {
-                              times.push(manualDepartureTime);
-                            }
+                                if (manualDepartureTime && manualDepartureTime.length === 5 && !times.includes(manualDepartureTime)) {
+                                  times.push(manualDepartureTime);
+                                }
+                                times.sort();
 
-                            times.sort();
-                            return times.map(t => <option key={t} value={t} />);
-                          })()}
-                        </datalist>
+                                return times.map(t => (
+                                  <div
+                                    key={t}
+                                    onClick={() => { setManualDepartureTime(t); setShowTimeDropdown(false); }}
+                                    style={{ 
+                                      padding: "6px 10px", cursor: "pointer", fontSize: 13, 
+                                      fontWeight: 700, color: t === manualDepartureTime ? "#4a7aff" : "#1a1a18",
+                                      background: t === manualDepartureTime ? "#f0f5ff" : "transparent",
+                                      borderBottom: "1px solid #f0f0f0", transition: "background 0.1s"
+                                    }}
+                                    onMouseEnter={e => { if (t !== manualDepartureTime) e.currentTarget.style.background = "#f8f9fa"; }}
+                                    onMouseLeave={e => { if (t !== manualDepartureTime) e.currentTarget.style.background = "transparent"; }}
+                                  >
+                                    {t}
+                                  </div>
+                                ));
+                              })()}
+                            </div>
+                          </>
+                        )}
                       </div>
 
                       {/* Кнопка сброса / возврата времени из БД */}
