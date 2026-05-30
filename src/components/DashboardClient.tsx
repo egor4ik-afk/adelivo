@@ -144,6 +144,8 @@ export function DashboardClient({ user }: { user: User }) {
   const ymapRef = useRef<any>(null);
   const clustererRef = useRef<any>(null);
   const couriersGeoObjectsRef = useRef<any>(null);
+  // 🔥 ДОБАВЛЯЕМ ЭТО:
+  const multiRouteRef = useRef<any>(null);  
   const clickedFromMapRef = useRef(false);
 
   const [isMobile, setIsMobile] = useState(false);
@@ -587,7 +589,6 @@ export function DashboardClient({ user }: { user: User }) {
       return sorted;
     });
   };
-
   useEffect(() => {
     if (!mapReady) return;
     const clusterer = clustererRef.current;
@@ -613,12 +614,15 @@ export function DashboardClient({ user }: { user: User }) {
 
       const late = isOrderLate(order);
 
-      // 🔥 ЛОГИКА НЕСТАНДАРТНЫХ СЛОТОВ: Проверяем, входит ли слот в стандартные (из констант)
       const isStandardSlot = SLOTS.some(s => s.from === order.slotFrom && s.to === order.slotTo);
       const isOtherSlot = !!order.slotRaw && !isStandardSlot;
 
-      // 🔥 ОТОБРАЖЕНИЕ: Показываем время всегда (если зум позволяет), убрали ограничение selectedSlots.length === 0
-      const displayTime = showTime && currentZoom >= 13 && !!order.slotRaw;
+      // 🔥 1. В режиме маршрута время показываем ВСЕГДА, независимо от зума
+      const displayTime = !!order.slotRaw && (
+        (showTime && currentZoom >= 13) || 
+        (isBulkMode && routeTabMode === "new")
+      );
+      
       const displayName = showCourierNames && !!order.courier;
       const slotLabelText = order.slotRaw ? order.slotRaw.replace("с ", "").replace(" до ", "-") : "";
 
@@ -642,8 +646,6 @@ export function DashboardClient({ user }: { user: User }) {
       `;
 
       let pm;
-
-      // 🔥 Базовый цвет точки: нестандартные слоты всегда черные, остальные - свой цвет
       const basePointColor = isOtherSlot ? '#1a1a18' : color;
 
       if (displayTime) {
@@ -651,8 +653,10 @@ export function DashboardClient({ user }: { user: User }) {
       
         if (isBulkMode && routeTabMode === "new") {
           if (isBulkSelected) {
-            pinColor = '#1a9e5c';
+            // 🔥 2. Оставляем родной цвет слота для выбранных в маршрут точек
+            pinColor = basePointColor;
           } else {
+            // А невыбранные делаем серыми
             pinColor = '#d1d5db';
           }
         } else if (isSelected) {
@@ -665,7 +669,7 @@ export function DashboardClient({ user }: { user: User }) {
           ? `${bulkIndex + 1}. ${slotLabelText}`
           : slotLabelText;
       
-          pm = new ymaps.Placemark([lat, lng], {
+        pm = new ymaps.Placemark([lat, lng], {
           balloonContentHeader: order.externalId ?? order.crmId,
           balloonContentBody: balloonBody,
           hintContent: order.address ?? "—",
@@ -674,9 +678,6 @@ export function DashboardClient({ user }: { user: User }) {
           iconLayout: StretchyLayout, 
           iconOffset: [-45, -36], 
           iconShape: { type: "Rectangle", coordinates: [[0, 0], [100, 65]] },
-          
-          // 🔥 ВОТ ЭТА МАГИЧЕСКАЯ СТРОКА:
-          // Говорим Яндексу, какого цвета эта метка, чтобы кластеризатор смог нарисовать дольки пирога
           iconColor: pinColor 
         });
       } else {
@@ -684,10 +685,12 @@ export function DashboardClient({ user }: { user: User }) {
         let iconContent = undefined;
 
         if (isBulkMode && routeTabMode === "new") {
-          if (isBulkSelected) { preset = 'islands#greenIcon'; iconContent = `${bulkIndex + 1}`; }
+          if (isBulkSelected) { 
+            preset = 'islands#icon'; // 🔥 Меняем пресет, чтобы влезла цифра
+            iconContent = `${bulkIndex + 1}`; 
+          }
           else { preset = 'islands#grayCircleDotIcon'; }
         } else {
-          // 🔥 Если заказ выбран, ставим стандартную желтую точку Яндекса
           if (isSelected) preset = previewGeo ? "islands#grayDotIcon" : "islands#yellowDotIcon";
           else if (late) preset = "islands#redIcon";
         }
@@ -699,8 +702,8 @@ export function DashboardClient({ user }: { user: User }) {
           iconCaption: (displayName) ? order.courier : undefined, iconContent
         }, { 
           preset, 
-          // 🔥 И здесь тоже применяем черный цвет для нестандартных
-          iconColor: (isBulkMode || isSelected || late) ? undefined : basePointColor 
+          // 🔥 И здесь тоже применяем родной цвет, если точка выбрана в маршрут
+          iconColor: (isBulkMode && routeTabMode === "new" && isBulkSelected) ? basePointColor : ((isBulkMode || isSelected || late) ? undefined : basePointColor)
         });
       }
 
@@ -718,6 +721,62 @@ export function DashboardClient({ user }: { user: User }) {
 
     if (placemarks.length > 0) clusterer.add(placemarks as any);
   }, [filteredForMap, selectedId, previewGeo, currentZoom, selectedSlots, isBulkMode, bulkSelectedIds, showTime, showCourierNames, isMobile, mapReady, routeTabMode]);
+
+  // 🔥 ЭФФЕКТ ДЛЯ ОТРИСОВКИ ЛИНИЙ МАРШРУТА (multiRouter)
+  useEffect(() => {
+    if (!mapReady || typeof window === "undefined" || !(window as any).ymaps) return;
+    const map = ymapRef.current;
+    const ymaps = (window as any).ymaps;
+    if (!map || !ymaps.multiRouter) return;
+
+    // 1. Очищаем старую линию маршрута при каждом изменении
+    if (multiRouteRef.current) {
+      map.geoObjects.remove(multiRouteRef.current);
+      multiRouteRef.current = null;
+    }
+
+    // 2. Рисуем новую линию, только если мы собираем маршрут и есть хотя бы 1 выбранный заказ
+    if (isBulkMode && routeTabMode === "new" && bulkSelectedIds.length > 0) {
+      // Собираем координаты по порядку кликов
+      const points = [];
+      
+      // Сначала всегда ставим Базу
+      points.push([STORE_LAT, STORE_LNG]); 
+
+      // Затем перебираем выбранные ID и достаем их координаты
+      bulkSelectedIds.forEach(id => {
+        const order = orders.find(o => o.id === id);
+        if (order && order.lat && order.lng) {
+          points.push([order.lat, order.lng]);
+        }
+      });
+
+      // Если есть куда ехать, создаем маршрут
+      if (points.length > 1) {
+        const multiRoute = new ymaps.multiRouter.MultiRoute({
+          referencePoints: points,
+          params: { routingMode: 'auto' } // можно 'auto' (на авто) или 'masstransit'
+        }, {
+          // 🔥 САМОЕ ВАЖНОЕ: Отключаем стандартные метки (А, В, С...), 
+          // так как у нас уже есть свои красивые плашки
+          wayPointVisible: false,
+          viaPointVisible: false,
+          
+          // Чтобы карта не прыгала и не зумировалась каждый раз, когда ты кликаешь на новую точку
+          boundsAutoApply: false, 
+          
+          // Настройки внешнего вида самой линии
+          routeActiveStrokeWidth: 5,
+          routeActiveStrokeColor: '#4a7aff', // Синий цвет линии
+          routeStrokeStyle: 'solid',
+          routeActivePedestrianSegmentStrokeStyle: 'solid'
+        });
+
+        map.geoObjects.add(multiRoute);
+        multiRouteRef.current = multiRoute;
+      }
+    }
+  }, [bulkSelectedIds, isBulkMode, routeTabMode, mapReady, orders]);
 
   useEffect(() => {
     if (!mapReady || !couriersGeoObjectsRef.current) return;
@@ -755,7 +814,7 @@ export function DashboardClient({ user }: { user: User }) {
       }
     });
   }, [dbCouriers, showCouriers, showHomes, mapReady]);
-
+  
   const existingRoutes = useMemo(() => {
     const routesMap = new Map<string, any>();
     orders.forEach((o) => {
