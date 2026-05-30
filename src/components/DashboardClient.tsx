@@ -662,21 +662,19 @@ const storePm = new window.ymaps.Placemark([STORE_LAT, STORE_LNG], { hintContent
           : slotLabelText;
       
           pm = new ymaps.Placemark([lat, lng], {
-            balloonContentHeader: order.externalId ?? order.crmId,
-            balloonContentBody: balloonBody,
-            hintContent: order.address ?? "—",
-            pinColor, slotLabel: finalSlotLabel, showLabel: displayName, labelText: order.courier ?? "",
-          }, { 
-            iconLayout: StretchyLayout, 
-            
-            // Сдвигаем левый верхний угол HTML-блока на 45px влево (половина от min-width: 90px)
-            // и на 36px вверх (примерная высота плашки + треугольник), чтобы носик был точно в координате
-            iconOffset: [-45, -36], 
-            
-            // Хитбокс отсчитывается ОТ левого верхнего угла самого HTML-блока!
-            // То есть от [0, 0] до [100px вправо, 65px вниз]. Это накроет всё: и плашку, и треугольник, и имя курьера.
-            iconShape: { type: "Rectangle", coordinates: [[0, 0], [100, 65]] } 
-          });
+          balloonContentHeader: order.externalId ?? order.crmId,
+          balloonContentBody: balloonBody,
+          hintContent: order.address ?? "—",
+          pinColor, slotLabel: finalSlotLabel, showLabel: displayName, labelText: order.courier ?? "",
+        }, { 
+          iconLayout: StretchyLayout, 
+          iconOffset: [-45, -36], 
+          iconShape: { type: "Rectangle", coordinates: [[0, 0], [100, 65]] },
+          
+          // 🔥 ВОТ ЭТА МАГИЧЕСКАЯ СТРОКА:
+          // Говорим Яндексу, какого цвета эта метка, чтобы кластеризатор смог нарисовать дольки пирога
+          iconColor: pinColor 
+        });
       } else {
         let preset = 'islands#dotIcon';
         let iconContent = undefined;
