@@ -1624,20 +1624,27 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
                   {selectedRouteOrders.map((o: any, index: number) => {
                     const color = slotColor(o);
                     const st = ROUTE_STATUS_MAP[o.status] || ROUTE_STATUS_MAP.NEW;
-                    const etaInfo = calculatedEtas[o.id] || { type: "NEW", timeStr: "—", color: "#4a7aff" };
+                    
+                    // 🔥 БЕРЕМ ИЗ БД: Если Яндекс еще не посчитал, тянем o.eta
+                    const etaInfo = calculatedEtas[o.id] || { 
+                      type: o.status, 
+                      timeStr: o.eta || "—", 
+                      color: o.status === "IN_DELIVERY" ? "#f59e0b" : "#4a7aff" 
+                    };
 
                     const isLateCalc = o.slotTo && etaInfo.timeStr !== "—" && parseTime(etaInfo.timeStr) > parseTime(o.slotTo);
                     const displayColor = isLateCalc ? "#d94040" : etaInfo.color;
 
                     return (
                       <React.Fragment key={o.id}>
-                        {routeLegs[index] && (
-                          <div style={{ fontSize: 12, color: displayColor, paddingLeft: 46, paddingBottom: 6, fontWeight: 700 }}>
-                            {etaInfo.type === 'DELIVERED' ? `✅ Доставлен в ${etaInfo.timeStr}` :
-                              etaInfo.type === 'SKIPPED' ? `❌ Отменен / Возврат` :
-                                (isLateCalc ? `⏰ Опаздывает (будет в ${etaInfo.timeStr})` : `↓ Ожидается в ${etaInfo.timeStr} (в пути ${routeLegs[index]})`)}
-                          </div>
-                        )}
+                        {/* 🔥 ПОКАЗЫВАЕМ ВСЕГДА, независимо от того, есть ли routeLegs[index] */}
+                        <div style={{ fontSize: 12, color: displayColor, paddingLeft: 46, paddingBottom: 6, fontWeight: 700 }}>
+                          {etaInfo.type === 'DELIVERED' ? `✅ Доставлен в ${etaInfo.timeStr}` :
+                            etaInfo.type === 'SKIPPED' ? `❌ Отменен / Возврат` :
+                              (isLateCalc ? `⏰ Опаздывает (будет в ${etaInfo.timeStr})` : 
+                                `↓ Ожидается в ${etaInfo.timeStr} ${routeLegs[index] ? `(в пути ${routeLegs[index]})` : ""}`
+                              )}
+                        </div>
 
                         <div style={{ padding: "10px 12px 10px 16px", background: o.status === "IN_DELIVERY" ? "#fffbeb" : "#fff", border: "1px solid #e8e6df", borderRadius: 8, display: "flex", gap: 12, alignItems: "center", position: "relative", overflow: "hidden" }}>
                           <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: 4, background: color }} />
@@ -1697,11 +1704,14 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
               );
             })()}
 
-            {routeLegs[selectedRouteOrders.length] && (
+            {/* 🔥 ПОКАЗЫВАЕМ ВОЗВРАТ ВСЕГДА, если стоит галочка или уже есть время */}
+            {(returnToBase || calculatedEtasData.baseReturnTime !== "—") && selectedRouteOrders.length > 0 && (
               <div style={{ fontSize: 11, color: "#a8a49c", paddingLeft: 46, paddingTop: 4 }}>
-                ↓ {routeLegs[selectedRouteOrders.length]} возврат на базу (Прибытие: {calculatedEtasData.baseReturnTime})
+                ↓ возврат на базу (Прибытие: {calculatedEtasData.baseReturnTime})
+                {routeLegs[selectedRouteOrders.length] && ` — в пути ${routeLegs[selectedRouteOrders.length]}`}
               </div>
             )}
+            
             {selectedRouteOrders.length === 0 && <div style={{ fontSize: 13, color: "#a8a49c", textAlign: "center", padding: 20 }}>Отметьте точки на карте</div>}
           </div>
         </>
