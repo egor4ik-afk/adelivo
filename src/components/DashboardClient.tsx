@@ -592,8 +592,8 @@ const storePm = new window.ymaps.Placemark([STORE_LAT, STORE_LNG], { hintContent
     const ymaps = (window as any).ymaps;
 
     const StretchyLayout = ymaps.templateLayoutFactory.createClass(
-      '<div style="display:inline-flex;flex-direction:column;align-items:center;cursor:pointer;">' +
-      '<div style="background:{{ properties.pinColor }};color:#fff;padding:4px 10px;border-radius:12px;font-size:10px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.28);border:1.5px solid rgba(255,255,255,0.35);min-width:28px;text-align:center;line-height:1.4;">{{ properties.slotLabel }}</div>' +
+      '<div style="display:inline-flex;flex-direction:column;align-items:center;cursor:pointer; min-width: 90px; max-width: 120px;">' +
+      '<div style="background:{{ properties.pinColor }};color:#fff;padding:4px 10px;border-radius:12px;font-size:10px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.28);border:1.5px solid rgba(255,255,255,0.35); text-align:center;line-height:1.4;">{{ properties.slotLabel }}</div>' +
       '<div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid {{ properties.pinColor }};margin-top:-1px;"></div>' +
       '{% if properties.showLabel %}<div style="margin-top:3px;font-size:9px;font-weight:700;color:#1a1a18;white-space:nowrap;background:rgba(255,255,255,0.96);padding:2px 6px;border-radius:4px;box-shadow:0 1px 5px rgba(0,0,0,0.15);line-height:1.4;">{{ properties.labelText }}</div>{% endif %}' +
       '</div>'
@@ -661,16 +661,22 @@ const storePm = new window.ymaps.Placemark([STORE_LAT, STORE_LNG], { hintContent
           ? `${bulkIndex + 1}. ${slotLabelText}`
           : slotLabelText;
       
-        pm = new ymaps.Placemark([lat, lng], {
-          balloonContentHeader: order.externalId ?? order.crmId,
-          balloonContentBody: balloonBody,
-          hintContent: order.address ?? "—",
-          pinColor, slotLabel: finalSlotLabel, showLabel: displayName, labelText: order.courier ?? "",
-        }, {
-          iconLayout: StretchyLayout,
-          iconShape: { type: "Rectangle", coordinates: [[-45, -38], [45, 22]] },
-          iconOffset: [-45, -38]
-        });
+          pm = new ymaps.Placemark([lat, lng], {
+            balloonContentHeader: order.externalId ?? order.crmId,
+            balloonContentBody: balloonBody,
+            hintContent: order.address ?? "—",
+            pinColor, slotLabel: finalSlotLabel, showLabel: displayName, labelText: order.courier ?? "",
+          }, { 
+            iconLayout: StretchyLayout, 
+            
+            // Сдвигаем левый верхний угол HTML-блока на 45px влево (половина от min-width: 90px)
+            // и на 36px вверх (примерная высота плашки + треугольник), чтобы носик был точно в координате
+            iconOffset: [-45, -36], 
+            
+            // Хитбокс отсчитывается ОТ левого верхнего угла самого HTML-блока!
+            // То есть от [0, 0] до [100px вправо, 65px вниз]. Это накроет всё: и плашку, и треугольник, и имя курьера.
+            iconShape: { type: "Rectangle", coordinates: [[0, 0], [100, 65]] } 
+          });
       } else {
         let preset = 'islands#dotIcon';
         let iconContent = undefined;
