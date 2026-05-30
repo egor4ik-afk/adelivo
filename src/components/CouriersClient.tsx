@@ -251,25 +251,23 @@ export function CouriersClient({ user }: { user: any }) {
   });
 
   const scheduleSorted = [...filtered].sort((a, b) => {
-    // Всегда: курьеры со сменами на ТЕКУЩЕЙ неделе — наверху
-    const aHasWeekShift = a.shifts.some(s => scheduleDates.includes(s.date));
-    const bHasWeekShift = b.shifts.some(s => scheduleDates.includes(s.date));
-    if (aHasWeekShift && !bHasWeekShift) return -1;
-    if (!aHasWeekShift && bHasWeekShift) return 1;
+  const aWorksToday = a.shifts.some(s => s.date === sortDate);
+  const bWorksToday = b.shifts.some(s => s.date === sortDate);
+  if (aWorksToday && !bWorksToday) return -1;
+  if (!aWorksToday && bWorksToday) return 1;
 
-    // Внутри каждой группы — по выбранному режиму
-    if (sortMode === "orders") {
-      const aCount = getCount(a.id, sortDate);
-      const bCount = getCount(b.id, sortDate);
-      if (aCount !== bCount) return bCount - aCount;
-    } else if (sortMode === "rating") {
-      const aPri = a.priority ?? 3;
-      const bPri = b.priority ?? 3;
-      if (aPri !== bPri) return bPri - aPri;
-    }
+  if (sortMode === "orders") {
+    const aCount = getCount(a.id, sortDate);
+    const bCount = getCount(b.id, sortDate);
+    if (aCount !== bCount) return bCount - aCount;
+  } else if (sortMode === "rating") {
+    const aPri = a.priority ?? 3;
+    const bPri = b.priority ?? 3;
+    if (aPri !== bPri) return bPri - aPri;
+  }
 
-    return a.fullName.localeCompare(b.fullName);
-  });
+  return a.fullName.localeCompare(b.fullName);
+});
 
   const calcSortedAndFiltered = [...filtered].filter(c => {
     return calcDates.some(d => getCount(c.id, d, true) > 0 || getSum(c.id, d) > 0 || c.payments?.some(p => p.date === d));

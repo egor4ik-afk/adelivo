@@ -484,9 +484,11 @@ export function DashboardClient({ user }: { user: User }) {
       const courierColl = new window.ymaps.GeoObjectCollection();
       map.geoObjects.add(courierColl);
 
-// 🔥 Сделали базу компактным синим домиком (отличается от обычных заказов)
-const storePm = new window.ymaps.Placemark([STORE_LAT, STORE_LNG], { hintContent: "БАЗА: Большой Афанасьевский переулок, 39", iconCaption: "База" }, { preset: 'islands#blueHomeIcon' });
-      map.geoObjects.add(storePm as any);
+      const storePm = new window.ymaps.Placemark(
+        [STORE_LAT, STORE_LNG], 
+        { hintContent: "БАЗА: Большой Афанасьевский переулок, 39" }, // Убрали iconCaption: "База"
+        { preset: 'islands#grayDotIcon' } // Поставили аккуратный серый пин
+      );
 
       const constructorUrl = "/zones.kml";
       (window.ymaps as any).geoXml.load(constructorUrl)
@@ -1338,19 +1340,50 @@ const storePm = new window.ymaps.Placemark([STORE_LAT, STORE_LNG], { hintContent
                     <span style={{ fontSize: 12, color: "#4a7aff", fontWeight: 700 }}>💡 Выезд:</span>
 
 
-
                     <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+
+                      {/* 🔥 ГИБРИД: Текстовый ввод + Выпадающий список (datalist) */}
+                      <div style={{ position: "relative", width: 106, flexShrink: 0 }}>
                       <input
-                        type="time"
-                        value={manualDepartureTime}
-                        onChange={(e) => setManualDepartureTime(e.target.value)}
+                          type="text"
+                          list="time-options"
+                          placeholder="--:--"
+                          maxLength={5}
+                          value={manualDepartureTime || ""}
+                          onChange={(e) => {
+                            // Оставляем только цифры и двоеточие
+                            let val = e.target.value.replace(/[^\d:]/g, "");
+                            
+                            // Умная маска: автоматически ставим двоеточие после 2 цифр при печати
+                            const isDeleting = (e.nativeEvent as InputEvent).inputType === "deleteContentBackward";
+                            if (val.length === 2 && !val.includes(":") && !isDeleting) {
+                              val += ":";
+                            }
+                            setManualDepartureTime(val);
+                          }}
                         style={{
                           padding: "4px 6px",
                           borderRadius: 6, border: "1px solid #4a7aff",
                           outline: "none", fontWeight: 700, fontFamily: "monospace",
-                          fontSize: 13, color: "#4a7aff", background: "#fff", width: 106
-                        }}
-                      />
+                            fontSize: 13, color: "#4a7aff", background: "#fff",
+                            width: "100%"
+                          }}
+                        />
+                        {/* Скрытый список с шагом 10 минут, который браузер покажет как dropdown */}
+                        <datalist id="time-options">
+                          {(() => {
+                            const times = [];
+                            for (let h = 8; h <= 23; h++) {
+                              for (let m = 0; m < 60; m += 10) {
+                                times.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+                              }
+                            }
+                            return times.map(t => <option key={t} value={t} />);
+                          })()}
+                        </datalist>
+                      </div>
+
+                      {/* Кнопка сброса / возврата времени из БД */}
                       {(() => {
                         const dbTime = (editingRouteId
                           ? existingRoutes.find((r: any) => r.id === editingRouteId)
