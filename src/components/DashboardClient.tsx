@@ -145,8 +145,9 @@ export function DashboardClient({ user }: { user: User }) {
   const clustererRef = useRef<any>(null);
   const couriersGeoObjectsRef = useRef<any>(null);
   // 🔥 ДОБАВЛЯЕМ ЭТО:
-  const multiRouteRef = useRef<any>(null);  
-  const clickedFromMapRef = useRef(false);
+  const multiRouteRef = useRef<any>(null); // Для создания нового маршрута
+  // 🔥 ДОБАВЛЯЕМ ЭТО (Для текущих активных маршрутов):
+  const activeRoutesRefs = useRef<any[]>([]);  const clickedFromMapRef = useRef(false);
 
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
@@ -778,6 +779,78 @@ export function DashboardClient({ user }: { user: User }) {
     }
   }, [bulkSelectedIds, isBulkMode, routeTabMode, mapReady, orders]);
 
+  // 🔥 ПАЛИТРА ЦВЕТОВ ДЛЯ АКТИВНЫХ МАРШРУТОВ (9 контрастных цветов)
+  const ROUTE_COLORS = ['#e6194B', '#3cb44b', '#4363d8', '#f58231', '#911eb4', '#42d4f4', '#f032e6', '#000075', '#a9a9a9'];
+
+  // 🔥 ЭФФЕКТ ДЛЯ ОТРИСОВКИ ВСЕХ ТЕКУЩИХ МАРШРУТОВ
+  useEffect(() => {
+    if (!mapReady || typeof window === "undefined" || !(window as any).ymaps) return;
+    const map = ymapRef.current;
+    const ymaps = (window as any).ymaps;
+    if (!map || !ymaps.multiRouter) return;
+
+    // 1. Очищаем старые линии при каждом ререндере
+    activeRoutesRefs.current.forEach(route => map.geoObjects.remove(route));
+    activeRoutesRefs.current = [];
+
+    // 2. Включаем отрисовку, только если мы во вкладке текущих маршрутов
+    // (Замени "current" на твое название вкладки, если оно другое, например "active")
+    if (isBulkMode && routeTabMode === "current") {
+      
+      // Группируем заказы по ID маршрута
+      const routesMap = new Map<string, any[]>();
+      
+      orders.forEach(o => {
+        // Берем только те точки, к которым курьер еще не доехал
+        if (o.routeId && (o.status === "ASSIGNED" || o.status === "IN_DELIVERY")) {
+          if (!routesMap.has(o.routeId)) routesMap.set(o.routeId, []);
+          routesMap.get(o.routeId)!.push(o);
+        }
+      });
+
+      let colorIndex = 0;
+
+      // Рисуем линию для каждого маршрута
+      routesMap.forEach((routeOrders, routeId) => {
+        // Обязательно сортируем точки по порядку (routeOrder), чтобы линия не прыгала хаотично
+        routeOrders.sort((a, b) => (a.routeOrder || 0) - (b.routeOrder || 0));
+
+        const points = [];
+        points.push([STORE_LAT, STORE_LNG]); // Все маршруты начинаем с базы
+
+        // Добавляем координаты оставшихся точек
+        routeOrders.forEach(o => {
+          if (o.lat && o.lng) {
+            points.push([o.lat, o.lng]);
+          }
+        });
+
+        // Если в маршруте осталась хотя бы 1 точка (База -> Точка), рисуем
+        if (points.length > 1) {
+          const color = ROUTE_COLORS[colorIndex % ROUTE_COLORS.length];
+          colorIndex++;
+
+          const multiRoute = new ymaps.multiRouter.MultiRoute({
+            referencePoints: points,
+            params: { routingMode: 'auto' }
+          }, {
+            wayPointVisible: false, // Без стандартных меток
+            viaPointVisible: false,
+            boundsAutoApply: false, // Не прыгаем камерой
+            
+            // 🔥 ВИЗУАЛЬНЫЕ НАСТРОЙКИ (потоньше и цветные)
+            routeActiveStrokeWidth: 3, 
+            routeActiveStrokeColor: color, 
+            routeActiveStrokeOpacity: 0.8 // Чуть прозрачные, чтобы карта читалась лучше
+          });
+
+          map.geoObjects.add(multiRoute);
+          activeRoutesRefs.current.push(multiRoute);
+        }
+      });
+    }
+  }, [orders, isBulkMode, routeTabMode, mapReady]);
+  
   useEffect(() => {
     if (!mapReady || !couriersGeoObjectsRef.current) return;
     const coll = couriersGeoObjectsRef.current;
@@ -1404,7 +1477,7 @@ export function DashboardClient({ user }: { user: User }) {
                     <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                       
                       {/* 🔥 КАСТОМНЫЙ ГИБРИД: Текстовый ввод + Ручной Dropdown */}
-                      <div style={{ position: "relative", width: 106, flexShrink: 0 }}>
+                      <div style={{ position: "relative", width: 86, flexShrink: 0 }}>
                         <input
                           type="text"
                           placeholder="--:--"
