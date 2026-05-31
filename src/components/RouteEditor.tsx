@@ -18,10 +18,9 @@ export function RouteEditor({
   const [orders, setOrders] = useState<any[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
   const [saving, setSaving] = useState(false);
-  
-  // Стейты для времени
-  const [baseTime, setBaseTime] = useState(route?.baseArrivalTime || "");
-  const [plannedTime, setPlannedTime] = useState(route?.plannedDepartureTime || ""); // 🔥 НОВОЕ ПОЛЕ
+
+  // 🔥 Только плановое время выезда (как в дашборде)
+  const [plannedTime, setPlannedTime] = useState(route?.plannedDepartureTime || "");
 
   useEffect(() => {
     if (!hasChanges) {
@@ -29,11 +28,9 @@ export function RouteEditor({
     }
   }, [initialOrders, hasChanges]);
 
-  // Обновляем локальный стейт, если пропсы изменились
   useEffect(() => {
-    setBaseTime(route?.baseArrivalTime || "");
-    setPlannedTime(route?.plannedDepartureTime || ""); // 🔥 НОВОЕ ПОЛЕ
-  }, [route?.baseArrivalTime, route?.plannedDepartureTime]);
+    setPlannedTime(route?.plannedDepartureTime || "");
+  }, [route?.plannedDepartureTime]);
 
   const move = (idx: number, dir: number) => {
     const arr = [...orders];
@@ -84,32 +81,18 @@ export function RouteEditor({
     }
   };
 
-  const handleTimeBlur = async () => {
-    if (baseTime === route?.baseArrivalTime) return; 
-    try {
-      await fetch(`/api/routes/${routeId}`, { 
-        method: "PATCH", 
-        headers: {"Content-Type": "application/json"}, 
-        body: JSON.stringify({ baseArrivalTime: baseTime }) 
-      });
-    } catch (err) {
-      alert("Не удалось сохранить время прибытия");
-      setBaseTime(route?.baseArrivalTime || ""); 
-    }
-  };
-
-  // 🔥 ФУНКЦИЯ ДЛЯ СОХРАНЕНИЯ НОВОГО ПОЛЯ ВРЕМЕНИ
+  // 🔥 Сохранение планового времени выезда
   const handlePlannedTimeBlur = async () => {
-    if (plannedTime === route?.plannedDepartureTime) return; 
+    if (plannedTime === route?.plannedDepartureTime) return;
     try {
-      await fetch(`/api/routes/${routeId}`, { 
-        method: "PATCH", 
-        headers: {"Content-Type": "application/json"}, 
-        body: JSON.stringify({ plannedDepartureTime: plannedTime }) 
+      await fetch(`/api/routes/${routeId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plannedDepartureTime: plannedTime })
       });
     } catch (err) {
-      alert("Не удалось сохранить время отправления");
-      setPlannedTime(route?.plannedDepartureTime || ""); 
+      alert("Не удалось сохранить время выезда");
+      setPlannedTime(route?.plannedDepartureTime || "");
     }
   };
 
@@ -117,40 +100,29 @@ export function RouteEditor({
 
   return (
     <div style={{ border: hasChanges ? "2px solid #4a7aff" : "1px solid #f0efe9", borderRadius: 12, padding: isMobile ? 12 : 16, background: hasChanges ? "#f4f7ff" : "#fff", transition: "all 0.3s", position: "relative" }}>
-      
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
-        
+
         <div>
           <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>
             Маршрут {routeName} {hasChanges && <span style={{ color: "#4a7aff", fontSize: 12, marginLeft: 8 }}>*не сохранено</span>}
           </h4>
-          
-          {/* Контейнер для полей времени */}
-          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 8 }}>
-            
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <span style={{fontSize: 12, fontWeight: 600, color: "#6b6860"}}>На базе:</span>
-              <input 
-                type="time" 
-                value={baseTime} 
-                onChange={(e) => setBaseTime(e.target.value)}
-                onBlur={handleTimeBlur}
-                style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #e8e6df", outline: "none", fontWeight: 700, fontFamily: "monospace", fontSize: 13 }}
-              />
-            </div>
 
-            {/* 🔥 НОВОЕ ПОЛЕ В ИНТЕРФЕЙСЕ */}
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <span style={{fontSize: 12, fontWeight: 600, color: "#d94040"}}>Забрать до:</span>
-              <input 
-                type="time" 
-                value={plannedTime} 
-                onChange={(e) => setPlannedTime(e.target.value)}
-                onBlur={handlePlannedTimeBlur}
-                style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #fca5a5", outline: "none", fontWeight: 700, fontFamily: "monospace", fontSize: 13, background: "#fef2f2", color: "#d94040" }}
-              />
-            </div>
-
+          {/* Плановое время выезда */}
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#4a7aff" }}>💡 Выезд:</span>
+            <input
+              type="time"
+              value={plannedTime}
+              onChange={(e) => setPlannedTime(e.target.value)}
+              onBlur={handlePlannedTimeBlur}
+              style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontWeight: 700, fontFamily: "monospace", fontSize: 13, color: "#4a7aff", background: "#fff" }}
+            />
+            {route?.estimatedReturnTime && route.estimatedReturnTime !== "—" && (
+              <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 600 }}>
+                🏠 На базе ~{route.estimatedReturnTime}
+              </span>
+            )}
           </div>
         </div>
 
@@ -211,17 +183,7 @@ export function RouteEditor({
                     ✅ Прикреплено фото:
                   </div>
                   <a href={o.photoUrl} target="_blank" rel="noreferrer" style={{ display: "block" }}>
-                    <img 
-                      src={o.photoUrl} 
-                      alt="Фотоотчет курьера" 
-                      style={{ 
-                        width: "100%", 
-                        borderRadius: 8, 
-                        maxHeight: 180, 
-                        objectFit: "cover",
-                        border: "1px solid #e8e6df"
-                      }} 
-                    />
+                    <img src={o.photoUrl} alt="Фотоотчет курьера" style={{ width: "100%", borderRadius: 8, maxHeight: 180, objectFit: "cover", border: "1px solid #e8e6df" }} />
                   </a>
                 </div>
               )}
@@ -252,7 +214,6 @@ export function RouteEditor({
             {availableToADD.map((free: any) => {
               const belongsToOther = free.courierId && free.courierId !== courierId;
               const suffix = belongsToOther ? `(У курьера: ${free.courier})` : (!free.courierId ? "(Новый / Без курьера)" : "");
-              
               return (
                 <option key={free.id} value={free.id}>
                   {free.slotRaw} · {free.address?.slice(0, 30)}... {suffix}
