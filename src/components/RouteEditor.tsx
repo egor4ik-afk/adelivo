@@ -19,8 +19,9 @@ export function RouteEditor({
   const [hasChanges, setHasChanges] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // 🔥 Только плановое время выезда (как в дашборде)
+  // 🔥 Плановое время выезда + дропдаун
   const [plannedTime, setPlannedTime] = useState(route?.plannedDepartureTime || "");
+  const [showTimeDropdown, setShowTimeDropdown] = useState(false);
 
   useEffect(() => {
     if (!hasChanges) {
@@ -81,20 +82,27 @@ export function RouteEditor({
     }
   };
 
-  // 🔥 Сохранение планового времени выезда
-  const handlePlannedTimeBlur = async () => {
-    if (plannedTime === route?.plannedDepartureTime) return;
+  // 🔥 Сохранение планового времени (PATCH)
+  const savePlannedTime = async (newTime: string) => {
+    if (newTime === route?.plannedDepartureTime) return;
     try {
       await fetch(`/api/routes/${routeId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plannedDepartureTime: plannedTime })
+        body: JSON.stringify({ plannedDepartureTime: newTime })
       });
     } catch (err) {
       alert("Не удалось сохранить время выезда");
       setPlannedTime(route?.plannedDepartureTime || "");
     }
   };
+
+  // Проверка — выехал ли курьер фактически
+  const pickedUpTimes = orders.map((o: any) => o.pickedUpAt).filter(Boolean);
+  const actualDepartureMs = pickedUpTimes.length > 0
+    ? Math.min(...pickedUpTimes.map((d: string) => new Date(d).getTime()))
+    : null;
+  const hasStarted = orders.some((o: any) => o.status === "IN_DELIVERY" || o.status === "DELIVERED");
 
   const availableToADD = globalFreeOrders.filter((free: any) => !orders.find(lo => lo.id === free.id));
 
@@ -108,16 +116,99 @@ export function RouteEditor({
             Маршрут {routeName} {hasChanges && <span style={{ color: "#4a7aff", fontSize: 12, marginLeft: 8 }}>*не сохранено</span>}
           </h4>
 
-          {/* Плановое время выезда */}
+          {/* 🔥 Время выезда */}
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: "#4a7aff" }}>💡 Выезд:</span>
-            <input
-              type="time"
-              value={plannedTime}
-              onChange={(e) => setPlannedTime(e.target.value)}
-              onBlur={handlePlannedTimeBlur}
-              style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #4a7aff", outline: "none", fontWeight: 700, fontFamily: "monospace", fontSize: 13, color: "#4a7aff", background: "#fff" }}
-            />
+            {hasStarted && actualDepartureMs ? (
+              // Курьер выехал — показываем факт
+              <span style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                padding: "4px 10px", borderRadius: 6, background: "#fffbeb",
+                border: "1px solid #fde68a", fontSize: 13, fontWeight: 700,
+                color: "#d97706", fontFamily: "monospace"
+              }}>
+                📦 Выехал в {new Date(actualDepartureMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            ) : (
+              // Не выехал — редактируемый инпут с дропдауном
+              <>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "#4a7aff" }}>💡 Выезд:</span>
+                <div style={{ position: "relative", width: 86, flexShrink: 0 }}>
+                  <input
+                    type="text"
+                    placeholder="--:--"
+                    maxLength={5}
+                    value={plannedTime || ""}
+                    onFocus={() => setShowTimeDropdown(false)}
+                    onChange={(e) => {
+                      let val = e.target.value.replace(/[^\d:]/g, "");
+                      const isDeleting = (e.nativeEvent as InputEvent).inputType === "deleteContentBackward";
+                      if (val.length === 2 && !val.includes(":") && !isDeleting) val += ":";
+                      setPlannedTime(val);
+                    }}
+                    onBlur={() => savePlannedTime(plannedTime)}
+                    style={{
+                      padding: "4px 24px 4px 6px", borderRadius: 6, border: "1px solid #4a7aff",
+                      outline: "none", fontWeight: 700, fontFamily: "monospace",
+                      fontSize: 13, color: "#4a7aff", background: "#fff", width: "100%"
+                    }}
+                  />
+                  <div
+                    onClick={() => setShowTimeDropdown(!showTimeDropdown)}
+                    style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 24, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#4a7aff", fontSize: 10 }}
+                  >
+                    ▼
+                  </div>
+
+                  {showTimeDropdown && (
+                    <>
+                      <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 99 }} onClick={() => setShowTimeDropdown(false)} />
+                      <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: "#fff", border: "1px solid #4a7aff", borderRadius: 6, zIndex: 100, maxHeight: 180, overflowY: "auto", boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>
+                        {(() => {
+                          const times: string[] = [];
+                          for (let h = 8; h <= 23; h++) {
+                            for (let m = 0; m < 60; m += 10) {
+                              times.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+                            }
+                          }
+                          if (plannedTime && plannedTime.length === 5 && !times.includes(plannedTime)) {
+                            times.push(plannedTime);
+                          }
+                          times.sort();
+                          return times.map(t => (
+                            <div
+                              key={t}
+                              onClick={() => { setPlannedTime(t); setShowTimeDropdown(false); savePlannedTime(t); }}
+                              style={{
+                                padding: "6px 10px", cursor: "pointer", fontSize: 13, fontWeight: 700,
+                                color: t === plannedTime ? "#4a7aff" : "#1a1a18",
+                                background: t === plannedTime ? "#f0f5ff" : "transparent",
+                                borderBottom: "1px solid #f0f0f0", transition: "background 0.1s"
+                              }}
+                              onMouseEnter={e => { if (t !== plannedTime) e.currentTarget.style.background = "#f8f9fa"; }}
+                              onMouseLeave={e => { if (t !== plannedTime) e.currentTarget.style.background = "transparent"; }}
+                            >
+                              {t}
+                            </div>
+                          ));
+                        })()}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Кнопка сброса к значению из БД */}
+                {plannedTime !== (route?.plannedDepartureTime || "") && (
+                  <button
+                    onClick={() => setPlannedTime(route?.plannedDepartureTime || "")}
+                    title={route?.plannedDepartureTime ? `Вернуть: ${route.plannedDepartureTime}` : "Очистить"}
+                    style={{ background: "none", border: "none", color: "#a8a49c", cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1, flexShrink: 0 }}
+                  >
+                    {route?.plannedDepartureTime ? "↺" : "×"}
+                  </button>
+                )}
+              </>
+            )}
+
             {route?.estimatedReturnTime && route.estimatedReturnTime !== "—" && (
               <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 600 }}>
                 🏠 На базе ~{route.estimatedReturnTime}
@@ -179,9 +270,7 @@ export function RouteEditor({
 
               {o.photoUrl && (
                 <div style={{ marginBottom: 12, position: "relative" }}>
-                  <div style={{ fontSize: 11, color: "#10b981", fontWeight: 700, marginBottom: 4 }}>
-                    ✅ Прикреплено фото:
-                  </div>
+                  <div style={{ fontSize: 11, color: "#10b981", fontWeight: 700, marginBottom: 4 }}>✅ Прикреплено фото:</div>
                   <a href={o.photoUrl} target="_blank" rel="noreferrer" style={{ display: "block" }}>
                     <img src={o.photoUrl} alt="Фотоотчет курьера" style={{ width: "100%", borderRadius: 8, maxHeight: 180, objectFit: "cover", border: "1px solid #e8e6df" }} />
                   </a>
