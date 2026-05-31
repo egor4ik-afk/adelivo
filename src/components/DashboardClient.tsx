@@ -168,6 +168,7 @@ export function DashboardClient({ user }: { user: User }) {
   const [showTime, setShowTime] = useState(true);
   const [showCouriers, setShowCouriers] = useState(false);
   const [showHomes, setShowHomes] = useState(false);
+const [showMapSettings, setShowMapSettings] = useState(false);
 
   const [filterDate, setFilterDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }));
   const [orders, setOrders] = useState<DashboardOrder[]>([]);
@@ -1931,28 +1932,50 @@ fontSize: 11, fontWeight: 700, cursor: "pointer",
 
         <div style={{ flex: 1, minWidth: isMobile ? "100%" : 0 }} />
 
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', background: "#fafaf8", padding: "0 12px", borderRadius: 8, height: 34, border: "1px solid #e8e6df", overflowX: "auto" }}>
-          <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 5, cursor: 'pointer', whiteSpace: "nowrap" }}>
-            <input type="checkbox" checked={showCouriers} onChange={e => setShowCouriers(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Курьеры
-          </label>
-          <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 5, cursor: 'pointer', whiteSpace: "nowrap" }}>
-            <input type="checkbox" checked={showHomes} onChange={e => setShowHomes(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Дом
-          </label>
-          <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 5, cursor: 'pointer', whiteSpace: "nowrap" }}>
-            <input type="checkbox" checked={showCourierNames} onChange={e => setShowCourierNames(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Имена
-          </label>
-          <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 5, cursor: 'pointer', whiteSpace: "nowrap" }}>
-            <input type="checkbox" checked={showTime} onChange={e => setShowTime(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Время
-          </label>
-          <div style={{ width: 1, height: 16, background: "#d1d5db", margin: "0 4px" }} />
-          <button
-            onClick={() => setShowRouteLines(!showRouteLines)}
-            title={showRouteLines ? "Скрыть линии маршрутов" : "Показать линии маршрутов"}
-            style={{ width: 24, height: 24, borderRadius: 6, border: `1px solid ${showRouteLines ? "#4a7aff" : "#d1d5db"}`, background: showRouteLines ? "#eff6ff" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.15s", fontSize: 13, padding: 0 }}
-          >
-            🗺️
-          </button>
-        </div>
+        {/* Настройки карты — кнопка + выпадашка */}
+<div style={{ position: "relative", flexShrink: 0 }}>
+  <button
+    onClick={() => setShowMapSettings(!showMapSettings)}
+    style={{
+      ...topbarBtnStyle,
+      background: showMapSettings ? "#eef3ff" : "#fff",
+      borderColor: showMapSettings ? "#4a7aff" : "#e8e6df",
+      color: showMapSettings ? "#4a7aff" : "#1a1a18",
+    }}
+    title="Настройки карты"
+  >
+    🗺️ <span style={{ fontSize: 10 }}>▼</span>
+  </button>
+
+  {showMapSettings && (
+    <>
+      <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setShowMapSettings(false)} />
+      <div style={{
+        position: "absolute", top: "calc(100% + 6px)", right: 0,
+        background: "#fff", border: "1px solid #e8e6df", borderRadius: 12,
+        padding: "12px 14px", zIndex: 200, display: "flex", flexDirection: "column",
+        gap: 10, minWidth: 160, boxShadow: "0 8px 24px rgba(0,0,0,0.12)"
+      }}>
+        <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}>
+          <input type="checkbox" checked={showCouriers} onChange={e => setShowCouriers(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Курьеры на карте
+        </label>
+        <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}>
+          <input type="checkbox" checked={showHomes} onChange={e => setShowHomes(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Дом
+        </label>
+        <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}>
+          <input type="checkbox" checked={showCourierNames} onChange={e => setShowCourierNames(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Имена
+        </label>
+        <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}>
+          <input type="checkbox" checked={showTime} onChange={e => setShowTime(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Время
+        </label>
+        <div style={{ width: "100%", height: 1, background: "#f0efe9" }} />
+        <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}>
+          <input type="checkbox" checked={showRouteLines} onChange={e => setShowRouteLines(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Линии маршрутов
+        </label>
+      </div>
+    </>
+  )}
+</div>
 
         {invalid.length > 0 && <button style={s.alertBadge} onClick={() => { setAlertsOpen(!alertsOpen); setProfileOpen(false); }}>⚠ {!isMobile && `${invalid.length}`}</button>}
         
