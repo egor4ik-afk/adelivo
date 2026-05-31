@@ -636,8 +636,9 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
       const isOtherSlot = !!order.slotRaw && !isStandardSlot;
 
       // 🔥 1. В режиме маршрута время показываем ВСЕГДА, независимо от зума
-      const displayTime = !!order.slotRaw && showTime && (
-        currentZoom >= 13 || (isBulkMode && routeTabMode === "new")
+      const displayTime = !!order.slotRaw && (
+        (showTime && currentZoom >= 13) || 
+        (isBulkMode && routeTabMode === "new")
       );
       
       const displayName = showCourierNames && !!order.courier;
