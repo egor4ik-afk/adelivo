@@ -42,23 +42,28 @@ function AddressSuggestInput({ value, onChange }: { value: string, onChange: (va
 
     const init = () => {
       (window as any).ymaps.ready(() => {
-        const input = document.getElementById(inputId);
-        if (!input || (input as any).isSuggestInitialized) return;
-        try {
-          const suggest = new (window as any).ymaps.SuggestView(inputId, { results: 5 });
-          suggest.events.add("select", (e: any) => {
-            onChangeRef.current(e.get("item").value);
-          });
-          (input as any).isSuggestInitialized = true;
-        } catch (err) {
-          console.warn("Suggest error:", err);
-        }
+        // 🔥 Добавили setTimeout как в дашборде, чтобы React успел отрендерить input
+        setTimeout(() => {
+          const input = document.getElementById(inputId);
+          if (!input || (input as any).isSuggestInitialized) return;
+          try {
+            const suggest = new (window as any).ymaps.SuggestView(inputId, { results: 5 });
+            suggest.events.add("select", (e: any) => {
+              onChangeRef.current(e.get("item").value);
+            });
+            (input as any).isSuggestInitialized = true;
+          } catch (err) {
+            console.warn("Suggest error:", err);
+          }
+        }, 100);
       });
     };
 
     const waitAndInit = () => {
       const interval = setInterval(() => {
-        if ((window as any).ymaps && typeof (window as any).ymaps.SuggestView === "function") {
+        // 🔥 Убрали жесткую проверку typeof ymaps.SuggestView. 
+        // ymaps.ready() сам дождется нужных модулей.
+        if ((window as any).ymaps) {
           clearInterval(interval);
           init();
         }

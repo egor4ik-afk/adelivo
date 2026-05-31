@@ -384,7 +384,7 @@ export function DashboardClient({ user }: { user: User }) {
     });
   })();
 
-  const courierOptions = [{ value: "UNASSIGNED", label: "Не назначен" }, ...sortedCouriers];
+  const courierOptions = [{ value: "ALL", label: "Все курьеры" }, { value: "UNASSIGNED", label: "Не назначен" }, ...sortedCouriers];
 
   const dateAndStatusOrders = orders.filter(o => {
     const oDate = o.deliveryDate || (o.crmCreatedAt ? o.crmCreatedAt.split('T')[0] : null);
@@ -1882,7 +1882,15 @@ export function DashboardClient({ user }: { user: User }) {
               <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setIsCourierMenuOpen(false)} />
               <div style={{ ...s.dropdownMenu, minWidth: 220 }}>
                 {courierOptions.map(c => {
-                  if (c.value === "ALL") return null;
+                  if (c.value === "ALL") {
+                    return (
+                      <label key="ALL" style={{ ...s.dropdownItem, fontWeight: 700, borderBottom: "1px solid #f0efe9", paddingBottom: 8, marginBottom: 4 }}
+                        onClick={() => setSelectedCouriers([])}>
+                        <input type="checkbox" checked={selectedCouriers.length === 0} readOnly style={{ accentColor: "#4a7aff", width: 16, height: 16 }} />
+                        Все курьеры
+                      </label>
+                    );
+                  }
                   return (
                     <label key={c.value} style={s.dropdownItem}>
                       <input
@@ -2057,16 +2065,27 @@ export function DashboardClient({ user }: { user: User }) {
                   <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#fff", borderRadius: "16px 16px 0 0", padding: "16px 16px 24px", zIndex: 1000, display: "flex", flexDirection: "column", gap: 4, maxHeight: "60vh", overflowY: "auto", boxShadow: "0 -8px 24px rgba(0,0,0,0.15)" }}>
                     <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Курьеры</div>
                     {courierOptions.map(c => {
-                      if (c.value === "ALL") return null;
+                      if (c.value === "ALL") {
+                        return (
+                          <label key="ALL" style={{ ...s.dropdownItem, fontWeight: 700, borderBottom: "1px solid #f0efe9", paddingBottom: 8, marginBottom: 4 }}
+                            onClick={() => setSelectedCouriers([])}>
+                            <input type="checkbox" checked={selectedCouriers.length === 0} readOnly style={{ accentColor: "#4a7aff", width: 16, height: 16 }} />
+                            Все курьеры
+                          </label>
+                        );
+                      }
                       return (
-                        <label key={c.value} style={{ ...s.dropdownItem, padding: "12px 8px", fontSize: 15 }}>
-                          <input type="checkbox" checked={selectedCouriers.includes(String(c.value))}
+                        <label key={c.value} style={s.dropdownItem}>
+                          <input
+                            type="checkbox"
+                            checked={selectedCouriers.includes(String(c.value))}
                             onChange={(e) => {
                               const val = String(c.value);
                               if (e.target.checked) setSelectedCouriers([...selectedCouriers, val]);
                               else setSelectedCouriers(selectedCouriers.filter(id => id !== val));
                             }}
-                            style={{ accentColor: "#4a7aff", width: 18, height: 18, flexShrink: 0 }} />
+                            style={{ accentColor: "#4a7aff", width: 16, height: 16, flexShrink: 0 }}
+                          />
                           <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{c.label}</span>
                         </label>
                       );
