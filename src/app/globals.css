@@ -52,3 +52,8 @@
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
 }
+/* Выпадашка адресных подсказок Яндекса — поверх всего */
+.ymaps-2-1-79-popup,
+ymaps[data-suggest="true"] {
+  z-index: 99999 !important;
+}
