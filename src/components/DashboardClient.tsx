@@ -758,104 +758,6 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
     if (placemarks.length > 0) clusterer.add(placemarks as any);
   }, [filteredForMap, selectedId, previewGeo, currentZoom, selectedSlots, isBulkMode, bulkSelectedIds, showTime, showCourierNames, isMobile, mapReady, routeTabMode]);
 
-  // 🔥 ЕДИНЫЙ ЭФФЕКТ ДЛЯ РАСЧЕТА ВРЕМЕНИ И ОТРИСОВКИ МАРШРУТА
-  useEffect(() => {
-    if (!isBulkMode || routeTabMode !== "new" || (isMobile && routeTab !== "list") || bulkSelectedIds.length === 0) {
-      setRouteLegs([]); setRouteTotals(null); setDepartureAdvice(null); return;
-    }
-
-    const ymapsAny = window.ymaps as any;
-    if (!ymapsAny || !ymapsAny.multiRouter || !ymapRef.current) return;
-
-    const validOrders = bulkSelectedIds
-      .map(id => orders.find(o => o.id === id))
-      .filter(o => o && o.lat && o.lng) as DashboardOrder[];
-
-    if (validOrders.length === 0) return;
-
-    const points = [[STORE_LAT, STORE_LNG], ...validOrders.map(o => [o.lat!, o.lng!])];
-    points.push([STORE_LAT, STORE_LNG]);
-
-    setIsCalculatingRoute(true); setDepartureAdvice(null);
-    let multiRoute: any = null;
-
-    const parseYandexTimeMs = (text: string) => {
-      if (!text || text === "—") return 0;
-      let ms = 0;
-      const hMatch = text.match(/(\d+)\s*ч/);
-      if (hMatch) ms += parseInt(hMatch[1], 10) * 3600000;
-      const mMatch = text.match(/(\d+)\s*мин/);
-      if (mMatch) ms += parseInt(mMatch[1], 10) * 60000;
-      return routeType === "auto" ? ms + (12 * 60 * 1000) : ms + (4 * 60 * 1000);
-    };
-
-    const timer = setTimeout(() => {
-      multiRoute = new ymapsAny.multiRouter.MultiRoute({
-        referencePoints: points, 
-        params: { routingMode: routeType === 'mt' ? 'masstransit' : 'auto' }
-      }, {
-        wayPointVisible: false,
-        viaPointVisible: false,
-        boundsAutoApply: false,
-        
-        // 🔥 СЕКРЕТ ЗДЕСЬ: Линия есть всегда, но мы делаем ее невидимой, если showRouteLines = false
-        routeActiveStrokeWidth: showRouteLines ? 5 : 0,
-        routeActiveStrokeColor: showRouteLines ? '#4a7aff' : 'transparent',
-        routeActiveStrokeOpacity: showRouteLines ? 1 : 0
-      });
-
-      // 🔥 ВАЖНО: Добавляем на карту ВСЕГДА! Иначе Яндекс не начнет считать время.
-      ymapRef.current.geoObjects.add(multiRoute);
-
-      multiRoute.model.events.add('requestsuccess', () => {
-        const activeRoute = multiRoute.getActiveRoute();
-        if (!activeRoute) { setIsCalculatingRoute(false); return; }
-
-        const cleanHtml = (str: string) => str ? str.replace(/&#160;/g, " ") : "";
-        const routeDuration = activeRoute.properties.get("durationInTraffic") || activeRoute.properties.get("duration");
-
-        setRouteTotals({
-          time: cleanHtml(routeDuration?.text || "—"),
-          dist: cleanHtml(activeRoute.properties.get("distance")?.text || "—"),
-        });
-
-        const legsArr: string[] = [];
-        const legDurationsMin: number[] = [];
-
-        activeRoute.getPaths().each((path: any) => {
-          const legDuration = path.properties.get("durationInTraffic") || path.properties.get("duration");
-          const textStr = cleanHtml(legDuration?.text || "—");
-          legsArr.push(textStr);
-          legDurationsMin.push(parseYandexTimeMs(textStr) / 60000);
-        });
-
-        const adviceData = getOptimalDeparture(validOrders, legDurationsMin);
-
-        if (adviceData) {
-          const extId = adviceData.anchorOrder.externalId ?? adviceData.anchorOrder.crmId;
-          if (adviceData.isShifted) {
-            setDepartureAdvice(`Выехать до ${adviceData.departureTime} — оптимально к началу слота ${adviceData.anchorIndex + 1}-го заказа (зак. ${extId})`);
-          } else {
-            setDepartureAdvice(`Выехать до ${adviceData.departureTime} — первый заказ к ${adviceData.anchorOrder.slotFrom} (зак. ${extId})`);
-          }
-        } else {
-          setDepartureAdvice("Слоты не строгие — выезд в любое время");
-        }
-
-        setRouteLegs(legsArr);
-        setIsCalculatingRoute(false);
-      });
-    }, 800);
-
-    return () => {
-      clearTimeout(timer);
-      if (multiRoute && ymapRef.current) {
-        ymapRef.current.geoObjects.remove(multiRoute);
-        multiRoute.destroy();
-      }
-    };
-  }, [bulkSelectedIds, routeType, returnToBase, routeTab, isBulkMode, isMobile, showRouteLines]);
-
   useEffect(() => {
     if (!mapReady || !couriersGeoObjectsRef.current) return;
     const coll = couriersGeoObjectsRef.current;
@@ -995,6 +897,58 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
     return bulkSelectedIds.map(id => orders.find(o => o.id === id)).filter(Boolean) as DashboardOrder[];
   }, [bulkSelectedIds, orders]);
 
+// =================================================================
+  // 1. ЭФФЕКТ ТОЛЬКО ДЛЯ ОТРИСОВКИ ЛИНИИ (Реагирует на кнопку 🗺️)
+  // =================================================================
+  useEffect(() => {
+    if (!mapReady || typeof window === "undefined" || !(window as any).ymaps) return;
+    const map = ymapRef.current;
+    const ymaps = (window as any).ymaps;
+    if (!map || !ymaps.multiRouter) return;
+
+    // Очищаем старую линию при каждом чихе
+    if (multiRouteRef.current) {
+      map.geoObjects.remove(multiRouteRef.current);
+      multiRouteRef.current = null;
+    }
+
+    // 🔥 Если кнопка выключена — обрываем работу, линия не появится
+    if (!showRouteLines) return;
+
+    if (isBulkMode && routeTabMode === "new" && bulkSelectedIds.length > 0) {
+      const points = [];
+      points.push([STORE_LAT, STORE_LNG]); // База
+
+      bulkSelectedIds.forEach(id => {
+        const order = orders.find(o => o.id === id);
+        if (order && order.lat && order.lng) {
+          points.push([order.lat, order.lng]);
+        }
+      });
+
+      if (points.length > 1) {
+        const multiRoute = new ymaps.multiRouter.MultiRoute({
+          referencePoints: points,
+          params: { routingMode: routeType === 'mt' ? 'masstransit' : 'auto' }
+        }, {
+          wayPointVisible: false,
+          viaPointVisible: false,
+          boundsAutoApply: false,
+          routeActiveStrokeWidth: 5,
+          routeActiveStrokeColor: '#4a7aff',
+          routeStrokeStyle: 'solid',
+          routeActivePedestrianSegmentStrokeStyle: 'solid'
+        });
+
+        map.geoObjects.add(multiRoute);
+        multiRouteRef.current = multiRoute;
+      }
+    }
+  }, [bulkSelectedIds, isBulkMode, routeTabMode, mapReady, orders, showRouteLines, routeType]);
+
+  // =================================================================
+  // 2. ЭФФЕКТ ТОЛЬКО ДЛЯ РАСЧЕТА ВРЕМЕНИ И ETA (В фоне)
+  // =================================================================
   useEffect(() => {
     if (!isBulkMode || routeTabMode !== "new" || (isMobile && routeTab !== "list") || bulkSelectedIds.length === 0) {
       setRouteLegs([]); setRouteTotals(null); setDepartureAdvice(null); return;
@@ -1010,10 +964,11 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
     if (validOrders.length === 0) return;
 
     const points = [[STORE_LAT, STORE_LNG], ...validOrders.map(o => [o.lat!, o.lng!])];
-    points.push([STORE_LAT, STORE_LNG]); // 🔥 всегда, чтобы знать время возврата
+    points.push([STORE_LAT, STORE_LNG]); 
 
-    setIsCalculatingRoute(true); setDepartureAdvice(null);
-    let multiRoute: any = null;
+    setIsCalculatingRoute(true); 
+    setDepartureAdvice(null);
+    let calcRoute: any = null;
 
     const parseYandexTimeMs = (text: string) => {
       if (!text || text === "—") return 0;
@@ -1022,17 +977,18 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
       if (hMatch) ms += parseInt(hMatch[1], 10) * 3600000;
       const mMatch = text.match(/(\d+)\s*мин/);
       if (mMatch) ms += parseInt(mMatch[1], 10) * 60000;
-      // 🔥 Теперь пешему прибавляем 1 минуту на точку
       return routeType === "auto" ? ms + (12 * 60 * 1000) : ms + (4 * 60 * 1000);
     };
 
     const timer = setTimeout(() => {
-      multiRoute = new ymapsAny.multiRouter.MultiRoute({
-        referencePoints: points, params: { routingMode: routeType === 'mt' ? 'masstransit' : 'auto' }
+      // Строим маршрут чисто для математики, НА КАРТУ НЕ ДОБАВЛЯЕМ
+      calcRoute = new ymapsAny.multiRouter.MultiRoute({
+        referencePoints: points, 
+        params: { routingMode: routeType === 'mt' ? 'masstransit' : 'auto' }
       }, { boundsAutoApply: false });
 
-      multiRoute.model.events.add('requestsuccess', () => {
-        const activeRoute = multiRoute.getActiveRoute();
+      calcRoute.model.events.add('requestsuccess', () => {
+        const activeRoute = calcRoute.getActiveRoute();
         if (!activeRoute) { setIsCalculatingRoute(false); return; }
 
         const cleanHtml = (str: string) => str ? str.replace(/&#160;/g, " ") : "";
@@ -1071,9 +1027,12 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
       });
     }, 800);
 
-    return () => { clearTimeout(timer); if (multiRoute) multiRoute.destroy(); };
+    return () => {
+      clearTimeout(timer);
+      if (calcRoute) calcRoute.destroy();
+    };
   }, [bulkSelectedIds, routeType, returnToBase, routeTab, isBulkMode, isMobile]);
-
+  
   const calculatedEtasData = useMemo(() => {
     const etas: Record<string, { type: string, timeStr: string, color: string }> = {};
     
