@@ -1994,16 +1994,6 @@ fontSize: 11, fontWeight: 700, cursor: "pointer",
         </button>
       </div>
 
-      {isMobile && (
-        <div style={sm.mobileSlotsWrap}>
-          <SlotBtn label="Все" active={selectedSlots.length === 0} color="#4a7aff" onClick={() => toggleSlot("all")} />
-          {SLOTS.map(sl => (
-            <SlotBtn key={sl.label} label={sl.label} active={selectedSlots.includes(sl.label)} color={sl.color} onClick={() => toggleSlot(sl.label)} />
-          ))}
-          <SlotBtn label="Другие" active={selectedSlots.includes("Другие")} color="#6b6860" onClick={() => toggleSlot("Другие")} />
-        </div>
-      )}
-
       {!isMobile && invalid.length > 0 && !dismissedInvalid && (
         <div style={s.invalidBanner}>
           <span style={{ fontSize: 14, flexShrink: 0 }}>⚠</span>
@@ -2022,20 +2012,97 @@ fontSize: 11, fontWeight: 700, cursor: "pointer",
         </div>
       )}
 
-      {isMobile && !isBulkMode && (
-        <div style={{ display: "flex", padding: "6px 10px", background: "#f5f4f0", gap: 6, flexShrink: 0, borderBottom: "1px solid #e8e6df" }}>
-          <ViewToggleBtn active={mobileView === "map"} onClick={() => setMobileView("map")}>🗺️ Карта</ViewToggleBtn>
-          <ViewToggleBtn active={mobileView === "split"} onClick={() => setMobileView("split")}>Вместе</ViewToggleBtn>
-          <ViewToggleBtn active={mobileView === "panels"} onClick={() => setMobileView("panels")}>📋 Список</ViewToggleBtn>
-        </div>
-      )}
-      {isMobile && isBulkMode && (
-        <div style={{ display: "flex", padding: "8px 10px", background: "#fff", gap: 8, flexShrink: 0, borderBottom: "1px solid #e8e6df", zIndex: 10 }}>
-          <button onClick={() => setRouteTab("map")} style={{ ...s.routeTabBtn, flex: 1, background: routeTab === "map" ? "#eef3ff" : "#fff", color: routeTab === "map" ? "#4a7aff" : "#6b6860" }}>📍 Точки на карте</button>
-          <button onClick={() => setRouteTab("list")} style={{ ...s.routeTabBtn, flex: 1, background: routeTab === "list" ? "#eef3ff" : "#fff", color: routeTab === "list" ? "#4a7aff" : "#6b6860" }}>📋 Управление</button>
-        </div>
-      )}
+      
 
+{isMobile && (
+        <>
+          {/* Ряд 2: фильтры + маршруты + слоты */}
+          <div className="hide-scrollbar" style={{ display: "flex", gap: 6, padding: "6px 10px", background: "#fff", borderBottom: "1px solid #e8e6df", overflowX: "auto", flexShrink: 0, alignItems: "center" }}>
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              <button onClick={() => setIsStatusMenuOpen(!isStatusMenuOpen)}
+                style={{ ...topbarBtnStyle, height: 30, fontSize: 12, background: selectedStatuses.length > 0 ? "#eef3ff" : "#fff", borderColor: selectedStatuses.length > 0 ? "#4a7aff" : "#e8e6df" }}>
+                <span style={{ color: selectedStatuses.length > 0 ? "#4a7aff" : "inherit" }}>Статусы: {selectedStatuses.length === 0 ? "Все" : `(${selectedStatuses.length})`}</span>
+                <span style={{ fontSize: 10 }}>▼</span>
+              </button>
+              {isStatusMenuOpen && (
+                <>
+                  <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setIsStatusMenuOpen(false)} />
+                  <div style={{ ...s.dropdownMenu, zIndex: 1000 }}>
+                    {["NEW", "ASSIGNED", "IN_DELIVERY", "DELIVERED"].map(st => (
+                      <label key={st} style={s.dropdownItem}>
+                        <input type="checkbox" checked={selectedStatuses.includes(st)}
+                          onChange={(e) => {
+                            if (e.target.checked) setSelectedStatuses([...selectedStatuses, st]);
+                            else setSelectedStatuses(selectedStatuses.filter(item => item !== st));
+                          }}
+                          style={{ accentColor: "#4a7aff", width: 16, height: 16 }} />
+                        {st === "NEW" ? "Новые" : st === "ASSIGNED" ? "Назначены" : st === "IN_DELIVERY" ? "В пути" : "Доставлены"}
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              <button onClick={() => setIsCourierMenuOpen(!isCourierMenuOpen)}
+                style={{ ...topbarBtnStyle, height: 30, fontSize: 12, background: selectedCouriers.length > 0 ? "#eef3ff" : "#fff", borderColor: selectedCouriers.length > 0 ? "#4a7aff" : "#e8e6df" }}>
+                <span style={{ color: selectedCouriers.length > 0 ? "#4a7aff" : "inherit" }}>Курьеры: {selectedCouriers.length === 0 ? "Все" : `(${selectedCouriers.length})`}</span>
+                <span style={{ fontSize: 10 }}>▼</span>
+              </button>
+              {isCourierMenuOpen && (
+                <>
+                  <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setIsCourierMenuOpen(false)} />
+                  <div style={{ ...s.dropdownMenu, minWidth: 220, zIndex: 1000 }}>
+                    {courierOptions.map(c => {
+                      if (c.value === "ALL") return null;
+                      return (
+                        <label key={c.value} style={s.dropdownItem}>
+                          <input type="checkbox" checked={selectedCouriers.includes(String(c.value))}
+                            onChange={(e) => {
+                              const val = String(c.value);
+                              if (e.target.checked) setSelectedCouriers([...selectedCouriers, val]);
+                              else setSelectedCouriers(selectedCouriers.filter(id => id !== val));
+                            }}
+                            style={{ accentColor: "#4a7aff", width: 16, height: 16, flexShrink: 0 }} />
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{c.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <button
+              onClick={() => { setIsBulkMode(!isBulkMode); setRouteTab("map"); setBulkSelectedIds([]); setSelectedId(null); setIsDetailVisible(false); setRouteTabMode("new"); setEditingRouteId(null); setBulkCourier(""); setRouteType("mt"); }}
+              style={{ ...topbarBtnStyle, height: 30, fontSize: 12, flexShrink: 0, background: isBulkMode ? "#1a1a18" : "#fff", color: isBulkMode ? "#fff" : "#1a1a18", borderColor: isBulkMode ? "#1a1a18" : "#e8e6df" }}
+            >
+              {isBulkMode ? "✕ Маршруты" : "📍 Маршруты"}
+            </button>
+
+            <div style={{ width: 1, height: 20, background: "#e8e6df", flexShrink: 0 }} />
+
+            <SlotBtn label="Все" active={selectedSlots.length === 0} color="#4a7aff" onClick={() => toggleSlot("all")} />
+            {SLOTS.map(sl => <SlotBtn key={sl.label} label={sl.label} active={selectedSlots.includes(sl.label)} color={sl.color} onClick={() => toggleSlot(sl.label)} />)}
+            <SlotBtn label="Другие" active={selectedSlots.includes("Другие")} color="#6b6860" onClick={() => toggleSlot("Другие")} />
+          </div>
+
+          {/* Ряд 3: переключатель вида или табы маршрутов */}
+          {!isBulkMode ? (
+            <div style={{ display: "flex", padding: "6px 10px", background: "#f5f4f0", gap: 6, flexShrink: 0, borderBottom: "1px solid #e8e6df" }}>
+              <ViewToggleBtn active={mobileView === "map"} onClick={() => setMobileView("map")}>🗺️ Карта</ViewToggleBtn>
+              <ViewToggleBtn active={mobileView === "split"} onClick={() => setMobileView("split")}>Вместе</ViewToggleBtn>
+              <ViewToggleBtn active={mobileView === "panels"} onClick={() => setMobileView("panels")}>📋 Список</ViewToggleBtn>
+            </div>
+          ) : (
+            <div style={{ display: "flex", padding: "8px 10px", background: "#fff", gap: 8, flexShrink: 0, borderBottom: "1px solid #e8e6df", zIndex: 10 }}>
+              <button onClick={() => setRouteTab("map")} style={{ ...s.routeTabBtn, flex: 1, background: routeTab === "map" ? "#eef3ff" : "#fff", color: routeTab === "map" ? "#4a7aff" : "#6b6860" }}>📍 Точки на карте</button>
+              <button onClick={() => setRouteTab("list")} style={{ ...s.routeTabBtn, flex: 1, background: routeTab === "list" ? "#eef3ff" : "#fff", color: routeTab === "list" ? "#4a7aff" : "#6b6860" }}>📋 Управление</button>
+            </div>
+          )}
+        </>
+      )}
       <div style={isMobile ? sm.body : s.body}>
         {!isMobile && (
           <div style={{ display: 'flex', width: '100%', height: '100%' }}>
@@ -2043,39 +2110,20 @@ fontSize: 11, fontWeight: 700, cursor: "pointer",
               <div style={s.leftPanel}>
                 {isListVisible && (
                   <div style={{ ...s.cardsSection, flex: (isDetailVisible && selected) ? "0 0 50%" : 1, borderBottom: (isDetailVisible && selected) ? "1px solid #e8e6df" : "none" }}>
-
                     <div style={s.sectionHeader}>
                       <span style={s.sectionTitle}>Заказы</span>
                       <span style={s.countBadge}>{filtered.length}</span>
-
                       <div style={{ flex: 1, position: "relative", margin: "0 8px" }}>
-                        <input
-                          type="text"
-                          placeholder="Поиск..."
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          style={{
-                            width: "100%", padding: "4px 20px 4px 24px", borderRadius: 6,
-                            border: "1px solid #e8e6df", fontSize: 11, outline: "none",
-                            background: "#fafaf8", boxSizing: "border-box", transition: "background 0.2s"
-                          }}
-                          onFocus={(e) => e.target.style.background = "#fff"}
-                          onBlur={(e) => e.target.style.background = "#fafaf8"}
-                        />
+                        <input type="text" placeholder="Поиск..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                          style={{ width: "100%", padding: "4px 20px 4px 24px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 11, outline: "none", background: "#fafaf8", boxSizing: "border-box", transition: "background 0.2s" }}
+                          onFocus={(e) => e.target.style.background = "#fff"} onBlur={(e) => e.target.style.background = "#fafaf8"} />
                         <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", fontSize: 10, color: "#a8a49c", pointerEvents: "none" }}>🔍</span>
                         {searchQuery && (
-                          <button
-                            onClick={() => setSearchQuery("")}
-                            style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#a8a49c", cursor: "pointer", fontSize: 12, padding: 0, display: "flex", alignItems: "center" }}
-                          >
-                            ✕
-                          </button>
+                          <button onClick={() => setSearchQuery("")} style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#a8a49c", cursor: "pointer", fontSize: 12, padding: 0, display: "flex", alignItems: "center" }}>✕</button>
                         )}
                       </div>
-
                       <button onClick={() => setIsListVisible(false)} style={s.panelToggleArrow}>◀</button>
                     </div>
-
                     <div style={s.cardsList}>
                       {loading ? <div style={s.empty}>Загрузка...</div> : sidePanelOrders.length === 0 ? <div style={s.empty}>Заказов нет</div> : sidePanelOrders.map(o =>
                         <OrderCard key={o.id} order={o} selected={selectedId === o.id} isBulkMode={isBulkMode} isBulkSelected={bulkSelectedIds.includes(o.id)} onSelect={() => {
@@ -2093,9 +2141,7 @@ fontSize: 11, fontWeight: 700, cursor: "pointer",
                 )}
               </div>
             )}
-
             <div style={{ flex: 1, position: 'relative', display: "flex", flexDirection: "row", minWidth: 0 }}>
-
               {isBulkMode && (
                 <div style={{ width: 600, flexShrink: 0, background: "#f5f4f0", borderRight: "1px solid #e8e6df", zIndex: 10, display: "flex", flexDirection: "column" }}>
                   <div style={{ flex: 1, overflowY: "auto", overflowX: "auto", padding: 16 }}>
@@ -2103,7 +2149,6 @@ fontSize: 11, fontWeight: 700, cursor: "pointer",
                   </div>
                 </div>
               )}
-
               <div style={{ flex: 1, position: "relative", display: "flex", flexDirection: "column", minWidth: 0 }}>
                 <div ref={mapRef} style={{ flex: 1, width: '100%' }} />
                 {!isBulkMode && (
@@ -2113,25 +2158,20 @@ fontSize: 11, fontWeight: 700, cursor: "pointer",
                   </div>
                 )}
               </div>
-
             </div>
           </div>
         )}
 
         {isMobile && (
           <>
-            <div
-              ref={mapRef}
-              style={{
-                ...sm.map,
-                visibility: ((mobileView === "panels" && !isBulkMode) || (isBulkMode && routeTab === "list")) ? "hidden" : "visible",
-                position: ((mobileView === "panels" && !isBulkMode) || (isBulkMode && routeTab === "list")) ? "absolute" : "relative",
-                pointerEvents: ((mobileView === "panels" && !isBulkMode) || (isBulkMode && routeTab === "list")) ? "none" : "auto",
-                flex: (mobileView === "map" || (isBulkMode && routeTab === "map")) ? "1 1 auto" : "0 0 45%",
-                top: 0, left: 0,
-              }}
-            />
-
+            <div ref={mapRef} style={{
+              ...sm.map,
+              visibility: ((mobileView === "panels" && !isBulkMode) || (isBulkMode && routeTab === "list")) ? "hidden" : "visible",
+              position: ((mobileView === "panels" && !isBulkMode) || (isBulkMode && routeTab === "list")) ? "absolute" : "relative",
+              pointerEvents: ((mobileView === "panels" && !isBulkMode) || (isBulkMode && routeTab === "list")) ? "none" : "auto",
+              flex: (mobileView === "map" || (isBulkMode && routeTab === "map")) ? "1 1 auto" : "0 0 45%",
+              top: 0, left: 0,
+            }} />
             {!isBulkMode && (
               <div style={{ ...sm.panelsWrap, display: mobileView === "map" ? "none" : "flex", flex: mobileView === "panels" ? 1 : undefined }}>
                 <div style={sm.cardsSection}>
@@ -2148,7 +2188,6 @@ fontSize: 11, fontWeight: 700, cursor: "pointer",
                 )}
               </div>
             )}
-
             {isBulkMode && routeTab === "list" && (
               <div style={{ flex: 1, background: "#f5f4f0", padding: 16, overflowY: "auto" }}>
                 {renderRouteListPanel()}
@@ -2220,13 +2259,7 @@ fontSize: 11, fontWeight: 700, cursor: "pointer",
 
       {profileOpen && (
         <div style={{ position: "fixed", top: 52, right: 8, zIndex: 200 }}>
-          <ProfilePanel
-            onClose={() => setProfileOpen(false)}
-            onLogout={async () => {
-              await fetch("/api/auth/logout", { method: "POST" });
-              window.location.href = "/login";
-            }}
-          />
+          <ProfilePanel onClose={() => setProfileOpen(false)} onLogout={async () => { await fetch("/api/auth/logout", { method: "POST" }); window.location.href = "/login"; }} />
         </div>
       )}
 
