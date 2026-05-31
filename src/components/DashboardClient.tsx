@@ -758,6 +758,63 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
     if (placemarks.length > 0) clusterer.add(placemarks as any);
   }, [filteredForMap, selectedId, previewGeo, currentZoom, selectedSlots, isBulkMode, bulkSelectedIds, showTime, showCourierNames, isMobile, mapReady, routeTabMode]);
 
+  // 🔥 ЭФФЕКТ ДЛЯ ОТРИСОВКИ ЛИНИЙ МАРШРУТА (multiRouter)
+  useEffect(() => {
+    if (!mapReady || typeof window === "undefined" || !(window as any).ymaps) return;
+    const map = ymapRef.current;
+    const ymaps = (window as any).ymaps;
+    if (!map || !ymaps.multiRouter) return;
+
+    // 1. Очищаем старую линию маршрута при каждом изменении
+    if (multiRouteRef.current) {
+      map.geoObjects.remove(multiRouteRef.current);
+      multiRouteRef.current = null;
+    }
+// 🔥 ДОБАВЛЯЕМ ПРОВЕРКУ showRouteLines
+    if (!showRouteLines) return;
+    // 2. Рисуем новую линию, только если мы собираем маршрут и есть хотя бы 1 выбранный заказ
+    if (isBulkMode && routeTabMode === "new" && bulkSelectedIds.length > 0) {
+      // Собираем координаты по порядку кликов
+      const points = [];
+      
+      // Сначала всегда ставим Базу
+      points.push([STORE_LAT, STORE_LNG]); 
+
+      // Затем перебираем выбранные ID и достаем их координаты
+      bulkSelectedIds.forEach(id => {
+        const order = orders.find(o => o.id === id);
+        if (order && order.lat && order.lng) {
+          points.push([order.lat, order.lng]);
+        }
+      });
+
+      // Если есть куда ехать, создаем маршрут
+      if (points.length > 1) {
+        const multiRoute = new ymaps.multiRouter.MultiRoute({
+          referencePoints: points,
+          params: { routingMode: 'auto' } // можно 'auto' (на авто) или 'masstransit'
+        }, {
+          // 🔥 САМОЕ ВАЖНОЕ: Отключаем стандартные метки (А, В, С...), 
+          // так как у нас уже есть свои красивые плашки
+          wayPointVisible: false,
+          viaPointVisible: false,
+          
+          // Чтобы карта не прыгала и не зумировалась каждый раз, когда ты кликаешь на новую точку
+          boundsAutoApply: false, 
+          
+          // Настройки внешнего вида самой линии
+          routeActiveStrokeWidth: 5,
+          routeActiveStrokeColor: '#4a7aff', // Синий цвет линии
+          routeStrokeStyle: 'solid',
+          routeActivePedestrianSegmentStrokeStyle: 'solid'
+        });
+
+        map.geoObjects.add(multiRoute);
+        multiRouteRef.current = multiRoute;
+      }
+    }
+  }, [bulkSelectedIds, isBulkMode, routeTabMode, mapReady, orders]);
+
   useEffect(() => {
     if (!mapReady || !couriersGeoObjectsRef.current) return;
     const coll = couriersGeoObjectsRef.current;
@@ -897,58 +954,6 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
     return bulkSelectedIds.map(id => orders.find(o => o.id === id)).filter(Boolean) as DashboardOrder[];
   }, [bulkSelectedIds, orders]);
 
-// =================================================================
-  // 1. ЭФФЕКТ ТОЛЬКО ДЛЯ ОТРИСОВКИ ЛИНИИ (Реагирует на кнопку 🗺️)
-  // =================================================================
-  useEffect(() => {
-    if (!mapReady || typeof window === "undefined" || !(window as any).ymaps) return;
-    const map = ymapRef.current;
-    const ymaps = (window as any).ymaps;
-    if (!map || !ymaps.multiRouter) return;
-
-    // Очищаем старую линию при каждом чихе
-    if (multiRouteRef.current) {
-      map.geoObjects.remove(multiRouteRef.current);
-      multiRouteRef.current = null;
-    }
-
-    // 🔥 Если кнопка выключена — обрываем работу, линия не появится
-    if (!showRouteLines) return;
-
-    if (isBulkMode && routeTabMode === "new" && bulkSelectedIds.length > 0) {
-      const points = [];
-      points.push([STORE_LAT, STORE_LNG]); // База
-
-      bulkSelectedIds.forEach(id => {
-        const order = orders.find(o => o.id === id);
-        if (order && order.lat && order.lng) {
-          points.push([order.lat, order.lng]);
-        }
-      });
-
-      if (points.length > 1) {
-        const multiRoute = new ymaps.multiRouter.MultiRoute({
-          referencePoints: points,
-          params: { routingMode: routeType === 'mt' ? 'masstransit' : 'auto' }
-        }, {
-          wayPointVisible: false,
-          viaPointVisible: false,
-          boundsAutoApply: false,
-          routeActiveStrokeWidth: 5,
-          routeActiveStrokeColor: '#4a7aff',
-          routeStrokeStyle: 'solid',
-          routeActivePedestrianSegmentStrokeStyle: 'solid'
-        });
-
-        map.geoObjects.add(multiRoute);
-        multiRouteRef.current = multiRoute;
-      }
-    }
-  }, [bulkSelectedIds, isBulkMode, routeTabMode, mapReady, orders, showRouteLines, routeType]);
-
-  // =================================================================
-  // 2. ЭФФЕКТ ТОЛЬКО ДЛЯ РАСЧЕТА ВРЕМЕНИ И ETA (В фоне)
-  // =================================================================
   useEffect(() => {
     if (!isBulkMode || routeTabMode !== "new" || (isMobile && routeTab !== "list") || bulkSelectedIds.length === 0) {
       setRouteLegs([]); setRouteTotals(null); setDepartureAdvice(null); return;
@@ -964,11 +969,10 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
     if (validOrders.length === 0) return;
 
     const points = [[STORE_LAT, STORE_LNG], ...validOrders.map(o => [o.lat!, o.lng!])];
-    points.push([STORE_LAT, STORE_LNG]); 
+    points.push([STORE_LAT, STORE_LNG]); // 🔥 всегда, чтобы знать время возврата
 
-    setIsCalculatingRoute(true); 
-    setDepartureAdvice(null);
-    let calcRoute: any = null;
+    setIsCalculatingRoute(true); setDepartureAdvice(null);
+    let multiRoute: any = null;
 
     const parseYandexTimeMs = (text: string) => {
       if (!text || text === "—") return 0;
@@ -977,18 +981,17 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
       if (hMatch) ms += parseInt(hMatch[1], 10) * 3600000;
       const mMatch = text.match(/(\d+)\s*мин/);
       if (mMatch) ms += parseInt(mMatch[1], 10) * 60000;
+      // 🔥 Теперь пешему прибавляем 1 минуту на точку
       return routeType === "auto" ? ms + (12 * 60 * 1000) : ms + (4 * 60 * 1000);
     };
 
     const timer = setTimeout(() => {
-      // Строим маршрут чисто для математики, НА КАРТУ НЕ ДОБАВЛЯЕМ
-      calcRoute = new ymapsAny.multiRouter.MultiRoute({
-        referencePoints: points, 
-        params: { routingMode: routeType === 'mt' ? 'masstransit' : 'auto' }
+      multiRoute = new ymapsAny.multiRouter.MultiRoute({
+        referencePoints: points, params: { routingMode: routeType === 'mt' ? 'masstransit' : 'auto' }
       }, { boundsAutoApply: false });
 
-      calcRoute.model.events.add('requestsuccess', () => {
-        const activeRoute = calcRoute.getActiveRoute();
+      multiRoute.model.events.add('requestsuccess', () => {
+        const activeRoute = multiRoute.getActiveRoute();
         if (!activeRoute) { setIsCalculatingRoute(false); return; }
 
         const cleanHtml = (str: string) => str ? str.replace(/&#160;/g, " ") : "";
@@ -1027,24 +1030,12 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
       });
     }, 800);
 
-    return () => {
-      clearTimeout(timer);
-      if (calcRoute) calcRoute.destroy();
-    };
+    return () => { clearTimeout(timer); if (multiRoute) multiRoute.destroy(); };
   }, [bulkSelectedIds, routeType, returnToBase, routeTab, isBulkMode, isMobile]);
-  
+
   const calculatedEtasData = useMemo(() => {
     const etas: Record<string, { type: string, timeStr: string, color: string }> = {};
-    
-    // 🔥 БЕРЕМ ИЗ БД: Если редактируем маршрут, тянем время возврата оттуда по умолчанию
     let baseReturnTime = "—";
-    if (editingRouteId) {
-      const existing = existingRoutes.find(r => r.id === editingRouteId);
-      if (existing && existing.estimatedReturnTime) {
-        baseReturnTime = existing.estimatedReturnTime;
-      }
-    }
-
     if (selectedRouteOrders.length === 0 || routeLegs.length === 0) return { etas, baseReturnTime };
 
     const parseYandexTimeMs = (text: string) => {
@@ -1434,110 +1425,183 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
             </label>
           </div>
 
-          {/* 🔥 БЛОК МАРШРУТА И ВРЕМЕНИ (Показывается всегда, когда есть точки) */}
-          {selectedRouteOrders.length > 0 && (
+          {routeTotals && (
             <div style={{ fontSize: 13, color: "#1a1a18", background: "#eef3ff", padding: "12px 14px", borderRadius: 8, marginBottom: 16, fontWeight: 600 }}>
-              
-              {/* Время выезда (показываем ВСЕГДА) */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: routeTotals || isCalculatingRoute ? 12 : 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 12, color: "#4a7aff", fontWeight: 700 }}>💡 Выезд:</span>
-                  
-                  {/* НАШ ИНПУТ */}
-                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                    <div style={{ position: "relative", width: 86, flexShrink: 0 }}>
-                      <input
-                        type="text"
-                        placeholder="--:--"
-                        maxLength={5}
-                        value={manualDepartureTime || ""}
-                        onFocus={() => setShowTimeDropdown(false)} 
-                        onChange={(e) => {
-                          let val = e.target.value.replace(/[^\d:]/g, "");
-                          const isDeleting = (e.nativeEvent as InputEvent).inputType === "deleteContentBackward";
-                          if (val.length === 2 && !val.includes(":") && !isDeleting) val += ":";
-                          setManualDepartureTime(val);
-                        }}
-                        style={{
-                          padding: "4px 24px 4px 6px", borderRadius: 6, border: "1px solid #4a7aff",
-                          outline: "none", fontWeight: 700, fontFamily: "monospace",
-                          fontSize: 13, color: "#4a7aff", background: "#fff", width: "100%"
-                        }}
-                      />
-                      <div 
-                        onClick={() => setShowTimeDropdown(!showTimeDropdown)}
-                        style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 24, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#4a7aff", fontSize: 10 }}
-                      >▼</div>
+              {isCalculatingRoute
+                ? "⏳ Считаем время в пути..."
+                : `🏁 Итого: ~${routeTotals.time} (${routeTotals.dist})`}
 
-                      {showTimeDropdown && (
-                        <>
-                          <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 99 }} onClick={() => setShowTimeDropdown(false)} />
-                          <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: "#fff", border: "1px solid #4a7aff", borderRadius: 6, zIndex: 100, maxHeight: 180, overflowY: "auto", boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>
-                            {(() => {
-                              const times = [];
-                              const calcTime = departureAdvice?.match(/(\d{2}:\d{2})/)?.[0];
-                              if (calcTime) {
-                                const [h, m] = calcTime.split(':').map(Number);
-                                const centerMins = h * 60 + m;
-                                const startMins = Math.floor((centerMins - 60) / 10) * 10;
-                                const endMins = Math.ceil((centerMins + 60) / 10) * 10;
-                                for (let mins = Math.max(0, startMins); mins <= Math.min(1430, endMins); mins += 10) {
-                                  const hh = Math.floor(mins / 60); const mm = mins % 60;
-                                  times.push(`${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`);
+              {!isCalculatingRoute && departureAdvice && (
+                <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 5 }}>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 12, color: "#4a7aff", fontWeight: 700 }}>💡 Выезд:</span>
+
+
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      
+                      {/* 🔥 КАСТОМНЫЙ ГИБРИД: Текстовый ввод + Ручной Dropdown */}
+                      <div style={{ position: "relative", width: 86, flexShrink: 0 }}>
+                        <input
+                          type="text"
+                          placeholder="--:--"
+                          maxLength={5}
+                          value={manualDepartureTime || ""}
+                          // Скрываем меню, как только диспетчер начинает печатать руками
+                          onFocus={() => setShowTimeDropdown(false)} 
+                          onChange={(e) => {
+                            let val = e.target.value.replace(/[^\d:]/g, "");
+                            const isDeleting = (e.nativeEvent as InputEvent).inputType === "deleteContentBackward";
+                            if (val.length === 2 && !val.includes(":") && !isDeleting) {
+                              val += ":";
+                            }
+                            setManualDepartureTime(val);
+                          }}
+                          style={{
+                            padding: "4px 24px 4px 6px", // Место под кастомную стрелочку
+                            borderRadius: 6, border: "1px solid #4a7aff",
+                            outline: "none", fontWeight: 700, fontFamily: "monospace",
+                            fontSize: 13, color: "#4a7aff", background: "#fff",
+                            width: "100%"
+                          }}
+                        />
+                        
+                        {/* Кастомная область клика для стрелочки */}
+                        <div 
+                          onClick={() => setShowTimeDropdown(!showTimeDropdown)}
+                          style={{ 
+                            position: "absolute", right: 0, top: 0, bottom: 0, width: 24, 
+                            display: "flex", alignItems: "center", justifyContent: "center", 
+                            cursor: "pointer", color: "#4a7aff", fontSize: 10 
+                          }}
+                        >
+                          ▼
+                        </div>
+
+                        {/* Наше меню, которое показывается ТОЛЬКО если showTimeDropdown === true */}
+                        {showTimeDropdown && (
+                          <>
+                            {/* Невидимая подложка на весь экран, чтобы меню закрывалось по клику вне его */}
+                            <div 
+                              style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 99 }} 
+                              onClick={() => setShowTimeDropdown(false)} 
+                            />
+                            
+                            <div style={{ 
+                              position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, 
+                              background: "#fff", border: "1px solid #4a7aff", borderRadius: 6, 
+                              zIndex: 100, maxHeight: 180, overflowY: "auto", 
+                              boxShadow: "0 4px 12px rgba(0,0,0,0.15)" 
+                            }}>
+                              {(() => {
+                                const times = [];
+                                const calcTime = departureAdvice?.match(/(\d{2}:\d{2})/)?.[0];
+
+                                if (calcTime) {
+                                  const [h, m] = calcTime.split(':').map(Number);
+                                  const centerMins = h * 60 + m;
+                                  const startMins = Math.floor((centerMins - 60) / 10) * 10;
+                                  const endMins = Math.ceil((centerMins + 60) / 10) * 10;
+
+                                  for (let mins = Math.max(0, startMins); mins <= Math.min(1430, endMins); mins += 10) {
+                                    const hh = Math.floor(mins / 60);
+                                    const mm = mins % 60;
+                                    times.push(`${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`);
+                                  }
+                                  if (!times.includes(calcTime)) times.push(calcTime);
+                                } else {
+                                  for (let h = 8; h <= 23; h++) {
+                                    for (let m = 0; m < 60; m += 10) {
+                                      times.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+                                    }
+                                  }
                                 }
-                                if (!times.includes(calcTime)) times.push(calcTime);
-                              } else {
-                                for (let h = 8; h <= 23; h++) {
-                                  for (let m = 0; m < 60; m += 10) times.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+
+                                if (manualDepartureTime && manualDepartureTime.length === 5 && !times.includes(manualDepartureTime)) {
+                                  times.push(manualDepartureTime);
                                 }
-                              }
-                              if (manualDepartureTime && manualDepartureTime.length === 5 && !times.includes(manualDepartureTime)) times.push(manualDepartureTime);
-                              times.sort();
-                              return times.map(t => (
-                                <div key={t} onClick={() => { setManualDepartureTime(t); setShowTimeDropdown(false); }} style={{ padding: "6px 10px", cursor: "pointer", fontSize: 13, fontWeight: 700, color: t === manualDepartureTime ? "#4a7aff" : "#1a1a18", background: t === manualDepartureTime ? "#f0f5ff" : "transparent", borderBottom: "1px solid #f0f0f0" }}>{t}</div>
-                              ));
-                            })()}
-                          </div>
-                        </>
-                      )}
+                                times.sort();
+
+                                return times.map(t => (
+                                  <div
+                                    key={t}
+                                    onClick={() => { setManualDepartureTime(t); setShowTimeDropdown(false); }}
+                                    style={{ 
+                                      padding: "6px 10px", cursor: "pointer", fontSize: 13, 
+                                      fontWeight: 700, color: t === manualDepartureTime ? "#4a7aff" : "#1a1a18",
+                                      background: t === manualDepartureTime ? "#f0f5ff" : "transparent",
+                                      borderBottom: "1px solid #f0f0f0", transition: "background 0.1s"
+                                    }}
+                                    onMouseEnter={e => { if (t !== manualDepartureTime) e.currentTarget.style.background = "#f8f9fa"; }}
+                                    onMouseLeave={e => { if (t !== manualDepartureTime) e.currentTarget.style.background = "transparent"; }}
+                                  >
+                                    {t}
+                                  </div>
+                                ));
+                              })()}
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Кнопка сброса / возврата времени из БД */}
+                      {(() => {
+                        const dbTime = (editingRouteId
+                          ? existingRoutes.find((r: any) => r.id === editingRouteId)
+                          : null)?.plannedDepartureTime || "";
+                        if (manualDepartureTime === dbTime) return null;
+                        return (
+                          <button
+                            onClick={() => setManualDepartureTime(dbTime)}
+                            title={dbTime ? `Вернуть: ${dbTime}` : "Очистить"}
+                            style={{
+                              background: "none", border: "none", color: "#a8a49c",
+                              cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1,
+                              opacity: 0.7, transition: "opacity 0.15s", flexShrink: 0
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
+                            onMouseLeave={e => (e.currentTarget.style.opacity = "0.7")}
+                          >
+                            {dbTime ? "↺" : "×"}
+                          </button>
+                        );
+                      })()}
                     </div>
+
+                    {/* Кликабельный чип с расчётным временем */}
                     {(() => {
-                      const dbTime = (editingRouteId ? existingRoutes.find((r: any) => r.id === editingRouteId) : null)?.plannedDepartureTime || "";
-                      if (manualDepartureTime === dbTime) return null;
-                      return <button onClick={() => setManualDepartureTime(dbTime)} title="Очистить" style={{ background: "none", border: "none", color: "#a8a49c", cursor: "pointer", fontSize: 16, padding: "0 2px" }}>{dbTime ? "↺" : "×"}</button>;
+                      const calcTime = departureAdvice.match(/(\d{2}:\d{2})/)?.[0];
+                      if (!calcTime || calcTime === manualDepartureTime) return null;
+                      return (
+                        <button
+                          onClick={() => setManualDepartureTime(calcTime)}
+                          title="Принять расчётное время"
+                          style={{
+                            background: "#f0f5ff", border: "1px dashed #93b4ff",
+                            color: "#4a7aff", padding: "3px 9px", borderRadius: 20,
+                            fontSize: 11, fontWeight: 700, cursor: "pointer",
+                            transition: "all 0.15s"
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.background = "#ddeaff"; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = "#f0f5ff"; }}
+                        >
+                          ≈ {calcTime}
+                        </button>
+                      );
                     })()}
                   </div>
 
-                  {/* Подсказка от Яндекса (Покажется, когда загрузится) */}
-                  {!isCalculatingRoute && departureAdvice && (() => {
-                    const calcTime = departureAdvice.match(/(\d{2}:\d{2})/)?.[0];
-                    if (!calcTime || calcTime === manualDepartureTime) return null;
-                    return (
-                      <button onClick={() => setManualDepartureTime(calcTime)} style={{ background: "#f0f5ff", border: "1px dashed #93b4ff", color: "#4a7aff", padding: "3px 9px", borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                        ≈ {calcTime}
-                      </button>
-                    );
-                  })()}
+                  {/* Описание — без времени, приглушённо */}
+                  <span style={{ fontSize: 11, color: "#6b6860", paddingLeft: 2 }}>
+                    {departureAdvice.replace(/Выехать до \d{2}:\d{2}/, "").replace(/^[\s—–]+/, "").trim()}
+                  </span>
+
                 </div>
+              )}
 
-                {!isCalculatingRoute && departureAdvice && (
-                  <span style={{ fontSize: 11, color: "#6b6860", paddingLeft: 2 }}>{departureAdvice.replace(/Выехать до \d{2}:\d{2}/, "").replace(/^[\s—–]+/, "").trim()}</span>
-                )}
-              </div>
-
-              {/* Данные о длительности от Яндекса */}
-              {(isCalculatingRoute || routeTotals) && (
-                <div style={{ borderTop: "1px solid rgba(74, 122, 255, 0.2)", paddingTop: 8 }}>
-                  {isCalculatingRoute ? "⏳ Считаем время в пути..." : (
-                    <>
-                      <div>🏁 Итого: ~{routeTotals!.time} ({routeTotals!.dist})</div>
-                      {returnToBase && calculatedEtasData.baseReturnTime !== "—" && (
-                        <div style={{ marginTop: 4, fontSize: 11, color: "#a8a49c", fontWeight: 600 }}>
-                          🏠 Расчётное время на базе: {calculatedEtasData.baseReturnTime}
-                        </div>
-                      )}
-                    </>
-                  )}
+              {!isCalculatingRoute && returnToBase && calculatedEtasData.baseReturnTime !== "—" && (
+                <div style={{ marginTop: 6, fontSize: 11, color: "#a8a49c", fontWeight: 600 }}>
+                  🏠 Расчётное время на базе: {calculatedEtasData.baseReturnTime}
                 </div>
               )}
             </div>
@@ -1624,27 +1688,20 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
                   {selectedRouteOrders.map((o: any, index: number) => {
                     const color = slotColor(o);
                     const st = ROUTE_STATUS_MAP[o.status] || ROUTE_STATUS_MAP.NEW;
-                    
-                    // 🔥 БЕРЕМ ИЗ БД: Если Яндекс еще не посчитал, тянем o.eta
-                    const etaInfo = calculatedEtas[o.id] || { 
-                      type: o.status, 
-                      timeStr: o.eta || "—", 
-                      color: o.status === "IN_DELIVERY" ? "#f59e0b" : "#4a7aff" 
-                    };
+                    const etaInfo = calculatedEtas[o.id] || { type: "NEW", timeStr: "—", color: "#4a7aff" };
 
                     const isLateCalc = o.slotTo && etaInfo.timeStr !== "—" && parseTime(etaInfo.timeStr) > parseTime(o.slotTo);
                     const displayColor = isLateCalc ? "#d94040" : etaInfo.color;
 
                     return (
                       <React.Fragment key={o.id}>
-                        {/* 🔥 ПОКАЗЫВАЕМ ВСЕГДА, независимо от того, есть ли routeLegs[index] */}
-                        <div style={{ fontSize: 12, color: displayColor, paddingLeft: 46, paddingBottom: 6, fontWeight: 700 }}>
-                          {etaInfo.type === 'DELIVERED' ? `✅ Доставлен в ${etaInfo.timeStr}` :
-                            etaInfo.type === 'SKIPPED' ? `❌ Отменен / Возврат` :
-                              (isLateCalc ? `⏰ Опаздывает (будет в ${etaInfo.timeStr})` : 
-                                `↓ Ожидается в ${etaInfo.timeStr} ${routeLegs[index] ? `(в пути ${routeLegs[index]})` : ""}`
-                              )}
-                        </div>
+                        {routeLegs[index] && (
+                          <div style={{ fontSize: 12, color: displayColor, paddingLeft: 46, paddingBottom: 6, fontWeight: 700 }}>
+                            {etaInfo.type === 'DELIVERED' ? `✅ Доставлен в ${etaInfo.timeStr}` :
+                              etaInfo.type === 'SKIPPED' ? `❌ Отменен / Возврат` :
+                                (isLateCalc ? `⏰ Опаздывает (будет в ${etaInfo.timeStr})` : `↓ Ожидается в ${etaInfo.timeStr} (в пути ${routeLegs[index]})`)}
+                          </div>
+                        )}
 
                         <div style={{ padding: "10px 12px 10px 16px", background: o.status === "IN_DELIVERY" ? "#fffbeb" : "#fff", border: "1px solid #e8e6df", borderRadius: 8, display: "flex", gap: 12, alignItems: "center", position: "relative", overflow: "hidden" }}>
                           <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: 4, background: color }} />
@@ -1704,14 +1761,11 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
               );
             })()}
 
-            {/* 🔥 ПОКАЗЫВАЕМ ВОЗВРАТ ВСЕГДА, если стоит галочка или уже есть время */}
-            {(returnToBase || calculatedEtasData.baseReturnTime !== "—") && selectedRouteOrders.length > 0 && (
+            {routeLegs[selectedRouteOrders.length] && (
               <div style={{ fontSize: 11, color: "#a8a49c", paddingLeft: 46, paddingTop: 4 }}>
-                ↓ возврат на базу (Прибытие: {calculatedEtasData.baseReturnTime})
-                {routeLegs[selectedRouteOrders.length] && ` — в пути ${routeLegs[selectedRouteOrders.length]}`}
+                ↓ {routeLegs[selectedRouteOrders.length]} возврат на базу (Прибытие: {calculatedEtasData.baseReturnTime})
               </div>
             )}
-            
             {selectedRouteOrders.length === 0 && <div style={{ fontSize: 13, color: "#a8a49c", textAlign: "center", padding: 20 }}>Отметьте точки на карте</div>}
           </div>
         </>
