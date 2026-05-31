@@ -152,7 +152,7 @@ export function DashboardClient({ user }: { user: User }) {
   const multiRouteRef = useRef<any>(null); // Для создания нового маршрута
   // 🔥 ДОБАВЛЯЕМ ЭТО (Для текущих активных маршрутов):
   const activeRoutesRefs = useRef<any[]>([]);  const clickedFromMapRef = useRef(false);
-  const [showRouteLines, setShowRouteLines] = useState(true);
+  const [showRouteLines, setShowRouteLines] = useState(false);
 
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
@@ -280,18 +280,24 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
     const shH = localStorage.getItem("fo_showHomes"); if (shH !== null) setShowHomes(shH === "true");
     const shCN = localStorage.getItem("fo_showCourierNames"); if (shCN !== null) setShowCourierNames(shCN === "true");
     const shT = localStorage.getItem("fo_showTime"); if (shT !== null) setShowTime(shT === "true");
+    const shRL = localStorage.getItem("fo_showRouteLines"); if (shRL !== null) setShowRouteLines(shRL === "true");
+
+    
   }, []);
 
   useEffect(() => { localStorage.setItem("fo_filterDate", filterDate); }, [filterDate]);
   useEffect(() => { localStorage.setItem("fo_tableOpen", String(tableOpen)); }, [tableOpen]);
   useEffect(() => { localStorage.setItem("fo_listVisible", String(isListVisible)); }, [isListVisible]);
   useEffect(() => { localStorage.setItem("fo_detailVisible", String(isDetailVisible)); }, [isDetailVisible]);
+  
 
   // 🔥 СОХРАНЕНИЕ состояния чекбоксов при их изменении
   useEffect(() => { localStorage.setItem("fo_showCouriers", String(showCouriers)); }, [showCouriers]);
   useEffect(() => { localStorage.setItem("fo_showHomes", String(showHomes)); }, [showHomes]);
   useEffect(() => { localStorage.setItem("fo_showCourierNames", String(showCourierNames)); }, [showCourierNames]);
   useEffect(() => { localStorage.setItem("fo_showTime", String(showTime)); }, [showTime]);
+  useEffect(() => { localStorage.setItem("fo_showRouteLines", String(showRouteLines)); }, [showRouteLines]);
+
 
   useEffect(() => {
     if (selectedId) {
@@ -2305,7 +2311,7 @@ function CourierSearchSelect({ value, onChange, options }: { value: string, onCh
 
 const s: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", overflow: "hidden" },
-  topbar: { display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", minHeight: 60, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 100, position: "relative", overflow: "visible", flexWrap: "wrap" },
+  topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 16px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 100, position: "relative", overflowX: "auto", overflowY: "visible", flexWrap: "nowrap" },
   dropdownMenu: { position: "absolute", top: "100%", left: 0, marginTop: 6, background: "#fff", border: "1px solid #e8e6df", borderRadius: 12, padding: 8, zIndex: 100, display: "flex", flexDirection: "column", gap: 2, minWidth: 180, maxHeight: 300, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,0.12)" },
   dropdownItem: { display: "flex", alignItems: "center", gap: 10, fontSize: 13, cursor: "pointer", padding: "6px 8px", borderRadius: 6, transition: "background 0.15s", whiteSpace: "nowrap" },
   logo: { fontSize: 15, fontWeight: 600, color: "#1a1a18", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap", flexShrink: 0, minWidth: "max-content", marginRight: "auto" },
