@@ -6,6 +6,9 @@ import { ProfilePanel } from "./ProfilePanel";
 import { OrderDetail } from "./OrderDetail";
 import { STATUS_OPTIONS, STATUS_LABELS, SLOTS, slotColor } from "@/lib/constants";
 import Link from "next/link";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
+import { ru } from "date-fns/locale";
 
 const STORE_LAT = 55.749511;
 const STORE_LNG = 37.596205;
@@ -20,6 +23,29 @@ interface DbCourier {
   isAuto?: boolean;
   priority?: number; // 🔥 ДОБАВЛЯЕМ ЭТУ СТРОКУ
 }
+// Кастомная кнопка для календаря, чтобы она выглядела как остальные фильтры
+const CustomDateInput = React.forwardRef(({ value, onClick }: any, ref: any) => (
+  <button onClick={onClick} ref={ref} style={{
+    height: 34,
+    padding: "0 12px",
+    borderRadius: 8,
+    border: "1px solid #e8e6df",
+    background: "#fff",
+    fontSize: 13,
+    fontWeight: 600,
+    color: "#1a1a18",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    whiteSpace: "nowrap",
+    boxSizing: "border-box",
+    boxShadow: "0 1px 2px rgba(0,0,0,0.02)"
+  }}>
+    📅 {value}
+  </button>
+));
+CustomDateInput.displayName = "CustomDateInput";
 
 export interface DashboardOrder {
   id: string; crmId: string; externalId?: string | null; status: string;
@@ -368,7 +394,7 @@ export function DashboardClient({ user }: { user: User }) {
       const oDate = o.deliveryDate || (o.crmCreatedAt ? o.crmCreatedAt.split('T')[0] : null);
       if (oDate === filterDate && o.courier) orderCounts[o.courier] = (orderCounts[o.courier] || 0) + 1;
     });
-    
+
     base.sort((a, b) => {
       const aWorks = a.shifts.some(s => s.date === filterDate);
       const bWorks = b.shifts.some(s => s.date === filterDate);
@@ -1374,38 +1400,38 @@ export function DashboardClient({ user }: { user: User }) {
                 style={{ background: "#fafaf8", border: "1px solid #e8e6df", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}
               >
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                {/* Иконка Drag & Drop */}
-                <div style={{ fontSize: 16, color: "#d1d5db", cursor: "grab", marginTop: 2, paddingRight: 4 }} title="Потяните для изменения порядка">
-                  ⠿
-                </div>
-
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    {typeIcon} {r.name}
-                    
-                    {isDraft && <span style={{ background: "#fef3c7", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>Черновик</span>}
-
-                    {/* 🔥 НОВЫЙ БЛОК: СТАТУС ПРИНЯТИЯ (показываем только для не-черновиков) */}
-                    {!isDraft && (
-                      r.isAccepted ? (
-                        <span style={{ background: "#ecfdf5", color: "#10b981", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #a7f3d0", display: "flex", alignItems: "center", gap: 4 }}>
-                          ✅ Принят
-                        </span>
-                      ) : (
-                        <span style={{ background: "#fffbeb", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #fde68a", display: "flex", alignItems: "center", gap: 4 }}>
-                          ❓ Ожидает
-                        </span>
-                      )
-                    )}
-
-                    {delaysCount > 0 && (
-                      <span style={{ background: "#fef2f2", color: "#d94040", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #fecaca" }}>
-                        ⚠️ Опаздывает ({delaysCount})
-                      </span>
-                    )}
-
-                    <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 500 }}>изм. {new Date(r.updatedAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</span>
+                  {/* Иконка Drag & Drop */}
+                  <div style={{ fontSize: 16, color: "#d1d5db", cursor: "grab", marginTop: 2, paddingRight: 4 }} title="Потяните для изменения порядка">
+                    ⠿
                   </div>
+
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      {typeIcon} {r.name}
+
+                      {isDraft && <span style={{ background: "#fef3c7", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>Черновик</span>}
+
+                      {/* 🔥 НОВЫЙ БЛОК: СТАТУС ПРИНЯТИЯ (показываем только для не-черновиков) */}
+                      {!isDraft && (
+                        r.isAccepted ? (
+                          <span style={{ background: "#ecfdf5", color: "#10b981", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #a7f3d0", display: "flex", alignItems: "center", gap: 4 }}>
+                            ✅ Принят
+                          </span>
+                        ) : (
+                          <span style={{ background: "#fffbeb", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #fde68a", display: "flex", alignItems: "center", gap: 4 }}>
+                            ❓ Ожидает
+                          </span>
+                        )
+                      )}
+
+                      {delaysCount > 0 && (
+                        <span style={{ background: "#fef2f2", color: "#d94040", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #fecaca" }}>
+                          ⚠️ Опаздывает ({delaysCount})
+                        </span>
+                      )}
+
+                      <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 500 }}>изм. {new Date(r.updatedAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
                     <div style={{ fontSize: 12, color: "#6b6860", marginTop: 4 }}>
                       Курьер: {courierName} · {deliveredCount}/{r.orders.length} точек
                     </div>
@@ -1860,13 +1886,24 @@ export function DashboardClient({ user }: { user: User }) {
         </button>
         <button onClick={() => router.push('/couriers')} style={topbarBtnStyle}>🚚 Курьеры</button>
 
-        {/* 3. Фильтры (Единый стиль) */}
-        <input
-          type="date"
-          value={filterDate}
-          onChange={e => setFilterDate(e.target.value)}
-          style={{ ...topbarBtnStyle, fontFamily: "inherit" }}
-        />
+        {/* 3. Фильтры (Единый стиль) - Кастомный календарь */}
+        <div style={{ position: "relative", zIndex: 110 }}>
+          <DatePicker
+            locale={ru} // 🇷🇺 Русская локаль (с понедельника)
+            selected={new Date(filterDate)}
+            onChange={(date: Date | null) => {
+              if (date) {
+                // Форматируем обратно в YYYY-MM-DD для фильтрации
+                const y = date.getFullYear();
+                const m = String(date.getMonth() + 1).padStart(2, '0');
+                const d = String(date.getDate()).padStart(2, '0');
+                setFilterDate(`${y}-${m}-${d}`);
+              }
+            }}
+            dateFormat="dd.MM.yyyy" // Привычный русский формат ДД.ММ.ГГГГ
+            customInput={<CustomDateInput />}
+          />
+        </div>
 
         {/* МУЛЬТИ-ФИЛЬТР СТАТУСОВ */}
         <div style={{ position: "relative" }}>
