@@ -32,17 +32,17 @@ for (let i = 6; i <= 23; i++) {
   TIME_OPTIONS.push(`${String(i).padStart(2, '0')}:30`);
 }
 
-function AddressSuggestInput({ value, onChange }: { value: string, onChange: (val: string) => void }) {
+function AddressSuggestInput({ value, onChange, active }: { value: string, onChange: (val: string) => void, active: boolean }) {
   const onChangeRef = useRef(onChange);
   useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
   useEffect(() => {
+    if (!active) return;  // 🔥 запускаем только когда инпут реально на экране
     if (typeof window === "undefined") return;
     const inputId = "profile-home-address";
 
     const init = () => {
       (window as any).ymaps.ready(() => {
-        // 🔥 Добавили setTimeout как в дашборде, чтобы React успел отрендерить input
         setTimeout(() => {
           const input = document.getElementById(inputId);
           if (!input || (input as any).isSuggestInitialized) return;
@@ -61,8 +61,6 @@ function AddressSuggestInput({ value, onChange }: { value: string, onChange: (va
 
     const waitAndInit = () => {
       const interval = setInterval(() => {
-        // 🔥 Убрали жесткую проверку typeof ymaps.SuggestView. 
-        // ymaps.ready() сам дождется нужных модулей.
         if ((window as any).ymaps) {
           clearInterval(interval);
           init();
@@ -72,18 +70,17 @@ function AddressSuggestInput({ value, onChange }: { value: string, onChange: (va
     };
 
     const existingScript = document.querySelector('script[src*="api-maps.yandex.ru"]');
-
     if ((window as any).ymaps || existingScript) {
       waitAndInit();
     } else {
       const script = document.createElement("script");
       const mapsKey = process.env.NEXT_PUBLIC_YANDEX_MAPS_KEY || "";
       const suggestKey = process.env.NEXT_PUBLIC_YANDEX_SUGGEST_KEY || mapsKey;
-      script.src = `https://api-maps.yandex.ru/2.1/?lang=ru_RU&apikey=${mapsKey}&suggest_apikey=${suggestKey}&load=package.full`;
+      script.src = `https://api-maps.yandex.ru/2.1/?lang=ru_RU&apikey=${mapsKey}${suggestKey ? `&suggest_apikey=${suggestKey}` : ''}`;
       script.onload = waitAndInit;
       document.head.appendChild(script);
     }
-  }, []);
+  }, [active]);  // 🔥 зависимость от active — перезапуск при открытии редактирования
 
   return (
     <input 
@@ -95,7 +92,6 @@ function AddressSuggestInput({ value, onChange }: { value: string, onChange: (va
     />
   );
 }
-
 export default function CourierProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -650,8 +646,8 @@ export default function CourierProfilePage() {
                   </div>
                   <div style={{ width: "100%" }}>
                     <div style={{ fontSize: 12, color: "#a8a49c", marginBottom: 4 }}>Домашний адрес (Город, Улица, Дом)</div>
-                    <AddressSuggestInput value={newHomeAddress} onChange={setNewHomeAddress} />
-                  </div>
+                    <AddressSuggestInput value={newHomeAddress} onChange={setNewHomeAddress} active={editingProfile} />
+                    </div>
                 </div>
               )}
             </div>
