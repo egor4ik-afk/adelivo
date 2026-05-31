@@ -894,6 +894,7 @@ export function DashboardClient({ user }: { user: User }) {
             link: o.route.link,
             date: o.route.date,
             isDraft: o.route.isDraft,
+            isAccepted: o.route.isAccepted,
             orders: [],
             courierId: o.courierId,
             createdAt: o.route.createdAt,
@@ -1373,24 +1374,38 @@ export function DashboardClient({ user }: { user: User }) {
                 style={{ background: "#fafaf8", border: "1px solid #e8e6df", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}
               >
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                  {/* Иконка Drag & Drop */}
-                  <div style={{ fontSize: 16, color: "#d1d5db", cursor: "grab", marginTop: 2, paddingRight: 4 }} title="Потяните для изменения порядка">
-                    ⠿
-                  </div>
+                {/* Иконка Drag & Drop */}
+                <div style={{ fontSize: 16, color: "#d1d5db", cursor: "grab", marginTop: 2, paddingRight: 4 }} title="Потяните для изменения порядка">
+                  ⠿
+                </div>
 
-                  <div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      {typeIcon} {r.name}
-                      {isDraft && <span style={{ background: "#fef3c7", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>Черновик</span>}
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    {typeIcon} {r.name}
+                    
+                    {isDraft && <span style={{ background: "#fef3c7", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>Черновик</span>}
 
-                      {delaysCount > 0 && (
-                        <span style={{ background: "#fef2f2", color: "#d94040", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #fecaca" }}>
-                          ⚠️ Опаздывает ({delaysCount})
+                    {/* 🔥 НОВЫЙ БЛОК: СТАТУС ПРИНЯТИЯ (показываем только для не-черновиков) */}
+                    {!isDraft && (
+                      r.isAccepted ? (
+                        <span style={{ background: "#ecfdf5", color: "#10b981", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #a7f3d0", display: "flex", alignItems: "center", gap: 4 }}>
+                          ✅ Принят
                         </span>
-                      )}
+                      ) : (
+                        <span style={{ background: "#fffbeb", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #fde68a", display: "flex", alignItems: "center", gap: 4 }}>
+                          ❓ Ожидает
+                        </span>
+                      )
+                    )}
 
-                      <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 500 }}>изм. {new Date(r.updatedAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
+                    {delaysCount > 0 && (
+                      <span style={{ background: "#fef2f2", color: "#d94040", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #fecaca" }}>
+                        ⚠️ Опаздывает ({delaysCount})
+                      </span>
+                    )}
+
+                    <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 500 }}>изм. {new Date(r.updatedAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
                     <div style={{ fontSize: 12, color: "#6b6860", marginTop: 4 }}>
                       Курьер: {courierName} · {deliveredCount}/{r.orders.length} точек
                     </div>
