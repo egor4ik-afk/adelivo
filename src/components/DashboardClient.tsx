@@ -640,9 +640,8 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
       const isOtherSlot = !!order.slotRaw && !isStandardSlot;
 
       // 🔥 1. В режиме маршрута время показываем ВСЕГДА, независимо от зума
-      const displayTime = !!order.slotRaw && (
-        (showTime &&         currentZoom >= 13) || 
-(isBulkMode && routeTabMode === "new")
+      const displayTime = !!order.slotRaw && showTime && (
+        currentZoom >= 13 || (isBulkMode && routeTabMode === "new")
       );
       
       const displayName = showCourierNames && !!order.courier;
@@ -775,7 +774,7 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
       map.geoObjects.remove(multiRouteRef.current);
       multiRouteRef.current = null;
     }
-// 🔥 ДОБАВЛЯЕМ ПРОВЕРКУ showRouteLines
+    // 🔥 ДОБАВЛЯЕМ ПРОВЕРКУ showRouteLines
     if (!showRouteLines) return;
     // 2. Рисуем новую линию, только если мы собираем маршрут и есть хотя бы 1 выбранный заказ
     if (isBulkMode && routeTabMode === "new" && bulkSelectedIds.length > 0) {
@@ -797,7 +796,7 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
       if (points.length > 1) {
         const multiRoute = new ymaps.multiRouter.MultiRoute({
           referencePoints: points,
-          params: { routingMode: 'auto' } // можно 'auto' (на авто) или 'masstransit'
+          params: { routingMode: routeType === 'mt' ? 'masstransit' : 'auto' } // можно 'auto' (на авто) или 'masstransit'
         }, {
           // 🔥 САМОЕ ВАЖНОЕ: Отключаем стандартные метки (А, В, С...), 
           // так как у нас уже есть свои красивые плашки
