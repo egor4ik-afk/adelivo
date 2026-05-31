@@ -1800,7 +1800,11 @@ fontSize: 11, fontWeight: 700, cursor: "pointer",
   return (
     <div style={isMobile ? sm.app : s.app}>
 
-    <div style={isMobile ? sm.topbar : s.topbar}>
+<div 
+  style={isMobile ? sm.topbar : s.topbar}
+  className="hide-scrollbar"
+  onWheel={(e) => { e.currentTarget.scrollLeft += e.deltaY; e.preventDefault(); }}
+>
         {/* 1. Логотип */}
         <Link href="/about" style={{ textDecoration: "none" }}>
           <div style={s.logo}>
@@ -2330,7 +2334,8 @@ function CourierSearchSelect({ value, onChange, options }: { value: string, onCh
 
 const s: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", overflow: "hidden" },
-  topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 16px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 100, position: "relative", overflowX: "auto", overflowY: "visible", flexWrap: "nowrap" },
+  topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 16px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 100, position: "relative", overflow: "visible", flexWrap: "nowrap" },
+
   dropdownMenu: { position: "absolute", top: "100%", left: 0, marginTop: 6, background: "#fff", border: "1px solid #e8e6df", borderRadius: 12, padding: 8, zIndex: 100, display: "flex", flexDirection: "column", gap: 2, minWidth: 180, maxHeight: 300, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,0.12)" },
   dropdownItem: { display: "flex", alignItems: "center", gap: 10, fontSize: 13, cursor: "pointer", padding: "6px 8px", borderRadius: 6, transition: "background 0.15s", whiteSpace: "nowrap" },
   logo: { fontSize: 15, fontWeight: 600, color: "#1a1a18", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap", flexShrink: 0, minWidth: "max-content", marginRight: "auto" },
@@ -2385,7 +2390,7 @@ const s: Record<string, React.CSSProperties> = {
 
 const sm: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", overflow: "hidden" },
-  topbar: { display: "flex", alignItems: "center", gap: 8, padding: "10px", minHeight: 60, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 100, position: "relative", overflow: "visible", flexWrap: "wrap" },
+  topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 10px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 100, position: "relative", overflow: "visible", flexWrap: "nowrap" },
   mobileSlotsWrap: { display: "flex", gap: 4, padding: "6px 10px", background: "#fff", borderBottom: "1px solid #e8e6df", overflowX: "auto", flexShrink: 0 },
   body: { display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", minHeight: 0 },
   map: { width: "100%", minHeight: 200 },

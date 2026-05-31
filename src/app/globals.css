@@ -43,3 +43,12 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
 }
+/* Скрытый горизонтальный скроллбар для топбара */
+.hide-scrollbar {
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
