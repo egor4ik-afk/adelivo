@@ -833,13 +833,25 @@ export function DashboardClient({ user }: { user: User }) {
     }
     // 🔥 ДОБАВИЛИ showRouteLines и routeType СЮДА В КОНЕЦ:
   }, [bulkSelectedIds, isBulkMode, routeTabMode, mapReady, orders, showRouteLines, routeType]);
+
   useEffect(() => {
     if (!mapReady || !couriersGeoObjectsRef.current) return;
     const coll = couriersGeoObjectsRef.current;
     coll.removeAll();
     if (typeof window === "undefined" || !window.ymaps) return;
 
-    dbCouriers.forEach(c => {
+    // 🔥 1. ВЫЧИСЛЯЕМ АКТИВНЫХ КУРЬЕРОВ (как и для списков)
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+    const limitDateStr = twoWeeksAgo.toISOString().split("T")[0];
+
+    const activeCouriersForMap = dbCouriers.filter(c => {
+      if (!c.isActive) return false;
+      return c.shifts.some(s => s.date >= limitDateStr);
+    });
+
+    // 🔥 2. ИСПОЛЬЗУЕМ activeCouriersForMap ВМЕСТО dbCouriers
+    activeCouriersForMap.forEach(c => {
       // 🔥 Расчет онлайна: меньше 60 минут = онлайн
       const diffMins = c.locationUpdatedAt
         ? Math.floor((Date.now() - new Date(c.locationUpdatedAt).getTime()) / 60000)
