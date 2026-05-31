@@ -47,7 +47,7 @@ function AddressSuggestInput({ value, onChange, active }: { value: string, onCha
           const input = document.getElementById(inputId);
           if (!input || (input as any).isSuggestInitialized) return;
           try {
-            const suggest = new (window as any).ymaps.SuggestView(inputId, { results: 5 });
+            const suggest = new (window as any).ymaps.SuggestView(inputId, { results: 5, container: document.body });
             suggest.events.add("select", (e: any) => {
               onChangeRef.current(e.get("item").value);
             });

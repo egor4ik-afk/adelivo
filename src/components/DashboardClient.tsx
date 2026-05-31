@@ -352,12 +352,23 @@ export function DashboardClient({ user }: { user: User }) {
   useEffect(() => { setDismissedInvalid(false); }, [orders]);
 
   const sortedCouriers = (() => {
-    const base = [...dbCouriers].filter(c => c.isActive);
+    // 🔥 Вычисляем дату 14 дней назад (в формате YYYY-MM-DD)
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+    const limitDateStr = twoWeeksAgo.toISOString().split("T")[0];
+
+    // 🔥 Берем только активных курьеров, у которых ЕСТЬ смены за последние 14 дней
+    const base = [...dbCouriers].filter(c => {
+      if (!c.isActive) return false;
+      return c.shifts.some(s => s.date >= limitDateStr);
+    });
+
     const orderCounts: Record<string, number> = {};
     orders.forEach(o => {
       const oDate = o.deliveryDate || (o.crmCreatedAt ? o.crmCreatedAt.split('T')[0] : null);
       if (oDate === filterDate && o.courier) orderCounts[o.courier] = (orderCounts[o.courier] || 0) + 1;
     });
+    
     base.sort((a, b) => {
       const aWorks = a.shifts.some(s => s.date === filterDate);
       const bWorks = b.shifts.some(s => s.date === filterDate);
@@ -366,6 +377,7 @@ export function DashboardClient({ user }: { user: User }) {
       if (scoreA !== scoreB) return scoreB - scoreA;
       return a.fullName.localeCompare(b.fullName);
     });
+
     return base.map(c => {
       const shift = c.shifts.find(s => s.date === filterDate) as any;
       const cnt = orderCounts[c.fullName] || 0;
@@ -374,7 +386,6 @@ export function DashboardClient({ user }: { user: User }) {
       if (shift || cnt > 0) {
         const flags = [];
         if (shift) {
-          // 🔥 БЕРЕМ c.priority ВМЕСТО shift.priority
           flags.push(`На смене ${shift.startTime || "10:00"}-${shift.endTime || "22:00"} (⭐${c.priority ?? 3})`);
         }
         if (cnt > 0) flags.push(`${cnt} зак.`);
