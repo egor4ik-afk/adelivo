@@ -128,13 +128,9 @@ function loadYMaps(): Promise<void> {
   ymapsReady = new Promise((resolve, reject) => {
     if (typeof window !== "undefined" && window.ymaps) { window.ymaps.ready(resolve); return; }
     const s = document.createElement("script");
-    
-    // 🔥 Оставляем ТОЛЬКО основной ключ для карты и маршрутов
-    const mapsKey = process.env.NEXT_PUBLIC_YANDEX_MAPS_KEY || "b842c0e2-8b73-4b3d-839c-6c9ad40685dd";
-    
-    // Убрали кусок с suggest_apikey, из-за которого крашился скрипт
-    s.src = `https://api-maps.yandex.ru/2.1/?lang=ru_RU&apikey=${mapsKey}`;
-    
+    const mapsKey = process.env.NEXT_PUBLIC_YANDEX_MAPS_KEY;
+    const suggestKey = process.env.NEXT_PUBLIC_YANDEX_SUGGEST_KEY;
+    s.src = `https://api-maps.yandex.ru/2.1/?lang=ru_RU&apikey=${mapsKey}${suggestKey ? `&suggest_apikey=${suggestKey}` : ''}`;
     s.onload = () => window.ymaps.ready(resolve);
     s.onerror = reject;
     document.head.appendChild(s);
