@@ -817,8 +817,8 @@ const [isCourierMenuOpen, setIsCourierMenuOpen] = useState(false);
         multiRouteRef.current = multiRoute;
       }
     }
-  }, [bulkSelectedIds, isBulkMode, routeTabMode, mapReady, orders]);
-
+  // 🔥 ДОБАВИЛИ showRouteLines и routeType СЮДА В КОНЕЦ:
+  }, [bulkSelectedIds, isBulkMode, routeTabMode, mapReady, orders, showRouteLines, routeType]);
   useEffect(() => {
     if (!mapReady || !couriersGeoObjectsRef.current) return;
     const coll = couriersGeoObjectsRef.current;
@@ -1516,10 +1516,10 @@ const mm = mins % 60;
                               } else {
                                 for (let h = 8; h <= 23; h++) {
                                   for (let m = 0; m < 60; m += 10) {
-times.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+                                    times.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+                                  }
                                 }
                               }
-}
 
                               if (manualDepartureTime && manualDepartureTime.length === 5 && !times.includes(manualDepartureTime)) {
 times.push(manualDepartureTime);
@@ -1776,45 +1776,79 @@ fontSize: 11, fontWeight: 700, cursor: "pointer",
       )}
     </div>
   );
+  // 🔥 ЕДИНЫЙ СТИЛЬ ДЛЯ ВСЕХ ФИЛЬТРОВ И КНОПОК ВЕРХНЕЙ ПАНЕЛИ
+  const topbarBtnStyle: React.CSSProperties = {
+    height: 34,
+    padding: "0 12px",
+    borderRadius: 8,
+    border: "1px solid #e8e6df",
+    background: "#fff",
+    fontSize: 13,
+    fontWeight: 600,
+    color: "#1a1a18",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    whiteSpace: "nowrap",
+    boxSizing: "border-box",
+    boxShadow: "0 1px 2px rgba(0,0,0,0.02)"
+  };
   return (
     <div style={isMobile ? sm.app : s.app}>
-      <div style={isMobile ? sm.topbar : s.topbar}>
+
+    <div style={isMobile ? sm.topbar : s.topbar}>
+        {/* 1. Логотип */}
         <Link href="/about" style={{ textDecoration: "none" }}>
           <div style={s.logo}>
             <img src="/favicon.svg" alt="Logo" style={{ width: 22, height: 22 }} />
             {!isMobile && "EventWave"}
           </div>
         </Link>
-        <button onClick={() => router.push('/orders')} style={s.navBtn}>
+
+        {/* 2. Основные кнопки навигации (Единый стиль) */}
+        <button onClick={() => router.push('/orders')} style={topbarBtnStyle}>
           ≡ Заказы
-          <span style={{ background: '#eef3ff', color: '#4a7aff', padding: '1px 6px', borderRadius: 10, marginLeft: 6, fontSize: 10, fontWeight: 700 }}>
+          <span style={{ background: '#eef3ff', color: '#4a7aff', padding: '1px 6px', borderRadius: 10, fontSize: 11, fontWeight: 700 }}>
             {filtered.length}
           </span>
         </button>
-        <button onClick={() => router.push('/couriers')} style={s.navBtn}>🚚 Курьеры</button>
-        <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={s.datePicker} />
+        <button onClick={() => router.push('/couriers')} style={topbarBtnStyle}>🚚 Курьеры</button>
+
+        {/* 3. Фильтры (Единый стиль) */}
+        <input 
+          type="date" 
+          value={filterDate} 
+          onChange={e => setFilterDate(e.target.value)} 
+          style={{ ...topbarBtnStyle, fontFamily: "inherit" }} 
+        />
+
         {/* МУЛЬТИ-ФИЛЬТР СТАТУСОВ */}
         <div style={{ position: "relative" }}>
           <button 
             onClick={() => setIsStatusMenuOpen(!isStatusMenuOpen)}
-            style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #d1d5db", background: "#fff", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}
+            style={{ ...topbarBtnStyle, background: selectedStatuses.length > 0 ? "#eef3ff" : "#fff", borderColor: selectedStatuses.length > 0 ? "#4a7aff" : "#e8e6df" }}
           >
-            Статусы: {selectedStatuses.length === 0 ? "Все" : `Выбрано (${selectedStatuses.length})`} ▼
+            <span style={{ color: selectedStatuses.length > 0 ? "#4a7aff" : "inherit" }}>
+              Статусы: {selectedStatuses.length === 0 ? "Все" : `(${selectedStatuses.length})`}
+            </span>
+            <span style={{ fontSize: 10, color: selectedStatuses.length > 0 ? "#4a7aff" : "#a8a49c" }}>▼</span>
           </button>
           
           {isStatusMenuOpen && (
             <>
               <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setIsStatusMenuOpen(false)} />
-              <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#fff", border: "1px solid #d1d5db", borderRadius: 8, padding: 8, zIndex: 100, display: "flex", flexDirection: "column", gap: 6, minWidth: 160, boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+              <div style={s.dropdownMenu}>
                 {["NEW", "ASSIGNED", "IN_DELIVERY", "DELIVERED"].map(st => (
-                  <label key={st} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+                  <label key={st} style={s.dropdownItem}>
                     <input 
                       type="checkbox" 
                       checked={selectedStatuses.includes(st)}
                       onChange={(e) => {
                         if (e.target.checked) setSelectedStatuses([...selectedStatuses, st]);
-                        else setSelectedStatuses(selectedStatuses.filter(s => s !== st));
+                        else setSelectedStatuses(selectedStatuses.filter(item => item !== st));
                       }}
+                      style={{ accentColor: "#4a7aff", width: 16, height: 16 }}
                     />
                     {st === "NEW" ? "Новые" : st === "ASSIGNED" ? "Назначены" : st === "IN_DELIVERY" ? "В пути" : "Доставлены"}
                   </label>
@@ -1823,30 +1857,27 @@ fontSize: 11, fontWeight: 700, cursor: "pointer",
             </>
           )}
         </div>
-        {/* МУЛЬТИ-ФИЛЬТР КУРЬЕРОВ (Замена старого select) */}
-        <div style={{ position: "relative", marginLeft: 4 }}>
+
+        {/* МУЛЬТИ-ФИЛЬТР КУРЬЕРОВ */}
+        <div style={{ position: "relative" }}>
           <button 
             onClick={() => setIsCourierMenuOpen(!isCourierMenuOpen)}
-            // 🔥 Используем твои стили s.nativeSelect, чтобы кнопка не выбивалась из дизайна
-            style={{ ...s.nativeSelect, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, minWidth: 140, cursor: "pointer" }}
+            style={{ ...topbarBtnStyle, background: selectedCouriers.length > 0 ? "#eef3ff" : "#fff", borderColor: selectedCouriers.length > 0 ? "#4a7aff" : "#e8e6df" }}
           >
-            <span>{selectedCouriers.length === 0 ? "Все курьеры" : `Выбрано (${selectedCouriers.length})`}</span>
-            <span style={{ fontSize: 10 }}>▼</span>
+            <span style={{ color: selectedCouriers.length > 0 ? "#4a7aff" : "inherit" }}>
+              Курьеры: {selectedCouriers.length === 0 ? "Все" : `(${selectedCouriers.length})`}
+            </span>
+            <span style={{ fontSize: 10, color: selectedCouriers.length > 0 ? "#4a7aff" : "#a8a49c" }}>▼</span>
           </button>
           
           {isCourierMenuOpen && (
             <>
-              {/* Невидимая подложка для закрытия по клику вне меню */}
               <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setIsCourierMenuOpen(false)} />
-              
-              {/* Само выпадающее меню с галочками */}
-              <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#fff", border: "1px solid #d1d5db", borderRadius: 8, padding: 8, zIndex: 100, display: "flex", flexDirection: "column", gap: 6, minWidth: 200, maxHeight: 300, overflowY: "auto", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+              <div style={{ ...s.dropdownMenu, minWidth: 220 }}>
                 {courierOptions.map(c => {
-                  // Опцию "ALL" не рендерим как чекбокс, так как "Все" — это когда ничего не выбрано
                   if (c.value === "ALL") return null; 
-                  
                   return (
-                    <label key={c.value} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>
+                    <label key={c.value} style={s.dropdownItem}>
                       <input 
                         type="checkbox" 
                         checked={selectedCouriers.includes(String(c.value))}
@@ -1855,8 +1886,9 @@ fontSize: 11, fontWeight: 700, cursor: "pointer",
                           if (e.target.checked) setSelectedCouriers([...selectedCouriers, val]);
                           else setSelectedCouriers(selectedCouriers.filter(id => id !== val));
                         }}
+                        style={{ accentColor: "#4a7aff", width: 16, height: 16, flexShrink: 0 }}
                       />
-                      {c.label}
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{c.label}</span>
                     </label>
                   );
                 })}
@@ -1864,6 +1896,7 @@ fontSize: 11, fontWeight: 700, cursor: "pointer",
             </>
           )}
         </div>
+
         <button
           onClick={() => {
             setIsBulkMode(!isBulkMode);
@@ -1871,54 +1904,59 @@ fontSize: 11, fontWeight: 700, cursor: "pointer",
             setBulkSelectedIds([]);
             setSelectedId(null);
             setIsDetailVisible(false);
-
             setRouteTabMode("new");
             setEditingRouteId(null);
             setBulkCourier("");
             setRouteType("mt");
           }}
-          style={{ ...s.navBtn, background: isBulkMode ? "#1a1a18" : "#fff", color: isBulkMode ? "#fff" : "#1a1a18", border: isBulkMode ? "1px solid #1a1a18" : "1px solid #e8e6df", marginLeft: 8 }}
+          style={{ 
+            ...topbarBtnStyle, 
+            background: isBulkMode ? "#1a1a18" : "#fff", 
+            color: isBulkMode ? "#fff" : "#1a1a18", 
+            borderColor: isBulkMode ? "#1a1a18" : "#e8e6df" 
+          }}
         >
           {isBulkMode ? "✕ Маршруты" : "📍 Маршруты"}
         </button>
+
         {!isMobile && (
-          <div style={s.slotBar}>
+          <div style={{ ...s.slotBar, marginLeft: 0 }}>
             <SlotBtn label="Все" active={selectedSlots.length === 0} color="#4a7aff" onClick={() => toggleSlot("all")} />
             {SLOTS.map(sl => <SlotBtn key={sl.label} label={sl.label} active={selectedSlots.includes(sl.label)} color={sl.color} onClick={() => toggleSlot(sl.label)} />)}
             <SlotBtn label="Другие" active={selectedSlots.includes("Другие")} color="#6b6860" onClick={() => toggleSlot("Другие")} />
           </div>
         )}
-        <div style={{ flex: 1 }} />
-        {!isMobile && (
-          <div style={{ display: 'flex', gap: 10, marginRight: 8, alignItems: 'center' }}>
-            <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 4, cursor: 'pointer' }}>
-              <input type="checkbox" checked={showCouriers} onChange={e => setShowCouriers(e.target.checked)} />Курьеры
-            </label>
-            <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 4, cursor: 'pointer' }}>
-              <input type="checkbox" checked={showHomes} onChange={e => setShowHomes(e.target.checked)} />Дом
-            </label>
-            <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 4, cursor: 'pointer' }}><input type="checkbox" checked={showCourierNames} onChange={e => setShowCourierNames(e.target.checked)} /> Имена</label>
-            <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 4, cursor: 'pointer' }}><input type="checkbox" checked={showTime} onChange={e => setShowTime(e.target.checked)} /> Время</label>
-            {/* 🔥 Кнопка переключения линий маршрутов */}
-            <button
-              onClick={() => setShowRouteLines(!showRouteLines)}
-              title={showRouteLines ? "Скрыть линии маршрутов" : "Показать линии маршрутов"}
-              style={{
-                width: 24, height: 24, borderRadius: 6, marginLeft: 4, // Чуть отодвинули от текста
-                border: `1px solid ${showRouteLines ? "#4a7aff" : "#d1d5db"}`,
-                background: showRouteLines ? "#eff6ff" : "#fff",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: "pointer", transition: "all 0.15s", fontSize: 13,
-                opacity: showRouteLines ? 1 : 0.6, padding: 0
-              }}
-            >
-              🗺️
-            </button>
-          </div>
-        )}
+
+        <div style={{ flex: 1, minWidth: isMobile ? "100%" : 0 }} />
+
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', background: "#fafaf8", padding: "0 12px", borderRadius: 8, height: 34, border: "1px solid #e8e6df", overflowX: "auto" }}>
+          <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 5, cursor: 'pointer', whiteSpace: "nowrap" }}>
+            <input type="checkbox" checked={showCouriers} onChange={e => setShowCouriers(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Курьеры
+          </label>
+          <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 5, cursor: 'pointer', whiteSpace: "nowrap" }}>
+            <input type="checkbox" checked={showHomes} onChange={e => setShowHomes(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Дом
+          </label>
+          <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 5, cursor: 'pointer', whiteSpace: "nowrap" }}>
+            <input type="checkbox" checked={showCourierNames} onChange={e => setShowCourierNames(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Имена
+          </label>
+          <label style={{ fontSize: 11, color: '#6b6860', display: 'flex', gap: 5, cursor: 'pointer', whiteSpace: "nowrap" }}>
+            <input type="checkbox" checked={showTime} onChange={e => setShowTime(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Время
+          </label>
+          <div style={{ width: 1, height: 16, background: "#d1d5db", margin: "0 4px" }} />
+          <button
+            onClick={() => setShowRouteLines(!showRouteLines)}
+            title={showRouteLines ? "Скрыть линии маршрутов" : "Показать линии маршрутов"}
+            style={{ width: 24, height: 24, borderRadius: 6, border: `1px solid ${showRouteLines ? "#4a7aff" : "#d1d5db"}`, background: showRouteLines ? "#eff6ff" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.15s", fontSize: 13, padding: 0 }}
+          >
+            🗺️
+          </button>
+        </div>
+
         {invalid.length > 0 && <button style={s.alertBadge} onClick={() => { setAlertsOpen(!alertsOpen); setProfileOpen(false); }}>⚠ {!isMobile && `${invalid.length}`}</button>}
-        {!isMobile && lastSync && <span style={s.syncLabel}>обновлено {lastSync}</span>}
-        <button style={{ ...s.userBtn, padding: 0, overflow: "hidden" }} onClick={() => { setProfileOpen(!profileOpen); setAlertsOpen(false); }}>
+        
+        {!isMobile && lastSync && <span style={{ ...s.syncLabel, marginLeft: 'auto' }}>обновлено {lastSync}</span>}
+        
+        <button style={{ ...s.userBtn, padding: 0, overflow: "hidden", marginLeft: isMobile ? "auto" : 0 }} onClick={() => { setProfileOpen(!profileOpen); setAlertsOpen(false); }}>
           {user.avatarUrl ? (
             <img src={user.avatarUrl} alt="Profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           ) : (
@@ -1930,7 +1968,9 @@ fontSize: 11, fontWeight: 700, cursor: "pointer",
       {isMobile && (
         <div style={sm.mobileSlotsWrap}>
           <SlotBtn label="Все" active={selectedSlots.length === 0} color="#4a7aff" onClick={() => toggleSlot("all")} />
-          {SLOTS.map(sl => <SlotBtn key={sl.label} label={sl.label} active={selectedSlots.includes(sl.label)} color={sl.color} onClick={() => toggleSlot(sl.label)} />)}
+          {SLOTS.map(sl => (
+            <SlotBtn key={sl.label} label={sl.label} active={selectedSlots.includes(sl.label)} color={sl.color} onClick={() => toggleSlot(sl.label)} />
+          ))}
           <SlotBtn label="Другие" active={selectedSlots.includes("Другие")} color="#6b6860" onClick={() => toggleSlot("Другие")} />
         </div>
       )}
@@ -1942,7 +1982,10 @@ fontSize: 11, fontWeight: 700, cursor: "pointer",
             <b>{invalid.length} заказов</b> с проблемными адресами —{" "}
             {invalid.map((o, i) => (
               <span key={o.id}>
-                <span style={s.invalidBannerLink} onClick={() => { setSelectedId(o.id); setIsDetailVisible(true); }}>{o.externalId ?? o.crmId}</span>{i < invalid.length - 1 ? ", " : ""}
+                <span style={s.invalidBannerLink} onClick={() => { setSelectedId(o.id); setIsDetailVisible(true); }}>
+                  {o.externalId ?? o.crmId}
+                </span>
+                {i < invalid.length - 1 ? ", " : ""}
               </span>
             ))}
           </span>
@@ -2055,7 +2098,7 @@ fontSize: 11, fontWeight: 700, cursor: "pointer",
                 visibility: ((mobileView === "panels" && !isBulkMode) || (isBulkMode && routeTab === "list")) ? "hidden" : "visible",
                 position: ((mobileView === "panels" && !isBulkMode) || (isBulkMode && routeTab === "list")) ? "absolute" : "relative",
                 pointerEvents: ((mobileView === "panels" && !isBulkMode) || (isBulkMode && routeTab === "list")) ? "none" : "auto",
-                flex: (mobileView === "map" || (isBulkMode && routeTab === "map")) ? 1 : "0 0 45%",
+                flex: (mobileView === "map" || (isBulkMode && routeTab === "map")) ? "1 1 auto" : "0 0 45%",
                 top: 0, left: 0,
               }}
             />
@@ -2227,7 +2270,7 @@ function CourierSearchSelect({ value, onChange, options }: { value: string, onCh
     document.addEventListener("mousedown", handler); return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const filtered = options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()));
+  const filteredOptions = options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()));
   const selectedLabel = options.find(o => String(o.value) === String(value))?.label || "— Выберите курьера —";
 
   return (
@@ -2247,12 +2290,12 @@ function CourierSearchSelect({ value, onChange, options }: { value: string, onCh
           </div>
           <div style={{ overflowY: "auto", padding: "4px 0", flex: 1 }}>
             <div onClick={() => { onChange(""); setOpen(false); setSearch(""); }} style={{ padding: "10px 14px", fontSize: 13, cursor: "pointer", color: !value ? "#4a7aff" : "#a8a49c", background: !value ? "#f4f7ff" : "transparent" }}>— Выберите курьера —</div>
-            {filtered.map(o => (
+            {filteredOptions.map(o => (
               <div key={o.value} onClick={() => { onChange(String(o.value)); setOpen(false); setSearch(""); }} style={{ padding: "10px 14px", fontSize: 13, cursor: "pointer", borderBottom: "1px solid #f5f4f0", color: String(o.value) === String(value) ? "#4a7aff" : "#1a1a18", background: String(o.value) === String(value) ? "#f4f7ff" : "transparent", fontWeight: String(o.value) === String(value) ? 700 : 500 }}>
                 {o.label}
               </div>
             ))}
-            {filtered.length === 0 && <div style={{ padding: "16px", textAlign: "center", fontSize: 13, color: "#a8a49c" }}>Не найдено</div>}
+            {filteredOptions.length === 0 && <div style={{ padding: "16px", textAlign: "center", fontSize: 13, color: "#a8a49c" }}>Не найдено</div>}
           </div>
         </div>
       )}
@@ -2263,6 +2306,8 @@ function CourierSearchSelect({ value, onChange, options }: { value: string, onCh
 const s: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", overflow: "hidden" },
   topbar: { display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", minHeight: 60, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 100, position: "relative", overflow: "visible", flexWrap: "wrap" },
+  dropdownMenu: { position: "absolute", top: "100%", left: 0, marginTop: 6, background: "#fff", border: "1px solid #e8e6df", borderRadius: 12, padding: 8, zIndex: 100, display: "flex", flexDirection: "column", gap: 2, minWidth: 180, maxHeight: 300, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,0.12)" },
+  dropdownItem: { display: "flex", alignItems: "center", gap: 10, fontSize: 13, cursor: "pointer", padding: "6px 8px", borderRadius: 6, transition: "background 0.15s", whiteSpace: "nowrap" },
   logo: { fontSize: 15, fontWeight: 600, color: "#1a1a18", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap", flexShrink: 0, minWidth: "max-content", marginRight: "auto" },
   navBtn: { padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#1a1a18", whiteSpace: "nowrap" },
   datePicker: { padding: "4px 8px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 11, outline: "none", color: "#1a1a18", background: "#fff", marginLeft: 8 },
