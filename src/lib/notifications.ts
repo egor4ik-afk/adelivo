@@ -8,10 +8,12 @@ export type NotificationEvent =
   | { type: "order.updated"; order: OrderPayload; previousStatus?: string; changes?: any }
   | { type: "address.invalid"; orders: InvalidOrderPayload[] }
   | { type: "route.assigned"; userId: string; routeId: string; pointsCount: number }
-  | { type: "route.accepted"; routeName: string; courierName: string; baseTime: string } // 🔥 ВОТ ЭТА СТРОКА
+  | { type: "route.accepted"; routeName: string; courierName: string; baseTime: string }
   | { type: "custom"; userId: string; title: string; body: string; url?: string }
   | { type: "chat.private"; senderName: string; text: string; targetUserId: string; conversationId: string }
-  | { type: "chat.global"; senderName: string; text: string; senderId: string };
+  | { type: "chat.global"; senderName: string; text: string; senderId: string }
+  // 🔥 ДОБАВЛЕНА ЭТА СТРОКА:
+  | { type: "konsol.paid"; courierEmail: string; date: string; amount?: number };
   
 interface OrderPayload {
   id: string;
@@ -227,6 +229,14 @@ async function sendIndividualPushes(event: NotificationEvent) {
     if (user.role === "COURIER") {
       targetUrl = "/courier/routes";
 
+      if (event.type === "konsol.paid" && user.email === event.courierEmail) {
+        shouldSend = true;
+        title = `💰 Оплата отправлена!`;
+        if (event.amount) bodyTexts.push(`Сумма: ${event.amount} ₽`);
+        bodyTexts.push(`Выплата за смену ${event.date} успешно проведена.`);
+        bodyTexts.push(`📝 Зайдите в приложение Консоль.Про и подпишите акт!`);
+      }
+      
       if (event.type === "route.assigned" && event.userId === user.id) {
         shouldSend = true;
         title = `🗺 Назначен маршрут: ${event.routeId}`;

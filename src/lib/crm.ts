@@ -817,6 +817,7 @@ export async function pollMeuraOrders() {
   if (!CRM_URL || !CRM_KEY_MEURA) return;
 
   try {
+    // 1. Забираем новые заказы за последние 3 дня
     const dateFrom = new Date(Date.now() - 3 * 24 * 3_600_000).toISOString().split("T")[0];
     
     const params = new URLSearchParams();
@@ -824,7 +825,7 @@ export async function pollMeuraOrders() {
     params.append("filter[createdAtFrom]", dateFrom);
     params.append("filter[sites][]", "kaktusfiori");
     params.append("filter[sites][]", "meura-flowers");
-    params.append("limit", "50");
+    params.append("limit", "100");
 
     const res = await axios.get<CrmOrdersResponse>(`${CRM_URL}/api/v5/orders?${params.toString()}`, { timeout: 15_000 });
     
@@ -833,12 +834,36 @@ export async function pollMeuraOrders() {
       await upsertOrder(order);
     }
     
-    console.log(`[Cron Meura] Синхронизировано ${orders.length} заказов.`);
+    // 🔥 2. ДОБАВЛЕНО: Проверяем обновления для ВСЕХ старых активных заказов Meura
+    const activeOrders = await prisma.order.findMany({
+      where: { 
+        status: { notIn: ["DELIVERED", "CANCELLED", "RETURNED"] },
+        shop: { in: ['kaktusfiori', 'meura-flowers'] } 
+      },
+      select: { crmId: true },
+    });
+    const activeIds = activeOrders.map(o => o.crmId);
+
+    for (let i = 0; i < activeIds.length; i += 50) {
+      const chunk = activeIds.slice(i, i + 50);
+      const paramsUpdate = new URLSearchParams();
+      paramsUpdate.append("apiKey", CRM_KEY_MEURA);
+      paramsUpdate.append("limit", "100");
+      chunk.forEach(id => paramsUpdate.append("filter[ids][]", id));
+      
+      const resUpdate = await axios.get<CrmOrdersResponse>(`${CRM_URL}/api/v5/orders?${paramsUpdate.toString()}`, { timeout: 15_000 });
+      const returnedOrders = resUpdate.data?.orders || [];
+      
+      for (const order of returnedOrders) {
+        await upsertOrder(order);
+      }
+    }
+    
+    console.log(`[Cron Meura] Синхронизировано новых: ${orders.length}, обновлено активных: ${activeIds.length}`);
   } catch (err) {
     console.error("[Cron Meura] Ошибка синхронизации:", err);
   }
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // ТИПЫ
 // ─────────────────────────────────────────────────────────────────────────────

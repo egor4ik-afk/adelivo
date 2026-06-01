@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { signKonsolAct, autopayKonsolAct } from "@/lib/konsol";
+import { notify } from "@/lib/notifications";
 
 async function fetchKonsolAct(actId: string) {
   const res = await fetch(`https://api.konsol.pro/v2/acts/${actId}`, {
@@ -123,6 +124,23 @@ export async function POST(req: Request) {
         }
 
         successCount++;
+
+        // 🔥 ОТПРАВЛЯЕМ ПУШ ОБ ОПЛАТЕ
+        const courierData = await prisma.courier.findUnique({ 
+          where: { id: courierId }, 
+          select: { email: true } 
+        });
+        
+        if (courierData?.email) {
+          // Берем последнюю дату из оплачиваемых как ориентир для текста пуша
+          const lastDateFormatted = new Date(courierDates[courierDates.length - 1]).toLocaleDateString("ru-RU");
+          
+          await notify({
+            type: "konsol.paid",
+            courierEmail: courierData.email,
+            date: lastDateFormatted,
+          }).catch(e => console.error("Push pay error:", e));
+        }
 
       } catch (err: any) {
         console.error(`❌ [Pay] Ошибка курьера ${courierId}:`, err.message || err);

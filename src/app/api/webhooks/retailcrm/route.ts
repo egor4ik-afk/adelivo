@@ -4,50 +4,6 @@ import { upsertOrder, geocodeNewOrders, type CrmOrder } from "@/lib/crm";
 import axios from "axios";
 import { applyUniversalEtaShift } from "@/lib/eta";
 
-const CRM_URL = process.env.RETAILCRM_API_URL;
-
-// Умный поиск заказа с ретраями по ОБОИМ ключам (Bunch и Meura)
-// 🔥 ИДЕАЛЬНЫЙ ФОЛБЭК: Работает в точности как ваш RetailCRM вебхук
-async function fetchAndUpsertFromCrm(orderId: string) {
-  const keys = [
-    process.env.RETAILCRM_API_KEY,        // Ключ Bunch
-    process.env.RETAILCRM_API_KEY_MEURA   // Ключ Meura
-  ].filter(Boolean);
-
-  if (!CRM_URL || keys.length === 0) return null;
-
-  const searchTypes = ["externalId", "number", "id"];
-  const searchValues = [orderId, `#${orderId}`]; // Ищем и чистый номер, и с решеткой
-
-  console.log(`🔍 [CRM Fetch] Ищем заказ ${orderId} напрямую (проверяем Bunch и Meura)...`);
-
-  for (const key of keys) {
-    for (const byType of searchTypes) {
-      for (const val of searchValues) {
-        try {
-          const res = await axios.get(`${CRM_URL}/api/v5/orders/${encodeURIComponent(val)}`, {
-            params: { apiKey: key, by: byType },
-            timeout: 5000,
-          });
-          
-          if (res.data?.success && res.data?.order) {
-            console.log(`✅ [CRM Fetch] Нашли заказ ${val} (${byType})! Создаем локально...`);
-            const newOrder = await upsertOrder(res.data.order); 
-            return newOrder;
-          }
-        } catch (e: any) {
-          // Игнорируем 404 (просто не найдено), логируем только реальные ошибки сети
-          if (e?.response?.status !== 404) {
-             console.error(`❌ [CRM Fetch] Ошибка API (${byType}=${val}):`, e.message);
-          }
-        }
-      }
-    }
-  }
-
-  console.log(`❌ [CRM Fetch] Заказ ${orderId} не найден в RetailCRM ни по одному из ключей.`);
-  return null;
-}
 
 export async function GET() {
   // RetailCRM пингует эндпоинт перед активацией
@@ -152,6 +108,42 @@ export async function POST(req: Request) {
   }
 }
 
-function fetchOrderFromCrm(orderId: string): CrmOrder | PromiseLike<CrmOrder | null> | null {
-  throw new Error("Function not implemented.");
+async function fetchOrderFromCrm(orderId: string): Promise<CrmOrder | null> {
+  const keys = [
+    process.env.RETAILCRM_API_KEY,        // Ключ Bunch
+    process.env.RETAILCRM_API_KEY_MEURA   // Ключ Meura
+  ].filter(Boolean);
+
+  const CRM_URL = process.env.RETAILCRM_API_URL;
+  if (!CRM_URL || keys.length === 0) return null;
+
+  const searchTypes = ["externalId", "number", "id"];
+  const searchValues = [orderId, `#${orderId}`]; 
+
+  console.log(`🔍 [CRM Fetch] Ищем заказ ${orderId} (проверяем Bunch и Meura)...`);
+
+  for (const key of keys) {
+    for (const byType of searchTypes) {
+      for (const val of searchValues) {
+        try {
+          const res = await axios.get(`${CRM_URL}/api/v5/orders/${encodeURIComponent(val)}`, {
+            params: { apiKey: key, by: byType },
+            timeout: 5000,
+          });
+          
+          if (res.data?.success && res.data?.order) {
+            return res.data.order;
+          }
+        } catch (e: any) {
+          // Игнорируем 404 (просто не найдено), логируем только реальные ошибки сети
+          if (e?.response?.status !== 404) {
+             console.error(`❌ [CRM Fetch] Ошибка API (${byType}=${val}):`, e.message);
+          }
+        }
+      }
+    }
+  }
+
+  console.log(`❌ [CRM Fetch] Заказ ${orderId} не найден в RetailCRM ни по одному из ключей.`);
+  return null;
 }
