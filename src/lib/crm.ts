@@ -671,18 +671,20 @@ export async function pollCrmOrders() {
           console.log(`[Cron Bunch] Локальный заказ ${localOrder.crmId} переведен в статус CANCELLED.`);
         }
 
-        const tgToken = process.env.TELEGRAM_BOT_TOKEN;
+        // Отправляем уведомление в Telegram через твой прокси
+        const tgToken = process.env.TELEGRAM_BOT_TOKEN?.replace(/\s+/g, "")?.replace(/^bot/i, "");
         const tgChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
+        const proxyUrl = process.env.PROXY_URL;
 
-        if (tgToken && tgChatId && localOrdersToCancel.length > 0) {
+        if (tgToken && tgChatId && proxyUrl && localOrdersToCancel.length > 0) {
           const cancelledIdsStr = localOrdersToCancel.map(o => o.crmId).join(", ");
-          const msg = `⚠️ *Внимание! Удаление в CRM Bunch*\n\nСледующие заказы пропали из RetailCRM (удалили или перенесли в корзину) и были автоматически отменены в базе курьеров:\n📦 ${cancelledIdsStr}`;
+          const msg = `⚠️ *Внимание! Удаление в CRM Bunch*\n\nСледующие заказы пропали из RetailCRM и были отменены:\n📦 ${cancelledIdsStr}`;
 
-          fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chat_id: tgChatId, text: msg, parse_mode: "Markdown" }),
-          }).catch(e => console.error("[TG] Ошибка отправки уведомления об удалении:", e));
+          axios.post(proxyUrl, {
+            token: tgToken,
+            method: "sendMessage",
+            payload: { chat_id: tgChatId, text: msg, parse_mode: "Markdown" }
+          }, { timeout: 5000 }).catch(e => console.error("[TG] Ошибка отправки уведомления об удалении Bunch:", e));
         }
       }
     }
@@ -901,19 +903,20 @@ export async function pollMeuraOrders() {
           console.log(`[Cron Meura] Локальный заказ ${localOrder.crmId} переведен в статус CANCELLED.`);
         }
 
-        // Отправляем уведомление в Telegram
-        const tgToken = process.env.TELEGRAM_BOT_TOKEN;
+        // Отправляем уведомление в Telegram через твой прокси
+        const tgToken = process.env.TELEGRAM_BOT_TOKEN?.replace(/\s+/g, "")?.replace(/^bot/i, "");
         const tgChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
+        const proxyUrl = process.env.PROXY_URL;
 
-        if (tgToken && tgChatId && localOrdersToCancel.length > 0) {
+        if (tgToken && tgChatId && proxyUrl && localOrdersToCancel.length > 0) {
           const cancelledIdsStr = localOrdersToCancel.map(o => o.crmId).join(", ");
-          const msg = `⚠️ *Внимание! Удаление в CRM Meura*\n\nСледующие заказы пропали из RetailCRM (удалили или перенесли в корзину) и были автоматически отменены в базе курьеров:\n🌸 ${cancelledIdsStr}`;
+          const msg = `⚠️ *Внимание! Удаление в CRM Meura*\n\nСледующие заказы пропали из RetailCRM и были отменены:\n🌸 ${cancelledIdsStr}`;
 
-          fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chat_id: tgChatId, text: msg, parse_mode: "Markdown" }),
-          }).catch(e => console.error("[TG] Ошибка отправки уведомления об удалении:", e));
+          axios.post(proxyUrl, {
+            token: tgToken,
+            method: "sendMessage",
+            payload: { chat_id: tgChatId, text: msg, parse_mode: "Markdown" }
+          }, { timeout: 5000 }).catch(e => console.error("[TG] Ошибка отправки уведомления об удалении Meura:", e));
         }
       }
     }
