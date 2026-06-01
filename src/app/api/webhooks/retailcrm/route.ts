@@ -125,6 +125,7 @@ async function fetchOrderFromCrm(orderId: string): Promise<CrmOrder | null> {
   for (const key of keys) {
     for (const byType of searchTypes) {
       for (const val of searchValues) {
+        if (byType === "id" && val.startsWith("#")) continue;
         try {
           const res = await axios.get(`${CRM_URL}/api/v5/orders/${encodeURIComponent(val)}`, {
             params: { apiKey: key, by: byType },
