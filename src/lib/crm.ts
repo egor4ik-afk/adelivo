@@ -813,6 +813,9 @@ export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: numb
 // ─────────────────────────────────────────────────────────────────────────────
 // POLLING ДЛЯ MEURA
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// POLLING ДЛЯ MEURA
+// ─────────────────────────────────────────────────────────────────────────────
 export async function pollMeuraOrders() {
   if (!CRM_URL || !CRM_KEY_MEURA) return;
 
@@ -834,7 +837,7 @@ export async function pollMeuraOrders() {
       await upsertOrder(order);
     }
     
-    // 🔥 2. ДОБАВЛЕНО: Проверяем обновления для ВСЕХ старых активных заказов Meura
+    // 2. Проверяем обновления для ВСЕХ старых активных заказов Meura
     const activeOrders = await prisma.order.findMany({
       where: { 
         status: { notIn: ["DELIVERED", "CANCELLED", "RETURNED"] },
@@ -857,9 +860,65 @@ export async function pollMeuraOrders() {
       for (const order of returnedOrders) {
         await upsertOrder(order);
       }
+
+      // 🔥 ДОБАВЛЕНО: ЛОГИКА УДАЛЕНИЯ КАК В BUNCH
+      const returnedIds = returnedOrders.map(o => String(o.id));
+      const deletedIds = chunk.filter(id => !returnedIds.includes(id));
+
+      if (deletedIds.length > 0) {
+        console.log(`[Cron Meura] Внимание! Эти заказы пропали из CRM:`, deletedIds);
+        
+        const localOrdersToCancel = await prisma.order.findMany({ 
+          where: { 
+            crmId: { in: deletedIds },
+            shop: { in: ['kaktusfiori', 'meura-flowers'] } // Только магазины Meura
+          } 
+        });
+
+        for (const localOrder of localOrdersToCancel) {
+          // Отвязываем от маршрута (если маршрут пустеет - удаляем его)
+          if (localOrder.routeId) {
+            const siblingsCount = await prisma.order.count({ 
+              where: { routeId: localOrder.routeId, id: { not: localOrder.id } }
+            });
+            if (siblingsCount === 0) {
+              await prisma.route.deleteMany({ where: { id: localOrder.routeId } });
+            }
+          }
+
+          // Отменяем заказ у курьера
+          await prisma.order.update({
+            where: { id: localOrder.id },
+            data: {
+              status: "CANCELLED",
+              opComment: "❌ Удален в CRM (или перенесен в корзину)",
+              routeId: null,
+              routeOrder: null,
+              pickedUpAt: null
+            }
+          });
+          
+          console.log(`[Cron Meura] Локальный заказ ${localOrder.crmId} переведен в статус CANCELLED.`);
+        }
+
+        // Отправляем уведомление в Telegram
+        const tgToken = process.env.TELEGRAM_BOT_TOKEN;
+        const tgChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
+
+        if (tgToken && tgChatId && localOrdersToCancel.length > 0) {
+          const cancelledIdsStr = localOrdersToCancel.map(o => o.crmId).join(", ");
+          const msg = `⚠️ *Внимание! Удаление в CRM Meura*\n\nСледующие заказы пропали из RetailCRM (удалили или перенесли в корзину) и были автоматически отменены в базе курьеров:\n🌸 ${cancelledIdsStr}`;
+
+          fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: tgChatId, text: msg, parse_mode: "Markdown" }),
+          }).catch(e => console.error("[TG] Ошибка отправки уведомления об удалении:", e));
+        }
+      }
     }
     
-    console.log(`[Cron Meura] Синхронизировано новых: ${orders.length}, обновлено активных: ${activeIds.length}`);
+    console.log(`[Cron Meura] Синхронизировано новых: ${orders.length}, проверено активных: ${activeIds.length}`);
   } catch (err) {
     console.error("[Cron Meura] Ошибка синхронизации:", err);
   }
