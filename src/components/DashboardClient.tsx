@@ -1411,7 +1411,7 @@ export function DashboardClient({ user }: { user: User }) {
 
                       {isDraft && <span style={{ background: "#fef3c7", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>Черновик</span>}
 
-                      {/* 🔥 НОВЫЙ БЛОК: СТАТУС ПРИНЯТИЯ (показываем только для не-черновиков) */}
+                      {/* СТАТУС ПРИНЯТИЯ */}
                       {!isDraft && (
                         r.isAccepted ? (
                           <span style={{ background: "#ecfdf5", color: "#10b981", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #a7f3d0", display: "flex", alignItems: "center", gap: 4 }}>
@@ -1422,6 +1422,13 @@ export function DashboardClient({ user }: { user: User }) {
                             ❓ Ожидает
                           </span>
                         )
+                      )}
+
+                      {/* 🔥 ДОБАВЛЕНО: Время выезда + ориентир на 1-й заказ */}
+                      {r.plannedDepartureTime && (
+                        <span style={{ background: "#eef3ff", color: "#4a7aff", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #bfdbfe" }}>
+                          ⏱ Выезд: {r.plannedDepartureTime} {r.orders[0]?.slotFrom ? `(1-й к ${r.orders[0].slotFrom})` : ''}
+                        </span>
                       )}
 
                       {delaysCount > 0 && (
