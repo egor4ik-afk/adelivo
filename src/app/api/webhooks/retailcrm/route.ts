@@ -136,8 +136,8 @@ async function fetchOrderFromCrm(orderId: string): Promise<CrmOrder | null> {
             return res.data.order;
           }
         } catch (e: any) {
-          // Игнорируем 404 (просто не найдено), логируем только реальные ошибки сети
-          if (e?.response?.status !== 404) {
+          // 🔥 Игнорируем 404 (просто не найдено) и 400 (неверный формат для данного поля)
+          if (e?.response?.status !== 404 && e?.response?.status !== 400) {
              console.error(`❌ [CRM Fetch] Ошибка API (${byType}=${val}):`, e.message);
           }
         }
