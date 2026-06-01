@@ -426,9 +426,13 @@ export async function geocodeNewOrders() {
       });
 
       // Уведомление в TG если цена не та
+      // Уведомление в TG если цена не та
       if (wrongPrice) {
-        const tgToken = process.env.TELEGRAM_BOT_TOKEN;
-        if (tgToken) {
+        const tgToken = process.env.TELEGRAM_BOT_TOKEN?.replace(/\s+/g, "")?.replace(/^bot/i, "");
+        const tgChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
+        const proxyUrl = process.env.PROXY_URL;
+
+        if (tgToken && tgChatId && proxyUrl) {
           const msg = [
             `⚠️ *Расхождение цены доставки*`,
             ``,
@@ -436,11 +440,12 @@ export async function geocodeNewOrders() {
             `💰 *Цена в CRM:* ${crmPrice} ₽`,
             `🗺 *Цена по зоне:* ${basePrice} ₽`,
           ].join("\n");
-          fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ chat_id: process.env.TELEGRAM_ADMIN_CHAT_ID, text: msg, parse_mode: "Markdown" }),
-          }).catch(e => console.error("[TG] Ошибка уведомления о цене:", e));
+          
+          axios.post(proxyUrl, {
+            token: tgToken,
+            method: "sendMessage",
+            payload: { chat_id: tgChatId, text: msg, parse_mode: "Markdown" }
+          }, { timeout: 5000 }).catch(e => console.error("[TG] Ошибка уведомления о цене:", e));
         }
       }
 
