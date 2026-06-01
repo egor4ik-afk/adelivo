@@ -446,7 +446,13 @@ export function DashboardClient({ user }: { user: User }) {
   });
 
   const selected = orders.find(o => o.id === selectedId) ?? null;
-  const invalid = dateAndStatusOrders.filter(o => o.isInvalid && !/самовывоз|большой афанасьевский 39/i.test(o.address || ""));
+  // 🔥 ДОБАВЛЕНО: игнорируем ошибки адреса у отмененных и возвращенных заказов
+  const invalid = dateAndStatusOrders.filter(o => 
+    o.isInvalid && 
+    o.status !== "CANCELLED" && 
+    o.status !== "RETURNED" &&
+    !/самовывоз|большой афанасьевский 39/i.test(o.address || "")
+  );
 
   const filtered = useMemo(() => {
     let result = selectedSlots.length === 0 ? dateAndStatusOrders : dateAndStatusOrders.filter(o => {

@@ -358,7 +358,12 @@ export async function geocodeAddress(address: string) {
 
 export async function geocodeNewOrders() {
   const orders = await prisma.order.findMany({
-    where: { geocoded: false, address: { not: null } },
+    where: { 
+      geocoded: false, 
+      address: { not: null },
+      // 🔥 ДОБАВЛЕНО: Не геокодируем отмененные и возвраты
+      status: { notIn: ["CANCELLED", "RETURNED"] } 
+    },
     take: 20,
   });
   if (orders.length === 0) return;
