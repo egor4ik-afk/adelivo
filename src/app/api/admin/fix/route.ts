@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 
 const prisma = new PrismaClient();
 
-export async function POST() {
+export async function GET() {
   try {
     // Точные данные из логов и выгрузки CSV (Сумма с учетом МКАД и кол-во)
     const targetData = [
