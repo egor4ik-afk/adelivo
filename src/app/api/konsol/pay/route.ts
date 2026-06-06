@@ -96,6 +96,7 @@ export async function POST(req: Request) {
         });
 
         // 2. БЕЗУСЛОВНАЯ АВТООПЛАТА
+        // 2. БЕЗУСЛОВНАЯ АВТООПЛАТА
         console.log(`[Pay] Отправляем акт ${actId} в автооплату...`);
         try {
           await autopayKonsolAct(actId);
@@ -110,17 +111,28 @@ export async function POST(req: Request) {
              const match = payErr.message.match(/"message":"([^"]+)"/);
              const humanMsg = match ? match[1] : payErr.message;
              warnings.push(`Акт ${actId}: ${humanMsg}`);
+             
+             // 🔥 ИСПРАВЛЕНИЕ: Добавляем прерывание!
+             errorCount++; // Записываем в ошибки
+             continue;     // Пропускаем шаги 3 (сохранение БД) и отправку пуша
           }
         }
 
-        // 3. ЗАЖИГАЕМ ЗЕЛЕНЫЕ КРУЖКИ В ИНТЕРФЕЙСЕ (только после успешного прохождения)
+        // 3. ЗАЖИГАЕМ ЗЕЛЕНЫЕ КРУЖКИ В ИНТЕРФЕЙСЕ И СОХРАНЯЕМ СУММЫ
         for (const d of courierDates) {
-          const existing = await prisma.courierPayment.findUnique({
+          await prisma.courierPayment.upsert({
             where: { courierId_date: { courierId, date: d } },
+            create: { 
+              courierId, 
+              date: d,
+              amount: task.amount,          // Ровно сумма из задания Консоли
+              ordersCount: task.ordersCount // Ровно количество услуг из задания
+            },
+            update: {
+              amount: task.amount,
+              ordersCount: task.ordersCount
+            }
           });
-          if (!existing) {
-            await prisma.courierPayment.create({ data: { courierId, date: d } });
-          }
         }
 
         successCount++;
@@ -139,6 +151,7 @@ export async function POST(req: Request) {
             type: "konsol.paid",
             courierEmail: courierData.email,
             date: lastDateFormatted,
+            amount: task.amount
           }).catch(e => console.error("Push pay error:", e));
         }
 

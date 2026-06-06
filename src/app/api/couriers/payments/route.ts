@@ -4,15 +4,21 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
   try {
-    // 1. Получаем массив оплат из тела запроса
     const { payments } = await req.json();
 
-    // 2. Массово сохраняем в новую таблицу CourierPayment
-    const operations = payments.map((p: { courierId: number, date: string }) => 
+    const operations = payments.map((p: any) => 
       prisma.courierPayment.upsert({
         where: { courierId_date: { courierId: p.courierId, date: p.date } },
-        create: { courierId: p.courierId, date: p.date },
-        update: {}, // Если уже есть, ничего не меняем
+        create: { 
+          courierId: p.courierId, 
+          date: p.date,
+          amount: p.amount || 0,          // Ровно та сумма, что пришла
+          ordersCount: p.ordersCount || 0 // Ровно то количество, что пришло
+        },
+        update: { 
+          amount: p.amount || 0,
+          ordersCount: p.ordersCount || 0
+        },
       })
     );
 
