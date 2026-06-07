@@ -14,9 +14,10 @@ const TARGET_SUPERGROUP_ID = "-1003732491171";
 const ALLOWED_TOPICS = [4, 5];
 
 async function sendNotificationToAdmin(text: string) {
-  const token = TELEGRAM_BOT_TOKEN?.replace(/\s+/g, "")?.replace(/^bot/i, "");
+  // 🔥 Вырезаем 'bot' (если есть) и пробелы, чтобы прокси не дублировал его:
+  const token = TELEGRAM_BOT_TOKEN?.replace(/\s+/g, "")?.replace(/^bot/i, ""); 
   const chatId = ADMIN_CHAT_ID?.replace(/\s+/g, "");
-  const proxyUrl = process.env.PROXY_URL; // 🔥 Достаем URL прокси
+  const proxyUrl = process.env.PROXY_URL; 
 
   if (!token || !chatId || !proxyUrl) {
     console.log("⚠️ Пропуск отправки: нет токена, ID чата или PROXY_URL");
@@ -24,12 +25,12 @@ async function sendNotificationToAdmin(text: string) {
   }
 
   try {
-    // 🔥 Стучимся в твой прокси-сервер
+    // 🔥 Оставляем таймаут 10 секунд на случай "холодного старта" Vercel
     await axios.post(proxyUrl, {
       token: token,
       method: "sendMessage",
       payload: { chat_id: chatId, text }
-    }, { timeout: 5000 });
+    }, { timeout: 10000 });
   } catch (err: any) {
     console.error("❌ Ошибка отправки уведомления админу в ТГ через прокси:", JSON.stringify(err?.response?.data || err.message));
   }
