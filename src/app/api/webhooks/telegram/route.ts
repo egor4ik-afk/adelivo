@@ -14,10 +14,9 @@ const TARGET_SUPERGROUP_ID = "-1003732491171";
 const ALLOWED_TOPICS = [4, 5];
 
 async function sendNotificationToAdmin(text: string) {
-  // 🔥 Вырезаем 'bot' (если есть) и пробелы, чтобы прокси не дублировал его:
-  const token = TELEGRAM_BOT_TOKEN?.replace(/\s+/g, "")?.replace(/^bot/i, ""); 
+  const token = TELEGRAM_BOT_TOKEN?.replace(/\s+/g, "")?.replace(/^bot/i, "");
   const chatId = ADMIN_CHAT_ID?.replace(/\s+/g, "");
-  const proxyUrl = process.env.PROXY_URL; 
+  const proxyUrl = process.env.PROXY_URL; // 🔥 Достаем URL прокси
 
   if (!token || !chatId || !proxyUrl) {
     console.log("⚠️ Пропуск отправки: нет токена, ID чата или PROXY_URL");
@@ -25,12 +24,12 @@ async function sendNotificationToAdmin(text: string) {
   }
 
   try {
-    // 🔥 Оставляем таймаут 10 секунд на случай "холодного старта" Vercel
+    // 🔥 Стучимся в твой прокси-сервер
     await axios.post(proxyUrl, {
       token: token,
       method: "sendMessage",
       payload: { chat_id: chatId, text }
-    }, { timeout: 10000 });
+    }, { timeout: 5000 });
   } catch (err: any) {
     console.error("❌ Ошибка отправки уведомления админу в ТГ через прокси:", JSON.stringify(err?.response?.data || err.message));
   }
@@ -143,11 +142,15 @@ async function findOrderLocal(orderId: string | null, address: string | null, re
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    if (!body.message) return NextResponse.json({ status: "ignored_no_message" });
+    
+    // 🔥 ИСПРАВЛЕНО: Ловим и обычные сообщения, и отредактированные
+    const msg = body.message || body.edited_message || body.channel_post || body.edited_channel_post;
+    
+    if (!msg) return NextResponse.json({ status: "ignored_no_message" });
 
-    const text = body.message.text || body.message.caption;
-    const chatId = String(body.message.chat.id);
-    const messageThreadId = body.message.message_thread_id; 
+    const text = msg.text || msg.caption;
+    const chatId = String(msg.chat.id);
+    const messageThreadId = msg.message_thread_id; 
 
     console.log("\n👀 ПРИШЛО СООБЩЕНИЕ ИЗ ТЕЛЕГРАМА:");
     console.log(`👉 Chat ID: [${chatId}]`);
