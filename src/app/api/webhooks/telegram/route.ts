@@ -190,34 +190,38 @@ export async function POST(req: Request) {
 
     if (!targetOrder) {
       console.log("⚠️ Заказ не найден ни в БД, ни в CRM.");
-      await sendNotificationToAdmin(
+      sendNotificationToAdmin(
         `⚠️ Пришел контакт, но заказ не найден ни у нас, ни в CRM:\nИскал по ID: ${orderId || "отсутствует"} или адресу.`
       );
       return NextResponse.json({ status: "order_not_found" });
     }
+// 3. Обновляем контакты
+const formattedPhone = normalizePhone(phone);
+console.log(`💾 Обновляем [${targetOrder.crmId}] -> Имя: ${name}, Тел: ${formattedPhone}`);
 
-    // 3. Обновляем контакты
-    const formattedPhone = normalizePhone(phone);
-    console.log(`💾 Обновляем [${targetOrder.crmId}] -> Имя: ${name}, Тел: ${formattedPhone}`);
+await prisma.order.update({
+  where: { id: targetOrder.id },
+  data: {
+    recipientPhone: formattedPhone || targetOrder.recipientPhone,
+    name: name || targetOrder.name,
+  },
+});
 
-    await prisma.order.update({
-      where: { id: targetOrder.id },
-      data: {
-        recipientPhone: formattedPhone || targetOrder.recipientPhone,
-        name: name || targetOrder.name,
-      },
-    });
+const foundByText = orderId ? `#${orderId}` : `(найден по адресу)`;
 
-    const foundByText = orderId ? `#${orderId}` : `(найден по адресу)`;
-    await sendNotificationToAdmin(
-      `✅ Обновлен заказ ${foundByText}\n👤 Имя: ${name || "—"}\n📞 Тел: ${formattedPhone || "—"}\n📍 Адрес: ${targetOrder.address}`
-    );
+// 🔥 УБРАЛИ AWAIT: Отправляем фоном. 
+// Добавили .catch() на случай, если фоновый промис упадет, чтобы он не крашнул сервер
+sendNotificationToAdmin(
+  `✅ Обновлен заказ ${foundByText}\n👤 Имя: ${name || "—"}\n📞 Тел: ${formattedPhone || "—"}\n📍 Адрес: ${targetOrder.address}`
+).catch(e => console.error("Ошибка при фоновой отправке админу:", e));
 
-    console.log("🎉 Успешно завершено!");
-    return NextResponse.json({ success: true });
+console.log("🎉 Успешно завершено!");
 
-  } catch (error) {
-    console.error("Ошибка Telegram Webhook:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
-  }
+// Скрипт отдаст 200 OK моментально, сразу после обновления БД
+return NextResponse.json({ success: true });
+
+} catch (error) {
+console.error("Ошибка Telegram Webhook:", error);
+return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+}
 }
