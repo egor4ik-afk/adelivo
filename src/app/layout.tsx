@@ -5,6 +5,7 @@ import Script from "next/script";
 import "./globals.css";
 import "@/lib/cron";
 import { GlobalChatWrapper } from "@/components/GlobalChatWrapper";
+import OfflineIndicator from "@/components/OfflineIndicator";
 
 const inter = Inter({ subsets: ["latin", "cyrillic"] });
 
@@ -104,6 +105,7 @@ export default function RootLayout({
   return (
     <html lang="ru">
       <body className={inter.className}>
+        <OfflineIndicator />
         {children}
         <GlobalChatWrapper />
 
