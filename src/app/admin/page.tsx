@@ -7,7 +7,7 @@ interface User {
   firstName: string | null;
   email: string | null;
   phone: string | null;
-  role: 'COURIER' | 'MANAGER' | 'ADMIN';
+  role: 'COURIER' | 'OPERATOR' | 'ADMIN';
 }
 
 export default function AdminPage() {
@@ -73,7 +73,7 @@ export default function AdminPage() {
                     className="p-2 border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 cursor-pointer"
                   >
                     <option value="COURIER">Курьер</option>
-                    <option value="MANAGER">Менеджер</option>
+                    <option value="OPERATOR">Менеджер</option>
                     <option value="ADMIN">Админ</option>
                   </select>
                 </td>
