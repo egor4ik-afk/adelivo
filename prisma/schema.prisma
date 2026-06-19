@@ -14,6 +14,7 @@ enum Role {
   OPERATOR
   COURIER
   ADMIN
+  MANAGER
 }
 
 enum OrderStatus {
