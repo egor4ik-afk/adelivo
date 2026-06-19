@@ -20,9 +20,9 @@ interface Profile {
 }
 
 const ROLE_LABELS: Record<string, string> = {
-  OPERATOR: "Оператор",
+  OPERATOR: "Менеджер",   // 🔥 МЕНЯЕМ ЗДЕСЬ (для базы это OPERATOR, а для людей - Менеджер)
   COURIER: "Курьер",
-  ADMIN: "Администратор",
+  ADMIN: "Администратор", // 🔥 Все твои текущие операторы (Иван, Техподдержка) теперь видят это
 };
 
 const SETTINGS = [

@@ -164,16 +164,18 @@ async function sendIndividualPushes(event: NotificationEvent) {
     let targetUrl: string | null = null;
     const role = user.role;
 
-    // ── ОПЕРАТОРЫ и АДМИНЫ ──
-    if (user.role === "OPERATOR" || user.role === "ADMIN") {
-      targetUrl = "/dashboard";
+    // ── АДМИНЫ (бывшие Операторы) и МЕНЕДЖЕРЫ (текущие OPERATOR) ──
+    if (user.role === "ADMIN" || user.role === "OPERATOR") {
+      // Базовый урл: Админов кидаем в дашборд, Менеджеров — в их кабинет
+      targetUrl = user.role === "OPERATOR" ? "/manager" : "/dashboard";
 
       if (event.type === "order.new") {
         if (user.notifyNewOrder) {
           shouldSend = true;
           title = `${getShopPrefix(event.order.shop)}: Новый заказ ${event.order.externalId ?? event.order.crmId}`;
           bodyTexts.push(event.order.address ?? "Без адреса");
-          targetUrl = `/dashboard?orderId=${event.order.id}`;
+          // Админа кидаем на конкретный заказ, Менеджера просто в кабинет
+          targetUrl = user.role === "OPERATOR" ? "/manager" : `/dashboard?orderId=${event.order.id}`;
         }
       } else if (event.type === "order.updated" && event.changes) {
         if (user.notifyStatus && event.changes.statusChanged) {
@@ -196,7 +198,6 @@ async function sendIndividualPushes(event: NotificationEvent) {
           shouldSend = true;
           bodyTexts.push(`Время: ${event.order.slotRaw || "—"}`);
         }
-        // 🔥 ИСПРАВЛЕНО: Проверка на пустой комментарий
         if (user.notifyComment && event.changes.commentChanged && event.order.comment?.trim()) {
           shouldSend = true;
           bodyTexts.push(`Коммент: ${event.order.comment.trim()}`);
@@ -213,15 +214,17 @@ async function sendIndividualPushes(event: NotificationEvent) {
           shouldSend = true;
           bodyTexts.push(`Телефон получателя изменен`);
         }
+        
         if (shouldSend) {
           title = `${getShopPrefix(event.order.shop)}: Изменения в ${event.order.externalId ?? event.order.crmId}`;
-          targetUrl = `/dashboard?orderId=${event.order.id}`;
+          // Формируем правильную ссылку в зависимости от роли
+          targetUrl = user.role === "OPERATOR" ? "/manager" : `/dashboard?orderId=${event.order.id}`;
         }
       } else if (event.type === "address.invalid") {
         shouldSend = true;
         title = `⚠️ Ошибка геокодинга`;
         bodyTexts.push(`Адресов не найдено: ${event.orders.length}`);
-        targetUrl = "/dashboard";
+        targetUrl = user.role === "OPERATOR" ? "/manager" : "/dashboard";
       }
     }
 
