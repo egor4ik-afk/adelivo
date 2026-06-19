@@ -10,43 +10,26 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const [isOperator, setIsOperator] = useState(false);
-  const [secretCode, setSecretCode] = useState("");
-
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
 
-  // ── Ключевой фикс: /login никогда не должен оставаться в стеке истории.
-  // replaceState заменяет текущую запись, а не добавляет новую.
-  // Это значит что кнопка «Назад» с /login уйдёт туда куда пришла ДО /login,
-  // а не будет гонять пользователя в цикле login → dashboard → login.
   useEffect(() => {
     if (typeof window === "undefined") return;
-
-    // Заменяем текущую запись в истории на /login — без добавления новой.
-    // Теперь нажатие «Назад» уйдёт ВЫШЕ /login в стеке, а не останется на ней.
     window.history.replaceState(null, "", "/login");
 
-    // Если пользователь уже авторизован — убираем со страницы логина сразу.
-    // Это предотвращает мигание формы для залогиненных.
     fetch("/api/auth/me")
       .then((r) => r.json())
       .then((d) => {
         if (d?.role === "COURIER") window.location.replace("/courier/profile");
+        else if (d?.role === "OPERATOR") window.location.replace("/manager"); // 🔥 Редирект Менеджера
         else if (d?.role) window.location.replace("/dashboard");
       })
-      .catch(() => {/* не залогинен — ок */});
+      .catch(() => {});
   }, []);
 
   async function handleSendCode(e: React.FormEvent) {
     e.preventDefault();
-
-    if (isOperator && secretCode !== "0007") {
-      setError("Неверный секретный пароль оператора!");
-      return;
-    }
-
     setLoading(true);
     setError("");
     try {
@@ -73,7 +56,7 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, code, isOperator, secretCode: isOperator ? secretCode : undefined }),
+        body: JSON.stringify({ email, code }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -83,8 +66,9 @@ export default function LoginPage() {
         return;
       }
 
-      // replace — не push. Логин не остаётся в истории после успешного входа.
+      // 🔥 Редиректы в зависимости от роли из базы
       if (data.role === "COURIER") window.location.replace("/courier/profile");
+      else if (data.role === "OPERATOR") window.location.replace("/manager");
       else window.location.replace("/dashboard");
     } catch (err: any) {
       setError(err.message);
@@ -141,28 +125,6 @@ export default function LoginPage() {
               placeholder="ivan@example.com"
               style={s.input}
             />
-
-            <label style={{ ...s.label, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", textTransform: "none", color: "#6b6860", fontSize: 13, marginTop: 4, marginBottom: 14 }}>
-              <input
-                type="checkbox" checked={isOperator}
-                onChange={(e) => setIsOperator(e.target.checked)}
-                style={{ accentColor: "#4a7aff", width: 16, height: 16 }}
-              />
-              Войти как оператор
-            </label>
-
-            {isOperator && (
-              <>
-                <label style={s.label}>Секретный код</label>
-                <input
-                  type="password" value={secretCode}
-                  onChange={(e) => setSecretCode(e.target.value)}
-                  placeholder="0000"
-                  style={s.input}
-                />
-              </>
-            )}
-
             <button disabled={loading} style={{ ...s.btn, opacity: loading ? 0.7 : 1 }}>
               {loading ? "Отправка..." : "Получить код"}
             </button>
@@ -239,91 +201,16 @@ export default function LoginPage() {
   );
 }
 
+// Стили оставляем без изменений
 const s: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    background: "#f5f4f0",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 16,
-  },
-  card: {
-    background: "#fff",
-    borderRadius: 20,
-    padding: "32px 28px",
-    width: "100%",
-    maxWidth: 380,
-    boxShadow: "0 4px 32px rgba(0,0,0,0.08)",
-  },
-  logoWrap: {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 28,
-  },
-  logoText: {
-    fontSize: 20,
-    fontWeight: 800,
-    color: "#1a1a18",
-    letterSpacing: "-0.02em",
-  },
-  label: {
-    fontSize: 11,
-    fontWeight: 700,
-    textTransform: "uppercase" as const,
-    letterSpacing: "0.08em",
-    color: "#a8a49c",
-    marginBottom: 6,
-  },
-  input: {
-    padding: "12px 14px",
-    borderRadius: 10,
-    border: "1.5px solid #e8e6df",
-    fontSize: 15,
-    color: "#1a1a18",
-    background: "#fafaf8",
-    marginBottom: 16,
-    outline: "none",
-    width: "100%",
-    fontFamily: "inherit",
-  },
-  btn: {
-    padding: "13px 0",
-    borderRadius: 10,
-    background: "#4a7aff",
-    color: "#fff",
-    fontWeight: 700,
-    fontSize: 15,
-    border: "none",
-    cursor: "pointer",
-    marginTop: 4,
-    width: "100%",
-    fontFamily: "inherit",
-  },
-  back: {
-    marginTop: 12,
-    background: "none",
-    border: "none",
-    color: "#a8a49c",
-    fontSize: 13,
-    cursor: "pointer",
-    textAlign: "center" as const,
-    fontFamily: "inherit",
-  },
-  sub: {
-    fontSize: 13,
-    color: "#6b6860",
-    marginBottom: 20,
-    lineHeight: 1.5,
-  },
-  err: {
-    background: "#fef2f2",
-    color: "#dc2626",
-    borderRadius: 8,
-    padding: "10px 14px",
-    fontSize: 13,
-    marginBottom: 16,
-    fontWeight: 500,
-  },
+  page: { minHeight: "100vh", background: "#f5f4f0", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 },
+  card: { background: "#fff", borderRadius: 20, padding: "32px 28px", width: "100%", maxWidth: 380, boxShadow: "0 4px 32px rgba(0,0,0,0.08)" },
+  logoWrap: { display: "flex", alignItems: "center", gap: 10, marginBottom: 28 },
+  logoText: { fontSize: 20, fontWeight: 800, color: "#1a1a18", letterSpacing: "-0.02em" },
+  label: { fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#a8a49c", marginBottom: 6 },
+  input: { padding: "12px 14px", borderRadius: 10, border: "1.5px solid #e8e6df", fontSize: 15, color: "#1a1a18", background: "#fafaf8", marginBottom: 16, outline: "none", width: "100%", fontFamily: "inherit" },
+  btn: { padding: "13px 0", borderRadius: 10, background: "#4a7aff", color: "#fff", fontWeight: 700, fontSize: 15, border: "none", cursor: "pointer", marginTop: 4, width: "100%", fontFamily: "inherit" },
+  back: { marginTop: 12, background: "none", border: "none", color: "#a8a49c", fontSize: 13, cursor: "pointer", textAlign: "center", fontFamily: "inherit" },
+  sub: { fontSize: 13, color: "#6b6860", marginBottom: 20, lineHeight: 1.5 },
+  err: { background: "#fef2f2", color: "#dc2626", borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: 16, fontWeight: 500 },
 };

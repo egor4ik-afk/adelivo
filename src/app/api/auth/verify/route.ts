@@ -5,8 +5,7 @@ import { signToken } from "@/lib/auth";
 
 export async function POST(req: Request) {
   try {
-    // 🔥 Принимаем isOperator от клиента
-    const { email: rawEmail, code, isOperator, secretCode } = await req.json();
+    const { email: rawEmail, code } = await req.json();
     if (!rawEmail || !code) return NextResponse.json({ error: "Email и код обязательны" }, { status: 400 });
 
     const email = rawEmail.toLowerCase().trim();
@@ -25,26 +24,9 @@ export async function POST(req: Request) {
     if (!authCode) return NextResponse.json({ error: "Неверный или просроченный код" }, { status: 400 });
 
     await prisma.authCode.update({ where: { id: authCode.id }, data: { used: true } });
-    let user = authCode.user;
+    const user = authCode.user;
 
-    // 🔥 ЯВНОЕ УПРАВЛЕНИЕ РОЛЯМИ
-    if (isOperator && secretCode === "0007") {
-      // Если стоит галочка и код верный — делаем оператором
-      if (user.role !== "OPERATOR" && user.role !== "ADMIN") {
-        user = await prisma.user.update({
-          where: { id: user.id }, data: { role: "OPERATOR" }
-        });
-      }
-    } else if (!isOperator) {
-      // Если заходим без галочки (как курьер), возвращаем роль курьера
-      // Это спасет от "застревания" в операторах после тестов
-      if (user.role === "OPERATOR") {
-        user = await prisma.user.update({
-          where: { id: user.id }, data: { role: "COURIER" }
-        });
-      }
-    }
-
+    // Обновляем время входа
     await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
     const sessionToken = await signToken({ userId: user.id, role: user.role });
@@ -57,9 +39,7 @@ export async function POST(req: Request) {
     let linked = true;
     if (user.role === "COURIER") {
       const courier = await prisma.courier.findFirst({ 
-        where: { 
-          email: { equals: user.email, mode: "insensitive" } 
-        } 
+        where: { email: { equals: user.email, mode: "insensitive" } } 
       });
       if (!courier) linked = false;
     }
