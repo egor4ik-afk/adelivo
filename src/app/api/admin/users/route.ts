@@ -1,7 +1,6 @@
 
 import { NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
-
+import { prisma } from '@/lib/prisma';
 // GET: Получить всех пользователей для таблицы в админке
 export async function GET() {
   try {
