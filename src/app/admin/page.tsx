@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 
 interface User {
   id: string;
-  firstName: string | null;
+  name: string | null;
   email: string | null;
   phone: string | null;
   role: 'COURIER' | 'OPERATOR' | 'ADMIN';
@@ -13,15 +13,36 @@ interface User {
 export default function AdminPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  
+  // 🔥 ДОБАВЛЕНО: Состояние проверки прав
+  const [isAuthorized, setIsAuthorized] = useState(false);
 
-  // Загружаем юзеров при открытии страницы
   useEffect(() => {
-    fetch('/api/admin/users')
-      .then((res) => res.json())
-      .then((data) => setUsers(Array.isArray(data) ? data : []));
+    // 🔥 ПРОВЕРКА ПРАВ ДОСТУПА
+    fetch('/api/auth/me')
+      .then((res) => {
+        if (!res.ok) throw new Error('Not logged in');
+        return res.json();
+      })
+      .then((data) => {
+        // Пускаем ТОЛЬКО Админов
+        if (data?.role !== 'ADMIN') {
+          window.location.replace('/dashboard'); // Если не админ, выкидываем
+          return;
+        }
+        
+        setIsAuthorized(true); // Права подтверждены, показываем страницу
+        
+        // Только после подтверждения прав грузим список пользователей
+        fetch('/api/admin/users')
+          .then((res) => res.json())
+          .then((data) => setUsers(Array.isArray(data) ? data : []));
+      })
+      .catch(() => {
+        window.location.replace('/login'); // Если вообще не авторизован
+      });
   }, []);
 
-  // Функция изменения роли
   const handleRoleChange = async (userId: string, newRole: string) => {
     setLoadingId(userId);
     try {
@@ -32,7 +53,6 @@ export default function AdminPage() {
       });
       
       if (res.ok) {
-        // Локально обновляем UI, если сервер ответил 200 OK
         setUsers((prev) =>
           prev.map((u) => (u.id === userId ? { ...u, role: newRole as User['role'] } : u))
         );
@@ -46,31 +66,40 @@ export default function AdminPage() {
     }
   };
 
+  // Пока проверяем права, показываем загрузку (чтобы интерфейс не мелькал)
+  if (!isAuthorized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#f5f4f0]">
+        <p className="text-[#a8a49c] font-medium animate-pulse">Проверка прав доступа...</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6 text-gray-900">Управление пользователями</h1>
+    <div className="max-w-4xl mx-auto p-6 min-h-screen bg-[#f5f4f0]">
+      <h1 className="text-2xl font-bold mb-6 text-[#1a1a18]">Управление доступом (Админ)</h1>
       
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-sm border border-[#e8e6df] overflow-hidden">
         <table className="w-full text-left">
-          <thead className="bg-gray-50 border-b border-gray-200">
+          <thead className="bg-[#fafaf8] border-b border-[#e8e6df]">
             <tr>
-              <th className="p-4 text-sm font-semibold text-gray-600">Сотрудник</th>
-              <th className="p-4 text-sm font-semibold text-gray-600">Роль</th>
+              <th className="p-4 text-xs font-bold text-[#a8a49c] uppercase tracking-wider">Сотрудник</th>
+              <th className="p-4 text-xs font-bold text-[#a8a49c] uppercase tracking-wider">Роль</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-[#e8e6df]">
             {users.map((user) => (
-              <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+              <tr key={user.id} className="hover:bg-[#fafaf8] transition-colors">
                 <td className="p-4">
-                  <div className="font-medium text-gray-900">{user.firstName || 'Имя не указано'}</div>
-                  <div className="text-sm text-gray-500">{user.email || user.phone}</div>
+                  <div className="font-bold text-[#1a1a18]">{user.name || 'Имя не указано'}</div>
+                  <div className="text-sm font-medium text-[#a8a49c]">{user.email || user.phone}</div>
                 </td>
                 <td className="p-4">
                   <select
                     value={user.role}
                     disabled={loadingId === user.id}
                     onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                    className="p-2 border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 cursor-pointer"
+                    className="p-2 border border-[#e8e6df] rounded-lg bg-white text-[#1a1a18] font-medium focus:outline-none focus:border-[#4a7aff] disabled:opacity-50 cursor-pointer"
                   >
                     <option value="COURIER">Курьер</option>
                     <option value="OPERATOR">Менеджер</option>

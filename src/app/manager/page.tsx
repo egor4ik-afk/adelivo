@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { ProfilePanel } from '@/components/ProfilePanel';
+
 type ChangeType = 'TIME_CHANGED' | 'ORDERS_CHANGED' | 'ROUTE_REASSIGNED';
 
 interface Notification {
@@ -23,6 +24,9 @@ export default function ManagerDashboard() {
   const [tasks, setTasks] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  
+  // 🔥 ДОБАВЛЕНО: Состояние проверки прав
+  const [isAuthorized, setIsAuthorized] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -33,39 +37,56 @@ export default function ManagerDashboard() {
     }
   };
 
-
-  // Получаем реальные данные при загрузке страницы
   useEffect(() => {
-    fetch('/api/manager/notifications')
-      .then((res) => res.json())
+    // 🔥 ПРОВЕРКА ПРАВ (Пускаем только OPERATOR и ADMIN)
+    fetch('/api/auth/me')
+      .then((res) => {
+        if (!res.ok) throw new Error('Not logged in');
+        return res.json();
+      })
+      .then((data) => {
+        if (data?.role !== 'OPERATOR' && data?.role !== 'ADMIN') {
+          window.location.replace('/dashboard');
+          return;
+        }
+        setIsAuthorized(true);
+
+        // Права есть, грузим уведомления
+        return fetch('/api/manager/notifications');
+      })
+      .then((res) => res?.json())
       .then((data) => {
         if (Array.isArray(data)) setTasks(data);
         setLoading(false);
       })
       .catch((err) => {
-        console.error('Ошибка загрузки:', err);
-        setLoading(false);
+        console.error('Ошибка:', err);
+        if (err.message === 'Not logged in') {
+          window.location.replace('/login');
+        } else {
+          setLoading(false);
+        }
       });
   }, []);
 
   const markAsSeen = async (id: string) => {
-    // 1. Оптимистичное обновление UI (плашка исчезает мгновенно)
     setTasks((prev) => prev.filter((task) => task.id !== id));
-
-    // 2. Отправляем запрос в базу
     try {
-      const res = await fetch(`/api/manager/notifications/${id}`, {
-        method: 'PATCH',
-      });
-      if (!res.ok) {
-        throw new Error('Ошибка при скрытии');
-      }
+      const res = await fetch(`/api/manager/notifications/${id}`, { method: 'PATCH' });
+      if (!res.ok) throw new Error('Ошибка при скрытии');
     } catch (error) {
       console.error(error);
-      // Если запрос упал, можно было бы вернуть плашку обратно, 
-      // но для скорости работы менеджера лучше оставить как есть.
     }
   };
+
+  // 🔥 Пока идет проверка, не показываем интерфейс
+  if (!isAuthorized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#f5f4f0]">
+        <p className="text-[#a8a49c] font-medium animate-pulse">Проверка прав доступа...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f5f4f0]">
