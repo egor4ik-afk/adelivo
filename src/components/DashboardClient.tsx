@@ -2057,8 +2057,8 @@ export function DashboardClient({ user }: { user: User }) {
           {/* Ряд 2: фильтры + маршруты + слоты */}
           <div className="hide-scrollbar" style={{ display: "flex", gap: 6, padding: "6px 10px", background: "#fff", borderBottom: "1px solid #e8e6df", overflowX: "auto", flexShrink: 0, alignItems: "center" }}>
 
-            {/* 🔥 КАЛЕНДАРЬ НА МОБИЛКЕ (в режиме Portal) */}
-            <div style={{ position: "relative", flexShrink: 0, zIndex: 110 }}>
+            {/* 🔥 КАЛЕНДАРЬ НА МОБИЛКЕ (в режиме Portal-Dropdown) */}
+            <div style={{ position: "relative", flexShrink: 0 }}>
               <DatePicker
                 locale={ru}
                 selected={new Date(filterDate)}
@@ -2072,7 +2072,24 @@ export function DashboardClient({ user }: { user: User }) {
                 }}
                 dateFormat="dd.MM.yyyy"
                 customInput={<CustomDateInput />}
-                withPortal={true} // 🔥 КЛЮЧЕВОЙ ФИКС: Модалка откроется по центру и не обрежется
+
+                // 1. Выключаем полноэкранную модалку, возвращаем поведение дропдауна
+                withPortal={false}
+
+                // 2. Железобетонное решение для iOS: вырываем календарь из overflowX: "auto" в корень body
+                portalId="dashboard-datepicker-portal"
+
+                // 3. Управляем позиционированием дропдауна относительно кнопки
+                popperPlacement="bottom-start"
+                popperClassName="relative z-[99999]" // Гарантируем, что портал будет поверх шапки и других слоев
+                popperModifiers={[
+                  {
+                    name: "preventOverflow",
+                    options: {
+                      boundary: "viewport", // Не дает календарю уезжать за границы экрана мобилки
+                    },
+                  },
+                ]}
               />
             </div>
 
