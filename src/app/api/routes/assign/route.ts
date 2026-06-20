@@ -1,13 +1,19 @@
-// src/app/api/routes/assign/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { notify } from "@/lib/notifications";
+import { notify, createManagerPlaque } from "@/lib/notifications"; // 🔥 ДОБАВЛЕН ИМПОРТ ПЛАШКИ
 import { updateCrmOrder } from "@/lib/crm";
+import { getSession } from "@/lib/auth"; // 🔥 ДОБАВЛЕН ИМПОРТ СЕССИИ (чтобы знать, кто логист)
 
 const STORE_COORDS = "55.749511,37.596205";
 
 export async function POST(req: Request) {
   try {
+    // 🔥 Получаем данные логиста, который сейчас сохраняет маршрут
+    const session = await getSession();
+    const authorName = session?.firstName 
+      ? `${session.firstName} ${session.lastName || ''}`.trim() 
+      : "Логист";
+
     const body = await req.json();
     const { 
       orderIds, courierId, returnToBase = false, routeDate, 
@@ -199,7 +205,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // 🔥 УМНАЯ ОТПРАВКА PUSH-УВЕДОМЛЕНИЙ С CUSTOM ТИПОМ
+    // 🔥 1. УМНАЯ ОТПРАВКА PUSH-УВЕДОМЛЕНИЙ КУРЬЕРУ
     let shouldSendPush = false;
     let isNewRoute = false;
 
@@ -222,7 +228,6 @@ export async function POST(req: Request) {
             pointsCount: orderIds.length
           });
         } else {
-          // Изменение состава — отправляем как custom с другим текстом
           await notify({
             type: "custom",
             userId: userObj.id,
@@ -232,6 +237,34 @@ export async function POST(req: Request) {
           });
         }
       }
+    }
+
+    // 🔥 2. ГЕНЕРАЦИЯ ПЛАШКИ И ПУША ДЛЯ МЕНЕДЖЕРА
+    try {
+      let changeType: 'ROUTE_REASSIGNED' | 'TIME_CHANGED' | 'ORDERS_CHANGED' | null = null;
+      
+      if (isNewRoute) {
+        changeType = 'ROUTE_REASSIGNED';
+      } else if (plannedDepartureTime !== undefined && plannedDepartureTime !== fallbackPlannedTime) {
+        changeType = 'TIME_CHANGED';
+      } else if (pointsChanged) {
+        changeType = 'ORDERS_CHANGED';
+      }
+
+      // Если было изменение и курьер существует, отправляем плашку
+      if (changeType && courierDb) {
+        await createManagerPlaque({
+          courierId: String(courierDb.id),
+          firstName: courierDb.firstName || '',
+          lastName: courierDb.lastName || '',
+          baseTime: newRoute.plannedDepartureTime || '—',
+          oldTime: changeType === 'TIME_CHANGED' ? fallbackPlannedTime : null,
+          changeType: changeType,
+          authorName: authorName
+        });
+      }
+    } catch (err) {
+      console.error("[Manager Plaque Error]:", err);
     }
 
     return NextResponse.json({ success: true, routeId: newRoute.id });
