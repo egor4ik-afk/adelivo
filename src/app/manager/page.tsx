@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { ProfilePanel } from '@/components/ProfilePanel';
+import { performLogout } from '@/lib/logout'; // 🔥 Импортируем
 
 type ChangeType = 'TIME_CHANGED' | 'ORDERS_CHANGED' | 'ROUTE_REASSIGNED';
 
@@ -47,10 +48,7 @@ export default function ManagerDashboard() {
   const [isAuthorized, setIsAuthorized] = useState(false);
 
   const handleLogout = async () => {
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-      window.location.replace('/login');
-    } catch (err) { console.error('Ошибка', err); }
+    await performLogout();
   };
 
   useEffect(() => {
@@ -130,7 +128,7 @@ export default function ManagerDashboard() {
         </div>
         <div className="relative">
           <button onClick={() => setIsProfileOpen(!isProfileOpen)} className="w-10 h-10 bg-[#e8e6df] rounded-full flex items-center justify-center text-xl hover:bg-[#dcd9d1] transition-colors">👨‍💻</button>
-          {isProfileOpen && <div className="absolute right-0 top-14 z-50"><ProfilePanel onClose={() => setIsProfileOpen(false)} onLogout={handleLogout} /></div>}
+          {isProfileOpen && <div className="absolute right-0 top-14 z-50"><ProfilePanel onClose={() => setIsProfileOpen(false)} /></div>}
         </div>
       </header>
 

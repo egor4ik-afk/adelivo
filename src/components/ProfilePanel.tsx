@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { usePushNotifications } from "./usePushNotifications";
 import imageCompression from "browser-image-compression"; // 🔥 Для сжатия фото перед загрузкой
+import { performLogout } from '@/lib/logout'; // 🔥 Импортируем
 
 interface Profile {
   id: string; email: string; role: string;
@@ -36,7 +37,7 @@ const SETTINGS = [
   { key: "notifyItems", label: "Изменение состава" },
 ];
 
-export function ProfilePanel({ onClose, onLogout }: { onClose: () => void; onLogout: () => void }) {
+export function ProfilePanel({ onClose }: { onClose: () => void; }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ firstName: "", lastName: "", phone: "" });
@@ -118,6 +119,10 @@ export function ProfilePanel({ onClose, onLogout }: { onClose: () => void; onLog
       setUploadingAvatar(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  };
+  
+  const handleLogout = async () => {
+    await performLogout();
   };
 
   const initials = profile
@@ -212,7 +217,7 @@ export function ProfilePanel({ onClose, onLogout }: { onClose: () => void; onLog
           )}
 
           <button style={s.editBtn} onClick={() => setEditing(true)}>Редактировать профиль</button>
-          <button style={s.logoutBtn} onClick={onLogout}>Выйти из аккаунта</button>
+          <button style={s.logoutBtn} onClick={handleLogout}>Выйти из аккаунта</button>
         </>
       ) : (
         <>

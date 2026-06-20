@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { usePushNotifications } from "@/components/usePushNotifications";
 import { IMaskInput } from "react-imask";
 import imageCompression from "browser-image-compression";
+import { performLogout } from '@/lib/logout'; // 🔥 Импортируем
 
 interface Profile {
   id: string; 
@@ -340,8 +341,7 @@ export default function CourierProfilePage() {
   };
 
   const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
-    window.location.href = "/login";
+    await performLogout();
   };
 
   const handleSubscribe = async () => {

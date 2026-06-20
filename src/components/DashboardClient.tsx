@@ -447,9 +447,9 @@ export function DashboardClient({ user }: { user: User }) {
 
   const selected = orders.find(o => o.id === selectedId) ?? null;
   // 🔥 ДОБАВЛЕНО: игнорируем ошибки адреса у отмененных и возвращенных заказов
-  const invalid = dateAndStatusOrders.filter(o => 
-    o.isInvalid && 
-    o.status !== "CANCELLED" && 
+  const invalid = dateAndStatusOrders.filter(o =>
+    o.isInvalid &&
+    o.status !== "CANCELLED" &&
     o.status !== "RETURNED" &&
     !/самовывоз|большой афанасьевский 39/i.test(o.address || "")
   );
@@ -2052,11 +2052,11 @@ export function DashboardClient({ user }: { user: User }) {
         </div>
       )}
 
-{isMobile && (
+      {isMobile && (
         <>
           {/* Ряд 2: фильтры + маршруты + слоты */}
           <div className="hide-scrollbar" style={{ display: "flex", gap: 6, padding: "6px 10px", background: "#fff", borderBottom: "1px solid #e8e6df", overflowX: "auto", flexShrink: 0, alignItems: "center" }}>
-            
+
             {/* 🔥 КАЛЕНДАРЬ НА МОБИЛКЕ (в режиме Portal) */}
             <div style={{ position: "relative", flexShrink: 0, zIndex: 110 }}>
               <DatePicker
@@ -2312,7 +2312,7 @@ export function DashboardClient({ user }: { user: User }) {
 
       {profileOpen && (
         <div style={{ position: "fixed", top: 52, right: 8, zIndex: 200 }}>
-          <ProfilePanel onClose={() => setProfileOpen(false)} onLogout={async () => { await fetch("/api/auth/logout", { method: "POST" }); window.location.href = "/login"; }} />
+          <ProfilePanel onClose={() => setProfileOpen(false)} />
         </div>
       )}
 
