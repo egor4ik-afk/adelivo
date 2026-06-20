@@ -20,8 +20,6 @@ self.addEventListener("push", (event) => {
     },
     vibrate: [200, 100, 200],
     requireInteraction: false,
-    // 🔥 Берём tag из данных пуша — сервер теперь шлёт уникальные теги
-    // chat-conv-<id>, chat-global-<senderId>, order-<id>, eventwave
     tag: data.tag || (data.orderId ? `order-${data.orderId}` : "eventwave"),
     renotify: true,
   };
@@ -67,7 +65,10 @@ self.addEventListener("notificationclick", (event) => {
 
         if (existing) {
           existing.postMessage({ type: "NOTIFICATION_CLICK", orderId, role });
-          return existing.focus().then((c) => c.navigate(targetUrl));
+          // 🔥 Безопасный переход
+          return existing.focus().then((c) => {
+            if (c.navigate) return c.navigate(targetUrl);
+          });
         }
 
         if (self.clients.openWindow) {
@@ -77,12 +78,15 @@ self.addEventListener("notificationclick", (event) => {
   );
 });
 
-// 🔥 Переподписка если браузер обновил подписку
+// 🔥 Исправленная переподписка с проверкой ключа
 self.addEventListener("pushsubscriptionchange", (event) => {
+  const appKey = event.oldSubscription?.options?.applicationServerKey;
+  if (!appKey) return; 
+
   event.waitUntil(
     self.registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: event.oldSubscription?.options?.applicationServerKey,
+      applicationServerKey: appKey,
     }).then((newSubscription) => {
       return fetch("/api/push/subscribe", {
         method: "POST",
@@ -99,4 +103,16 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-self.addEventListener("fetch", () => {});
+// 🔥 ОДИН ЕДИНСТВЕННЫЙ обработчик fetch
+self.addEventListener("fetch", (event) => {
+  // Игнорируем запросы к FCM
+  if (event.request.url.includes('fcm.googleapis.com')) {
+    return;
+  }
+  
+  event.respondWith(
+    caches.match(event.request).then((response) => {
+      return response || fetch(event.request);
+    })
+  );
+});
