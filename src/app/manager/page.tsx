@@ -7,22 +7,42 @@ type ChangeType = 'TIME_CHANGED' | 'ORDERS_CHANGED' | 'ROUTE_REASSIGNED';
 
 interface Notification {
   id: string; firstName: string; lastName: string;
-  baseTime: string; changeType: ChangeType; isSeen: boolean; createdAt: string;
+  baseTime: string; oldTime?: string | null; authorName?: string | null;
+  changeType: ChangeType; isSeen: boolean; createdAt: string;
 }
 
-const badgeConfig: Record<string, { text: string; styles: string }> = {
-  TIME_CHANGED: { text: 'Изменено время', styles: 'bg-orange-100 text-orange-800 border-orange-200' },
-  ORDERS_CHANGED: { text: 'Изменены заказы', styles: 'bg-blue-100 text-blue-800 border-blue-200' },
-  ROUTE_REASSIGNED: { text: 'Новый маршрут', styles: 'bg-rose-100 text-rose-800 border-rose-200' },
+const badgeConfig: Record<string, { text: string; styles: string; icon: string }> = {
+  TIME_CHANGED: { text: 'Изменилось время', styles: 'bg-orange-100 text-orange-800', icon: '⏱' },
+  ORDERS_CHANGED: { text: 'Изменились заказы', styles: 'bg-blue-100 text-blue-800', icon: '📦' },
+  ROUTE_REASSIGNED: { text: 'Новый маршрут', styles: 'bg-rose-100 text-rose-800', icon: '🗺️' },
+};
+
+const LOCAL_STATUSES: Record<string, { label: string, color: string }> = {
+  NEW: { label: 'Новый', color: 'bg-gray-100 text-gray-700' },
+  ASSIGNED: { label: 'Назначен', color: 'bg-blue-100 text-blue-700' },
+  IN_DELIVERY: { label: 'В пути', color: 'bg-yellow-100 text-yellow-800' },
+  DELIVERED: { label: 'Доставлен', color: 'bg-green-100 text-green-800' },
+  RETURNED: { label: 'Возврат', color: 'bg-red-100 text-red-800' },
+  CANCELLED: { label: 'Отменён', color: 'bg-gray-200 text-gray-500' },
+};
+
+// 🔥 ДОБАВЛЕН СЛОВАРЬ ТВОИХ СТАТУСОВ ИЗ CRM
+const CRM_STATUSES: Record<string, { label: string, color: string }> = {
+  'new': { label: 'Новый (CRM)', color: 'border-[#e8e6df] text-[#8c8880] bg-[#fafaf8]' },
+  'assembling': { label: 'Сборка', color: 'border-yellow-200 text-yellow-700 bg-yellow-50' },
+  'assembling-complete': { label: 'Собран', color: 'border-teal-200 text-teal-700 bg-teal-50' },
+  'send-to-delivery': { label: 'Передан курьеру', color: 'border-purple-200 text-purple-700 bg-purple-50' },
+  'complete': { label: 'Выполнен', color: 'border-green-200 text-green-700 bg-green-50' },
+  'cancel-other': { label: 'Отменен (CRM)', color: 'border-gray-200 text-gray-500 bg-gray-50' },
+  'return': { label: 'Возврат (CRM)', color: 'border-red-200 text-red-700 bg-red-50' },
+  'chastichnyi-vozvrat': { label: 'Част. возврат', color: 'border-orange-200 text-orange-700 bg-orange-50' },
 };
 
 export default function ManagerDashboard() {
   const [activeTab, setActiveTab] = useState<'new' | 'routes' | 'history'>('new');
-  
   const [tasks, setTasks] = useState<Notification[]>([]);
   const [history, setHistory] = useState<Notification[]>([]);
   const [routes, setRoutes] = useState<any[]>([]);
-  
   const [loading, setLoading] = useState(true);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(false);
@@ -55,7 +75,6 @@ export default function ManagerDashboard() {
     setLoading(true);
     try {
       if (activeTab === 'new' || activeTab === 'routes') {
-        // Грузим и уведомления, и маршруты, чтобы объединить их на первом экране
         const [notifRes, routesRes] = await Promise.all([
           fetch('/api/manager/notifications'),
           fetch('/api/manager/routes')
@@ -88,15 +107,10 @@ export default function ManagerDashboard() {
     );
   }
 
-  // 🔥 ЛОГИКА ДЛЯ ПЕРВОЙ ВКЛАДКИ: Связываем Уведомления с Маршрутами
-  // И сортируем их по времени прибытия на базу (baseTime)
   const tasksWithRoutes = tasks.map(task => {
-    // Ищем маршрут, где имя и фамилия курьера совпадают с уведомлением
-    const matchedRoute = routes.find(r => 
-      r.courier?.firstName === task.firstName && r.courier?.lastName === task.lastName
-    );
+    const matchedRoute = routes.find(r => r.courier?.firstName === task.firstName && r.courier?.lastName === task.lastName);
     return { ...task, routeData: matchedRoute };
-  }).sort((a, b) => a.baseTime.localeCompare(b.baseTime)); // Сортировка: кто раньше - сверху
+  }).sort((a, b) => a.baseTime.localeCompare(b.baseTime));
 
   return (
     <div className="min-h-screen bg-[#f5f4f0]">
@@ -106,39 +120,20 @@ export default function ManagerDashboard() {
           <h1 className="text-xl font-bold text-gray-900 tracking-tight">Кабинет менеджера</h1>
         </div>
         <div className="relative">
-          <button 
-            onClick={() => setIsProfileOpen(!isProfileOpen)}
-            className="w-10 h-10 bg-[#e8e6df] rounded-full flex items-center justify-center text-xl hover:bg-[#dcd9d1] transition-colors"
-          >👨‍💻</button>
-          {isProfileOpen && (
-            <div className="absolute right-0 top-14 z-50">
-              <ProfilePanel onClose={() => setIsProfileOpen(false)} onLogout={handleLogout} />
-            </div>
-          )}
+          <button onClick={() => setIsProfileOpen(!isProfileOpen)} className="w-10 h-10 bg-[#e8e6df] rounded-full flex items-center justify-center text-xl hover:bg-[#dcd9d1] transition-colors">👨‍💻</button>
+          {isProfileOpen && <div className="absolute right-0 top-14 z-50"><ProfilePanel onClose={() => setIsProfileOpen(false)} onLogout={handleLogout} /></div>}
         </div>
       </header>
 
       <main className="max-w-5xl mx-auto p-4 sm:p-6">
-        
-        {/* Вкладки (Tabs) */}
         <div className="flex bg-[#e8e6df] p-1 rounded-xl w-fit mb-6 shadow-inner overflow-x-auto">
-          <button 
-            onClick={() => setActiveTab('new')} 
-            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'new' ? 'bg-white shadow-sm text-[#1a1a18]' : 'text-[#8c8880] hover:text-[#1a1a18]'}`}
-          >
-            Требуют внимания 
-            {tasks.length > 0 && <span className="bg-[#dc2626] text-white px-2 py-0.5 rounded-full text-[11px]">{tasks.length}</span>}
+          <button onClick={() => setActiveTab('new')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'new' ? 'bg-white shadow-sm text-[#1a1a18]' : 'text-[#8c8880] hover:text-[#1a1a18]'}`}>
+            Требуют внимания {tasks.length > 0 && <span className="bg-[#dc2626] text-white px-2 py-0.5 rounded-full text-[11px]">{tasks.length}</span>}
           </button>
-          <button 
-            onClick={() => setActiveTab('routes')} 
-            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'routes' ? 'bg-white shadow-sm text-[#1a1a18]' : 'text-[#8c8880] hover:text-[#1a1a18]'}`}
-          >
+          <button onClick={() => setActiveTab('routes')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'routes' ? 'bg-white shadow-sm text-[#1a1a18]' : 'text-[#8c8880] hover:text-[#1a1a18]'}`}>
             Все текущие маршруты
           </button>
-          <button 
-            onClick={() => setActiveTab('history')} 
-            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'history' ? 'bg-white shadow-sm text-[#1a1a18]' : 'text-[#8c8880] hover:text-[#1a1a18]'}`}
-          >
+          <button onClick={() => setActiveTab('history')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'history' ? 'bg-white shadow-sm text-[#1a1a18]' : 'text-[#8c8880] hover:text-[#1a1a18]'}`}>
             История логов
           </button>
         </div>
@@ -148,94 +143,109 @@ export default function ManagerDashboard() {
         ) : (
           <div className="flex flex-col gap-6">
             
-            {/* Вкладка: ТРЕБУЮТ ВНИМАНИЯ (Уведомления + Маршрут внутри) */}
+            {/* ТАБЛИЦА: ТРЕБУЮТ ВНИМАНИЯ */}
             {activeTab === 'new' && (
-              <div className="flex flex-col gap-4">
-                {tasksWithRoutes.map((item) => (
-                  <div key={item.id} className="bg-white border-2 border-rose-100 rounded-2xl shadow-sm overflow-hidden relative">
-                    
-                    {/* Красная полоска слева для привлечения внимания */}
-                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-rose-400"></div>
+              <div className="flex flex-col gap-3">
+                <div className="hidden sm:grid grid-cols-[2fr_1fr_2fr_1fr_auto] gap-4 px-4 py-2 text-xs font-bold text-[#a8a49c] uppercase tracking-wider border-b border-[#e8e6df]">
+                  <div>Курьер</div>
+                  <div>Время на базе</div>
+                  <div>Событие</div>
+                  <div>Кто изменил</div>
+                  <div className="text-right">Увидел</div>
+                </div>
 
-                    {/* Верхняя панель (Кто, Во сколько на базе, Какое изменение) */}
-                    <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#fffcfc] border-b border-rose-50 pl-6 sm:pl-7">
-                      <div className="flex items-center gap-4">
-                        <div className="flex flex-col items-center justify-center w-14 h-14 bg-white border border-rose-100 shadow-sm rounded-xl shrink-0">
-                          <span className="text-[10px] font-bold text-[#a8a49c] uppercase tracking-wider -mb-1">На базе</span>
-                          <span className="text-lg font-black text-[#1a1a18]">{item.baseTime}</span>
-                        </div>
-                        <div>
-                          <p className="text-xl font-extrabold text-[#1a1a18] leading-none mb-1.5">
-                            {item.firstName} {item.lastName}
-                          </p>
-                          <span className={`inline-flex px-3 py-1 text-xs font-bold border rounded-lg ${badgeConfig[item.changeType]?.styles || 'bg-gray-100 text-gray-800'}`}>
-                            {badgeConfig[item.changeType]?.text || 'Изменение'}
-                          </span>
-                        </div>
-                      </div>
+                {tasksWithRoutes.map((item) => (
+                  <div key={item.id} className="bg-white border-2 border-transparent hover:border-rose-100 rounded-2xl shadow-sm transition-all group overflow-hidden">
+                    <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-[2fr_1fr_2fr_1fr_auto] gap-3 sm:gap-4 items-center">
                       
-                      {/* Кнопка "Скрыть" */}
-                      <button 
-                        onClick={() => markAsSeen(item.id)} 
-                        className="flex items-center justify-center gap-2 px-4 h-12 text-[#1a1a18] bg-white border border-[#e8e6df] shadow-sm hover:bg-green-500 hover:text-white hover:border-green-600 rounded-xl transition-all font-bold text-sm w-full sm:w-auto"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                        Понятно
-                      </button>
+                      <div className="font-extrabold text-[#1a1a18] text-base">
+                        {item.firstName} {item.lastName}
+                      </div>
+
+                      <div className="flex items-center gap-2 text-base font-black">
+                        {item.oldTime && (
+                          <>
+                            <span className="text-[#a8a49c] line-through decoration-rose-500 decoration-2">{item.oldTime}</span>
+                            <span className="text-[#a8a49c]">→</span>
+                          </>
+                        )}
+                        <span className="text-[#1a1a18]">{item.baseTime}</span>
+                      </div>
+
+                      <div>
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg ${badgeConfig[item.changeType]?.styles || 'bg-gray-100 text-gray-800'}`}>
+                          {badgeConfig[item.changeType]?.icon} {badgeConfig[item.changeType]?.text || 'Изменение'}
+                        </span>
+                      </div>
+
+                      <div className="text-xs font-semibold text-[#6b6860]">
+                        {item.authorName ? `Изменил: ${item.authorName}` : 'Система'}
+                      </div>
+
+                      <div className="flex justify-end">
+                        <button 
+                          onClick={() => markAsSeen(item.id)} 
+                          className="w-10 h-10 border-2 border-[#e8e6df] rounded-xl flex items-center justify-center text-transparent hover:border-green-500 hover:bg-green-50 hover:text-green-600 transition-all shadow-sm"
+                          title="Пометить увиденным"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        </button>
+                      </div>
                     </div>
 
-                    {/* Нижняя часть - Детали маршрута, если он найден */}
-                    {item.routeData ? (
-                      <div className="p-4 sm:p-5 pl-6 sm:pl-7 bg-white">
-                        <div className="flex items-center gap-2 mb-3">
-                          <span className="text-sm font-bold text-[#6b6860]">
-                            Маршрут #{item.routeData.name || item.routeData.id.slice(-4).toUpperCase()}
-                          </span>
-                          <span className="bg-[#f5f4f0] text-[#8c8880] px-2 py-0.5 rounded-md text-xs font-bold">
-                            {item.routeData.orders?.length || 0} точек
-                          </span>
-                        </div>
-                        <div className="flex flex-col gap-2">
-                          {item.routeData.orders?.slice(0, 3).map((order: any, idx: number) => (
-                            <div key={order.id} className="flex gap-3 items-start">
-                              <div className="w-5 h-5 rounded bg-[#f5f4f0] text-[#8c8880] flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">
-                                {idx + 1}
+                    {item.routeData && item.routeData.orders?.length > 0 && (
+                      <div className="bg-[#fafaf8] border-t border-[#f0efe9] p-4">
+                        <p className="text-xs font-bold text-[#8c8880] mb-3 uppercase tracking-wider">
+                          Маршрут курьера ({item.routeData.orders.length} точек)
+                        </p>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                          {item.routeData.orders.map((order: any, idx: number) => {
+                            const localStatus = LOCAL_STATUSES[order.status] || LOCAL_STATUSES.NEW;
+                            const crmConf = order.crmStatus ? (CRM_STATUSES[order.crmStatus] || { label: order.crmStatus, color: 'border-gray-200 text-gray-500' }) : null;
+
+                            return (
+                              <div key={order.id} className="flex gap-3 items-start bg-white p-3 border border-[#e8e6df] rounded-xl shadow-sm">
+                                <div className="w-6 h-6 rounded bg-[#1a1a18] text-white flex items-center justify-center text-xs font-black shrink-0">
+                                  {idx + 1}
+                                </div>
+                                <div className="flex-grow min-w-0">
+                                  <p className="text-[13px] font-bold text-[#1a1a18] break-words mb-1">
+                                    {order.address || 'Без адреса'}
+                                  </p>
+                                  <div className="flex flex-wrap gap-2 items-center">
+                                    <span className="text-[11px] font-bold text-[#6b6860] bg-[#f5f4f0] px-2 py-0.5 rounded border border-[#e8e6df]">
+                                      ⏱ {order.slotRaw || '—'}
+                                    </span>
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${localStatus.color}`}>
+                                      {localStatus.label}
+                                    </span>
+                                    {/* 🔥 КРАСИВЫЙ ВЫВОД CRM СТАТУСА */}
+                                    {crmConf && (
+                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${crmConf.color}`}>
+                                        CRM: {crmConf.label}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                              <div className="flex-grow min-w-0">
-                                <p className="text-[13px] font-bold text-[#1a1a18] truncate">
-                                  {order.address || 'Без адреса'}
-                                </p>
-                                <p className="text-[11px] font-semibold text-[#a8a49c] mt-0.5">
-                                  ⏱ {order.slotRaw || '—'} • Заказ {order.externalId || order.crmId}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                          {item.routeData.orders?.length > 3 && (
-                            <p className="text-[12px] font-bold text-[#4a7aff] ml-8 mt-1">
-                              + ещё {item.routeData.orders.length - 3} точек
-                            </p>
-                          )}
+                            );
+                          })}
                         </div>
-                      </div>
-                    ) : (
-                      <div className="p-4 pl-7 bg-white text-sm text-[#a8a49c] font-medium">
-                        Маршрут на сегодня пока не сформирован
                       </div>
                     )}
                   </div>
                 ))}
                 {tasksWithRoutes.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="flex flex-col items-center justify-center py-16 text-center bg-white rounded-2xl border border-[#e8e6df] shadow-sm">
                     <div className="text-4xl mb-4">☕</div>
                     <p className="text-[#1a1a18] font-bold text-lg">Всё спокойно</p>
-                    <p className="text-[#a8a49c] mt-1">Новых изменений от логистов нет</p>
+                    <p className="text-[#a8a49c] mt-1">Все изменения просмотрены</p>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Вкладка: ВСЕ МАРШРУТЫ КУРЬЕРОВ (Оставили как было, красивой сеткой) */}
+            {/* Вкладка: ВСЕ МАРШРУТЫ КУРЬЕРОВ */}
             {activeTab === 'routes' && (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
@@ -254,19 +264,36 @@ export default function ManagerDashboard() {
                           {route.orders?.length || 0} точ.
                         </span>
                       </div>
+                      
                       <div className="flex flex-col gap-3 flex-grow">
-                        {route.orders?.length > 0 ? route.orders.map((order: any, idx: number) => (
-                          <div key={order.id} className="flex gap-3 items-start p-2.5 hover:bg-[#fafaf8] rounded-xl transition-colors border border-transparent hover:border-[#f0efe9]">
-                            <div className="w-6 h-6 rounded-lg bg-[#1a1a18] text-white flex items-center justify-center text-xs font-black shrink-0 mt-0.5">{idx + 1}</div>
-                            <div className="flex-grow min-w-0">
-                              <p className="text-[14px] font-bold text-[#1a1a18] leading-snug break-words">{order.address || 'Адрес не указан'}</p>
-                              <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                                <span className="inline-block bg-[#f5f4f0] text-[#6b6860] px-2 py-0.5 rounded-md text-xs font-bold border border-[#e8e6df]">⏱ {order.slotRaw || '—'}</span>
-                                <span className="text-xs font-semibold text-[#a8a49c]">Заказ {order.externalId || order.crmId}</span>
+                        {route.orders?.length > 0 ? route.orders.map((order: any, idx: number) => {
+                          const localStatus = LOCAL_STATUSES[order.status] || LOCAL_STATUSES.NEW;
+                          const crmConf = order.crmStatus ? (CRM_STATUSES[order.crmStatus] || { label: order.crmStatus, color: 'border-gray-200 text-gray-500' }) : null;
+
+                          return (
+                            <div key={order.id} className="flex gap-3 items-start p-2.5 hover:bg-[#fafaf8] rounded-xl transition-colors border border-transparent hover:border-[#f0efe9]">
+                              <div className="w-6 h-6 rounded-lg bg-[#1a1a18] text-white flex items-center justify-center text-xs font-black shrink-0 mt-0.5">{idx + 1}</div>
+                              <div className="flex-grow min-w-0">
+                                <p className="text-[14px] font-bold text-[#1a1a18] leading-snug break-words mb-1.5">{order.address || 'Адрес не указан'}</p>
+                                
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="inline-block bg-[#f5f4f0] text-[#6b6860] px-2 py-0.5 rounded-md text-xs font-bold border border-[#e8e6df]">
+                                    ⏱ {order.slotRaw || '—'}
+                                  </span>
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${localStatus.color}`}>
+                                    {localStatus.label}
+                                  </span>
+                                  {/* 🔥 КРАСИВЫЙ ВЫВОД CRM СТАТУСА */}
+                                  {crmConf && (
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${crmConf.color}`}>
+                                      CRM: {crmConf.label}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        )) : <p className="text-sm text-[#a8a49c] font-medium p-2 text-center my-auto">В данном маршруте нет точек</p>}
+                          );
+                        }) : <p className="text-sm text-[#a8a49c] font-medium p-2 text-center my-auto">В данном маршруте нет точек</p>}
                       </div>
                     </div>
                   ))}
@@ -283,7 +310,10 @@ export default function ManagerDashboard() {
                     <div className="flex items-center gap-4">
                       <div className="text-xs font-black text-[#a8a49c] w-12 text-center">{task.baseTime}</div>
                       <div className="w-px h-8 bg-[#e8e6df]"></div>
-                      <p className="text-[15px] font-bold text-[#1a1a18]">{task.firstName} {task.lastName}</p>
+                      <div>
+                        <p className="text-[15px] font-bold text-[#1a1a18]">{task.firstName} {task.lastName}</p>
+                        {task.authorName && <p className="text-[10px] font-bold text-[#a8a49c] uppercase tracking-wider mt-0.5">Изменил: {task.authorName}</p>}
+                      </div>
                     </div>
                     <div className="flex items-center gap-3 justify-between sm:justify-end">
                       <span className={`px-3 py-1 text-xs font-bold border rounded-lg ${badgeConfig[task.changeType]?.styles || 'bg-gray-100 text-gray-800'}`}>

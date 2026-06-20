@@ -313,11 +313,13 @@ model KonsolTask {
 
 model ManagerNotification {
   id          String   @id @default(cuid())
-  courierId   String?  // ID курьера (если нужно для связки)
-  firstName   String   // Имя курьера
-  lastName    String   // Фамилия
-  baseTime    String   // Время в формате HH:mm
-  changeType  String   // 'TIME_CHANGED', 'ORDERS_CHANGED', 'ROUTE_REASSIGNED'
+  courierId   String?  
+  firstName   String   
+  lastName    String   
+  baseTime    String   
+  oldTime     String?  // 🔥 ДОБАВЛЕНО: Старое время (например, 14:20)
+  authorName  String?  // 🔥 ДОБАВЛЕНО: Имя логиста (например, "Иван Зенчев")
+  changeType  String   
   isSeen      Boolean  @default(false)
   createdAt   DateTime @default(now())
 }
