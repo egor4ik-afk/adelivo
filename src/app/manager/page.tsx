@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ProfilePanel } from '@/components/ProfilePanel';
-import { performLogout } from '@/lib/logout'; // 🔥 Импортируем
 
 type ChangeType = 'TIME_CHANGED' | 'ORDERS_CHANGED' | 'ROUTE_REASSIGNED';
 
@@ -47,10 +46,6 @@ export default function ManagerDashboard() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(false);
 
-  const handleLogout = async () => {
-    await performLogout();
-  };
-
   useEffect(() => {
     fetch('/api/auth/me')
       .then((res) => { if (!res.ok) throw new Error('Not logged in'); return res.json(); })
@@ -66,10 +61,8 @@ export default function ManagerDashboard() {
       });
   }, []);
 
-  useEffect(() => { if (isAuthorized) loadData(); }, [activeTab]);
-
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = useCallback(async (showLoadingState = true) => {
+    if (showLoadingState) setLoading(true);
     try {
       if (activeTab === 'new' || activeTab === 'routes') {
         const [notifRes, routesRes] = await Promise.all([
@@ -86,8 +79,41 @@ export default function ManagerDashboard() {
         if (Array.isArray(data)) setHistory(data);
       }
     } catch (error) { console.error(error); }
-    setLoading(false);
-  };
+    if (showLoadingState) setLoading(false);
+  }, [activeTab]);
+
+  useEffect(() => { 
+    if (isAuthorized) loadData(); 
+  }, [activeTab, isAuthorized, loadData]);
+
+  // 🔥 ДИНАМИЧЕСКОЕ ОБНОВЛЕНИЕ БЕЗ ПЕРЕЗАГРУЗКИ
+  useEffect(() => {
+    if (!isAuthorized) return;
+
+    // 1. Слушаем пуши от Service Worker
+    const handleSWMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'PUSH_RECEIVED') {
+        console.log('[Manager] Получен пуш, обновляю дашборд...');
+        loadData(false); // false — чтобы экран не моргал "Загрузкой", а просто обновил данные
+      }
+    };
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleSWMessage);
+    }
+
+    // 2. Тихий авто-рефреш каждую минуту (как подстраховка)
+    const interval = setInterval(() => {
+      loadData(false);
+    }, 60000);
+
+    return () => {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', handleSWMessage);
+      }
+      clearInterval(interval);
+    };
+  }, [isAuthorized, loadData]);
 
   const markAsSeen = async (id: string) => {
     setTasks((prev) => prev.filter((task) => task.id !== id));
@@ -110,8 +136,7 @@ export default function ManagerDashboard() {
     return { ...task, routeData: matchedRoute };
   }).sort((a, b) => a.baseTime.localeCompare(b.baseTime));
 
-  // 2. 🔥 ВЫЧИСЛЯЕМ МАРШРУТЫ, КОТОРЫЕ ЕЩЕ НЕ ЗАБРАЛИ
-  // Логика: есть статус ASSIGNED, но ни один заказ не перешел в IN_DELIVERY или DELIVERED
+  // 2. ВЫЧИСЛЯЕМ МАРШРУТЫ, КОТОРЫЕ ЕЩЕ НЕ ЗАБРАЛИ
   const pendingRoutes = routes.filter((route) => {
     if (!route.orders || route.orders.length === 0) return false;
     const hasAssigned = route.orders.some((o: any) => o.status === 'ASSIGNED');
@@ -134,7 +159,6 @@ export default function ManagerDashboard() {
 
       <main className="max-w-5xl mx-auto p-4 sm:p-6 w-full overflow-hidden">
         
-        {/* 🔥 ИСПРАВЛЕННЫЕ ТАБЫ (Правильный скролл на мобилке) */}
         <div className="w-full overflow-x-auto hide-scrollbar mb-6 pb-2">
           <div className="flex bg-[#e8e6df] p-1 rounded-xl w-max shadow-inner gap-1">
             <button onClick={() => setActiveTab('new')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap shrink-0 ${activeTab === 'new' ? 'bg-white shadow-sm text-[#1a1a18]' : 'text-[#8c8880] hover:text-[#1a1a18]'}`}>
@@ -158,7 +182,6 @@ export default function ManagerDashboard() {
             {activeTab === 'new' && (
               <div className="flex flex-col gap-8">
                 
-                {/* Секция 1: Уведомления от логистов */}
                 <div className="flex flex-col gap-3">
                   {tasksWithRoutes.length > 0 && (
                     <div className="hidden sm:grid grid-cols-[2fr_1fr_2fr_1fr_auto] gap-4 px-4 py-2 text-xs font-bold text-[#a8a49c] uppercase tracking-wider border-b border-[#e8e6df]">
@@ -230,7 +253,6 @@ export default function ManagerDashboard() {
                   )}
                 </div>
 
-                {/* СЕКЦИЯ 2: ОЖИДАЮТ ЗАГРУЗКИ (Не забранные маршруты) */}
                 <div className="pt-6 border-t-2 border-dashed border-[#e8e6df]">
                   <div className="flex items-center gap-3 mb-6">
                     <span className="text-2xl">🚚</span>
@@ -250,7 +272,6 @@ export default function ManagerDashboard() {
                           <div>
                             <h3 className="font-extrabold text-lg text-[#1a1a18] leading-tight flex flex-wrap items-center gap-2">
                               {route.courier?.firstName || 'Не назначен'} {route.courier?.lastName || ''}
-                              {/* 🔥 ДОБАВЛЕНО ВРЕМЯ НА БАЗЕ */}
                               {route.plannedDepartureTime && (
                                 <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-rose-100">
                                   На базе: {route.plannedDepartureTime}
@@ -306,7 +327,6 @@ export default function ManagerDashboard() {
                         <div>
                           <h3 className="font-extrabold text-lg text-[#1a1a18] leading-tight flex flex-wrap items-center gap-2">
                             {route.courier?.firstName || 'Не назначен'} {route.courier?.lastName || ''}
-                            {/* 🔥 ДОБАВЛЕНО ВРЕМЯ НА БАЗЕ И СЮДА ТОЖЕ */}
                             {route.plannedDepartureTime && (
                               <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-rose-100">
                                 На базе: {route.plannedDepartureTime}
