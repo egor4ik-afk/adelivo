@@ -5,27 +5,42 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    // Берем маршруты начиная с начала текущего дня
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // 1. Получаем текущую дату в Москве в формате YYYY-MM-DD
+    const moscowTodayStr = new Date().toLocaleDateString('en-CA', { 
+      timeZone: 'Europe/Moscow' 
+    });
 
+    // 2. Вытягиваем последние маршруты с курьерами и заказами
     const routes = await prisma.route.findMany({
-      where: {
-        createdAt: { gte: today }
-      },
       include: {
         courier: true,
-        // 🔥 Меняем points на orders (связь напрямую с таблицей заказов)
         orders: {
           orderBy: { id: 'asc' } 
         }
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
+      take: 100 // Берем с запасом последние собранные маршруты
     });
 
-    return NextResponse.json(routes);
+    // 3. Фильтруем: оставляем только те, у которых первая точка назначена на СЕГОДНЯ
+    const todayRoutes = routes.filter((route) => {
+      const firstOrder = route.orders?.[0] as any;
+      if (!firstOrder) return false; // Пустые маршруты без точек нам не нужны
+
+      // Проверяем поле даты (поддерживаем и строку, и Date-объект, и deliveryDate)
+      const rawDate = firstOrder.date || firstOrder.deliveryDate;
+      if (!rawDate) return false;
+
+      const orderDateStr = rawDate instanceof Date
+        ? rawDate.toLocaleDateString('en-CA', { timeZone: 'Europe/Moscow' })
+        : String(rawDate).split('T')[0]; // Отрезаем время, если там ISO-строка
+
+      return orderDateStr === moscowTodayStr;
+    });
+
+    return NextResponse.json(todayRoutes);
   } catch (error) {
-    console.error('Ошибка загрузки маршрутов:', error);
+    console.error('Ошибка загрузки маршрутов менеджера:', error);
     return NextResponse.json({ error: 'Ошибка сервера' }, { status: 500 });
   }
 }

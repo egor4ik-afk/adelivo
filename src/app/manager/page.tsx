@@ -166,38 +166,68 @@ export default function ManagerDashboard() {
             {/* Вкладка: МАРШРУТЫ КУРЬЕРОВ */}
             {activeTab === 'routes' && (
               <>
-                {routes.map((route) => (
-                  <div key={route.id} className="bg-white border border-[#e8e6df] rounded-2xl p-5 shadow-sm">
-                    <div className="flex justify-between items-center mb-4 border-b border-[#f0efe9] pb-4">
-                      <div>
-                        <h3 className="font-bold text-lg text-[#1a1a18]">{route.courier?.firstName} {route.courier?.lastName}</h3>
-                        <p className="text-sm text-[#a8a49c] font-medium mt-0.5">Маршрут #{route.name || route.id.slice(-4)}</p>
-                      </div>
-                      <div className="bg-[#eef3ff] text-[#4a7aff] px-3 py-1.5 rounded-lg text-sm font-bold border border-[#dce6ff]">
-                        {/* 🔥 Считаем orders вместо points */}
-                        {route.orders?.length || 0} точек
-                      </div>
-                    </div>
-                    
-                    <div className="flex flex-col gap-3">
-                      {/* 🔥 Итерируемся по orders напрямую */}
-                      {route.orders?.length > 0 ? route.orders.map((order: any, idx: number) => (
-                        <div key={order.id} className="flex gap-3 items-start p-2 hover:bg-[#fafaf8] rounded-xl transition-colors">
-                          <div className="w-7 h-7 rounded-full bg-[#f5f4f0] text-[#8c8880] flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 border border-[#e8e6df]">
-                            {idx + 1}
-                          </div>
-                          <div>
-                            <p className="text-[15px] font-bold text-[#1a1a18]">{order.address || 'Адрес не указан'}</p>
-                            <p className="text-sm text-[#a8a49c] mt-0.5 font-medium">
-                              {order.slotRaw || 'Время не назначено'} • Заказ {order.externalId || order.crmId}
-                            </p>
-                          </div>
+                {/* Сетка: 1 колонка на мобилке, 2 колонки на больших экранах */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
+                  {routes.map((route) => (
+                    <div 
+                      key={route.id} 
+                      className="bg-white border border-[#e8e6df] rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between"
+                    >
+                      {/* Шапка карточки маршрута */}
+                      <div className="flex justify-between items-start mb-4 border-b border-[#f0efe9] pb-3">
+                        <div>
+                          <h3 className="font-extrabold text-lg text-[#1a1a18] leading-tight">
+                            {route.courier?.firstName || 'Не назначен'} {route.courier?.lastName || ''}
+                          </h3>
+                          <p className="text-xs text-[#a8a49c] font-bold uppercase tracking-wider mt-1">
+                            Маршрут {route.name || `#${route.id.slice(-5).toUpperCase()}`}
+                          </p>
                         </div>
-                      )) : <p className="text-sm text-[#a8a49c] p-2">Точек нет</p>}
+                        <span className="bg-[#eef3ff] text-[#4a7aff] px-2.5 py-1 rounded-xl text-xs font-bold border border-[#dce6ff] shrink-0">
+                          {route.orders?.length || 0} точ.
+                        </span>
+                      </div>
+                      
+                      {/* Список точек (Адреса) */}
+                      <div className="flex flex-col gap-3 flex-grow">
+                        {route.orders?.length > 0 ? route.orders.map((order: any, idx: number) => (
+                          <div key={order.id} className="flex gap-3 items-start p-2.5 hover:bg-[#fafaf8] rounded-xl transition-colors border border-transparent hover:border-[#f0efe9]">
+                            {/* Номер точки */}
+                            <div className="w-6 h-6 rounded-lg bg-[#1a1a18] text-white flex items-center justify-center text-xs font-black shrink-0 mt-0.5">
+                              {idx + 1}
+                            </div>
+                            
+                            <div className="flex-grow min-w-0">
+                              <p className="text-[14px] font-bold text-[#1a1a18] leading-snug break-words">
+                                {order.address || 'Адрес не указан'}
+                              </p>
+                              
+                              {/* Время и номер заказа */}
+                              <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                                <span className="inline-block bg-[#f5f4f0] text-[#6b6860] px-2 py-0.5 rounded-md text-xs font-bold border border-[#e8e6df]">
+                                  ⏱ {order.slotRaw || '—'}
+                                </span>
+                                <span className="text-xs font-semibold text-[#a8a49c]">
+                                  Заказ {order.externalId || order.crmId}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )) : (
+                          <p className="text-sm text-[#a8a49c] font-medium p-2 text-center my-auto">
+                            В данном маршруте нет точек
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
-                {routes.length === 0 && <p className="text-[#a8a49c] text-center py-12">На сегодня маршрутов еще нет</p>}
+                  ))}
+                </div>
+                
+                {routes.length === 0 && (
+                  <p className="text-[#a8a49c] font-medium text-center py-12">
+                    На сегодня маршрутов еще нет
+                  </p>
+                )}
               </>
             )}
 
