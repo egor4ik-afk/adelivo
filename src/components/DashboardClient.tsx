@@ -9,6 +9,8 @@ import Link from "next/link";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { ru } from "date-fns/locale";
+import { MiddlewareReturn } from "@floating-ui/core";
+import { MiddlewareState } from "@floating-ui/dom";
 
 const STORE_LAT = 55.749511;
 const STORE_LNG = 37.596205;
@@ -2088,6 +2090,9 @@ export function DashboardClient({ user }: { user: User }) {
                     options: {
                       boundary: "viewport", // Не дает календарю уезжать за границы экрана мобилки
                     },
+                    fn: function (state: MiddlewareState): MiddlewareReturn | Promise<MiddlewareReturn> {
+                      throw new Error("Function not implemented.");
+                    }
                   },
                 ]}
               />
