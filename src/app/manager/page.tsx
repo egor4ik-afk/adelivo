@@ -1,3 +1,4 @@
+// src/app/manager/page.tsx
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -76,6 +77,7 @@ export default function ManagerDashboard() {
         if (Array.isArray(notifData)) setTasks(notifData);
         
         if (Array.isArray(routesData)) {
+          // Сортировка по времени на базе
           const sortedRoutes = routesData.sort((a, b) => {
             const timeA = a.plannedDepartureTime || "23:59";
             const timeB = b.plannedDepartureTime || "23:59";
@@ -96,18 +98,11 @@ export default function ManagerDashboard() {
     if (isAuthorized) loadData(); 
   }, [activeTab, isAuthorized, loadData]);
 
+  // Динамическое обновление каждые 15 секунд без F5
   useEffect(() => {
     if (!isAuthorized) return;
-    const handleSWMessage = (event: MessageEvent) => {
-      if (event.data && event.data.type === 'PUSH_RECEIVED') loadData(false);
-    };
-    if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', handleSWMessage);
-
-    const interval = setInterval(() => loadData(false), 300000);
-    return () => {
-      if ('serviceWorker' in navigator) navigator.serviceWorker.removeEventListener('message', handleSWMessage);
-      clearInterval(interval);
-    };
+    const interval = setInterval(() => loadData(false), 15000);
+    return () => clearInterval(interval);
   }, [isAuthorized, loadData]);
 
   const markAsSeen = async (id: string) => {
@@ -115,10 +110,6 @@ export default function ManagerDashboard() {
     try {
       await fetch(`/api/manager/notifications/${id}`, { method: 'PATCH' });
     } catch (error) { console.error(error); }
-  };
-  
-  const handleLogout = async () => {
-    await performLogout();
   };
 
   const toggleRouteSelection = (routeId: string) => {
@@ -233,6 +224,7 @@ export default function ManagerDashboard() {
             
             {activeTab === 'new' && (
               <div className="flex flex-col gap-8">
+                {/* Уведомления */}
                 <div className="flex flex-col gap-3">
                   {tasksWithRoutes.length > 0 && (
                     <div className="hidden sm:grid grid-cols-[2fr_1fr_2fr_1fr_auto] gap-4 px-4 py-2 text-xs font-bold text-[#a8a49c] uppercase tracking-wider border-b border-[#e8e6df]">
@@ -304,6 +296,7 @@ export default function ManagerDashboard() {
                   )}
                 </div>
 
+                {/* Маршруты ожидающие загрузки */}
                 <div className="pt-6 border-t-2 border-dashed border-[#e8e6df]">
                   <div className="flex items-center gap-3 mb-6">
                     <span className="text-2xl">🚚</span>
@@ -374,9 +367,9 @@ export default function ManagerDashboard() {
                   <h2 className="text-lg font-bold text-[#1a1a18]">Управление маршрутами</h2>
                   <button 
                     onClick={handlePrintLabels}
-                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm ${selectedRoutes.size > 0 ? 'bg-[#1a1a18] text-white hover:bg-gray-800' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm flex items-center gap-2 ${selectedRoutes.size > 0 ? 'bg-[#1a1a18] text-white hover:bg-gray-800' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
                   >
-                    🖨️ Печать этикеток (120x85)
+                    🖨️ Печать этикеток (120x85) {selectedRoutes.size > 0 && `(${selectedRoutes.size})`}
                   </button>
                 </div>
 
@@ -384,20 +377,25 @@ export default function ManagerDashboard() {
                   {routes.map((route) => (
                     <div key={route.id} className={`bg-white border-2 rounded-2xl p-5 shadow-sm transition-all ${selectedRoutes.has(route.id) ? 'border-[#1a1a18]' : 'border-[#e8e6df]'}`}>
                       
+                      {/* ЗАГОЛОВОК МАРШРУТА */}
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-5 pb-4 border-b border-[#f0efe9] gap-4">
                         <div className="flex items-center gap-3">
                           <input 
                             type="checkbox" 
-                            className="w-5 h-5 accent-[#1a1a18] rounded cursor-pointer"
+                            className="w-5 h-5 accent-[#1a1a18] rounded cursor-pointer shrink-0"
                             checked={selectedRoutes.has(route.id)}
                             onChange={() => toggleRouteSelection(route.id)}
                           />
                           <div>
-                            <h3 className="font-black text-xl text-[#1a1a18] leading-tight flex items-center gap-2">
+                            <h3 className="font-black text-xl text-[#1a1a18] leading-tight flex flex-wrap items-center gap-2">
                               {route.courier?.firstName || 'Не назначен'} {route.courier?.lastName || ''}
-                              <span className="text-[#a8a49c] font-medium text-sm ml-1">{route.courier?.phone || 'Телефон не указан'}</span>
+                              {route.courier?.phone && (
+                                <span className="text-[#a8a49c] font-medium text-sm ml-1 flex items-center gap-1">
+                                  📞 <a href={`tel:${route.courier.phone}`} className="hover:text-blue-500 transition-colors">{route.courier.phone}</a>
+                                </span>
+                              )}
                             </h3>
-                            <div className="flex items-center gap-3 mt-1.5">
+                            <div className="flex items-center gap-3 mt-2">
                               {route.plannedDepartureTime && (
                                 <span className="text-[12px] font-black text-rose-700 bg-rose-50 px-2 py-1 rounded uppercase tracking-wider border border-rose-200">
                                   На базе: {route.plannedDepartureTime}
@@ -412,60 +410,81 @@ export default function ManagerDashboard() {
                         
                         <button 
                           onClick={() => updateRouteToAssembling(route.id)}
-                          className="w-full sm:w-auto bg-[#fff8e6] text-[#b38a00] border border-[#ffe082] px-4 py-2 rounded-lg text-sm font-bold hover:bg-[#fff0c2] transition-colors"
+                          className="w-full sm:w-auto bg-[#fff8e6] text-[#b38a00] border border-[#ffe082] px-4 py-2 rounded-lg text-sm font-bold hover:bg-[#fff0c2] transition-colors whitespace-nowrap shadow-sm"
                         >
                           📦 Отправить на сборку
                         </button>
                       </div>
                       
+                      {/* ЗАКАЗЫ В МАРШРУТЕ */}
                       <div className="flex flex-col gap-4 flex-grow">
                         {route.orders?.length > 0 ? route.orders.map((order: any, idx: number) => {
                           const isAssembled = order.crmStatus === 'assembling-complete';
+                          const cleanPhoneForTg = order.clientPhone ? order.clientPhone.replace(/[^\d+]/g, "") : "";
                           
                           return (
                             <div key={order.id} className="flex gap-4 p-4 bg-[#fafaf8] rounded-xl border border-[#f0efe9]">
                               <div className="w-8 h-8 rounded-lg bg-[#1a1a18] text-white flex items-center justify-center text-sm font-black shrink-0 mt-0.5">{idx + 1}</div>
                               
-                              <div className="flex-grow min-w-0 flex flex-col gap-2">
+                              <div className="flex-grow min-w-0 flex flex-col gap-3">
+                                
                                 <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
                                   <div>
-                                    <div className="flex items-center gap-2 mb-1">
+                                    {/* 1. Номер заказа + Время */}
+                                    <div className="flex items-center gap-2 mb-1.5">
                                       <span className="font-black text-base text-[#1a1a18]">Заказ #{order.number || order.id.slice(-4)}</span>
-                                      <span className="text-xs font-bold text-[#6b6860] bg-white px-2 py-0.5 rounded border border-[#e8e6df]">⏱ {order.slotRaw || '—'}</span>
+                                      <span className="text-xs font-bold text-[#6b6860] bg-white px-2 py-0.5 rounded border border-[#e8e6df] shadow-sm">⏱ {order.slotRaw || '—'}</span>
                                     </div>
+                                    {/* 2. Адрес */}
                                     <p className="text-[15px] font-bold text-[#1a1a18] leading-snug">{order.address || 'Адрес не указан'}</p>
                                   </div>
                                   
                                   <button 
                                     onClick={() => updateOrderToAssembled(order.id)}
-                                    className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${isAssembled ? 'bg-green-50 text-green-700 border-green-200' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                                    className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors shadow-sm ${isAssembled ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
                                   >
                                     {isAssembled ? '✅ Собран' : 'Сделать Собран'}
                                   </button>
                                 </div>
 
-                                <div className="text-sm font-medium text-[#4a4740] bg-white p-2 rounded border border-[#e8e6df]">
-                                  <span className="font-bold text-[#1a1a18]">Состав:</span> {order.composition || order.items || 'Состав не загружен'}
+                                {/* 3. Состав */}
+                                <div className="text-sm font-medium text-[#4a4740] bg-white p-2.5 rounded-lg border border-[#e8e6df] shadow-sm">
+                                  <span className="font-bold text-[#1a1a18] block mb-1">📦 Состав:</span> 
+                                  {order.composition || order.items || 'Состав не загружен'}
                                 </div>
 
+                                {/* 4. Получатель (Имя + Номер) */}
                                 <div className="flex items-center gap-3">
-                                  <span className="text-sm font-bold text-[#1a1a18]">
-                                    👤 {order.clientName || 'Без имени'} <span className="text-[#6b6860 font-medium]">{order.clientPhone || ''}</span>
+                                  <span className="text-sm font-bold text-[#1a1a18] flex items-center gap-2">
+                                    👤 {order.clientName || 'Без имени'} 
+                                    <span className="text-[#6b6860] font-medium">{order.clientPhone || ''}</span>
                                   </span>
-                                  {order.clientPhone && (
+                                  {cleanPhoneForTg && (
                                     <div className="flex gap-1.5">
-                                      <a href={`tel:${order.clientPhone}`} className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-600 rounded border border-blue-100 hover:bg-blue-100">📞</a>
-                                      <a href={`https://t.me/+${order.clientPhone.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className="w-7 h-7 flex items-center justify-center bg-sky-50 text-sky-600 rounded border border-sky-100 hover:bg-sky-100">TG</a>
+                                      <a href={`tel:${order.clientPhone}`} className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-600 rounded border border-blue-100 hover:bg-blue-100 transition-colors" title="Позвонить">📞</a>
+                                      <a href={`https://t.me/+${cleanPhoneForTg}`} target="_blank" rel="noreferrer" className="w-7 h-7 flex items-center justify-center bg-[#2AABEE] text-white rounded border border-[#2AABEE] hover:opacity-90 transition-opacity shadow-sm" title="Написать в Telegram">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z" /></svg>
+                                      </a>
                                     </div>
                                   )}
                                 </div>
 
+                                {/* 5 & 6. Комментарии клиента и оператора */}
                                 {(order.clientComment || order.opComment) && (
-                                  <div className="flex flex-col gap-1.5 mt-1 border-t border-dashed border-[#e8e6df] pt-2">
-                                    {order.clientComment && <p className="text-sm text-gray-600"><span className="font-bold text-rose-600">Клиент:</span> {order.clientComment}</p>}
-                                    {order.opComment && <p className="text-sm text-gray-600"><span className="font-bold text-blue-600">Оператор:</span> {order.opComment}</p>}
+                                  <div className="flex flex-col gap-2 mt-1">
+                                    {order.clientComment && (
+                                      <div className="bg-[#fff1f2] border border-[#ffe4e6] p-2 rounded-lg">
+                                        <p className="text-sm text-[#881337]"><span className="font-bold text-[#be123c] uppercase tracking-wider text-[10px] block mb-0.5">Комментарий клиента</span> {order.clientComment}</p>
+                                      </div>
+                                    )}
+                                    {order.opComment && (
+                                      <div className="bg-[#f0fdf4] border border-[#dcfce7] p-2 rounded-lg">
+                                        <p className="text-sm text-[#14532d]"><span className="font-bold text-[#15803d] uppercase tracking-wider text-[10px] block mb-0.5">Заметка оператора</span> {order.opComment}</p>
+                                      </div>
+                                    )}
                                   </div>
                                 )}
+                                
                               </div>
                             </div>
                           );
