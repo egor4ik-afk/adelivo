@@ -1890,7 +1890,7 @@ export function DashboardClient({ user }: { user: User }) {
           </div>
         </Link>
 
-        {/* 2. Основные кнопки навигации (Единый стиль) */}
+        {/* 2. Основные кнопки навигации */}
         <button onClick={() => router.push('/orders')} style={topbarBtnStyle}>
           ≡ Заказы
           <span style={{ background: '#eef3ff', color: '#4a7aff', padding: '1px 6px', borderRadius: 10, fontSize: 11, fontWeight: 700 }}>
@@ -1899,149 +1899,111 @@ export function DashboardClient({ user }: { user: User }) {
         </button>
         <button onClick={() => router.push('/couriers')} style={topbarBtnStyle}>🚚 Курьеры</button>
 
-        {/* 3. Фильтры (Единый стиль) - Кастомный календарь */}
-        <div style={{ position: "relative", zIndex: 110 }}>
-          <DatePicker
-            locale={ru} // 🇷🇺 Русская локаль (с понедельника)
-            selected={new Date(filterDate)}
-            onChange={(date: Date | null) => {
-              if (date) {
-                // Форматируем обратно в YYYY-MM-DD для фильтрации
-                const y = date.getFullYear();
-                const m = String(date.getMonth() + 1).padStart(2, '0');
-                const d = String(date.getDate()).padStart(2, '0');
-                setFilterDate(`${y}-${m}-${d}`);
-              }
-            }}
-            dateFormat="dd.MM.yyyy" // Привычный русский формат ДД.ММ.ГГГГ
-            customInput={<CustomDateInput />}
-          />
-        </div>
-
-        {/* МУЛЬТИ-ФИЛЬТР СТАТУСОВ */}
-        <div style={{ position: "relative" }}>
-          <button
-            onClick={() => setIsStatusMenuOpen(!isStatusMenuOpen)}
-            style={{ ...topbarBtnStyle, background: selectedStatuses.length > 0 ? "#eef3ff" : "#fff", borderColor: selectedStatuses.length > 0 ? "#4a7aff" : "#e8e6df" }}
-          >
-            <span style={{ color: selectedStatuses.length > 0 ? "#4a7aff" : "inherit" }}>
-              Статусы: {selectedStatuses.length === 0 ? "Все" : `(${selectedStatuses.length})`}
-            </span>
-            <span style={{ fontSize: 10, color: selectedStatuses.length > 0 ? "#4a7aff" : "#a8a49c" }}>▼</span>
-          </button>
-
-          {isStatusMenuOpen && (
-            <>
-              <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setIsStatusMenuOpen(false)} />
-              <div style={s.dropdownMenu}>
-                {["NEW", "ASSIGNED", "IN_DELIVERY", "DELIVERED"].map(st => (
-                  <label key={st} style={s.dropdownItem}>
-                    <input
-                      type="checkbox"
-                      checked={selectedStatuses.includes(st)}
-                      onChange={(e) => {
-                        if (e.target.checked) setSelectedStatuses([...selectedStatuses, st]);
-                        else setSelectedStatuses(selectedStatuses.filter(item => item !== st));
-                      }}
-                      style={{ accentColor: "#4a7aff", width: 16, height: 16 }}
-                    />
-                    {st === "NEW" ? "Новые" : st === "ASSIGNED" ? "Назначены" : st === "IN_DELIVERY" ? "В пути" : "Доставлены"}
-                  </label>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* МУЛЬТИ-ФИЛЬТР КУРЬЕРОВ */}
-        <div style={{ position: "relative" }}>
-          <button
-            onClick={() => setIsCourierMenuOpen(!isCourierMenuOpen)}
-            style={{ ...topbarBtnStyle, background: selectedCouriers.length > 0 ? "#eef3ff" : "#fff", borderColor: selectedCouriers.length > 0 ? "#4a7aff" : "#e8e6df" }}
-          >
-            <span style={{ color: selectedCouriers.length > 0 ? "#4a7aff" : "inherit" }}>
-              Курьеры: {selectedCouriers.length === 0 ? "Все" : `(${selectedCouriers.length})`}
-            </span>
-            <span style={{ fontSize: 10, color: selectedCouriers.length > 0 ? "#4a7aff" : "#a8a49c" }}>▼</span>
-          </button>
-
-          {isCourierMenuOpen && (
-            <>
-              <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setIsCourierMenuOpen(false)} />
-              <div style={{ ...s.dropdownMenu, minWidth: 220 }}>
-                {courierOptions.map(c => {
-                  if (c.value === "ALL") {
-                    return (
-                      <label key="ALL" style={{ ...s.dropdownItem, fontWeight: 700, borderBottom: "1px solid #f0efe9", paddingBottom: 8, marginBottom: 4 }}
-                        onClick={() => setSelectedCouriers([])}>
-                        <input type="checkbox" checked={selectedCouriers.length === 0} readOnly style={{ accentColor: "#4a7aff", width: 16, height: 16 }} />
-                        Все курьеры
-                      </label>
-                    );
-                  }
-                  return (
-                    <label key={c.value} style={s.dropdownItem}>
-                      <input
-                        type="checkbox"
-                        checked={selectedCouriers.includes(String(c.value))}
-                        onChange={(e) => {
-                          const val = String(c.value);
-                          if (e.target.checked) setSelectedCouriers([...selectedCouriers, val]);
-                          else setSelectedCouriers(selectedCouriers.filter(id => id !== val));
-                        }}
-                        style={{ accentColor: "#4a7aff", width: 16, height: 16, flexShrink: 0 }}
-                      />
-                      <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{c.label}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </div>
-
-        <button
-          onClick={() => {
-            setIsBulkMode(!isBulkMode);
-            setRouteTab("map");
-            setBulkSelectedIds([]);
-            setSelectedId(null);
-            setIsDetailVisible(false);
-            setRouteTabMode("new");
-            setEditingRouteId(null);
-            setBulkCourier("");
-            setRouteType("mt");
-          }}
-          style={{
-            ...topbarBtnStyle,
-            background: isBulkMode ? "#1a1a18" : "#fff",
-            color: isBulkMode ? "#fff" : "#1a1a18",
-            borderColor: isBulkMode ? "#1a1a18" : "#e8e6df"
-          }}
-        >
-          {isBulkMode ? "✕ Маршруты" : "📍 Маршруты"}
-        </button>
-
+        {/* 🔥 ПОКАЗЫВАЕМ ЭТО ТОЛЬКО НА ДЕСКТОПЕ (На мобилке они уедут во 2-й ряд) */}
         {!isMobile && (
-          <div style={{ ...s.slotBar, marginLeft: 0 }}>
-            <SlotBtn label="Все" active={selectedSlots.length === 0} color="#4a7aff" onClick={() => toggleSlot("all")} />
-            {SLOTS.map(sl => <SlotBtn key={sl.label} label={sl.label} active={selectedSlots.includes(sl.label)} color={sl.color} onClick={() => toggleSlot(sl.label)} />)}
-            <SlotBtn label="Другие" active={selectedSlots.includes("Другие")} color="#6b6860" onClick={() => toggleSlot("Другие")} />
-          </div>
+          <>
+            {/* Календарь (Десктоп) */}
+            <div style={{ position: "relative", zIndex: 110 }}>
+              <DatePicker
+                locale={ru}
+                selected={new Date(filterDate)}
+                onChange={(date: Date | null) => {
+                  if (date) {
+                    const y = date.getFullYear();
+                    const m = String(date.getMonth() + 1).padStart(2, '0');
+                    const d = String(date.getDate()).padStart(2, '0');
+                    setFilterDate(`${y}-${m}-${d}`);
+                  }
+                }}
+                dateFormat="dd.MM.yyyy"
+                customInput={<CustomDateInput />}
+                popperPlacement="bottom-start"
+              />
+            </div>
+
+            {/* МУЛЬТИ-ФИЛЬТР СТАТУСОВ */}
+            <div style={{ position: "relative" }}>
+              <button
+                onClick={() => setIsStatusMenuOpen(!isStatusMenuOpen)}
+                style={{ ...topbarBtnStyle, background: selectedStatuses.length > 0 ? "#eef3ff" : "#fff", borderColor: selectedStatuses.length > 0 ? "#4a7aff" : "#e8e6df" }}
+              >
+                <span style={{ color: selectedStatuses.length > 0 ? "#4a7aff" : "inherit" }}>
+                  Статусы: {selectedStatuses.length === 0 ? "Все" : `(${selectedStatuses.length})`}
+                </span>
+                <span style={{ fontSize: 10, color: selectedStatuses.length > 0 ? "#4a7aff" : "#a8a49c" }}>▼</span>
+              </button>
+
+              {isStatusMenuOpen && (
+                <>
+                  <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setIsStatusMenuOpen(false)} />
+                  <div style={s.dropdownMenu}>
+                    {["NEW", "ASSIGNED", "IN_DELIVERY", "DELIVERED"].map(st => (
+                      <label key={st} style={s.dropdownItem}>
+                        <input type="checkbox" checked={selectedStatuses.includes(st)} onChange={(e) => { if (e.target.checked) setSelectedStatuses([...selectedStatuses, st]); else setSelectedStatuses(selectedStatuses.filter(item => item !== st)); }} style={{ accentColor: "#4a7aff", width: 16, height: 16 }} />
+                        {st === "NEW" ? "Новые" : st === "ASSIGNED" ? "Назначены" : st === "IN_DELIVERY" ? "В пути" : "Доставлены"}
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* МУЛЬТИ-ФИЛЬТР КУРЬЕРОВ */}
+            <div style={{ position: "relative" }}>
+              <button
+                onClick={() => setIsCourierMenuOpen(!isCourierMenuOpen)}
+                style={{ ...topbarBtnStyle, background: selectedCouriers.length > 0 ? "#eef3ff" : "#fff", borderColor: selectedCouriers.length > 0 ? "#4a7aff" : "#e8e6df" }}
+              >
+                <span style={{ color: selectedCouriers.length > 0 ? "#4a7aff" : "inherit" }}>
+                  Курьеры: {selectedCouriers.length === 0 ? "Все" : `(${selectedCouriers.length})`}
+                </span>
+                <span style={{ fontSize: 10, color: selectedCouriers.length > 0 ? "#4a7aff" : "#a8a49c" }}>▼</span>
+              </button>
+
+              {isCourierMenuOpen && (
+                <>
+                  <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setIsCourierMenuOpen(false)} />
+                  <div style={{ ...s.dropdownMenu, minWidth: 220 }}>
+                    {courierOptions.map(c => {
+                      if (c.value === "ALL") {
+                        return (
+                          <label key="ALL" style={{ ...s.dropdownItem, fontWeight: 700, borderBottom: "1px solid #f0efe9", paddingBottom: 8, marginBottom: 4 }} onClick={() => setSelectedCouriers([])}>
+                            <input type="checkbox" checked={selectedCouriers.length === 0} readOnly style={{ accentColor: "#4a7aff", width: 16, height: 16 }} /> Все курьеры
+                          </label>
+                        );
+                      }
+                      return (
+                        <label key={c.value} style={s.dropdownItem}>
+                          <input type="checkbox" checked={selectedCouriers.includes(String(c.value))} onChange={(e) => { const val = String(c.value); if (e.target.checked) setSelectedCouriers([...selectedCouriers, val]); else setSelectedCouriers(selectedCouriers.filter(id => id !== val)); }} style={{ accentColor: "#4a7aff", width: 16, height: 16, flexShrink: 0 }} />
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{c.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <button onClick={() => { setIsBulkMode(!isBulkMode); setRouteTab("map"); setBulkSelectedIds([]); setSelectedId(null); setIsDetailVisible(false); setRouteTabMode("new"); setEditingRouteId(null); setBulkCourier(""); setRouteType("mt"); }} style={{ ...topbarBtnStyle, background: isBulkMode ? "#1a1a18" : "#fff", color: isBulkMode ? "#fff" : "#1a1a18", borderColor: isBulkMode ? "#1a1a18" : "#e8e6df" }}>
+              {isBulkMode ? "✕ Маршруты" : "📍 Маршруты"}
+            </button>
+
+            <div style={{ ...s.slotBar, marginLeft: 0 }}>
+              <SlotBtn label="Все" active={selectedSlots.length === 0} color="#4a7aff" onClick={() => toggleSlot("all")} />
+              {SLOTS.map(sl => <SlotBtn key={sl.label} label={sl.label} active={selectedSlots.includes(sl.label)} color={sl.color} onClick={() => toggleSlot(sl.label)} />)}
+              <SlotBtn label="Другие" active={selectedSlots.includes("Другие")} color="#6b6860" onClick={() => toggleSlot("Другие")} />
+            </div>
+          </>
         )}
 
-        <div style={{ flex: 1, minWidth: isMobile ? "100%" : 0 }} />
+        {/* 🔥 ИСПРАВЛЕННЫЙ СПЕЙСЕР (БЕЗ 100% ШИРИНЫ НА МОБИЛКЕ) */}
+        <div style={{ flex: 1 }} />
 
         {/* Настройки карты — кнопка + выпадашка */}
         <div style={{ position: "relative", flexShrink: 0 }}>
           <button
             onClick={() => setShowMapSettings(!showMapSettings)}
-            style={{
-              ...topbarBtnStyle,
-              background: showMapSettings ? "#eef3ff" : "#fff",
-              borderColor: showMapSettings ? "#4a7aff" : "#e8e6df",
-              color: showMapSettings ? "#4a7aff" : "#1a1a18",
-            }}
+            style={{ ...topbarBtnStyle, background: showMapSettings ? "#eef3ff" : "#fff", borderColor: showMapSettings ? "#4a7aff" : "#e8e6df", color: showMapSettings ? "#4a7aff" : "#1a1a18" }}
             title="Настройки карты"
           >
             🗺️ <span style={{ fontSize: 10 }}>▼</span>
@@ -2050,28 +2012,13 @@ export function DashboardClient({ user }: { user: User }) {
           {showMapSettings && (
             <>
               <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setShowMapSettings(false)} />
-              <div style={{
-                position: "absolute", top: "calc(100% + 6px)", right: 0,
-                background: "#fff", border: "1px solid #e8e6df", borderRadius: 12,
-                padding: "12px 14px", zIndex: 200, display: "flex", flexDirection: "column",
-                gap: 10, minWidth: 160, boxShadow: "0 8px 24px rgba(0,0,0,0.12)"
-              }}>
-                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}>
-                  <input type="checkbox" checked={showCouriers} onChange={e => setShowCouriers(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Курьеры на карте
-                </label>
-                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}>
-                  <input type="checkbox" checked={showHomes} onChange={e => setShowHomes(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Дом
-                </label>
-                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}>
-                  <input type="checkbox" checked={showCourierNames} onChange={e => setShowCourierNames(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Имена
-                </label>
-                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}>
-                  <input type="checkbox" checked={showTime} onChange={e => setShowTime(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Время
-                </label>
+              <div style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, background: "#fff", border: "1px solid #e8e6df", borderRadius: 12, padding: "12px 14px", zIndex: 200, display: "flex", flexDirection: "column", gap: 10, minWidth: 160, boxShadow: "0 8px 24px rgba(0,0,0,0.12)" }}>
+                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showCouriers} onChange={e => setShowCouriers(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Курьеры на карте</label>
+                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showHomes} onChange={e => setShowHomes(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Дом</label>
+                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showCourierNames} onChange={e => setShowCourierNames(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Имена</label>
+                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showTime} onChange={e => setShowTime(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Время</label>
                 <div style={{ width: "100%", height: 1, background: "#f0efe9" }} />
-                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}>
-                  <input type="checkbox" checked={showRouteLines} onChange={e => setShowRouteLines(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Линии маршрутов
-                </label>
+                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showRouteLines} onChange={e => setShowRouteLines(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Линии маршрутов</label>
               </div>
             </>
           )}
@@ -2097,10 +2044,7 @@ export function DashboardClient({ user }: { user: User }) {
             <b>{invalid.length} заказов</b> с проблемными адресами —{" "}
             {invalid.map((o, i) => (
               <span key={o.id}>
-                <span style={s.invalidBannerLink} onClick={() => { setSelectedId(o.id); setIsDetailVisible(true); }}>
-                  {o.externalId ?? o.crmId}
-                </span>
-                {i < invalid.length - 1 ? ", " : ""}
+                <span style={s.invalidBannerLink} onClick={() => { setSelectedId(o.id); setIsDetailVisible(true); }}>{o.externalId ?? o.crmId}</span>{i < invalid.length - 1 ? ", " : ""}
               </span>
             ))}
           </span>
@@ -2108,12 +2052,30 @@ export function DashboardClient({ user }: { user: User }) {
         </div>
       )}
 
-
-
-      {isMobile && (
+{isMobile && (
         <>
           {/* Ряд 2: фильтры + маршруты + слоты */}
           <div className="hide-scrollbar" style={{ display: "flex", gap: 6, padding: "6px 10px", background: "#fff", borderBottom: "1px solid #e8e6df", overflowX: "auto", flexShrink: 0, alignItems: "center" }}>
+            
+            {/* 🔥 КАЛЕНДАРЬ НА МОБИЛКЕ (в режиме Portal) */}
+            <div style={{ position: "relative", flexShrink: 0, zIndex: 110 }}>
+              <DatePicker
+                locale={ru}
+                selected={new Date(filterDate)}
+                onChange={(date: Date | null) => {
+                  if (date) {
+                    const y = date.getFullYear();
+                    const m = String(date.getMonth() + 1).padStart(2, '0');
+                    const d = String(date.getDate()).padStart(2, '0');
+                    setFilterDate(`${y}-${m}-${d}`);
+                  }
+                }}
+                dateFormat="dd.MM.yyyy"
+                customInput={<CustomDateInput />}
+                withPortal={true} // 🔥 КЛЮЧЕВОЙ ФИКС: Модалка откроется по центру и не обрежется
+              />
+            </div>
+
             <div style={{ position: "relative", flexShrink: 0 }}>
               <button onClick={() => setIsStatusMenuOpen(!isStatusMenuOpen)}
                 style={{ ...topbarBtnStyle, height: 30, fontSize: 12, background: selectedStatuses.length > 0 ? "#eef3ff" : "#fff", borderColor: selectedStatuses.length > 0 ? "#4a7aff" : "#e8e6df" }}>
@@ -2127,12 +2089,7 @@ export function DashboardClient({ user }: { user: User }) {
                     <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Статусы</div>
                     {["NEW", "ASSIGNED", "IN_DELIVERY", "DELIVERED"].map(st => (
                       <label key={st} style={{ ...s.dropdownItem, padding: "12px 8px", fontSize: 15 }}>
-                        <input type="checkbox" checked={selectedStatuses.includes(st)}
-                          onChange={(e) => {
-                            if (e.target.checked) setSelectedStatuses([...selectedStatuses, st]);
-                            else setSelectedStatuses(selectedStatuses.filter(item => item !== st));
-                          }}
-                          style={{ accentColor: "#4a7aff", width: 18, height: 18 }} />
+                        <input type="checkbox" checked={selectedStatuses.includes(st)} onChange={(e) => { if (e.target.checked) setSelectedStatuses([...selectedStatuses, st]); else setSelectedStatuses(selectedStatuses.filter(item => item !== st)); }} style={{ accentColor: "#4a7aff", width: 18, height: 18 }} />
                         {st === "NEW" ? "Новые" : st === "ASSIGNED" ? "Назначены" : st === "IN_DELIVERY" ? "В пути" : "Доставлены"}
                       </label>
                     ))}
@@ -2155,25 +2112,14 @@ export function DashboardClient({ user }: { user: User }) {
                     {courierOptions.map(c => {
                       if (c.value === "ALL") {
                         return (
-                          <label key="ALL" style={{ ...s.dropdownItem, fontWeight: 700, borderBottom: "1px solid #f0efe9", paddingBottom: 8, marginBottom: 4 }}
-                            onClick={() => setSelectedCouriers([])}>
-                            <input type="checkbox" checked={selectedCouriers.length === 0} readOnly style={{ accentColor: "#4a7aff", width: 16, height: 16 }} />
-                            Все курьеры
+                          <label key="ALL" style={{ ...s.dropdownItem, fontWeight: 700, borderBottom: "1px solid #f0efe9", paddingBottom: 8, marginBottom: 4 }} onClick={() => setSelectedCouriers([])}>
+                            <input type="checkbox" checked={selectedCouriers.length === 0} readOnly style={{ accentColor: "#4a7aff", width: 16, height: 16 }} /> Все курьеры
                           </label>
                         );
                       }
                       return (
                         <label key={c.value} style={s.dropdownItem}>
-                          <input
-                            type="checkbox"
-                            checked={selectedCouriers.includes(String(c.value))}
-                            onChange={(e) => {
-                              const val = String(c.value);
-                              if (e.target.checked) setSelectedCouriers([...selectedCouriers, val]);
-                              else setSelectedCouriers(selectedCouriers.filter(id => id !== val));
-                            }}
-                            style={{ accentColor: "#4a7aff", width: 16, height: 16, flexShrink: 0 }}
-                          />
+                          <input type="checkbox" checked={selectedCouriers.includes(String(c.value))} onChange={(e) => { const val = String(c.value); if (e.target.checked) setSelectedCouriers([...selectedCouriers, val]); else setSelectedCouriers(selectedCouriers.filter(id => id !== val)); }} style={{ accentColor: "#4a7aff", width: 16, height: 16, flexShrink: 0 }} />
                           <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{c.label}</span>
                         </label>
                       );
@@ -2183,10 +2129,7 @@ export function DashboardClient({ user }: { user: User }) {
               )}
             </div>
 
-            <button
-              onClick={() => { setIsBulkMode(!isBulkMode); setRouteTab("map"); setBulkSelectedIds([]); setSelectedId(null); setIsDetailVisible(false); setRouteTabMode("new"); setEditingRouteId(null); setBulkCourier(""); setRouteType("mt"); }}
-              style={{ ...topbarBtnStyle, height: 30, fontSize: 12, flexShrink: 0, background: isBulkMode ? "#1a1a18" : "#fff", color: isBulkMode ? "#fff" : "#1a1a18", borderColor: isBulkMode ? "#1a1a18" : "#e8e6df" }}
-            >
+            <button onClick={() => { setIsBulkMode(!isBulkMode); setRouteTab("map"); setBulkSelectedIds([]); setSelectedId(null); setIsDetailVisible(false); setRouteTabMode("new"); setEditingRouteId(null); setBulkCourier(""); setRouteType("mt"); }} style={{ ...topbarBtnStyle, height: 30, fontSize: 12, flexShrink: 0, background: isBulkMode ? "#1a1a18" : "#fff", color: isBulkMode ? "#fff" : "#1a1a18", borderColor: isBulkMode ? "#1a1a18" : "#e8e6df" }}>
               {isBulkMode ? "✕ Маршруты" : "📍 Маршруты"}
             </button>
 
@@ -2212,6 +2155,7 @@ export function DashboardClient({ user }: { user: User }) {
           )}
         </>
       )}
+
       <div style={isMobile ? sm.body : s.body}>
         {!isMobile && (
           <div style={{ display: 'flex', width: '100%', height: '100%' }}>
