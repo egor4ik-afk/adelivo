@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { ProfilePanel } from '@/components/ProfilePanel';
+import { performLogout } from '@/lib/logout';
 
 type ChangeType = 'TIME_CHANGED' | 'ORDERS_CHANGED' | 'ROUTE_REASSIGNED';
 
@@ -38,13 +39,15 @@ const CRM_STATUSES: Record<string, { label: string, color: string }> = {
 };
 
 export default function ManagerDashboard() {
-  const [activeTab, setActiveTab] = useState<'new' | 'routes' | 'history'>('new');
-  const [tasks, setTasks] = useState<Notification[]>([]);
-  const [history, setHistory] = useState<Notification[]>([]);
+  const [activeTab, setActiveTab] = useState<'new' | 'routes' | 'history'>('routes');
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
   const [routes, setRoutes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(false);
+  
+  const [selectedRoutes, setSelectedRoutes] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -54,7 +57,6 @@ export default function ManagerDashboard() {
           window.location.replace('/dashboard'); return;
         }
         setIsAuthorized(true);
-        loadData();
       })
       .catch((err) => {
         if (err.message === 'Not logged in') window.location.replace('/login');
@@ -72,7 +74,15 @@ export default function ManagerDashboard() {
         const notifData = await notifRes.json();
         const routesData = await routesRes.json();
         if (Array.isArray(notifData)) setTasks(notifData);
-        if (Array.isArray(routesData)) setRoutes(routesData);
+        
+        if (Array.isArray(routesData)) {
+          const sortedRoutes = routesData.sort((a, b) => {
+            const timeA = a.plannedDepartureTime || "23:59";
+            const timeB = b.plannedDepartureTime || "23:59";
+            return timeA.localeCompare(timeB);
+          });
+          setRoutes(sortedRoutes);
+        }
       } else if (activeTab === 'history') {
         const res = await fetch('/api/manager/notifications?history=true');
         const data = await res.json();
@@ -86,31 +96,16 @@ export default function ManagerDashboard() {
     if (isAuthorized) loadData(); 
   }, [activeTab, isAuthorized, loadData]);
 
-  // 🔥 ДИНАМИЧЕСКОЕ ОБНОВЛЕНИЕ БЕЗ ПЕРЕЗАГРУЗКИ
   useEffect(() => {
     if (!isAuthorized) return;
-
-    // 1. Слушаем пуши от Service Worker
     const handleSWMessage = (event: MessageEvent) => {
-      if (event.data && event.data.type === 'PUSH_RECEIVED') {
-        console.log('[Manager] Получен пуш, обновляю дашборд...');
-        loadData(false); // false — чтобы экран не моргал "Загрузкой", а просто обновил данные
-      }
+      if (event.data && event.data.type === 'PUSH_RECEIVED') loadData(false);
     };
+    if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', handleSWMessage);
 
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.addEventListener('message', handleSWMessage);
-    }
-
-    // 2. Тихий авто-рефреш каждую минуту (как подстраховка)
-    const interval = setInterval(() => {
-      loadData(false);
-    }, 60000);
-
+    const interval = setInterval(() => loadData(false), 300000);
     return () => {
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.removeEventListener('message', handleSWMessage);
-      }
+      if ('serviceWorker' in navigator) navigator.serviceWorker.removeEventListener('message', handleSWMessage);
       clearInterval(interval);
     };
   }, [isAuthorized, loadData]);
@@ -121,6 +116,67 @@ export default function ManagerDashboard() {
       await fetch(`/api/manager/notifications/${id}`, { method: 'PATCH' });
     } catch (error) { console.error(error); }
   };
+  
+  const handleLogout = async () => {
+    await performLogout();
+  };
+
+  const toggleRouteSelection = (routeId: string) => {
+    setSelectedRoutes(prev => {
+      const next = new Set(prev);
+      if (next.has(routeId)) next.delete(routeId);
+      else next.add(routeId);
+      return next;
+    });
+  };
+  
+  const handlePrintLabels = async () => {
+    if (selectedRoutes.size === 0) return alert("Выберите хотя бы один маршрут для печати");
+    
+    try {
+      const response = await fetch('/api/manager/routes/print', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ routeIds: Array.from(selectedRoutes) })
+      });
+
+      if (!response.ok) throw new Error("Ошибка при генерации PDF");
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Этикетки_${new Date().toLocaleTimeString('ru-RU').replace(/:/g, '-')}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Ошибка печати:", err);
+      alert("Не удалось создать этикетки");
+    }
+  };
+
+  const updateRouteToAssembling = async (routeId: string) => {
+    if (!confirm("Отправить все заказы маршрута на сборку в CRM?")) return;
+    try {
+      await fetch(`/api/manager/routes/${routeId}/status`, { 
+        method: 'PATCH', 
+        body: JSON.stringify({ crmStatus: 'assembling' }) 
+      });
+      loadData(false);
+    } catch (e) { console.error(e); }
+  };
+
+  const updateOrderToAssembled = async (orderId: string) => {
+    try {
+      await fetch(`/api/manager/orders/${orderId}/status`, { 
+        method: 'PATCH', 
+        body: JSON.stringify({ crmStatus: 'assembling-complete' }) 
+      });
+      loadData(false);
+    } catch (e) { console.error(e); }
+  };
 
   if (!isAuthorized) {
     return (
@@ -130,13 +186,11 @@ export default function ManagerDashboard() {
     );
   }
 
-  // 1. Плашки изменений, привязанные к маршрутам
   const tasksWithRoutes = tasks.map(task => {
     const matchedRoute = routes.find(r => r.courier?.firstName === task.firstName && r.courier?.lastName === task.lastName);
     return { ...task, routeData: matchedRoute };
   }).sort((a, b) => a.baseTime.localeCompare(b.baseTime));
 
-  // 2. ВЫЧИСЛЯЕМ МАРШРУТЫ, КОТОРЫЕ ЕЩЕ НЕ ЗАБРАЛИ
   const pendingRoutes = routes.filter((route) => {
     if (!route.orders || route.orders.length === 0) return false;
     const hasAssigned = route.orders.some((o: any) => o.status === 'ASSIGNED');
@@ -158,7 +212,6 @@ export default function ManagerDashboard() {
       </header>
 
       <main className="max-w-5xl mx-auto p-4 sm:p-6 w-full overflow-hidden">
-        
         <div className="w-full overflow-x-auto hide-scrollbar mb-6 pb-2">
           <div className="flex bg-[#e8e6df] p-1 rounded-xl w-max shadow-inner gap-1">
             <button onClick={() => setActiveTab('new')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap shrink-0 ${activeTab === 'new' ? 'bg-white shadow-sm text-[#1a1a18]' : 'text-[#8c8880] hover:text-[#1a1a18]'}`}>
@@ -178,10 +231,8 @@ export default function ManagerDashboard() {
         ) : (
           <div className="flex flex-col gap-6">
             
-            {/* ВКЛАДКА 1: ТРЕБУЮТ ВНИМАНИЯ */}
             {activeTab === 'new' && (
               <div className="flex flex-col gap-8">
-                
                 <div className="flex flex-col gap-3">
                   {tasksWithRoutes.length > 0 && (
                     <div className="hidden sm:grid grid-cols-[2fr_1fr_2fr_1fr_auto] gap-4 px-4 py-2 text-xs font-bold text-[#a8a49c] uppercase tracking-wider border-b border-[#e8e6df]">
@@ -316,42 +367,105 @@ export default function ManagerDashboard() {
                 </div>
               </div>
             )}
-
-            {/* ВКЛАДКА 2: ВСЕ МАРШРУТЫ КУРЬЕРОВ */}
+            
             {activeTab === 'routes' && (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
+                <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-[#e8e6df] shadow-sm mb-2">
+                  <h2 className="text-lg font-bold text-[#1a1a18]">Управление маршрутами</h2>
+                  <button 
+                    onClick={handlePrintLabels}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm ${selectedRoutes.size > 0 ? 'bg-[#1a1a18] text-white hover:bg-gray-800' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+                  >
+                    🖨️ Печать этикеток (120x85)
+                  </button>
+                </div>
+
+                <div className="flex flex-col gap-6 mt-2">
                   {routes.map((route) => (
-                    <div key={route.id} className="bg-white border border-[#e8e6df] rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
-                      <div className="flex justify-between items-start mb-4 border-b border-[#f0efe9] pb-3">
-                        <div>
-                          <h3 className="font-extrabold text-lg text-[#1a1a18] leading-tight flex flex-wrap items-center gap-2">
-                            {route.courier?.firstName || 'Не назначен'} {route.courier?.lastName || ''}
-                            {route.plannedDepartureTime && (
-                              <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-rose-100">
-                                На базе: {route.plannedDepartureTime}
+                    <div key={route.id} className={`bg-white border-2 rounded-2xl p-5 shadow-sm transition-all ${selectedRoutes.has(route.id) ? 'border-[#1a1a18]' : 'border-[#e8e6df]'}`}>
+                      
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-5 pb-4 border-b border-[#f0efe9] gap-4">
+                        <div className="flex items-center gap-3">
+                          <input 
+                            type="checkbox" 
+                            className="w-5 h-5 accent-[#1a1a18] rounded cursor-pointer"
+                            checked={selectedRoutes.has(route.id)}
+                            onChange={() => toggleRouteSelection(route.id)}
+                          />
+                          <div>
+                            <h3 className="font-black text-xl text-[#1a1a18] leading-tight flex items-center gap-2">
+                              {route.courier?.firstName || 'Не назначен'} {route.courier?.lastName || ''}
+                              <span className="text-[#a8a49c] font-medium text-sm ml-1">{route.courier?.phone || 'Телефон не указан'}</span>
+                            </h3>
+                            <div className="flex items-center gap-3 mt-1.5">
+                              {route.plannedDepartureTime && (
+                                <span className="text-[12px] font-black text-rose-700 bg-rose-50 px-2 py-1 rounded uppercase tracking-wider border border-rose-200">
+                                  На базе: {route.plannedDepartureTime}
+                                </span>
+                              )}
+                              <span className="text-xs font-bold text-[#6b6860] bg-[#f5f4f0] px-2 py-1 rounded border border-[#e8e6df]">
+                                Точек: {route.orders?.length || 0}
                               </span>
-                            )}
-                          </h3>
-                          <p className="text-xs text-[#a8a49c] font-bold uppercase tracking-wider mt-1">Маршрут {route.name || `#${route.id.slice(-5).toUpperCase()}`}</p>
+                            </div>
+                          </div>
                         </div>
-                        <span className="bg-[#eef3ff] text-[#4a7aff] px-2.5 py-1 rounded-xl text-xs font-bold border border-[#dce6ff] shrink-0">{route.orders?.length || 0} точ.</span>
+                        
+                        <button 
+                          onClick={() => updateRouteToAssembling(route.id)}
+                          className="w-full sm:w-auto bg-[#fff8e6] text-[#b38a00] border border-[#ffe082] px-4 py-2 rounded-lg text-sm font-bold hover:bg-[#fff0c2] transition-colors"
+                        >
+                          📦 Отправить на сборку
+                        </button>
                       </div>
                       
-                      <div className="flex flex-col gap-3 flex-grow">
+                      <div className="flex flex-col gap-4 flex-grow">
                         {route.orders?.length > 0 ? route.orders.map((order: any, idx: number) => {
-                          const localStatus = LOCAL_STATUSES[order.status] || LOCAL_STATUSES.NEW;
-                          const crmConf = order.crmStatus ? (CRM_STATUSES[order.crmStatus] || { label: order.crmStatus, color: 'border-gray-200 text-gray-500' }) : null;
+                          const isAssembled = order.crmStatus === 'assembling-complete';
+                          
                           return (
-                            <div key={order.id} className="flex gap-3 items-start p-2.5 hover:bg-[#fafaf8] rounded-xl transition-colors border border-transparent hover:border-[#f0efe9]">
-                              <div className="w-6 h-6 rounded-lg bg-[#1a1a18] text-white flex items-center justify-center text-xs font-black shrink-0 mt-0.5">{idx + 1}</div>
-                              <div className="flex-grow min-w-0">
-                                <p className="text-[14px] font-bold text-[#1a1a18] leading-snug break-words mb-1.5">{order.address || 'Адрес не указан'}</p>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className="inline-block bg-[#f5f4f0] text-[#6b6860] px-2 py-0.5 rounded-md text-xs font-bold border border-[#e8e6df]">⏱ {order.slotRaw || '—'}</span>
-                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${localStatus.color}`}>{localStatus.label}</span>
-                                  {crmConf && <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${crmConf.color}`}>CRM: {crmConf.label}</span>}
+                            <div key={order.id} className="flex gap-4 p-4 bg-[#fafaf8] rounded-xl border border-[#f0efe9]">
+                              <div className="w-8 h-8 rounded-lg bg-[#1a1a18] text-white flex items-center justify-center text-sm font-black shrink-0 mt-0.5">{idx + 1}</div>
+                              
+                              <div className="flex-grow min-w-0 flex flex-col gap-2">
+                                <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
+                                  <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className="font-black text-base text-[#1a1a18]">Заказ #{order.number || order.id.slice(-4)}</span>
+                                      <span className="text-xs font-bold text-[#6b6860] bg-white px-2 py-0.5 rounded border border-[#e8e6df]">⏱ {order.slotRaw || '—'}</span>
+                                    </div>
+                                    <p className="text-[15px] font-bold text-[#1a1a18] leading-snug">{order.address || 'Адрес не указан'}</p>
+                                  </div>
+                                  
+                                  <button 
+                                    onClick={() => updateOrderToAssembled(order.id)}
+                                    className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${isAssembled ? 'bg-green-50 text-green-700 border-green-200' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                                  >
+                                    {isAssembled ? '✅ Собран' : 'Сделать Собран'}
+                                  </button>
                                 </div>
+
+                                <div className="text-sm font-medium text-[#4a4740] bg-white p-2 rounded border border-[#e8e6df]">
+                                  <span className="font-bold text-[#1a1a18]">Состав:</span> {order.composition || order.items || 'Состав не загружен'}
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                  <span className="text-sm font-bold text-[#1a1a18]">
+                                    👤 {order.clientName || 'Без имени'} <span className="text-[#6b6860 font-medium]">{order.clientPhone || ''}</span>
+                                  </span>
+                                  {order.clientPhone && (
+                                    <div className="flex gap-1.5">
+                                      <a href={`tel:${order.clientPhone}`} className="w-7 h-7 flex items-center justify-center bg-blue-50 text-blue-600 rounded border border-blue-100 hover:bg-blue-100">📞</a>
+                                      <a href={`https://t.me/+${order.clientPhone.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className="w-7 h-7 flex items-center justify-center bg-sky-50 text-sky-600 rounded border border-sky-100 hover:bg-sky-100">TG</a>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {(order.clientComment || order.opComment) && (
+                                  <div className="flex flex-col gap-1.5 mt-1 border-t border-dashed border-[#e8e6df] pt-2">
+                                    {order.clientComment && <p className="text-sm text-gray-600"><span className="font-bold text-rose-600">Клиент:</span> {order.clientComment}</p>}
+                                    {order.opComment && <p className="text-sm text-gray-600"><span className="font-bold text-blue-600">Оператор:</span> {order.opComment}</p>}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           );
@@ -363,8 +477,7 @@ export default function ManagerDashboard() {
                 {routes.length === 0 && <p className="text-[#a8a49c] font-medium text-center py-12">На сегодня маршрутов еще нет</p>}
               </>
             )}
-
-            {/* ВКЛАДКА 3: ИСТОРИЯ ЛОГОВ */}
+            
             {activeTab === 'history' && (
               <>
                 {history.map((task) => (

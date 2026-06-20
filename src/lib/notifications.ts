@@ -385,68 +385,34 @@ export async function notify(event: NotificationEvent) {
 }
 
 export async function createManagerPlaque(data: {
-  courierId?: string;
+  courierId: string;
   firstName: string;
   lastName: string;
   baseTime: string;
-  oldTime?: string | null;      // 🔥 Убедись, что это есть
-  authorName?: string | null;   // 🔥 И это тоже
+  oldTime?: string | null;
+  authorName?: string | null;
   changeType: 'TIME_CHANGED' | 'ORDERS_CHANGED' | 'ROUTE_REASSIGNED';
 }) {
-  try {
-    // 1. ЗАПИСЫВАЕМ ПЛАШКУ В БАЗУ ДАННЫХ
-    await prisma.managerNotification.create({
+  // Ищем непрочитанную плашку для этого курьера
+  const existing = await prisma.managerNotification.findFirst({
+    where: { courierId: data.courierId, isSeen: false }
+  });
+
+  if (existing) {
+    // Если висит непрочитанная — ПЕРЕЗАПИСЫВАЕМ её новыми данными
+    return prisma.managerNotification.update({
+      where: { id: existing.id },
       data: {
-        courierId: data.courierId,
-        firstName: data.firstName,
-        lastName: data.lastName,
         baseTime: data.baseTime,
-        oldTime: data.oldTime,
-        changeType: data.changeType,
-        authorName: data.authorName,
+        // Оставляем самое первое старое время, либо берем текущее, если его не было
+        oldTime: existing.oldTime || data.oldTime || existing.baseTime,
+        changeType: data.changeType, 
+        authorName: data.authorName || existing.authorName,
+        createdAt: new Date() // Обновляем время, чтобы всплыло наверх
       }
     });
-
-    // 2. ОТПРАВЛЯЕМ ПУШ ВСЕМ МЕНЕДЖЕРАМ (OPERATOR)
-    const managers = await prisma.user.findMany({
-      where: { role: "OPERATOR" },
-      include: { pushSubscriptions: true }
-    });
-
-    if (!managers.length || !initWebPush()) return;
-
-    const titleMap = {
-      TIME_CHANGED: '⏱ Изменено время прибытия',
-      ORDERS_CHANGED: '📦 Изменены заказы в маршруте',
-      ROUTE_REASSIGNED: '🗺️ Назначен новый маршрут'
-    };
-
-    const payload = JSON.stringify({
-      title: titleMap[data.changeType],
-      body: `Курьер: ${data.firstName} ${data.lastName}\nНовое время: ${data.baseTime}\nИзменил: ${data.authorName}`,
-      url: "/manager",
-      role: "OPERATOR",
-      tag: `manager-alert-${Date.now()}`,
-      timestamp: Date.now(),
-    });
-
-    const expiredEndpoints: string[] = [];
-
-    for (const manager of managers) {
-      for (const sub of manager.pushSubscriptions) {
-        try {
-          await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload);
-        } catch (e: any) {
-          if (e.statusCode === 410 || e.statusCode === 404) expiredEndpoints.push(sub.endpoint);
-        }
-      }
-    }
-
-    if (expiredEndpoints.length > 0) {
-      await prisma.pushSubscription.deleteMany({ where: { endpoint: { in: expiredEndpoints } } });
-    }
-
-  } catch (error) {
-    console.error("[Manager Plaque Error]:", error);
   }
+
+  // Если всё прочитано — создаем новую
+  return prisma.managerNotification.create({ data });
 }
