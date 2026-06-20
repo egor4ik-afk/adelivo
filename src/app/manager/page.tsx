@@ -174,17 +174,23 @@ export default function ManagerDashboard() {
                         <p className="text-sm text-[#a8a49c] font-medium mt-0.5">Маршрут #{route.name || route.id.slice(-4)}</p>
                       </div>
                       <div className="bg-[#eef3ff] text-[#4a7aff] px-3 py-1.5 rounded-lg text-sm font-bold border border-[#dce6ff]">
-                        {route.points?.length || 0} точек
+                        {/* 🔥 Считаем orders вместо points */}
+                        {route.orders?.length || 0} точек
                       </div>
                     </div>
                     
                     <div className="flex flex-col gap-3">
-                      {route.points?.length > 0 ? route.points.map((p: any, idx: number) => (
-                        <div key={p.id} className="flex gap-3 items-start p-2 hover:bg-[#fafaf8] rounded-xl transition-colors">
-                          <div className="w-7 h-7 rounded-full bg-[#f5f4f0] text-[#8c8880] flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 border border-[#e8e6df]">{idx + 1}</div>
+                      {/* 🔥 Итерируемся по orders напрямую */}
+                      {route.orders?.length > 0 ? route.orders.map((order: any, idx: number) => (
+                        <div key={order.id} className="flex gap-3 items-start p-2 hover:bg-[#fafaf8] rounded-xl transition-colors">
+                          <div className="w-7 h-7 rounded-full bg-[#f5f4f0] text-[#8c8880] flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 border border-[#e8e6df]">
+                            {idx + 1}
+                          </div>
                           <div>
-                            <p className="text-[15px] font-bold text-[#1a1a18]">{p.order?.address || 'Адрес не указан'}</p>
-                            <p className="text-sm text-[#a8a49c] mt-0.5 font-medium">{p.order?.slotRaw || 'Время не назначено'} • Заказ {p.order?.externalId || p.order?.crmId}</p>
+                            <p className="text-[15px] font-bold text-[#1a1a18]">{order.address || 'Адрес не указан'}</p>
+                            <p className="text-sm text-[#a8a49c] mt-0.5 font-medium">
+                              {order.slotRaw || 'Время не назначено'} • Заказ {order.externalId || order.crmId}
+                            </p>
                           </div>
                         </div>
                       )) : <p className="text-sm text-[#a8a49c] p-2">Точек нет</p>}

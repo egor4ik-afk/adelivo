@@ -15,9 +15,9 @@ export async function GET() {
       },
       include: {
         courier: true,
-        points: {
-          include: { order: true },
-          orderBy: { id: 'asc' } // или position, если у вас такое поле
+        // 🔥 Меняем points на orders (связь напрямую с таблицей заказов)
+        orders: {
+          orderBy: { id: 'asc' } 
         }
       },
       orderBy: { createdAt: 'desc' }
