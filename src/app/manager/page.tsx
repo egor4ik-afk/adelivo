@@ -134,17 +134,21 @@ export default function ManagerDashboard() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto p-4 sm:p-6">
-        <div className="flex bg-[#e8e6df] p-1 rounded-xl w-fit mb-6 shadow-inner overflow-x-auto">
-          <button onClick={() => setActiveTab('new')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'new' ? 'bg-white shadow-sm text-[#1a1a18]' : 'text-[#8c8880] hover:text-[#1a1a18]'}`}>
-            Требуют внимания {tasks.length > 0 && <span className="bg-[#dc2626] text-white px-2 py-0.5 rounded-full text-[11px]">{tasks.length}</span>}
-          </button>
-          <button onClick={() => setActiveTab('routes')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'routes' ? 'bg-white shadow-sm text-[#1a1a18]' : 'text-[#8c8880] hover:text-[#1a1a18]'}`}>
-            Все текущие маршруты
-          </button>
-          <button onClick={() => setActiveTab('history')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'history' ? 'bg-white shadow-sm text-[#1a1a18]' : 'text-[#8c8880] hover:text-[#1a1a18]'}`}>
-            История логов
-          </button>
+      <main className="max-w-5xl mx-auto p-4 sm:p-6 w-full overflow-hidden">
+        
+        {/* 🔥 ИСПРАВЛЕННЫЕ ТАБЫ (Правильный скролл на мобилке) */}
+        <div className="w-full overflow-x-auto hide-scrollbar mb-6 pb-2">
+          <div className="flex bg-[#e8e6df] p-1 rounded-xl w-max shadow-inner gap-1">
+            <button onClick={() => setActiveTab('new')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap shrink-0 ${activeTab === 'new' ? 'bg-white shadow-sm text-[#1a1a18]' : 'text-[#8c8880] hover:text-[#1a1a18]'}`}>
+              Требуют внимания {tasks.length > 0 && <span className="bg-[#dc2626] text-white px-2 py-0.5 rounded-full text-[11px]">{tasks.length}</span>}
+            </button>
+            <button onClick={() => setActiveTab('routes')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap shrink-0 ${activeTab === 'routes' ? 'bg-white shadow-sm text-[#1a1a18]' : 'text-[#8c8880] hover:text-[#1a1a18]'}`}>
+              Все текущие маршруты
+            </button>
+            <button onClick={() => setActiveTab('history')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap shrink-0 ${activeTab === 'history' ? 'bg-white shadow-sm text-[#1a1a18]' : 'text-[#8c8880] hover:text-[#1a1a18]'}`}>
+              История логов
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -228,7 +232,7 @@ export default function ManagerDashboard() {
                   )}
                 </div>
 
-                {/* 🔥 СЕКЦИЯ 2: ОЖИДАЮТ ЗАГРУЗКИ (Не забранные маршруты) */}
+                {/* СЕКЦИЯ 2: ОЖИДАЮТ ЗАГРУЗКИ (Не забранные маршруты) */}
                 <div className="pt-6 border-t-2 border-dashed border-[#e8e6df]">
                   <div className="flex items-center gap-3 mb-6">
                     <span className="text-2xl">🚚</span>
@@ -246,8 +250,14 @@ export default function ManagerDashboard() {
                       <div key={route.id} className="bg-white border-2 border-[#e8e6df] rounded-2xl p-5 shadow-sm flex flex-col justify-between">
                         <div className="flex justify-between items-start mb-4 border-b border-[#f0efe9] pb-3">
                           <div>
-                            <h3 className="font-extrabold text-lg text-[#1a1a18] leading-tight">
+                            <h3 className="font-extrabold text-lg text-[#1a1a18] leading-tight flex flex-wrap items-center gap-2">
                               {route.courier?.firstName || 'Не назначен'} {route.courier?.lastName || ''}
+                              {/* 🔥 ДОБАВЛЕНО ВРЕМЯ НА БАЗЕ */}
+                              {route.plannedDepartureTime && (
+                                <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-rose-100">
+                                  На базе: {route.plannedDepartureTime}
+                                </span>
+                              )}
                             </h3>
                             <p className="text-xs text-[#a8a49c] font-bold uppercase tracking-wider mt-1">
                               Маршрут {route.name || `#${route.id.slice(-5).toUpperCase()}`}
@@ -296,8 +306,14 @@ export default function ManagerDashboard() {
                     <div key={route.id} className="bg-white border border-[#e8e6df] rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
                       <div className="flex justify-between items-start mb-4 border-b border-[#f0efe9] pb-3">
                         <div>
-                          <h3 className="font-extrabold text-lg text-[#1a1a18] leading-tight">
+                          <h3 className="font-extrabold text-lg text-[#1a1a18] leading-tight flex flex-wrap items-center gap-2">
                             {route.courier?.firstName || 'Не назначен'} {route.courier?.lastName || ''}
+                            {/* 🔥 ДОБАВЛЕНО ВРЕМЯ НА БАЗЕ И СЮДА ТОЖЕ */}
+                            {route.plannedDepartureTime && (
+                              <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded uppercase tracking-wider border border-rose-100">
+                                На базе: {route.plannedDepartureTime}
+                              </span>
+                            )}
                           </h3>
                           <p className="text-xs text-[#a8a49c] font-bold uppercase tracking-wider mt-1">Маршрут {route.name || `#${route.id.slice(-5).toUpperCase()}`}</p>
                         </div>
