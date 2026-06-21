@@ -112,7 +112,7 @@ const ContactBadge = ({ title, phone, name, isCourier }: { title?: string, phone
 };
 
 export default function ManagerDashboard() {
-  const [activeTab, setActiveTab] = useState<'new' | 'routes' | 'history'>('routes');
+  const [activeTab, setActiveTab] = useState<'new' | 'routes' | 'history'>('new');
   const [tasks, setTasks] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [routes, setRoutes] = useState<any[]>([]);
@@ -295,11 +295,12 @@ export default function ManagerDashboard() {
     }
   };
 
-  const updateOrderToAssembled = async (orderId: string) => {
+  const updateOrderStatusSingle = async (orderId: string, newCrmStatus: string) => {
     try {
       await fetch(`/api/manager/orders/${orderId}/status`, {
         method: 'PATCH',
-        body: JSON.stringify({ crmStatus: 'assembling-complete' })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ crmStatus: newCrmStatus })
       });
       loadData(false);
     } catch (e) { console.error(e); }
@@ -837,14 +838,57 @@ export default function ManagerDashboard() {
                                         <span className="font-bold text-[#1a1a18]">📦</span> {order.composition || order.items || '—'}
                                       </div>
 
-                                      {/* Кнопка Собран */}
-                                      <div className="pt-3 mt-1">
-                                        <button
-                                          onClick={() => updateOrderToAssembled(order.id)}
-                                          className={`w-full py-1.5 rounded-lg text-[12px] font-bold border transition-colors shadow-sm ${isAssembled ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                                      {/* 🔥 УМНАЯ ЛОГИКА И ДРОПДАУН ДЛЯ ЗАКАЗА */}
+                                      <div className="pt-2 mt-1 flex flex-col gap-2">
+                                        
+                                        {/* Умная кнопка действий */}
+                                        {(() => {
+                                          const isCancelledOrReturned = order.status === 'CANCELLED' || order.status === 'RETURNED' || order.crmStatus === 'cancel-other' || order.crmStatus === 'return' || order.crmStatus === 'chastichnyi-vozvrat';
+                                          const isHandedOver = order.status === 'IN_DELIVERY' || order.status === 'DELIVERED' || order.crmStatus === 'send-to-delivery' || order.crmStatus === 'complete';
+
+                                          if (isCancelledOrReturned) {
+                                            return <div className="text-center text-[11px] font-bold text-[#a8a49c] py-1.5 border border-dashed border-[#e8e6df] rounded-lg">Отменен / Возврат</div>;
+                                          }
+
+                                          if (isHandedOver) {
+                                            return (
+                                              <div className="flex gap-2">
+                                                <button onClick={() => updateOrderStatusSingle(order.id, 'cancel-other')} className="flex-1 py-1.5 rounded-lg text-[11px] font-bold border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-colors shadow-sm">❌ Отмена</button>
+                                                <button onClick={() => updateOrderStatusSingle(order.id, 'return')} className="flex-1 py-1.5 rounded-lg text-[11px] font-bold border border-orange-200 bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors shadow-sm">↩️ Возврат</button>
+                                              </div>
+                                            );
+                                          }
+
+                                          // До передачи курьеру (Smart Logic)
+                                          if (!order.crmStatus || order.crmStatus === 'new') {
+                                            return <button onClick={() => updateOrderStatusSingle(order.id, 'assembling')} className="w-full py-1.5 rounded-lg text-[12px] font-bold border border-[#ffe082] bg-[#fff8e6] text-[#b38a00] hover:bg-[#fff0c2] transition-colors shadow-sm">📦 В сборку</button>;
+                                          }
+                                          if (order.crmStatus === 'assembling') {
+                                            return <button onClick={() => updateOrderStatusSingle(order.id, 'assembling-complete')} className="w-full py-1.5 rounded-lg text-[12px] font-bold border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 transition-colors shadow-sm">✅ Собран</button>;
+                                          }
+                                          if (order.crmStatus === 'assembling-complete') {
+                                            return <button onClick={() => updateOrderStatusSingle(order.id, 'send-to-delivery')} className="w-full py-1.5 rounded-lg text-[12px] font-bold border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors shadow-sm">🚀 Передать</button>;
+                                          }
+
+                                          return null;
+                                        })()}
+
+                                        {/* Универсальный дропдаун (ручное управление статусом) */}
+                                        <select
+                                          value={order.crmStatus || 'new'}
+                                          onChange={(e) => updateOrderStatusSingle(order.id, e.target.value)}
+                                          className="w-full p-1.5 text-[11px] font-semibold border border-[#e8e6df] rounded-lg bg-[#fafaf8] text-[#6b6860] outline-none focus:border-[#4a7aff] hover:bg-white transition-colors cursor-pointer"
                                         >
-                                          {isAssembled ? '✅ Собран' : 'Собран'}
-                                        </button>
+                                          <option value="new">Новый (CRM)</option>
+                                          <option value="assembling">В сборке (CRM)</option>
+                                          <option value="assembling-complete">Собран (CRM)</option>
+                                          <option value="send-to-delivery">Передан курьеру (CRM)</option>
+                                          <option value="complete">Выполнен (CRM)</option>
+                                          <option value="return">Возврат (CRM)</option>
+                                          <option value="chastichnyi-vozvrat">Частичный возврат (CRM)</option>
+                                          <option value="cancel-other">Отменен (CRM)</option>
+                                        </select>
+
                                       </div>
 
                                     </div>
