@@ -39,7 +39,6 @@ const CRM_STATUSES: Record<string, { label: string, color: string }> = {
   'chastichnyi-vozvrat': { label: 'Част. возврат', color: 'border-orange-200 text-orange-700 bg-orange-50' },
 };
 
-// Функция для объединения всех слотов маршрута в итоговый (например, "с 10:00 до 14:00")
 function getRouteTimeRange(orders: any[]) {
   if (!orders || orders.length === 0) return null;
   let min = 24;
@@ -47,7 +46,6 @@ function getRouteTimeRange(orders: any[]) {
   let found = false;
   orders.forEach(o => {
     if (!o.slotRaw) return;
-    // Ищем только часы до двоеточия (например, 10 из 10:00)
     const matches = o.slotRaw.match(/(\d{1,2})(?=:)/g);
     if (matches) {
       matches.forEach((m: string) => {
@@ -61,22 +59,28 @@ function getRouteTimeRange(orders: any[]) {
     }
   });
   if (!found || min === 24 || max === 0) return null;
-  return `(${min}:00 - ${max}:00)`;
+  return `с ${min}:00 до ${max}:00`;
 }
 
-const ContactBadge = ({ phone, name, isCourier }: { phone: string, name?: string, isCourier?: boolean }) => {
-  if (!phone || phone === "—") return null;
-  const cleanPhoneForTg = phone.replace(/[^\d+]/g, "");
+// Компонент контактов (Заказчик / Получатель / Курьер)
+const ContactBadge = ({ title, phone, name, isCourier }: { title?: string, phone: string, name?: string, isCourier?: boolean }) => {
+  const hasPhone = phone && phone !== "—";
+  if (!name && !hasPhone) return null;
+
+  const cleanPhoneForTg = hasPhone ? phone.replace(/[^\d+]/g, "") : "";
   const encodedMsg = encodeURIComponent(isCourier ? "Привет! Это менеджер EventWave." : `Здравствуйте${name ? `, ${name}` : ''}! Это доставка EventWave.`);
 
   return (
-    <div className="flex flex-col gap-2 mt-1.5">
+    <div className="flex flex-col gap-1.5 mt-1">
       <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[#4a7aff] flex-wrap">
+        {title && <span className="text-[#8c8880] text-[10px] uppercase tracking-wider font-bold mr-1">{title}</span>}
         {name && <span className="text-[#1a1a18]">👤 {name}</span>}
-        {name && <span className="text-[#a8a49c]">·</span>}
-        <a href={`tel:${phone}`} onClick={e => e.stopPropagation()} className="hover:underline flex items-center gap-1">
-          📞 {phone}
-        </a>
+        {name && hasPhone && <span className="text-[#a8a49c]">·</span>}
+        {hasPhone && (
+          <a href={`tel:${phone}`} onClick={e => e.stopPropagation()} className="hover:underline flex items-center gap-1">
+            📞 {phone}
+          </a>
+        )}
       </div>
       {cleanPhoneForTg && (
         <div className="flex items-center gap-2">
@@ -86,17 +90,17 @@ const ContactBadge = ({ phone, name, isCourier }: { phone: string, name?: string
             rel="noopener noreferrer"
             onClick={e => e.stopPropagation()}
             title="Написать в Telegram"
-            className="flex items-center justify-center bg-[#2AABEE] w-[28px] h-[28px] rounded-full shadow-sm hover:opacity-90 transition-opacity"
+            className="flex items-center justify-center bg-[#2AABEE] w-[26px] h-[26px] rounded-full shadow-sm hover:opacity-90 transition-opacity"
           >
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z" /></svg>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="#ffffff"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z" /></svg>
           </a>
           <a
             href={`sms:${cleanPhoneForTg}?body=${encodedMsg}`}
             title="Отправить SMS"
             onClick={e => e.stopPropagation()}
-            className="flex items-center justify-center bg-[#34C759] w-[28px] h-[28px] rounded-full shadow-sm hover:opacity-90 transition-opacity"
+            className="flex items-center justify-center bg-[#34C759] w-[26px] h-[26px] rounded-full shadow-sm hover:opacity-90 transition-opacity"
           >
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" /></svg>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="#ffffff"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" /></svg>
           </a>
         </div>
       )}
@@ -113,9 +117,9 @@ export default function ManagerDashboard() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(false);
   
-  // Состояния для аккордеона и чекбоксов
   const [expandedRoutes, setExpandedRoutes] = useState<Record<string, boolean>>({});
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
+  const [isMassUpdating, setIsMassUpdating] = useState(false);
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -213,6 +217,17 @@ export default function ManagerDashboard() {
     });
   };
 
+  const allRouteOrderIds = routes.flatMap(r => r.orders?.map((o: any) => o.id) || []);
+  const isAllGlobalSelected = allRouteOrderIds.length > 0 && allRouteOrderIds.every(id => selectedOrders.has(id));
+
+  const toggleAllGlobalOrders = () => {
+    if (isAllGlobalSelected) {
+      setSelectedOrders(new Set());
+    } else {
+      setSelectedOrders(new Set(allRouteOrderIds));
+    }
+  };
+
   const handlePrintLabels = async () => {
     if (selectedOrders.size === 0) return alert("Выберите хотя бы один заказ для печати");
     try {
@@ -239,22 +254,47 @@ export default function ManagerDashboard() {
     }
   };
 
+  const updateOrderToAssembled = async (orderId: string) => {
+    try {
+      await fetch(`/api/manager/orders/${orderId}/status`, { 
+        method: 'PATCH', 
+        body: JSON.stringify({ crmStatus: 'assembling-complete' }) 
+      });
+      loadData(false);
+    } catch (e) { console.error(e); }
+  };
+
+  const massUpdateToAssembling = async () => {
+    if (selectedOrders.size === 0) return alert("Выберите заказы для отправки в сборку");
+    if (!confirm(`Отправить в сборку (CRM) ${selectedOrders.size} заказов?`)) return;
+    
+    setIsMassUpdating(true);
+    try {
+      await Promise.all(
+        Array.from(selectedOrders).map(orderId => 
+          fetch(`/api/manager/orders/${orderId}/status`, { 
+            method: 'PATCH', 
+            body: JSON.stringify({ crmStatus: 'assembling' }),
+            headers: { 'Content-Type': 'application/json' }
+          })
+        )
+      );
+      loadData(false);
+      setSelectedOrders(new Set());
+    } catch (e) { 
+      console.error(e); 
+      alert("Ошибка при массовом обновлении статусов");
+    } finally {
+      setIsMassUpdating(false);
+    }
+  };
+
   const updateRouteToAssembling = async (routeId: string) => {
     if (!confirm("Отправить все заказы маршрута на сборку в CRM?")) return;
     try {
       await fetch(`/api/manager/routes/${routeId}/status`, { 
         method: 'PATCH', 
         body: JSON.stringify({ crmStatus: 'assembling' }) 
-      });
-      loadData(false);
-    } catch (e) { console.error(e); }
-  };
-
-  const updateOrderToAssembled = async (orderId: string) => {
-    try {
-      await fetch(`/api/manager/orders/${orderId}/status`, { 
-        method: 'PATCH', 
-        body: JSON.stringify({ crmStatus: 'assembling-complete' }) 
       });
       loadData(false);
     } catch (e) { console.error(e); }
@@ -289,7 +329,7 @@ export default function ManagerDashboard() {
 
   return (
     <div className="min-h-screen bg-[#f5f4f0]">
-      <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10">
+      <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4 flex justify-between items-center sticky top-0 z-20">
         <div className="flex items-center gap-3">
           <img src="/favicon.svg" alt="Logo" className="w-8 h-8" />
           <h1 className="text-xl font-bold text-gray-900 tracking-tight">Кабинет менеджера</h1>
@@ -322,7 +362,6 @@ export default function ManagerDashboard() {
             
             {activeTab === 'new' && (
               <div className="flex flex-col gap-8">
-                 {/* Блок новых уведомлений */}
                  <div className="flex flex-col gap-3">
                   {tasksWithRoutes.map((item) => (
                     <div key={item.id} className="bg-white border-2 border-transparent hover:border-rose-100 rounded-2xl shadow-sm transition-all group overflow-hidden">
@@ -348,31 +387,6 @@ export default function ManagerDashboard() {
                           </button>
                         </div>
                       </div>
-
-                      {item.routeData && item.routeData.orders?.length > 0 && (
-                        <div className="bg-[#fafaf8] border-t border-[#f0efe9] p-4">
-                          <p className="text-xs font-bold text-[#8c8880] mb-3 uppercase tracking-wider">Маршрут курьера ({item.routeData.orders.length} точек)</p>
-                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                            {item.routeData.orders.map((order: any, idx: number) => {
-                              const localStatus = LOCAL_STATUSES[order.status] || LOCAL_STATUSES.NEW;
-                              const crmConf = order.crmStatus ? (CRM_STATUSES[order.crmStatus] || { label: order.crmStatus, color: 'border-gray-200 text-gray-500' }) : null;
-                              return (
-                                <div key={order.id} className="flex gap-3 items-start bg-white p-3 border border-[#e8e6df] rounded-xl shadow-sm">
-                                  <div className="w-6 h-6 rounded bg-[#1a1a18] text-white flex items-center justify-center text-xs font-black shrink-0">{idx + 1}</div>
-                                  <div className="flex-grow min-w-0">
-                                    <p className="text-[13px] font-bold text-[#1a1a18] break-words mb-1">{order.address || 'Без адреса'}</p>
-                                    <div className="flex flex-wrap gap-2 items-center">
-                                      <span className="text-[11px] font-bold text-[#6b6860] bg-[#f5f4f0] px-2 py-0.5 rounded border border-[#e8e6df]">⏱ {order.slotRaw || '—'}</span>
-                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${localStatus.color}`}>{localStatus.label}</span>
-                                      {crmConf && <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${crmConf.color}`}>CRM: {crmConf.label}</span>}
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   ))}
                   {tasksWithRoutes.length === 0 && (
@@ -384,7 +398,6 @@ export default function ManagerDashboard() {
                   )}
                 </div>
 
-                {/* БЛОК "ОЖИДАЮТ ЗАГРУЗКИ НА БАЗЕ" */}
                 <div className="pt-6 border-t-2 border-dashed border-[#e8e6df]">
                   <div className="flex items-center gap-3 mb-6">
                     <span className="text-2xl">🚚</span>
@@ -451,14 +464,40 @@ export default function ManagerDashboard() {
             
             {activeTab === 'routes' && (
               <>
-                <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-[#e8e6df] shadow-sm mb-2">
-                  <h2 className="text-lg font-bold text-[#1a1a18]">Управление маршрутами</h2>
-                  <button 
-                    onClick={handlePrintLabels}
-                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm ${selectedOrders.size > 0 ? 'bg-[#1a1a18] text-white hover:bg-gray-800' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
-                  >
-                    🖨️ Печать этикеток (75x120) {selectedOrders.size > 0 && `(${selectedOrders.size})`}
-                  </button>
+                {/* ПАНЕЛЬ МАССОВЫХ ДЕЙСТВИЙ */}
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-2xl border border-[#e8e6df] shadow-sm mb-2 sticky top-[84px] z-10 gap-4">
+                  <div className="flex items-center gap-3">
+                    <input 
+                      type="checkbox" 
+                      className="w-5 h-5 accent-[#1a1a18] rounded cursor-pointer shrink-0"
+                      checked={isAllGlobalSelected}
+                      onChange={toggleAllGlobalOrders}
+                    />
+                    <span className="font-bold text-[#1a1a18] text-[15px]">Выбрать все</span>
+                    
+                    {selectedOrders.size > 0 && (
+                      <span className="bg-[#eef3ff] text-[#4a7aff] px-2.5 py-1 rounded-lg text-sm font-bold border border-[#dce6ff] ml-2 shadow-sm transition-all">
+                        Выбрано: {selectedOrders.size}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3 w-full sm:w-auto">
+                    <button 
+                      onClick={massUpdateToAssembling}
+                      disabled={selectedOrders.size === 0 || isMassUpdating}
+                      className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm flex items-center justify-center gap-2 ${selectedOrders.size > 0 ? 'bg-[#fff8e6] text-[#b38a00] border border-[#ffe082] hover:bg-[#fff0c2]' : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'}`}
+                    >
+                      {isMassUpdating ? '⏳ Загрузка...' : '📦 В сборку'}
+                    </button>
+                    <button 
+                      onClick={handlePrintLabels}
+                      disabled={selectedOrders.size === 0}
+                      className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm flex items-center justify-center gap-2 ${selectedOrders.size > 0 ? 'bg-[#1a1a18] text-white hover:bg-gray-800' : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'}`}
+                    >
+                      🖨️ Печать (75x120)
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-4 mt-2">
@@ -467,9 +506,8 @@ export default function ManagerDashboard() {
                     const routeOrderIds = route.orders?.map((o: any) => o.id) || [];
                     const isAllSelected = routeOrderIds.length > 0 && routeOrderIds.every((id: string) => selectedOrders.has(id));
                     const routeTimeRange = getRouteTimeRange(route.orders);
+                    
                     const courierPhone = route.courier?.phone || "—";
-                    const cleanPhoneForTg = courierPhone !== "—" ? courierPhone.replace(/[^\d+]/g, "") : "";
-                    const encodedMsg = encodeURIComponent("Привет! Это менеджер EventWave.");
 
                     return (
                       <div key={route.id} className="bg-white border border-[#e8e6df] rounded-2xl shadow-sm transition-all overflow-hidden">
@@ -496,36 +534,12 @@ export default function ManagerDashboard() {
                               </h3>
 
                               {courierPhone !== "—" && (
-                                <div className="flex items-center gap-3 pl-6">
-                                  <a href={`tel:${courierPhone}`} onClick={e => e.stopPropagation()} className="text-[13px] font-semibold text-[#4a7aff] hover:underline">
-                                    📞 {courierPhone}
-                                  </a>
-                                  {cleanPhoneForTg && (
-                                    <div className="flex items-center gap-2">
-                                      <a
-                                        href={`https://t.me/${cleanPhoneForTg}?text=${encodedMsg}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        onClick={e => e.stopPropagation()}
-                                        title="Написать в Telegram"
-                                        className="flex items-center justify-center bg-[#2AABEE] w-7 h-7 rounded-full shadow-sm hover:opacity-90 transition-opacity"
-                                      >
-                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z" /></svg>
-                                      </a>
-                                      <a
-                                        href={`sms:${cleanPhoneForTg}?body=${encodedMsg}`}
-                                        title="Отправить SMS"
-                                        onClick={e => e.stopPropagation()}
-                                        className="flex items-center justify-center bg-[#34C759] w-7 h-7 rounded-full shadow-sm hover:opacity-90 transition-opacity"
-                                      >
-                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" /></svg>
-                                      </a>
-                                    </div>
-                                  )}
+                                <div className="pl-6">
+                                  <ContactBadge phone={courierPhone} isCourier={true} />
                                 </div>
                               )}
                               
-                              <div className="flex flex-wrap items-center gap-2 pl-6">
+                              <div className="flex flex-wrap items-center gap-2 pl-6 mt-1">
                                 {route.plannedDepartureTime && (
                                   <span className="text-[11px] font-black text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
                                     На базе: {route.plannedDepartureTime}
@@ -560,10 +574,16 @@ export default function ManagerDashboard() {
                                 const crmConf = order.crmStatus ? (CRM_STATUSES[order.crmStatus] || { label: order.crmStatus, color: 'border-gray-200 text-gray-500 bg-white' }) : null;
                                 const localStatus = LOCAL_STATUSES[order.status] || LOCAL_STATUSES.NEW;
                                 
-                                const oName = order.name || order.clientName;
-                                const oPhone = order.phone || order.clientPhone || "—";
-                                const oCleanPhone = oPhone !== "—" ? oPhone.replace(/[^\d+]/g, "") : "";
-                                const oEncodedMsg = encodeURIComponent(`Здравствуйте${oName ? `, ${oName}` : ''}! Это доставка EventWave.`);
+                                const customerName = order.clientName;
+                                const customerPhone = order.clientPhone || "—";
+                                
+                                const recipientName = order.name;
+                                const recipientPhone = order.recipientPhone || order.phone || "—";
+                                
+                                const isMeura = order.shop === 'kaktusfiori' || order.shop === 'meura-flowers';
+                                const shopBadge = isMeura ? "🌸 Meura" : "📦 Bunch";
+
+                                const displayId = order.externalId || order.crmId || order.number || order.id;
 
                                 return (
                                   <div key={order.id} className="flex flex-col bg-white rounded-xl border border-[#e8e6df] shadow-sm p-3 relative hover:border-[#dcd9d1] transition-colors">
@@ -573,17 +593,24 @@ export default function ManagerDashboard() {
                                       <div className="flex items-center gap-2">
                                         <input 
                                           type="checkbox" 
-                                          className="w-4 h-4 accent-[#1a1a18] rounded cursor-pointer"
+                                          className="w-4 h-4 accent-[#1a1a18] rounded cursor-pointer shrink-0"
                                           checked={selectedOrders.has(order.id)}
                                           onChange={() => toggleOrderSelection(order.id)}
                                         />
-                                        <div className="w-5 h-5 rounded bg-[#1a1a18] text-white flex items-center justify-center text-[10px] font-black">{idx + 1}</div>
-                                        <span className="font-black text-[13px] text-[#1a1a18] truncate max-w-[80px]" title={order.number || order.id}>
-                                          #{order.number || order.id.slice(-6)}
+                                        <div className="w-5 h-5 rounded bg-[#1a1a18] text-white flex items-center justify-center text-[10px] font-black shrink-0">{idx + 1}</div>
+                                        <span className="font-black text-[13px] text-[#1a1a18] truncate max-w-[85px]" title={displayId}>
+                                          #{displayId}
                                         </span>
                                       </div>
-                                      <span className="text-[10px] font-bold text-[#6b6860] bg-[#f5f4f0] px-1.5 py-0.5 rounded border border-[#e8e6df]">
+                                      <span className="text-[10px] font-bold text-[#6b6860] bg-[#f5f4f0] px-1.5 py-0.5 rounded border border-[#e8e6df] shrink-0">
                                         ⏱ {order.slotRaw || '—'}
+                                      </span>
+                                    </div>
+
+                                    {/* Значок магазина */}
+                                    <div className="mb-2">
+                                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${isMeura ? 'bg-pink-50 text-pink-600 border-pink-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>
+                                        {shopBadge}
                                       </span>
                                     </div>
 
@@ -594,77 +621,53 @@ export default function ManagerDashboard() {
                                     </div>
 
                                     {/* Адрес с ETA */}
-                                    <div className="text-[13px] font-medium text-[#1a1a18] leading-tight mb-3">
+                                    <div className="text-[13px] font-medium text-[#1a1a18] leading-tight mb-2 min-h-[30px]">
                                       {order.address || 'Адрес не указан'}
                                       {order.eta && <span className="inline-block ml-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">~{order.eta}</span>}
                                     </div>
 
-                                    {/* Контакты клиента (Код 1-в-1 как просил) */}
-                                    {(oName || oPhone !== "—") && (
-                                      <div style={{ fontSize: 13, fontWeight: 600, color: "#4a7aff", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 2, marginBottom: 10 }}>
-                                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                                          {oName && <span>👤 {oName}</span>}
-                                          {oName && oPhone !== "—" && <span style={{ color: "#a8a49c" }}>·</span>}
-                                          {oPhone !== "—" && (
-                                            <a href={`tel:${oPhone}`} onClick={e => e.stopPropagation()} style={{ color: "#4a7aff", textDecoration: "none" }}>
-                                              📞 {oPhone}
-                                            </a>
+                                    {/* БЛОК КОНТАКТОВ И КОММЕНТАРИЕВ */}
+                                    <div className="flex flex-col gap-2 mt-1 mb-2">
+                                      
+                                      {/* Заказчик */}
+                                      {(customerName || customerPhone !== "—") && (
+                                        <div className="flex flex-col gap-1.5">
+                                          <ContactBadge title="Заказчик" phone={customerPhone} name={customerName} />
+                                          {(order.clientComment || order.comment) && (
+                                            <div className="bg-[#fff1f2] border border-[#ffe4e6] p-1.5 rounded">
+                                              <p className="text-[11px] text-[#881337]"><span className="font-bold text-[#be123c] uppercase tracking-wider text-[9px] block mb-0.5">Коммент заказчика</span> {order.clientComment || order.comment}</p>
+                                            </div>
                                           )}
                                         </div>
+                                      )}
 
-                                        {oCleanPhone && (
-                                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                            <a
-                                              href={`https://t.me/${oCleanPhone}?text=${oEncodedMsg}`}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              onClick={e => e.stopPropagation()}
-                                              title="Написать в Telegram"
-                                              style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#2AABEE", width: 26, height: 26, borderRadius: "50%", textDecoration: "none", boxShadow: "0 2px 4px rgba(42, 171, 238, 0.3)" }}
-                                            >
-                                              <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff">
-                                                <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z" />
-                                              </svg>
-                                            </a>
+                                      {/* Разделитель, если есть оба контакта */}
+                                      {(customerName || customerPhone !== "—") && (recipientName || recipientPhone !== "—") && (
+                                        <div className="h-px bg-[#e8e6df] w-full my-0.5"></div>
+                                      )}
 
-                                            <a
-                                              href={`sms:${oCleanPhone}?body=${oEncodedMsg}`}
-                                              title="Отправить SMS"
-                                              onClick={e => e.stopPropagation()}
-                                              style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#34C759", width: 26, height: 26, borderRadius: "50%", textDecoration: "none", boxShadow: "0 2px 4px rgba(52, 199, 89, 0.3)" }}
-                                            >
-                                              <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff">
-                                                <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" />
-                                              </svg>
-                                            </a>
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
+                                      {/* Получатель */}
+                                      {(recipientName || recipientPhone !== "—") && (
+                                        <div className="flex flex-col gap-1.5">
+                                          <ContactBadge title="Получатель" phone={recipientPhone} name={recipientName} />
+                                        </div>
+                                      )}
 
-                                    {/* Комментарии */}
-                                    {(order.clientComment || order.opComment) && (
-                                      <div className="flex flex-col gap-1.5 mb-2">
-                                        {order.clientComment && (
-                                          <div className="bg-[#fff1f2] border border-[#ffe4e6] p-1.5 rounded">
-                                            <p className="text-[11px] text-[#881337]"><span className="font-bold text-[#be123c] uppercase tracking-wider text-[9px] block mb-0.5">Коммент клиента</span> {order.clientComment}</p>
-                                          </div>
-                                        )}
-                                        {order.opComment && (
-                                          <div className="bg-[#f0fdf4] border border-[#dcfce7] p-1.5 rounded">
-                                            <p className="text-[11px] text-[#14532d]"><span className="font-bold text-[#15803d] uppercase tracking-wider text-[9px] block mb-0.5">Оператор</span> {order.opComment}</p>
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
+                                      {/* Комментарий оператора */}
+                                      {order.opComment && (
+                                        <div className="bg-[#f0fdf4] border border-[#dcfce7] p-1.5 rounded mt-1">
+                                          <p className="text-[11px] text-[#14532d]"><span className="font-bold text-[#15803d] uppercase tracking-wider text-[9px] block mb-0.5">Оператор</span> {order.opComment}</p>
+                                        </div>
+                                      )}
+                                    </div>
 
                                     {/* Состав заказа */}
-                                    <div className="text-[11px] font-medium text-[#4a4740] bg-[#fafaf8] p-1.5 rounded border border-[#e8e6df]" title={order.composition || order.items}>
+                                    <div className="text-[11px] font-medium text-[#4a4740] bg-[#fafaf8] p-1.5 rounded border border-[#e8e6df] mt-auto line-clamp-3" title={order.composition || order.items}>
                                       <span className="font-bold text-[#1a1a18]">📦</span> {order.composition || order.items || '—'}
                                     </div>
 
                                     {/* Кнопка Собран */}
-                                    <div className="mt-auto pt-3">
+                                    <div className="pt-3 mt-1">
                                       <button 
                                         onClick={() => updateOrderToAssembled(order.id)}
                                         className={`w-full py-1.5 rounded-lg text-[12px] font-bold border transition-colors shadow-sm ${isAssembled ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
