@@ -169,28 +169,23 @@ async function sendIndividualPushes(event: NotificationEvent) {
       // Базовый урл: Админов кидаем в дашборд, Менеджеров — в их кабинет
       targetUrl = user.role === "OPERATOR" ? "/manager" : "/dashboard";
 
-      // Уведомления от логистов (для плашек менеджера)
+      // 🔥 НОВЫЙ БЛОК: Уведомления от логистов (для плашек менеджера)
       if (event.type === "manager.notification") {
-        if (user.notifyLogistChanges) {
+        // Защита, если поля еще нет в базе
+        if ((user as any).notifyLogistChanges ?? true) { 
           shouldSend = true;
-
-          // Универсальный словарь для заголовков пушей
           const pushTitles: Record<string, string> = {
             TIME_CHANGED: "⏱ Изменено время выезда",
             ORDERS_CHANGED: "📦 Изменены заказы в маршруте",
             ROUTE_REASSIGNED: "🗺️ Назначен новый маршрут",
-            COURIER_CHANGED: "👤 Изменен курьер",
-            OP_COMMENT_ADDED: "💬 Важный комментарий по маршруту", // 🔥 Добавлено
+            COURIER_CHANGED: "👤 Смена курьера",
+            OP_COMMENT_ADDED: "💬 Комментарий оператора",
           };
-
-          title = pushTitles[event.notification.changeType] || "🔔 Изменения в маршруте";
-          
+          title = pushTitles[event.notification.changeType] || "🔔 Изменение на базе";
           bodyTexts.push(`Курьер: ${event.notification.firstName} ${event.notification.lastName}`);
-          // Если это комментарий, можно выводить его текст (если ты передашь его в baseTime или oldTime)
-          bodyTexts.push(`Детали: ${event.notification.baseTime}`);
-          
+          bodyTexts.push(`Время: ${event.notification.baseTime}`);
           if (event.notification.authorName) {
-             bodyTexts.push(`Автор: ${event.notification.authorName}`);
+             bodyTexts.push(`Логист: ${event.notification.authorName}`);
           }
           targetUrl = "/manager?tab=new";
         }
@@ -412,14 +407,69 @@ export async function notify(event: NotificationEvent) {
 }
 
 export async function createManagerPlaque(data: {
-  courierId: string;
-  firstName: string;
-  lastName: string;
-  baseTime: string;
+  courierId: string | number; // 🔥 Разрешаем number для страховки от ошибок
+  firstName?: string | null;
+  lastName?: string | null;
+  baseTime?: string | null;
   oldTime?: string | null;
   authorName?: string | null;
-  // 🔥 Разрешаем передавать комментарий оператора
-  changeType: 'TIME_CHANGED' | 'ORDERS_CHANGED' | 'ROUTE_REASSIGNED' | 'COURIER_CHANGED' | 'OP_COMMENT_ADDED' | string;
+  changeType: string; // 🔥 Любой строковый статус
 }) {
-   // ... тело функции без изменений
+  try {
+    console.log("[Plaque Init] Получены данные:", data);
+
+    // 🔥 ЖЕСТКАЯ ЗАЩИТА ТИПОВ ДЛЯ PRISMA
+    const safeCourierId = data.courierId ? String(data.courierId) : "UNKNOWN";
+    const safeBaseTime = data.baseTime || "—";
+    const safeChangeType = data.changeType || "DEFAULT";
+    const safeFirstName = data.firstName || "Неизвестный";
+    const safeLastName = data.lastName || "Курьер";
+
+    // Ищем непрочитанную плашку для этого курьера
+    const existing = await prisma.managerNotification.findFirst({
+      where: { courierId: safeCourierId, isSeen: false }
+    });
+
+    let record;
+
+    if (existing) {
+      record = await prisma.managerNotification.update({
+        where: { id: existing.id },
+        data: {
+          baseTime: safeBaseTime,
+          oldTime: existing.oldTime || data.oldTime || existing.baseTime,
+          changeType: safeChangeType,
+          authorName: data.authorName || existing.authorName,
+          createdAt: new Date() // Поднимаем наверх
+        }
+      });
+      console.log("✅ [Plaque Updated] ID:", record.id);
+    } else {
+      record = await prisma.managerNotification.create({
+        data: {
+          courierId: safeCourierId,
+          firstName: safeFirstName,
+          lastName: safeLastName,
+          baseTime: safeBaseTime,
+          oldTime: data.oldTime || null,
+          authorName: data.authorName || null,
+          changeType: safeChangeType
+        }
+      });
+      console.log("✅ [Plaque Created] ID:", record.id);
+    }
+
+    // 🔥 ЗАПИСЫВАЕМ УСПЕХ В БД (чтобы было видно в логах)
+    await log("manager.plaque", "db", record, true).catch(() => {});
+
+    // Отправляем PUSH, чтобы Табло пискнуло и обновилось в риалтайме!
+    notify({ type: "manager.notification", notification: record }).catch(e => console.error("[Push Plaque Err]:", e));
+
+    return record;
+  } catch (error: any) {
+    console.error("❌ [FATAL Plaque Error]:", error);
+    // 🔥 ЛОГИРУЕМ ОШИБКУ В БД
+    await log("manager.plaque", "db", data, false, String(error?.message || error)).catch(() => {});
+    return null; // Возвращаем null, чтобы ошибка не роняла сохранение маршрутов
+  }
 }

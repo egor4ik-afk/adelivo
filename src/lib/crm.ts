@@ -705,6 +705,7 @@ export async function updateCrmOrder(
   crmId: string,
   data: {
     status?: OrderStatus;
+    crmStatus?: string; // 🔥 Прямой канал для менеджеров
     courier?: string;
     opComment?: string;
     address?: string;
@@ -722,7 +723,18 @@ export async function updateCrmOrder(
 
   const orderPayload: any = {};
 
-  if (data.status && STATUS_TO_CRM[data.status]) orderPayload.status = STATUS_TO_CRM[data.status];
+  // 🔥 ЛОГИКА И ЗАЩИТА:
+  if (data.crmStatus) {
+    // 1. Если менеджер жмет кнопку "В сборку" — отправляем сырой статус как есть
+    orderPayload.status = data.crmStatus;
+  } else if (data.status && STATUS_TO_CRM[data.status]) {
+    // 2. Если курьер жмет кнопку — отправляем маппинг, НО:
+    // Строго соблюдаем правило: статус "Назначен" (ASSIGNED) в CRM НЕ ОТПРАВЛЯЕТСЯ
+    if (data.status !== "ASSIGNED") {
+      orderPayload.status = STATUS_TO_CRM[data.status];
+    }
+  }
+
   if (data.opComment !== undefined) orderPayload.managerComment = data.opComment;
   if (data.address !== undefined) {
     orderPayload.delivery = orderPayload.delivery ?? {};
