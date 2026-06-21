@@ -506,60 +506,68 @@ export default function ManagerDashboard() {
                     const routeOrderIds = route.orders?.map((o: any) => o.id) || [];
                     const isAllSelected = routeOrderIds.length > 0 && routeOrderIds.every((id: string) => selectedOrders.has(id));
                     const routeTimeRange = getRouteTimeRange(route.orders);
-                    
                     const courierPhone = route.courier?.phone || "—";
+                    const cleanPhoneForTg = courierPhone !== "—" ? courierPhone.replace(/[^\d+]/g, "") : "";
+                    const encodedMsg = encodeURIComponent("Привет! Это менеджер EventWave.");
 
                     return (
                       <div key={route.id} className="bg-white border border-[#e8e6df] rounded-2xl shadow-sm transition-all overflow-hidden">
                         
-                        {/* ШАПКА МАРШРУТА (Аккордеон) */}
+                        {/* ШАПКА МАРШРУТА: СТРОГО 1 СТРОКА */}
                         <div 
-                          className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 hover:bg-[#fafaf8] cursor-pointer transition-colors gap-4"
+                          className="flex flex-row items-center justify-between p-3 hover:bg-[#fafaf8] cursor-pointer transition-colors gap-2"
                           onClick={() => toggleRouteExpansion(route.id)}
                         >
-                          <div className="flex items-start gap-3">
+                          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap overflow-hidden">
                             <input 
                               type="checkbox" 
-                              className="w-5 h-5 accent-[#1a1a18] rounded cursor-pointer shrink-0 mt-1"
+                              className="w-4 h-4 accent-[#1a1a18] rounded cursor-pointer shrink-0"
                               checked={isAllSelected}
                               onChange={(e) => { e.stopPropagation(); toggleRouteOrders(routeOrderIds); }}
                               onClick={(e) => e.stopPropagation()}
                             />
+                            <span className="text-[#a8a49c] w-4 text-center text-[10px] shrink-0">{isExpanded ? '▼' : '▶'}</span>
                             
-                            <div className="flex flex-col gap-2">
-                              <h3 className="font-black text-[16px] text-[#1a1a18] flex items-center gap-2">
-                                <span className="text-[#a8a49c] w-4 text-center">{isExpanded ? '▼' : '▶'}</span>
-                                {route.courier?.firstName || 'Не назначен'} {route.courier?.lastName || ''}
-                                {route.name && <span className="text-[#a8a49c] font-medium text-sm ml-2">Маршрут {route.name || route.id.slice(-5).toUpperCase()}</span>}
-                              </h3>
-
-                              {courierPhone !== "—" && (
-                                <div className="pl-6">
-                                  <ContactBadge phone={courierPhone} isCourier={true} />
-                                </div>
-                              )}
-                              
-                              <div className="flex flex-wrap items-center gap-2 pl-6 mt-1">
-                                {route.plannedDepartureTime && (
-                                  <span className="text-[11px] font-black text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
-                                    На базе: {route.plannedDepartureTime}
-                                  </span>
+                            <span className="font-black text-[14px] text-[#1a1a18] whitespace-nowrap">
+                              {route.courier?.firstName || 'Не назначен'} {route.courier?.lastName || ''}
+                            </span>
+                            
+                            {courierPhone !== "—" && (
+                              <div className="flex items-center gap-1.5 ml-1">
+                                <a href={`tel:${courierPhone}`} onClick={e => e.stopPropagation()} className="text-[#4a7aff] font-semibold text-[13px] hover:underline whitespace-nowrap">
+                                  📞 {courierPhone}
+                                </a>
+                                {cleanPhoneForTg && (
+                                  <>
+                                    <a href={`https://t.me/${cleanPhoneForTg}?text=${encodedMsg}`} onClick={e => e.stopPropagation()} target="_blank" rel="noopener noreferrer" className="bg-[#2AABEE] w-5 h-5 flex items-center justify-center rounded-full hover:opacity-90">
+                                      <svg viewBox="0 0 24 24" width="10" height="10" fill="#ffffff"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z" /></svg>
+                                    </a>
+                                    <a href={`sms:${cleanPhoneForTg}?body=${encodedMsg}`} onClick={e => e.stopPropagation()} className="bg-[#34C759] w-5 h-5 flex items-center justify-center rounded-full hover:opacity-90">
+                                      <svg viewBox="0 0 24 24" width="10" height="10" fill="#ffffff"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" /></svg>
+                                    </a>
+                                  </>
                                 )}
-                                {routeTimeRange && (
-                                  <span className="text-[11px] font-black text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
-                                    Слоты: {routeTimeRange}
-                                  </span>
-                                )}
-                                <span className="text-[11px] font-bold text-[#6b6860] bg-[#f5f4f0] px-1.5 py-0.5 rounded border border-[#e8e6df]">
-                                  Точек: {route.orders?.length || 0}
-                                </span>
                               </div>
-                            </div>
+                            )}
+
+                            {route.plannedDepartureTime && (
+                              <span className="text-[11px] font-black text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 whitespace-nowrap ml-1">
+                                На базе: {route.plannedDepartureTime}
+                              </span>
+                            )}
+                            {routeTimeRange && (
+                              <span className="text-[11px] font-black text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 whitespace-nowrap">
+                                Слоты: {routeTimeRange}
+                              </span>
+                            )}
+                            <span className="text-[11px] font-bold text-[#6b6860] bg-[#f5f4f0] px-1.5 py-0.5 rounded border border-[#e8e6df] whitespace-nowrap hidden sm:inline-block">
+                              Точек: {route.orders?.length || 0}
+                            </span>
                           </div>
                           
                           <button 
                             onClick={(e) => { e.stopPropagation(); updateRouteToAssembling(route.id); }}
-                            className="w-full sm:w-auto bg-[#fff8e6] text-[#b38a00] border border-[#ffe082] px-4 py-2 rounded-lg text-[13px] font-bold hover:bg-[#fff0c2] transition-colors shadow-sm ml-auto"
+                            className="shrink-0 bg-[#fff8e6] text-[#b38a00] border border-[#ffe082] px-3 py-1.5 rounded-lg text-[12px] font-bold hover:bg-[#fff0c2] transition-colors shadow-sm ml-auto"
                           >
                             📦 В сборку
                           </button>
@@ -576,6 +584,7 @@ export default function ManagerDashboard() {
                                 
                                 const customerName = order.clientName;
                                 const customerPhone = order.clientPhone || "—";
+                                const customerComment = order.clientComment || order.comment;
                                 
                                 const recipientName = order.name;
                                 const recipientPhone = order.recipientPhone || order.phone || "—";
@@ -583,7 +592,10 @@ export default function ManagerDashboard() {
                                 const isMeura = order.shop === 'kaktusfiori' || order.shop === 'meura-flowers';
                                 const shopBadge = isMeura ? "🌸 Meura" : "📦 Bunch";
 
-                                const displayId = order.externalId || order.crmId || order.number || order.id;
+                                const displayId = order.externalId || order.crmId || order.number || order.id.slice(-6);
+                                const createdAt = order.crmCreatedAt 
+                                  ? new Date(order.crmCreatedAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) 
+                                  : null;
 
                                 return (
                                   <div key={order.id} className="flex flex-col bg-white rounded-xl border border-[#e8e6df] shadow-sm p-3 relative hover:border-[#dcd9d1] transition-colors">
@@ -598,7 +610,7 @@ export default function ManagerDashboard() {
                                           onChange={() => toggleOrderSelection(order.id)}
                                         />
                                         <div className="w-5 h-5 rounded bg-[#1a1a18] text-white flex items-center justify-center text-[10px] font-black shrink-0">{idx + 1}</div>
-                                        <span className="font-black text-[13px] text-[#1a1a18] truncate max-w-[85px]" title={displayId}>
+                                        <span className="font-black text-[14px] text-[#1a1a18] truncate max-w-[100px]" title={String(displayId)}>
                                           #{displayId}
                                         </span>
                                       </div>
@@ -607,11 +619,12 @@ export default function ManagerDashboard() {
                                       </span>
                                     </div>
 
-                                    {/* Значок магазина */}
-                                    <div className="mb-2">
-                                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${isMeura ? 'bg-pink-50 text-pink-600 border-pink-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>
+                                    {/* Значок магазина и Время создания */}
+                                    <div className="flex flex-wrap items-center justify-between gap-1 mb-2">
+                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${isMeura ? 'bg-pink-50 text-pink-600 border-pink-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>
                                         {shopBadge}
                                       </span>
+                                      {createdAt && <span className="text-[9px] text-[#a8a49c] font-medium">Создан: {createdAt}</span>}
                                     </div>
 
                                     {/* Статусы */}
@@ -632,10 +645,29 @@ export default function ManagerDashboard() {
                                       {/* Заказчик */}
                                       {(customerName || customerPhone !== "—") && (
                                         <div className="flex flex-col gap-1.5">
-                                          <ContactBadge title="Заказчик" phone={customerPhone} name={customerName} />
-                                          {(order.clientComment || order.comment) && (
+                                          {/* Самописный рендер контактных данных для гибкости */}
+                                          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#4a7aff] flex-wrap">
+                                            <span className="text-[#8c8880] text-[9px] uppercase tracking-wider font-bold">Заказчик:</span>
+                                            {customerName && <span className="text-[#1a1a18]">{customerName}</span>}
+                                            {customerPhone !== "—" && (
+                                              <>
+                                                <span className="text-[#a8a49c]">·</span>
+                                                <a href={`tel:${customerPhone}`} onClick={e => e.stopPropagation()} className="hover:underline">📞 {customerPhone}</a>
+                                                {/* Иконки мессенджеров для заказчика */}
+                                                <div className="flex items-center gap-1 ml-1">
+                                                  <a href={`https://t.me/${customerPhone.replace(/[^\d+]/g, "")}?text=${encodeURIComponent("Здравствуйте! Это доставка EventWave.")}`} onClick={e => e.stopPropagation()} target="_blank" rel="noopener noreferrer" className="bg-[#2AABEE] w-[20px] h-[20px] flex items-center justify-center rounded-full hover:opacity-90">
+                                                    <svg viewBox="0 0 24 24" width="10" height="10" fill="#ffffff"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z" /></svg>
+                                                  </a>
+                                                  <a href={`sms:${customerPhone.replace(/[^\d+]/g, "")}?body=${encodeURIComponent("Здравствуйте! Это доставка EventWave.")}`} onClick={e => e.stopPropagation()} className="bg-[#34C759] w-[20px] h-[20px] flex items-center justify-center rounded-full hover:opacity-90">
+                                                    <svg viewBox="0 0 24 24" width="10" height="10" fill="#ffffff"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" /></svg>
+                                                  </a>
+                                                </div>
+                                              </>
+                                            )}
+                                          </div>
+                                          {customerComment && (
                                             <div className="bg-[#fff1f2] border border-[#ffe4e6] p-1.5 rounded">
-                                              <p className="text-[11px] text-[#881337]"><span className="font-bold text-[#be123c] uppercase tracking-wider text-[9px] block mb-0.5">Коммент заказчика</span> {order.clientComment || order.comment}</p>
+                                              <p className="text-[11px] text-[#881337]"><span className="font-bold text-[#be123c] uppercase tracking-wider text-[9px] block mb-0.5">Коммент заказчика</span> {customerComment}</p>
                                             </div>
                                           )}
                                         </div>
@@ -649,7 +681,25 @@ export default function ManagerDashboard() {
                                       {/* Получатель */}
                                       {(recipientName || recipientPhone !== "—") && (
                                         <div className="flex flex-col gap-1.5">
-                                          <ContactBadge title="Получатель" phone={recipientPhone} name={recipientName} />
+                                          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#4a7aff] flex-wrap">
+                                            <span className="text-[#8c8880] text-[9px] uppercase tracking-wider font-bold">Получатель:</span>
+                                            {recipientName && <span className="text-[#1a1a18]">{recipientName}</span>}
+                                            {recipientPhone !== "—" && (
+                                              <>
+                                                <span className="text-[#a8a49c]">·</span>
+                                                <a href={`tel:${recipientPhone}`} onClick={e => e.stopPropagation()} className="hover:underline">📞 {recipientPhone}</a>
+                                                {/* Иконки мессенджеров для получателя */}
+                                                <div className="flex items-center gap-1 ml-1">
+                                                  <a href={`https://t.me/${recipientPhone.replace(/[^\d+]/g, "")}?text=${encodeURIComponent(`Здравствуйте${recipientName ? `, ${recipientName}` : ''}! Это доставка EventWave.`)}`} onClick={e => e.stopPropagation()} target="_blank" rel="noopener noreferrer" className="bg-[#2AABEE] w-[20px] h-[20px] flex items-center justify-center rounded-full hover:opacity-90">
+                                                    <svg viewBox="0 0 24 24" width="10" height="10" fill="#ffffff"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z" /></svg>
+                                                  </a>
+                                                  <a href={`sms:${recipientPhone.replace(/[^\d+]/g, "")}?body=${encodeURIComponent(`Здравствуйте${recipientName ? `, ${recipientName}` : ''}! Это доставка EventWave.`)}`} onClick={e => e.stopPropagation()} className="bg-[#34C759] w-[20px] h-[20px] flex items-center justify-center rounded-full hover:opacity-90">
+                                                    <svg viewBox="0 0 24 24" width="10" height="10" fill="#ffffff"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" /></svg>
+                                                  </a>
+                                                </div>
+                                              </>
+                                            )}
+                                          </div>
                                         </div>
                                       )}
 

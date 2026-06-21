@@ -7,10 +7,9 @@ import { OrderStatus } from "@prisma/client";
 
 const CRM_URL = process.env.RETAILCRM_API_URL;
 const CRM_KEY = process.env.RETAILCRM_API_KEY; 
-const CRM_KEY_MEURA = process.env.RETAILCRM_API_KEY_MEURA; // 🔥 Добавили
+const CRM_KEY_MEURA = process.env.RETAILCRM_API_KEY_MEURA;
 const GEO_KEY = process.env.YANDEX_GEOCODER_KEY;
 
-// 🔥 БРОНЕЖИЛЕТ ДЛЯ MEURA
 const MEURA_SHOPS = ['kaktusfiori', 'meura-flowers'];
 
 async function resolveCourierId(name: string): Promise<number | null> {
@@ -65,7 +64,6 @@ const STATUS_TO_CRM: Partial<Record<OrderStatus, string>> = {
 function parseCourierFromDelivery(delivery: CrmOrder["delivery"]): { id: number | null; name: string | null } {
   if (!delivery) return { id: null, name: null };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const d = delivery as any;
 
   if (d.courier && typeof d.courier === "object" && d.courier.id) {
@@ -73,7 +71,6 @@ function parseCourierFromDelivery(delivery: CrmOrder["delivery"]): { id: number 
     return { id: Number(d.courier.id), name };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let dData = delivery.data as any;
   if (typeof dData === "string") {
     try { dData = JSON.parse(dData); } catch (_) { dData = null; }
@@ -101,7 +98,7 @@ function parseCourierFromDelivery(delivery: CrmOrder["delivery"]): { id: number 
   return { id: null, name: null };
 }
 
-// 🔥 УМНЫЙ ПАРСЕР АДРЕСА (вырезает Имя и Телефон)
+// УМНЫЙ ПАРСЕР АДРЕСА (вырезает Имя и Телефон получателя)
 function parseMeuraAddress(rawAddress: string | null) {
   if (!rawAddress) return { cleanAddress: null, name: null, phone: null };
 
@@ -147,7 +144,6 @@ export async function mapCrmOrder(order: CrmOrder) {
     return `${name} — ${i.quantity ?? 1} шт`;
   }).join("; ");
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cFields = (order as any).customFields as any;
 
   let parsedCourier: string | null = null;
@@ -179,7 +175,13 @@ export async function mapCrmOrder(order: CrmOrder) {
     parsedDate = new Date(rawDate.getTime() - 5 * 60 * 60 * 1000);
   }
 
-  // 🔥 РАЗДЕЛЕНИЕ ЛОГИКИ ПО МАГАЗИНАМ
+  // 🔥 ДАННЫЕ ЗАКАЗЧИКА ИЗ КОРНЯ ЗАКАЗА
+  const customerName = [order.firstName, order.lastName].filter(Boolean).join(" ") 
+                    || [order.customer?.firstName, order.customer?.lastName].filter(Boolean).join(" ") 
+                    || null;
+  const customerPhone = order.phone || order.customer?.phones?.[0]?.number || null;
+
+  // РАЗДЕЛЕНИЕ ЛОГИКИ ПО МАГАЗИНАМ (ДЛЯ ПОЛУЧАТЕЛЯ)
   const shopCode = order.site ?? null;
   const rawAddress = order.delivery?.address?.text ?? null;
   let finalAddress = rawAddress;
@@ -197,8 +199,10 @@ export async function mapCrmOrder(order: CrmOrder) {
     crmId: String(order.id),
     externalId: order.externalId ?? order.number ?? null,
     shop: shopCode,
-    name: recipientName,
-    recipientPhone: recipientPhone,
+    name: recipientName,              // Имя получателя
+    recipientPhone: recipientPhone,   // Телефон получателя
+    customerName: customerName,       // 🔥 Имя ЗАКАЗЧИКА
+    customerPhone: customerPhone,     // 🔥 Телефон ЗАКАЗЧИКА
     crmStatus: order.status ?? null,
     status: mapCrmStatus(order.status),
     address: finalAddress,
@@ -317,8 +321,6 @@ function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon
 export async function geocodeAddress(address: string) {
   if (!GEO_KEY || !address) return null;
   try {
-    // 🔥 ФУНКЦИЯ ОЧИСТКИ АДРЕСА (Отрезаем домофоны, квартиры, этажи)
-    // Ищем первую запятую, после которой идут слова-детали, и берем всё до неё.
     let cleanAddress = address;
     const match = address.match(/^(.*?)(?:,\s*(кв\.|квартира|кв\s|подъезд|под\.|пд\.|этаж|эт\.|домофон|код|дф\.).*)/i);
     if (match) {
@@ -361,7 +363,6 @@ export async function geocodeNewOrders() {
     where: { 
       geocoded: false, 
       address: { not: null },
-      // 🔥 ДОБАВЛЕНО: Не геокодируем отмененные и возвраты
       status: { notIn: ["CANCELLED", "RETURNED"] } 
     },
     take: 20,
@@ -375,7 +376,6 @@ export async function geocodeNewOrders() {
 
     const addressLower = order.address.toLowerCase();
 
-    // 🔥 ИСКЛЮЧЕНИЯ: Самовывоз и наш конкретный адрес
     if (addressLower.includes("самовывоз") || addressLower.includes("большой афанасьевский 39")) {
       await prisma.order.update({ 
         where: { id: order.id }, 
@@ -406,11 +406,8 @@ export async function geocodeNewOrders() {
         continue;
       }
 
-      // Считаем ожидаемую цену по зоне
       const basePrice = calcBaseDeliveryPrice(geo.lat, geo.lng);
       const crmPrice = order.price ?? 0;
-
-      // Флаг: цена в CRM не совпадает ни с базовой, ни с базовой+100 (авто)
       const wrongPrice = crmPrice > 0 && crmPrice !== basePrice && crmPrice !== basePrice + 100;
 
       await prisma.order.update({
@@ -425,8 +422,6 @@ export async function geocodeNewOrders() {
         },
       });
 
-      // Уведомление в TG если цена не та
-      // Уведомление в TG если цена не та
       if (wrongPrice) {
         const tgToken = process.env.TELEGRAM_BOT_TOKEN?.replace(/\s+/g, "")?.replace(/^bot/i, "");
         const tgChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
@@ -461,7 +456,11 @@ export async function geocodeNewOrders() {
     notify({ type: "address.invalid", orders: invalidOrders }).catch(console.error);
   }
 }
+
 // ─────────────────────────────────────────────────────────────────────────────
+// СОХРАНЕНИЕ / ОБНОВЛЕНИЕ ЗАКАЗА (UPSERT)
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function upsertOrder(crmOrder: CrmOrder) {
   const data = await mapCrmOrder(crmOrder);
 
@@ -476,7 +475,6 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     pickedUpAt?: Date | null;
   } = { ...data };
 
-  // 🔥 Проверяем, является ли адрес исключением (Самовывоз или Афанасьевский)
   const isExceptionAddress = (addr: string | null | undefined) => {
     if (!addr) return false;
     const lower = addr.toLowerCase();
@@ -484,17 +482,18 @@ export async function upsertOrder(crmOrder: CrmOrder) {
   };
 
   if (existing) {
-    // 🔥 БРОНЯ полей
+    // 🔥 БРОНЯ ПОЛЕЙ ПОЛУЧАТЕЛЯ И ЗАКАЗЧИКА
     if (!updateFields.name && existing.name) updateFields.name = existing.name;
     if (!updateFields.recipientPhone && existing.recipientPhone) updateFields.recipientPhone = existing.recipientPhone;
+    if (!updateFields.customerName && existing.customerName) updateFields.customerName = existing.customerName;
+    if (!updateFields.customerPhone && existing.customerPhone) updateFields.customerPhone = existing.customerPhone;
     if (!updateFields.shop && existing.shop) updateFields.shop = existing.shop;
 
     const dbAddr  = existing.address?.trim() || "";
-    const crmAddr = (data.address ?? "").trim();  // берём из data, не из updateFields
+    const crmAddr = (data.address ?? "").trim();  
 
     if (dbAddr !== crmAddr) {
       updateFields.address       = crmAddr || null;
-      // 🔥 Если это исключение, сразу ставим geocoded: true, чтобы крон его игнорировал
       updateFields.geocoded      = isExceptionAddress(crmAddr);
       updateFields.lat           = null;
       updateFields.lng           = null;
@@ -513,7 +512,6 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       updateFields.status = existing.status;
     }
 
-    // АБСОЛЮТНАЯ ЗАЩИТА ЦЕНЫ
     if (existing.price && existing.price > 0) {
       updateFields.price = existing.price;
     } else if (data.price && data.price > 0) {
@@ -532,10 +530,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       updateFields.pickedUpAt = null;
     }
 
-    const isCancelledOrReturned =
-      updateFields.status === OrderStatus.CANCELLED || updateFields.status === OrderStatus.RETURNED;
-    
-    // 🔥 ТЕПЕРЬ ОТВЯЗЫВАЕМ ОТ МАРШРУТА И САМОВЫВОЗ, И АФАНАСЬЕВСКИЙ
+    const isCancelledOrReturned = updateFields.status === OrderStatus.CANCELLED || updateFields.status === OrderStatus.RETURNED;
     const isPickup = isExceptionAddress(updateFields.address);
 
     if (isCancelledOrReturned || isPickup) {
@@ -549,7 +544,6 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       }
     }
 
-    // 🔥 ИСПРАВЛЕНО: строим changes ДО upsert, на основе existing vs data
     const hasCoreChanges =
       (existing.crmStatus       ?? "") !== (data.crmStatus       ?? "") ||
       (existing.courierId       ?? 0)  !== (data.courierId       ?? 0)  ||
@@ -559,6 +553,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       (existing.slotTo          ?? "") !== (data.slotTo          ?? "") ||
       (existing.price           ?? 0)  !== (updateFields.price   ?? 0)  ||
       (existing.recipientPhone  ?? "") !== (data.recipientPhone  ?? "") ||
+      (existing.customerPhone   ?? "") !== (data.customerPhone   ?? "") ||
       dbAddr !== crmAddr;
 
     if (hasCoreChanges) updateFields.changedAt = new Date();
@@ -567,14 +562,12 @@ export async function upsertOrder(crmOrder: CrmOrder) {
   const order = await prisma.order.upsert({
     where: { crmId: data.crmId },
     update: updateFields,
-    // 🔥 При создании нового заказа тоже сразу проверяем на исключения
     create: { ...data, isInvalid: false, geocoded: isExceptionAddress(data.address) },
   });
 
   if (!existing) {
     notify({ type: "order.new", order }).catch(console.error);
   } else {
-    // 🔥 ИСПРАВЛЕНО: changes строим из existing vs order (после upsert — финальные значения)
     const changes = {
       statusChanged:         (existing.crmStatus      ?? "") !== (order.crmStatus      ?? ""),
       courierChanged:        (existing.courierId       ?? 0)  !== (order.courierId       ?? 0),
@@ -584,6 +577,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       opCommentChanged:      (existing.opComment       ?? "") !== (order.opComment       ?? ""),
       itemsChanged:          (existing.items           ?? "") !== (order.items           ?? ""),
       recipientPhoneChanged: (existing.recipientPhone  ?? "") !== (order.recipientPhone  ?? ""),
+      customerPhoneChanged:  (existing.customerPhone   ?? "") !== (order.customerPhone   ?? ""),
     };
 
     if (Object.values(changes).some(Boolean)) {
@@ -598,6 +592,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
 
   return order;
 }
+
 // ─────────────────────────────────────────────────────────────────────────────
 // POLLING BUNCH
 // ─────────────────────────────────────────────────────────────────────────────
@@ -607,11 +602,10 @@ export async function pollCrmOrders() {
   try {
     const dateFrom = new Date(Date.now() - 2 * 24 * 3_600_000).toISOString().split("T")[0];
     
-    // 🔥 ИСПРАВЛЕНИЕ: Жестко фильтруем по сайту "bunch" (Московский)
     const paramsNew = new URLSearchParams();
     paramsNew.append("apiKey", CRM_KEY);
     paramsNew.append("filter[createdAtFrom]", dateFrom);
-    paramsNew.append("filter[sites][]", "bunch"); // ⛔ Отсекаем bunch-ekb и прочие
+    paramsNew.append("filter[sites][]", "bunch");
     paramsNew.append("limit", "100");
 
     const resNew = await axios.get<CrmOrdersResponse>(`${CRM_URL}/api/v5/orders?${paramsNew.toString()}`, {
@@ -677,11 +671,8 @@ export async function pollCrmOrders() {
               pickedUpAt: null
             }
           });
-          
-          console.log(`[Cron Bunch] Локальный заказ ${localOrder.crmId} переведен в статус CANCELLED.`);
         }
 
-        // Отправляем уведомление в Telegram через твой прокси
         const tgToken = process.env.TELEGRAM_BOT_TOKEN?.replace(/\s+/g, "")?.replace(/^bot/i, "");
         const tgChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
         const proxyUrl = process.env.PROXY_URL;
@@ -705,8 +696,9 @@ export async function pollCrmOrders() {
     console.error("[Cron] Error polling CRM:", err);
   }
 }
+
 // ─────────────────────────────────────────────────────────────────────────────
-// ОБНОВЛЕНИЕ ЗАКАЗА В CRM (статус, курьер, адрес — без цены)
+// ОБНОВЛЕНИЕ ЗАКАЗА В CRM
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function updateCrmOrder(
@@ -728,7 +720,6 @@ export async function updateCrmOrder(
 
   if (!apiKeyToUse) return;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const orderPayload: any = {};
 
   if (data.status && STATUS_TO_CRM[data.status]) orderPayload.status = STATUS_TO_CRM[data.status];
@@ -770,7 +761,6 @@ export async function updateCrmOrder(
   const params = new URLSearchParams();
   params.append("apiKey", apiKeyToUse);
 
-  // 🔥 ДОБАВЛЯЕМ ПАРАМЕТР МАГАЗИНА, ЧТОБЫ CRM НЕ РУГАЛАСЬ
   if (orderInDb?.shop) {
     params.append("site", orderInDb.shop); 
   }
@@ -781,7 +771,6 @@ export async function updateCrmOrder(
     await axios.post(`${CRM_URL}/api/v5/orders/${crmId}/edit`, params.toString(), {
       headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 5000,
     });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (err: any) {
     console.error(`[CRM] Ошибка обновления заказа ${crmId}:`, err?.response?.data ?? err.message);
   }
@@ -789,6 +778,7 @@ export async function updateCrmOrder(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // СЕБЕСТОИМОСТЬ В CRM
+// ─────────────────────────────────────────────────────────────────────────────
 export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: number) {
   if (!CRM_URL) return;
 
@@ -806,7 +796,6 @@ export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: numb
   const params = new URLSearchParams();
   params.append("apiKey", apiKeyToUse);
   
-  // 🔥 ДОБАВЛЯЕМ ПАРАМЕТР МАГАЗИНА ЗДЕСЬ ТОЖЕ
   if (orderInDb?.shop) {
     params.append("site", orderInDb.shop); 
   }
@@ -822,9 +811,7 @@ export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: numb
     console.error(`[CRM] Ошибка обновления себестоимости:`, err?.response?.data ?? err.message);
   }
 }
-// ─────────────────────────────────────────────────────────────────────────────
-// POLLING ДЛЯ MEURA
-// ─────────────────────────────────────────────────────────────────────────────
+
 // ─────────────────────────────────────────────────────────────────────────────
 // POLLING ДЛЯ MEURA
 // ─────────────────────────────────────────────────────────────────────────────
@@ -832,7 +819,6 @@ export async function pollMeuraOrders() {
   if (!CRM_URL || !CRM_KEY_MEURA) return;
 
   try {
-    // 1. Забираем новые заказы за последние 3 дня
     const dateFrom = new Date(Date.now() - 3 * 24 * 3_600_000).toISOString().split("T")[0];
     
     const params = new URLSearchParams();
@@ -849,7 +835,6 @@ export async function pollMeuraOrders() {
       await upsertOrder(order);
     }
     
-    // 2. Проверяем обновления для ВСЕХ старых активных заказов Meura
     const activeOrders = await prisma.order.findMany({
       where: { 
         status: { notIn: ["DELIVERED", "CANCELLED", "RETURNED"] },
@@ -873,7 +858,6 @@ export async function pollMeuraOrders() {
         await upsertOrder(order);
       }
 
-      // 🔥 ДОБАВЛЕНО: ЛОГИКА УДАЛЕНИЯ КАК В BUNCH
       const returnedIds = returnedOrders.map(o => String(o.id));
       const deletedIds = chunk.filter(id => !returnedIds.includes(id));
 
@@ -883,12 +867,11 @@ export async function pollMeuraOrders() {
         const localOrdersToCancel = await prisma.order.findMany({ 
           where: { 
             crmId: { in: deletedIds },
-            shop: { in: ['kaktusfiori', 'meura-flowers'] } // Только магазины Meura
+            shop: { in: ['kaktusfiori', 'meura-flowers'] } 
           } 
         });
 
         for (const localOrder of localOrdersToCancel) {
-          // Отвязываем от маршрута (если маршрут пустеет - удаляем его)
           if (localOrder.routeId) {
             const siblingsCount = await prisma.order.count({ 
               where: { routeId: localOrder.routeId, id: { not: localOrder.id } }
@@ -898,7 +881,6 @@ export async function pollMeuraOrders() {
             }
           }
 
-          // Отменяем заказ у курьера
           await prisma.order.update({
             where: { id: localOrder.id },
             data: {
@@ -909,11 +891,8 @@ export async function pollMeuraOrders() {
               pickedUpAt: null
             }
           });
-          
-          console.log(`[Cron Meura] Локальный заказ ${localOrder.crmId} переведен в статус CANCELLED.`);
         }
 
-        // Отправляем уведомление в Telegram через твой прокси
         const tgToken = process.env.TELEGRAM_BOT_TOKEN?.replace(/\s+/g, "")?.replace(/^bot/i, "");
         const tgChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
         const proxyUrl = process.env.PROXY_URL;
@@ -936,13 +915,14 @@ export async function pollMeuraOrders() {
     console.error("[Cron Meura] Ошибка синхронизации:", err);
   }
 }
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ТИПЫ
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface CrmOrder {
   id: number; number?: string; externalId?: string; status?: string;
-  site?: string; // 🔥 Добавлено
+  site?: string; 
   createdAt?: string; customerComment?: string; managerComment?: string;
   firstName?: string; lastName?: string; phone?: string; email?: string;
   customer?: {
@@ -960,7 +940,6 @@ export interface CrmOrder {
     productName?: string; quantity?: number; initialPrice?: number;
     offer?: { name?: string; displayName?: string };
   }>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   customFields?: any;
 }
 

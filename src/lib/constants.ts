@@ -9,6 +9,8 @@ export interface Order {
   isInvalid: boolean; invalidReason: string | null;
   crmCreatedAt: string | null; updatedAt?: string;
   recipientPhone?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
 }
 
 export const SLOTS = [
