@@ -2059,7 +2059,7 @@ export function DashboardClient({ user }: { user: User }) {
           {/* Ряд 2: фильтры + маршруты + слоты */}
           <div className="hide-scrollbar" style={{ display: "flex", gap: 6, padding: "6px 10px", background: "#fff", borderBottom: "1px solid #e8e6df", overflowX: "auto", flexShrink: 0, alignItems: "center" }}>
 
-            {/* 🔥 КАЛЕНДАРЬ НА МОБИЛКЕ (в режиме Portal-Dropdown) */}
+            {/* 🔥 КАЛЕНДАРЬ НА МОБИЛКЕ с отступом вниз */}
             <div style={{ position: "relative", flexShrink: 0 }}>
               <DatePicker
                 locale={ru}
@@ -2074,21 +2074,25 @@ export function DashboardClient({ user }: { user: User }) {
                 }}
                 dateFormat="dd.MM.yyyy"
                 customInput={<CustomDateInput />}
-
-                // 1. Выключаем полноэкранную модалку, возвращаем поведение дропдауна
                 withPortal={false}
-
-                // 2. Железобетонное решение для iOS: вырываем календарь из overflowX: "auto" в корень body
                 portalId="dashboard-datepicker-portal"
-
-                // 3. Управляем позиционированием дропдауна относительно кнопки
                 popperPlacement="bottom-start"
-                popperClassName="relative z-[99999]" // Гарантируем, что портал будет поверх шапки и других слоев
+                popperClassName="relative z-[99999]"
                 popperModifiers={[
+                  {
+                    name: "offset",
+                    options: {
+                      // [смещение по оси X, смещение по оси Y (отступ вниз)]
+                      offset: [0, 8],
+                    },
+                    fn: function (state: MiddlewareState): MiddlewareReturn | Promise<MiddlewareReturn> {
+                      throw new Error("Function not implemented.");
+                    }
+                  },
                   {
                     name: "preventOverflow",
                     options: {
-                      boundary: "viewport", // Не дает календарю уезжать за границы экрана мобилки
+                      boundary: "viewport",
                     },
                     fn: function (state: MiddlewareState): MiddlewareReturn | Promise<MiddlewareReturn> {
                       throw new Error("Function not implemented.");
@@ -2097,6 +2101,7 @@ export function DashboardClient({ user }: { user: User }) {
                 ]}
               />
             </div>
+
 
             <div style={{ position: "relative", flexShrink: 0 }}>
               <button onClick={() => setIsStatusMenuOpen(!isStatusMenuOpen)}
