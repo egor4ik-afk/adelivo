@@ -148,7 +148,22 @@ export default function ManagerDashboard() {
         if (Array.isArray(notifData)) setTasks(notifData);
 
         if (Array.isArray(routesData)) {
+          // 🔥 ИСПРАВЛЕННАЯ СОРТИРОВКА: Сначала статус, потом время
           const sortedRoutes = routesData.sort((a, b) => {
+            const getRoutePriority = (route: any) => {
+              if (!route.orders || route.orders.length === 0) return 1; // Не забрали (наверх)
+              const isAllFinished = route.orders.every((o: any) => o.status === 'DELIVERED' || o.status === 'RETURNED' || o.status === 'CANCELLED');
+              if (isAllFinished) return 3; // Все завершены (в самый низ)
+              const hasStarted = route.orders.some((o: any) => o.status === 'IN_DELIVERY' || o.status === 'DELIVERED');
+              if (hasStarted) return 2; // В пути (в середину)
+              return 1; // Еще не забрали (наверх)
+            };
+            
+            const prioA = getRoutePriority(a);
+            const prioB = getRoutePriority(b);
+            if (prioA !== prioB) return prioA - prioB; // Сначала по статусу
+            
+            // Если статус одинаковый - сортируем по времени выезда
             const timeA = a.plannedDepartureTime || "23:59";
             const timeB = b.plannedDepartureTime || "23:59";
             return timeA.localeCompare(timeB);

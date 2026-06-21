@@ -12,8 +12,8 @@ export type NotificationEvent =
   | { type: "custom"; userId: string; title: string; body: string; url?: string }
   | { type: "chat.private"; senderName: string; text: string; targetUserId: string; conversationId: string }
   | { type: "chat.global"; senderName: string; text: string; senderId: string }
-  // 🔥 ДОБАВЛЕНА ЭТА СТРОКА:
-  | { type: "konsol.paid"; courierEmail: string; date: string; amount?: number };
+  | { type: "konsol.paid"; courierEmail: string; date: string; amount?: number }
+  | { type: "manager.notification"; notification: any }; // 🔥 ДОБАВЛЕНО
   
 interface OrderPayload {
   id: string;
@@ -168,6 +168,26 @@ async function sendIndividualPushes(event: NotificationEvent) {
     if (user.role === "ADMIN" || user.role === "OPERATOR") {
       // Базовый урл: Админов кидаем в дашборд, Менеджеров — в их кабинет
       targetUrl = user.role === "OPERATOR" ? "/manager" : "/dashboard";
+
+      // 🔥 НОВЫЙ БЛОК: Уведомления от логистов (для плашек менеджера)
+      if (event.type === "manager.notification") {
+        if (user.notifyTime) { // Привязываем к тумблеру "Изменение времени"
+          shouldSend = true;
+          if (event.notification.changeType === 'TIME_CHANGED') {
+             title = "⏱ Изменено время выезда";
+          } else if (event.notification.changeType === 'ORDERS_CHANGED') {
+             title = "📦 Изменены заказы в маршруте";
+          } else {
+             title = "🗺️ Назначен новый маршрут";
+          }
+          bodyTexts.push(`Курьер: ${event.notification.firstName} ${event.notification.lastName}`);
+          bodyTexts.push(`Новое время: ${event.notification.baseTime}`);
+          if (event.notification.authorName) {
+             bodyTexts.push(`Логист: ${event.notification.authorName}`);
+          }
+          targetUrl = "/manager";
+        }
+      }
 
       if (event.type === "order.new") {
         if (user.notifyNewOrder) {
@@ -393,26 +413,28 @@ export async function createManagerPlaque(data: {
   authorName?: string | null;
   changeType: 'TIME_CHANGED' | 'ORDERS_CHANGED' | 'ROUTE_REASSIGNED';
 }) {
-  // Ищем непрочитанную плашку для этого курьера
+  let record;
   const existing = await prisma.managerNotification.findFirst({
     where: { courierId: data.courierId, isSeen: false }
   });
 
   if (existing) {
-    // Если висит непрочитанная — ПЕРЕЗАПИСЫВАЕМ её новыми данными
-    return prisma.managerNotification.update({
+    record = await prisma.managerNotification.update({
       where: { id: existing.id },
       data: {
         baseTime: data.baseTime,
-        // Оставляем самое первое старое время, либо берем текущее, если его не было
         oldTime: existing.oldTime || data.oldTime || existing.baseTime,
         changeType: data.changeType, 
         authorName: data.authorName || existing.authorName,
-        createdAt: new Date() // Обновляем время, чтобы всплыло наверх
+        createdAt: new Date()
       }
     });
+  } else {
+    record = await prisma.managerNotification.create({ data });
   }
 
-  // Если всё прочитано — создаем новую
-  return prisma.managerNotification.create({ data });
+  // 🔥 Запускаем пуш-уведомление менеджерам (не блокируя ответ)
+  notify({ type: "manager.notification", notification: record }).catch(console.error);
+
+  return record;
 }

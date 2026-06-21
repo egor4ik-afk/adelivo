@@ -168,7 +168,7 @@ export function ProfilePanel({ onClose }: { onClose: () => void; }) {
             <span style={s.roleBadge}>{ROLE_LABELS[profile.role] ?? profile.role}</span>
           </div>
         </div>
-        <button style={s.closeBtn} onClick={onClose}>✕</button>
+        <button type="button" style={s.closeBtn} onClick={onClose}>✕</button>
       </div>
 
       <div style={s.divider} />
@@ -194,9 +194,9 @@ export function ProfilePanel({ onClose }: { onClose: () => void; }) {
               </div>
             </div>
             {isSubscribed ? (
-              <button style={s.pushBtnOff} onClick={unsubscribe}>Выкл.</button>
+              <button type="button" style={s.pushBtnOff} onClick={unsubscribe}>Выкл.</button>
             ) : (
-              <button style={s.pushBtnOn} onClick={subscribe}>Включить</button>
+              <button type="button" style={s.pushBtnOn} onClick={subscribe}>Включить</button>
             )}
           </div>
 
@@ -216,8 +216,8 @@ export function ProfilePanel({ onClose }: { onClose: () => void; }) {
             </div>
           )}
 
-          <button style={s.editBtn} onClick={() => setEditing(true)}>Редактировать профиль</button>
-          <button style={s.logoutBtn} onClick={handleLogout}>Выйти из аккаунта</button>
+          <button type="button" style={s.editBtn} onClick={() => setEditing(true)}>Редактировать профиль</button>
+          <button type="button" style={s.logoutBtn} onClick={handleLogout}>Выйти из аккаунта</button>
         </>
       ) : (
         <>
@@ -235,8 +235,8 @@ export function ProfilePanel({ onClose }: { onClose: () => void; }) {
           <div style={{ ...s.fieldStatic, marginBottom: 14 }}>{profile.email}</div>
 
           <div style={{ display: "flex", gap: 8 }}>
-            <button style={s.saveBtn} disabled={saving} onClick={handleSave}>{saving ? "Сохраняем..." : "Сохранить"}</button>
-            <button style={s.cancelBtn} onClick={() => setEditing(false)}>Отмена</button>
+            <button type="button" style={s.saveBtn} disabled={saving} onClick={handleSave}>{saving ? "Сохраняем..." : "Сохранить"}</button>
+            <button type="button" style={s.cancelBtn} onClick={() => setEditing(false)}>Отмена</button>
           </div>
         </>
       )}
@@ -275,13 +275,13 @@ const s: Record<string, React.CSSProperties> = {
   closeBtn: { position: "absolute", right: 0, top: 0, background: "none", border: "none", color: "#a8a49c", fontSize: 14, cursor: "pointer", padding: 2 },
   divider: { height: "0.5px", background: "#e8e6df", margin: "10px 0" },
   pushRow: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", marginBottom: 4 },
-  pushBtnOn: { padding: "5px 12px", borderRadius: 6, background: "#4a7aff", border: "none", color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer" },
-  pushBtnOff: { padding: "5px 12px", borderRadius: 6, background: "transparent", border: "1px solid #e8e6df", color: "#a8a49c", fontSize: 11, cursor: "pointer" },
-  editBtn: { width: "100%", marginTop: 10, padding: 8, borderRadius: 8, background: "#f5f4f0", border: "0.5px solid #e8e6df", color: "#1a1a18", fontSize: 12, cursor: "pointer" },
-  logoutBtn: { width: "100%", marginTop: 6, padding: 8, borderRadius: 8, background: "rgba(217,64,64,0.07)", border: "1px solid rgba(217,64,64,0.15)", color: "#d94040", fontSize: 12, cursor: "pointer" },
+  pushBtnOn: { padding: "5px 12px", borderRadius: 6, background: "#4a7aff", border: "none", color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
+  pushBtnOff: { padding: "5px 12px", borderRadius: 6, background: "transparent", border: "1px solid #e8e6df", color: "#a8a49c", fontSize: 11, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
+  editBtn: { width: "100%", marginTop: 10, padding: 8, borderRadius: 8, background: "#f5f4f0", border: "0.5px solid #e8e6df", color: "#1a1a18", fontSize: 12, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
+  logoutBtn: { width: "100%", marginTop: 6, padding: 8, borderRadius: 8, background: "rgba(217,64,64,0.07)", border: "1px solid rgba(217,64,64,0.15)", color: "#d94040", fontSize: 12, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
   sectionTitle: { fontSize: 11, fontWeight: 500, color: "#a8a49c", marginBottom: 8, marginTop: 4 },
   fieldStatic: { fontSize: 12, color: "#a8a49c", padding: "7px 10px", borderRadius: 7, background: "#f5f4f0" },
   fieldInput: { width: "100%", padding: "7px 10px", borderRadius: 7, border: "1px solid #e8e6df", background: "#fafaf8", color: "#1a1a18", fontSize: 12, fontFamily: "Manrope, system-ui, sans-serif", outline: "none" },
-  saveBtn: { flex: 1, padding: 8, borderRadius: 7, background: "#4a7aff", border: "none", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer" },
-  cancelBtn: { padding: "8px 14px", borderRadius: 7, background: "transparent", border: "1px solid #e8e6df", color: "#6b6860", fontSize: 12, cursor: "pointer" },
+  saveBtn: { flex: 1, padding: 8, borderRadius: 7, background: "#4a7aff", border: "none", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
+  cancelBtn: { padding: "8px 14px", borderRadius: 7, background: "transparent", border: "1px solid #e8e6df", color: "#6b6860", fontSize: 12, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
 };
