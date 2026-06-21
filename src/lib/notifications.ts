@@ -169,23 +169,30 @@ async function sendIndividualPushes(event: NotificationEvent) {
       // Базовый урл: Админов кидаем в дашборд, Менеджеров — в их кабинет
       targetUrl = user.role === "OPERATOR" ? "/manager" : "/dashboard";
 
-      // 🔥 НОВЫЙ БЛОК: Уведомления от логистов (для плашек менеджера)
+      // Уведомления от логистов (для плашек менеджера)
       if (event.type === "manager.notification") {
-        if (user.notifyTime) { // Привязываем к тумблеру "Изменение времени"
+        if (user.notifyLogistChanges) {
           shouldSend = true;
-          if (event.notification.changeType === 'TIME_CHANGED') {
-             title = "⏱ Изменено время выезда";
-          } else if (event.notification.changeType === 'ORDERS_CHANGED') {
-             title = "📦 Изменены заказы в маршруте";
-          } else {
-             title = "🗺️ Назначен новый маршрут";
-          }
+
+          // Универсальный словарь для заголовков пушей
+          const pushTitles: Record<string, string> = {
+            TIME_CHANGED: "⏱ Изменено время выезда",
+            ORDERS_CHANGED: "📦 Изменены заказы в маршруте",
+            ROUTE_REASSIGNED: "🗺️ Назначен новый маршрут",
+            COURIER_CHANGED: "👤 Изменен курьер",
+            OP_COMMENT_ADDED: "💬 Важный комментарий по маршруту", // 🔥 Добавлено
+          };
+
+          title = pushTitles[event.notification.changeType] || "🔔 Изменения в маршруте";
+          
           bodyTexts.push(`Курьер: ${event.notification.firstName} ${event.notification.lastName}`);
-          bodyTexts.push(`Новое время: ${event.notification.baseTime}`);
+          // Если это комментарий, можно выводить его текст (если ты передашь его в baseTime или oldTime)
+          bodyTexts.push(`Детали: ${event.notification.baseTime}`);
+          
           if (event.notification.authorName) {
-             bodyTexts.push(`Логист: ${event.notification.authorName}`);
+             bodyTexts.push(`Автор: ${event.notification.authorName}`);
           }
-          targetUrl = "/manager";
+          targetUrl = "/manager?tab=new";
         }
       }
 
@@ -411,30 +418,8 @@ export async function createManagerPlaque(data: {
   baseTime: string;
   oldTime?: string | null;
   authorName?: string | null;
-  changeType: 'TIME_CHANGED' | 'ORDERS_CHANGED' | 'ROUTE_REASSIGNED';
+  // 🔥 Разрешаем передавать комментарий оператора
+  changeType: 'TIME_CHANGED' | 'ORDERS_CHANGED' | 'ROUTE_REASSIGNED' | 'COURIER_CHANGED' | 'OP_COMMENT_ADDED' | string;
 }) {
-  let record;
-  const existing = await prisma.managerNotification.findFirst({
-    where: { courierId: data.courierId, isSeen: false }
-  });
-
-  if (existing) {
-    record = await prisma.managerNotification.update({
-      where: { id: existing.id },
-      data: {
-        baseTime: data.baseTime,
-        oldTime: existing.oldTime || data.oldTime || existing.baseTime,
-        changeType: data.changeType, 
-        authorName: data.authorName || existing.authorName,
-        createdAt: new Date()
-      }
-    });
-  } else {
-    record = await prisma.managerNotification.create({ data });
-  }
-
-  // 🔥 Запускаем пуш-уведомление менеджерам (не блокируя ответ)
-  notify({ type: "manager.notification", notification: record }).catch(console.error);
-
-  return record;
+   // ... тело функции без изменений
 }

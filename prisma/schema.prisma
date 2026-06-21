@@ -47,6 +47,7 @@ model User {
   notifyComment     Boolean            @default(true)
   notifyOpComment   Boolean            @default(true)
   notifyItems       Boolean            @default(true)
+  notifyLogistChanges Boolean          @default(true) // 🔥 Новый тумблер для менеджеров
 
   sessions          Session[]
   authCodes         AuthCode[]

@@ -3,9 +3,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { ProfilePanel } from '@/components/ProfilePanel';
-import { performLogout } from '@/lib/logout';
 
-type ChangeType = 'TIME_CHANGED' | 'ORDERS_CHANGED' | 'ROUTE_REASSIGNED';
+// Делаем тип расширяемым
+type ChangeType = 'TIME_CHANGED' | 'ORDERS_CHANGED' | 'ROUTE_REASSIGNED' | 'COURIER_CHANGED' | 'OP_COMMENT_ADDED' | string;
 
 interface Notification {
   id: string; firstName: string; lastName: string;
@@ -17,6 +17,9 @@ const badgeConfig: Record<string, { text: string; styles: string; icon: string }
   TIME_CHANGED: { text: 'Изменилось время', styles: 'bg-orange-100 text-orange-800', icon: '⏱' },
   ORDERS_CHANGED: { text: 'Изменились заказы', styles: 'bg-blue-100 text-blue-800', icon: '📦' },
   ROUTE_REASSIGNED: { text: 'Новый маршрут', styles: 'bg-rose-100 text-rose-800', icon: '🗺️' },
+  COURIER_CHANGED: { text: 'Смена курьера', styles: 'bg-purple-100 text-purple-800', icon: '👤' },
+  OP_COMMENT_ADDED: { text: 'Комментарий оператора', styles: 'bg-yellow-100 text-yellow-800', icon: '💬' }, // 🔥 Добавлено
+  DEFAULT: { text: 'Изменение', styles: 'bg-gray-100 text-gray-800', icon: '🔔' }
 };
 
 const LOCAL_STATUSES: Record<string, { label: string, color: string }> = {
@@ -192,11 +195,34 @@ export default function ManagerDashboard() {
     if (isAuthorized) loadData();
   }, [activeTab, isAuthorized, loadData]);
 
+  // 🔥 ДОБАВИТЬ: Проверяем URL при загрузке страницы (если открыли по клику на пуш)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('tab') === 'new') {
+        setActiveTab('new');
+      }
+    }
+  }, []);
+
+  // ЗАМЕНИТЬ текущий useEffect с handleSWMessage на этот:
   useEffect(() => {
     if (!isAuthorized) return;
     const handleSWMessage = (event: MessageEvent) => {
-      if (event.data && event.data.type === 'PUSH_RECEIVED') loadData(false);
+      if (!event.data) return;
+      
+      // Простое фоновое обновление данных
+      if (event.data.type === 'PUSH_RECEIVED') {
+        loadData(false);
+      } 
+      // 🔥 Если кликнули по пушу и мы уже находимся в открытой вкладке менеджера
+      else if (event.data.type === 'NOTIFICATION_CLICK') {
+        if (event.data.tab === 'new' || (!event.data.orderId && event.data.role !== 'COURIER')) {
+          setActiveTab('new');
+        }
+      }
     };
+    
     if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', handleSWMessage);
 
     const interval = setInterval(() => loadData(false), 15000);
@@ -389,8 +415,8 @@ export default function ManagerDashboard() {
                           <span className="text-[#1a1a18]">{item.baseTime}</span>
                         </div>
                         <div>
-                          <span className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg ${badgeConfig[item.changeType]?.styles || 'bg-gray-100 text-gray-800'}`}>
-                            {badgeConfig[item.changeType]?.icon} {badgeConfig[item.changeType]?.text || 'Изменение'}
+                          <span className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg ${badgeConfig[item.changeType]?.styles || badgeConfig.DEFAULT.styles}`}>
+                            {badgeConfig[item.changeType]?.icon || badgeConfig.DEFAULT.icon} {badgeConfig[item.changeType]?.text || badgeConfig.DEFAULT.text}
                           </span>
                         </div>
                         <div className="text-xs font-semibold text-[#6b6860]">

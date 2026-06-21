@@ -18,6 +18,7 @@ interface Profile {
   notifyComment?: boolean;
   notifyOpComment?: boolean;
   notifyItems?: boolean;
+  notifyLogistChanges?: boolean; // 🔥 Добавили в интерфейс
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -35,6 +36,7 @@ const SETTINGS = [
   { key: "notifyComment", label: "Комментарий клиента" },
   { key: "notifyOpComment", label: "Комментарий оператора" },
   { key: "notifyItems", label: "Изменение состава" },
+  { key: "notifyLogistChanges", label: "Изменения от логистов (Табло)" }, // 🔥 Наш новый тумблер
 ];
 
 export function ProfilePanel({ onClose }: { onClose: () => void; }) {
