@@ -31,6 +31,7 @@ export async function POST(req: Request) {
     // Переменные для контроля уведомлений
     let oldCourierId = null;
     let pointsChanged = true;
+    let oldOrders: any[] = [];
 
     if (oldRouteId) {
       const oldRoute = await prisma.route.findUnique({ 
@@ -51,7 +52,7 @@ export async function POST(req: Request) {
         }
       }
       
-      const oldOrders = await prisma.order.findMany({
+      oldOrders = await prisma.order.findMany({
         where: { routeId: oldRouteId }
       });
       
@@ -241,30 +242,45 @@ export async function POST(req: Request) {
 
     // 🔥 2. ГЕНЕРАЦИЯ ПЛАШКИ И ПУША ДЛЯ МЕНЕДЖЕРА
     try {
-      // Расширяем тип
       let changeType: 'ROUTE_REASSIGNED' | 'COURIER_CHANGED' | 'TIME_CHANGED' | 'ORDERS_CHANGED' | null = null;
       
+      // Вычисляем, что именно изменилось
       if (!oldRouteId) {
-        changeType = 'ROUTE_REASSIGNED'; // Это абсолютно новый маршрут
+        changeType = 'ROUTE_REASSIGNED';
       } else if (oldCourierId !== Number(courierId)) {
-        changeType = 'COURIER_CHANGED';  // Маршрут старый, но курьера заменили
+        changeType = 'COURIER_CHANGED';
       } else if (plannedDepartureTime !== undefined && plannedDepartureTime !== fallbackPlannedTime) {
-        changeType = 'TIME_CHANGED';     // Поменяли только время
+        changeType = 'TIME_CHANGED';
       } else if (pointsChanged) {
-        changeType = 'ORDERS_CHANGED';   // Перетасовали заказы
+        changeType = 'ORDERS_CHANGED';
       }
 
-      // Если было изменение и курьер существует, отправляем плашку
       if (changeType && courierDb) {
-        await createManagerPlaque({
-          courierId: String(courierDb.id),
+        let finalNewValue = newRoute.plannedDepartureTime || '—';
+        let finalOldValue = fallbackPlannedTime || null;
+
+        // 🔥 УМНАЯ ЛОГИКА ДЛЯ old/new ЗНАЧЕНИЙ
+        if (changeType === 'ORDERS_CHANGED') {
+          // Собираем красивые списки заказов (например: "1001, 1002, 1005")
+          // oldOrders и sortedOrders у тебя уже определены выше по коду!
+          finalOldValue = oldOrders.map(o => o.crmId || o.id).join(', ');
+          finalNewValue = sortedOrders.map((o: any) => o.crmId || o.id).join(', ');
+        } else if (changeType === 'COURIER_CHANGED') {
+          // При смене курьера можно выводить ID старого и нового (или их имена, если подтянешь из БД)
+          finalOldValue = `Курьер ID: ${oldCourierId}`;
+          finalNewValue = `Курьер ID: ${courierId}`;
+        }
+
+        // Вызываем функцию асинхронно
+        createManagerPlaque({
+          courierId: courierDb.id,
           firstName: courierDb.firstName || '',
           lastName: courierDb.lastName || '',
-          newValue: newRoute.plannedDepartureTime || '—',
-          oldValue: changeType === 'TIME_CHANGED' ? fallbackPlannedTime : null,
+          newValue: finalNewValue, 
+          oldValue: finalOldValue, 
           changeType: changeType,
           authorName: authorName
-        });
+        }).catch(console.error);
       }
     } catch (err) {
       console.error("[Manager Plaque Error]:", err);

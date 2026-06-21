@@ -418,10 +418,21 @@ export default function ManagerDashboard() {
                       <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-[2fr_1fr_2fr_1fr_auto] gap-3 sm:gap-4 items-center">
                         <div className="font-extrabold text-[#1a1a18] text-base">{item.firstName} {item.lastName}</div>
                         <div className="flex items-center gap-2 text-base font-black">
-                          {item.oldValue && (
-                            <><span className="text-[#a8a49c] line-through decoration-rose-500 decoration-2">{item.oldValue}</span><span className="text-[#a8a49c]">→</span></>
-                          )}
-                          <span className="text-[#1a1a18]">{item.newValue}</span>
+                          <div className="flex flex-col mt-2.5 p-2.5 bg-[#fafaf8] border border-[#e8e6df] rounded-lg text-[12px] leading-snug">
+                            {item.oldValue && item.oldValue !== item.newValue && item.oldValue !== "Не было" && item.oldValue !== "—" && (
+                              <div className="flex items-start gap-2 text-[#a8a49c] mb-1">
+                                <span className="shrink-0 text-[10px] uppercase tracking-wider font-semibold mt-0.5">Было:</span>
+                                <s className="break-words line-clamp-2">{item.oldValue}</s>
+                              </div>
+                            )}
+                            
+                            <div className="flex items-start gap-2 text-[#1a1a18]">
+                              {item.oldValue && item.oldValue !== item.newValue && item.oldValue !== "Не было" && item.oldValue !== "—" && (
+                                <span className="shrink-0 text-[10px] uppercase tracking-wider font-semibold mt-0.5 text-[#a8a49c]">Стало:</span>
+                              )}
+                              <span className="font-bold break-words whitespace-pre-wrap">{item.newValue}</span>
+                            </div>
+                          </div>
                         </div>
                         <div>
                           <span className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg ${badgeConfig[item.changeType]?.styles || badgeConfig.DEFAULT.styles}`}>
@@ -911,7 +922,21 @@ export default function ManagerDashboard() {
                 {history.map((task) => (
                   <div key={task.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-[#fafaf8] border border-[#e8e6df] rounded-xl opacity-80 gap-3">
                     <div className="flex items-center gap-4">
-                      <div className="text-xs font-black text-[#a8a49c] w-12 text-center">{task.newValue}</div>
+                       <div className="flex flex-col mt-2.5 p-2.5 bg-[#fafaf8] border border-[#e8e6df] rounded-lg text-[12px] leading-snug">
+                        {task.oldValue && task.oldValue !== task.newValue && task.oldValue !== "Не было" && task.oldValue !== "—" && (
+                          <div className="flex items-start gap-2 text-[#a8a49c] mb-1">
+                            <span className="shrink-0 text-[10px] uppercase tracking-wider font-semibold mt-0.5">Было:</span>
+                            <s className="break-words line-clamp-2">{task.oldValue}</s>
+                          </div>
+                        )}
+                        
+                        <div className="flex items-start gap-2 text-[#1a1a18]">
+                          {task.oldValue && task.oldValue !== task.newValue && task.oldValue !== "Не было" && task.oldValue !== "—" && (
+                            <span className="shrink-0 text-[10px] uppercase tracking-wider font-semibold mt-0.5 text-[#a8a49c]">Стало:</span>
+                          )}
+                          <span className="font-bold break-words whitespace-pre-wrap">{task.newValue}</span>
+                        </div>
+                      </div>
                       <div className="w-px h-8 bg-[#e8e6df]"></div>
                       <div>
                         <p className="text-[15px] font-bold text-[#1a1a18]">{task.firstName} {task.lastName}</p>

@@ -225,6 +225,14 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       opCommentChanged:      (order.opComment  ?? "") !== (updatedOrder.opComment  ?? ""),
       itemsChanged:          (order.items      ?? "") !== (updatedOrder.items      ?? ""),
       recipientPhoneChanged: (order.recipientPhone ?? "") !== (updatedOrder.recipientPhone ?? ""),
+
+      // 🔥 ЯВНЫЕ ПОЛЯ ДЛЯ ИСТОРИИ ЛОГОВ (Теперь в БД будет видно Было/Стало)
+      oldOpComment: order.opComment || "Не было",
+      newOpComment: updatedOrder.opComment || "Удалён",
+      oldStatus: order.status,
+      newStatus: updatedOrder.status,
+      oldTime: order.slotRaw || "—",
+      newTime: updatedOrder.slotRaw || "—"
     };
 
     if (Object.values(changes).some(Boolean)) {
@@ -232,20 +240,20 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         type: "order.updated",
         order: updatedOrder as any,
         previousStatus: changes.statusChanged ? order.status : undefined,
-        changes,
+        changes, // В логи теперь улетят подробные old/new значения
       }).catch(console.error);
     }
 
-    // 🔥 ДОБАВЛЕНО: Создаем универсальную плашку при изменении комментария
+    // 🔥 ДОБАВЛЕНО: Создаем плашку в Табло при изменении комментария
     if (changes.opCommentChanged && updatedOrder.courierId) {
       const courierDb = await prisma.courier.findUnique({ where: { id: updatedOrder.courierId } });
-      const session = await getSession(req as any);
-      const authorName = session?.firstName 
-        ? `${session.firstName} ${session.lastName || ''}`.trim() 
+      
+      // user уже получен в самом начале файла через getSession
+      const authorName = user?.firstName 
+        ? `${user.firstName} ${user.lastName || ''}`.trim() 
         : "Оператор";
 
       if (courierDb) {
-        // Вызываем функцию без await, чтобы не блокировать ответ клиенту
         createManagerPlaque({
           courierId: courierDb.id,
           firstName: courierDb.firstName || '',
