@@ -13,7 +13,7 @@ export async function GET(req: Request) {
         isSeen: isHistory, // Если history=true, отдаем прочитанные
       },
       // Новые сортируем по времени прибытия, а историю по дате скрытия (самые свежие сверху)
-      orderBy: isHistory ? { createdAt: 'desc' } : { baseTime: 'asc' },
+      orderBy: isHistory ? { createdAt: 'desc' } : { newValue: 'asc' },
       take: isHistory ? 50 : undefined, // Для истории отдаем последние 50, чтобы не грузить базу
     });
 
