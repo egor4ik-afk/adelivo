@@ -2059,7 +2059,7 @@ export function DashboardClient({ user }: { user: User }) {
           {/* Ряд 2: фильтры + маршруты + слоты */}
           <div className="hide-scrollbar" style={{ display: "flex", gap: 6, padding: "6px 10px", background: "#fff", borderBottom: "1px solid #e8e6df", overflowX: "auto", flexShrink: 0, alignItems: "center" }}>
 
-            {/* 🔥 КАЛЕНДАРЬ НА МОБИЛКЕ с отступом вниз */}
+            {/* 🔥 КАЛЕНДАРЬ НА МОБИЛКЕ (в режиме Portal-Dropdown) */}
             <div style={{ position: "relative", flexShrink: 0 }}>
               <DatePicker
                 locale={ru}
@@ -2074,6 +2074,13 @@ export function DashboardClient({ user }: { user: User }) {
                 }}
                 dateFormat="dd.MM.yyyy"
                 customInput={<CustomDateInput />}
+
+                // 🔥 ДОБАВЛЕНО: Удобный выбор месяца и года сверху
+                showMonthDropdown
+                showYearDropdown
+                dropdownMode="select" // На мобилках вызовет удобный нативный селект (барабан)
+
+                // Настройки отображения дропдауна
                 withPortal={false}
                 portalId="dashboard-datepicker-portal"
                 popperPlacement="bottom-start"
@@ -2082,26 +2089,18 @@ export function DashboardClient({ user }: { user: User }) {
                   {
                     name: "offset",
                     options: {
-                      // [смещение по оси X, смещение по оси Y (отступ вниз)]
-                      offset: [0, 8],
+                      offset: [0, 8], // Смещение вниз, чтобы календарь не прилипал к кнопке
                     },
-                    fn: function (state: MiddlewareState): MiddlewareReturn | Promise<MiddlewareReturn> {
-                      throw new Error("Function not implemented.");
-                    }
                   },
                   {
                     name: "preventOverflow",
                     options: {
-                      boundary: "viewport",
+                      boundary: "viewport", // Не дает календарю уезжать за края экрана
                     },
-                    fn: function (state: MiddlewareState): MiddlewareReturn | Promise<MiddlewareReturn> {
-                      throw new Error("Function not implemented.");
-                    }
                   },
                 ]}
               />
             </div>
-
 
             <div style={{ position: "relative", flexShrink: 0 }}>
               <button onClick={() => setIsStatusMenuOpen(!isStatusMenuOpen)}
