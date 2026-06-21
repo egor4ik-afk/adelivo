@@ -116,7 +116,7 @@ export default function ManagerDashboard() {
   const [loading, setLoading] = useState(true);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(false);
-  
+
   const [expandedRoutes, setExpandedRoutes] = useState<Record<string, boolean>>({});
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
   const [isMassUpdating, setIsMassUpdating] = useState(false);
@@ -146,7 +146,7 @@ export default function ManagerDashboard() {
         const notifData = await notifRes.json();
         const routesData = await routesRes.json();
         if (Array.isArray(notifData)) setTasks(notifData);
-        
+
         if (Array.isArray(routesData)) {
           const sortedRoutes = routesData.sort((a, b) => {
             const timeA = a.plannedDepartureTime || "23:59";
@@ -154,7 +154,7 @@ export default function ManagerDashboard() {
             return timeA.localeCompare(timeB);
           });
           setRoutes(sortedRoutes);
-          
+
           setExpandedRoutes(prev => {
             if (Object.keys(prev).length === 0) {
               const initialExpanded: Record<string, boolean> = {};
@@ -173,8 +173,8 @@ export default function ManagerDashboard() {
     if (showLoadingState) setLoading(false);
   }, [activeTab]);
 
-  useEffect(() => { 
-    if (isAuthorized) loadData(); 
+  useEffect(() => {
+    if (isAuthorized) loadData();
   }, [activeTab, isAuthorized, loadData]);
 
   useEffect(() => {
@@ -256,9 +256,9 @@ export default function ManagerDashboard() {
 
   const updateOrderToAssembled = async (orderId: string) => {
     try {
-      await fetch(`/api/manager/orders/${orderId}/status`, { 
-        method: 'PATCH', 
-        body: JSON.stringify({ crmStatus: 'assembling-complete' }) 
+      await fetch(`/api/manager/orders/${orderId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ crmStatus: 'assembling-complete' })
       });
       loadData(false);
     } catch (e) { console.error(e); }
@@ -267,13 +267,13 @@ export default function ManagerDashboard() {
   const massUpdateToAssembling = async () => {
     if (selectedOrders.size === 0) return alert("Выберите заказы для отправки в сборку");
     if (!confirm(`Отправить в сборку (CRM) ${selectedOrders.size} заказов?`)) return;
-    
+
     setIsMassUpdating(true);
     try {
       await Promise.all(
-        Array.from(selectedOrders).map(orderId => 
-          fetch(`/api/manager/orders/${orderId}/status`, { 
-            method: 'PATCH', 
+        Array.from(selectedOrders).map(orderId =>
+          fetch(`/api/manager/orders/${orderId}/status`, {
+            method: 'PATCH',
             body: JSON.stringify({ crmStatus: 'assembling' }),
             headers: { 'Content-Type': 'application/json' }
           })
@@ -281,8 +281,8 @@ export default function ManagerDashboard() {
       );
       loadData(false);
       setSelectedOrders(new Set());
-    } catch (e) { 
-      console.error(e); 
+    } catch (e) {
+      console.error(e);
       alert("Ошибка при массовом обновлении статусов");
     } finally {
       setIsMassUpdating(false);
@@ -292,9 +292,9 @@ export default function ManagerDashboard() {
   const updateRouteToAssembling = async (routeId: string) => {
     if (!confirm("Отправить все заказы маршрута на сборку в CRM?")) return;
     try {
-      await fetch(`/api/manager/routes/${routeId}/status`, { 
-        method: 'PATCH', 
-        body: JSON.stringify({ crmStatus: 'assembling' }) 
+      await fetch(`/api/manager/routes/${routeId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ crmStatus: 'assembling' })
       });
       loadData(false);
     } catch (e) { console.error(e); }
@@ -359,10 +359,10 @@ export default function ManagerDashboard() {
           <p className="text-center text-[#a8a49c] font-medium mt-10 animate-pulse">Загрузка данных...</p>
         ) : (
           <div className="flex flex-col gap-6">
-            
+
             {activeTab === 'new' && (
               <div className="flex flex-col gap-8">
-                 <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-3">
                   {tasksWithRoutes.map((item) => (
                     <div key={item.id} className="bg-white border-2 border-transparent hover:border-rose-100 rounded-2xl shadow-sm transition-all group overflow-hidden">
                       <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-[2fr_1fr_2fr_1fr_auto] gap-3 sm:gap-4 items-center">
@@ -431,7 +431,7 @@ export default function ManagerDashboard() {
                             {route.orders?.length || 0} точ.
                           </span>
                         </div>
-                        
+
                         <div className="flex flex-col gap-3 flex-grow">
                           {route.orders?.length > 0 ? route.orders.map((order: any, idx: number) => {
                             const localStatus = LOCAL_STATUSES[order.status] || LOCAL_STATUSES.NEW;
@@ -461,20 +461,20 @@ export default function ManagerDashboard() {
                 </div>
               </div>
             )}
-            
+
             {activeTab === 'routes' && (
               <>
                 {/* ПАНЕЛЬ МАССОВЫХ ДЕЙСТВИЙ */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-2xl border border-[#e8e6df] shadow-sm mb-2 sticky top-[84px] z-10 gap-4">
                   <div className="flex items-center gap-3">
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       className="w-5 h-5 accent-[#1a1a18] rounded cursor-pointer shrink-0"
                       checked={isAllGlobalSelected}
                       onChange={toggleAllGlobalOrders}
                     />
                     <span className="font-bold text-[#1a1a18] text-[15px]">Выбрать все</span>
-                    
+
                     {selectedOrders.size > 0 && (
                       <span className="bg-[#eef3ff] text-[#4a7aff] px-2.5 py-1 rounded-lg text-sm font-bold border border-[#dce6ff] ml-2 shadow-sm transition-all">
                         Выбрано: {selectedOrders.size}
@@ -483,14 +483,14 @@ export default function ManagerDashboard() {
                   </div>
 
                   <div className="flex items-center gap-3 w-full sm:w-auto">
-                    <button 
+                    <button
                       onClick={massUpdateToAssembling}
                       disabled={selectedOrders.size === 0 || isMassUpdating}
                       className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm flex items-center justify-center gap-2 ${selectedOrders.size > 0 ? 'bg-[#fff8e6] text-[#b38a00] border border-[#ffe082] hover:bg-[#fff0c2]' : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'}`}
                     >
                       {isMassUpdating ? '⏳ Загрузка...' : '📦 В сборку'}
                     </button>
-                    <button 
+                    <button
                       onClick={handlePrintLabels}
                       disabled={selectedOrders.size === 0}
                       className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm flex items-center justify-center gap-2 ${selectedOrders.size > 0 ? 'bg-[#1a1a18] text-white hover:bg-gray-800' : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'}`}
@@ -512,26 +512,26 @@ export default function ManagerDashboard() {
 
                     return (
                       <div key={route.id} className="bg-white border border-[#e8e6df] rounded-2xl shadow-sm transition-all overflow-hidden">
-                        
+
                         {/* ШАПКА МАРШРУТА: СТРОГО 1 СТРОКА */}
-                        <div 
+                        <div
                           className="flex flex-row items-center justify-between p-3 hover:bg-[#fafaf8] cursor-pointer transition-colors gap-2"
                           onClick={() => toggleRouteExpansion(route.id)}
                         >
                           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap overflow-hidden">
-                            <input 
-                              type="checkbox" 
+                            <input
+                              type="checkbox"
                               className="w-4 h-4 accent-[#1a1a18] rounded cursor-pointer shrink-0"
                               checked={isAllSelected}
                               onChange={(e) => { e.stopPropagation(); toggleRouteOrders(routeOrderIds); }}
                               onClick={(e) => e.stopPropagation()}
                             />
                             <span className="text-[#a8a49c] w-4 text-center text-[10px] shrink-0">{isExpanded ? '▼' : '▶'}</span>
-                            
+
                             <span className="font-black text-[14px] text-[#1a1a18] whitespace-nowrap">
                               {route.courier?.firstName || 'Не назначен'} {route.courier?.lastName || ''}
                             </span>
-                            
+
                             {courierPhone !== "—" && (
                               <div className="flex items-center gap-1.5 ml-1">
                                 <a href={`tel:${courierPhone}`} onClick={e => e.stopPropagation()} className="text-[#4a7aff] font-semibold text-[13px] hover:underline whitespace-nowrap">
@@ -564,15 +564,15 @@ export default function ManagerDashboard() {
                               Точек: {route.orders?.length || 0}
                             </span>
                           </div>
-                          
-                          <button 
+
+                          <button
                             onClick={(e) => { e.stopPropagation(); updateRouteToAssembling(route.id); }}
                             className="shrink-0 bg-[#fff8e6] text-[#b38a00] border border-[#ffe082] px-3 py-1.5 rounded-lg text-[12px] font-bold hover:bg-[#fff0c2] transition-colors shadow-sm ml-auto"
                           >
                             📦 В сборку
                           </button>
                         </div>
-                        
+
                         {/* КАРТОЧКИ ЗАКАЗОВ В МАРШРУТЕ */}
                         {isExpanded && (
                           <div className="p-4 bg-[#f5f4f0] border-t border-[#e8e6df]">
@@ -581,37 +581,38 @@ export default function ManagerDashboard() {
                                 const isAssembled = order.crmStatus === 'assembling-complete';
                                 const crmConf = order.crmStatus ? (CRM_STATUSES[order.crmStatus] || { label: order.crmStatus, color: 'border-gray-200 text-gray-500 bg-white' }) : null;
                                 const localStatus = LOCAL_STATUSES[order.status] || LOCAL_STATUSES.NEW;
-                                
-                                const customerName = order.clientName;
-                                const customerPhone = order.clientPhone || "—";
-                                const customerComment = order.clientComment || order.comment;
-                                
+
+                                const customerName = order.customerName;
+                                const customerPhone = order.customerPhone || "—";
+                                // Комментарий заказчика в нашей базе лежит в order.comment
+                                const customerComment = order.comment;
+
                                 const recipientName = order.name;
                                 const recipientPhone = order.recipientPhone || order.phone || "—";
-                                
+
                                 const isMeura = order.shop === 'kaktusfiori' || order.shop === 'meura-flowers';
                                 const shopBadge = isMeura ? "🌸 Meura" : "📦 Bunch";
 
                                 const displayId = order.externalId || order.crmId || order.number || order.id.slice(-6);
-                                const createdAt = order.crmCreatedAt 
-                                  ? new Date(order.crmCreatedAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) 
+                                const createdAt = order.crmCreatedAt
+                                  ? new Date(order.crmCreatedAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
                                   : null;
 
                                 return (
                                   <div key={order.id} className="flex flex-col bg-white rounded-xl border border-[#e8e6df] shadow-sm p-3 relative hover:border-[#dcd9d1] transition-colors">
-                                    
+
                                     {/* Шапка карточки: Чекбокс, Номер, Слот */}
                                     <div className="flex justify-between items-start mb-2">
                                       <div className="flex items-center gap-2">
-                                        <input 
-                                          type="checkbox" 
+                                        <input
+                                          type="checkbox"
                                           className="w-4 h-4 accent-[#1a1a18] rounded cursor-pointer shrink-0"
                                           checked={selectedOrders.has(order.id)}
                                           onChange={() => toggleOrderSelection(order.id)}
                                         />
                                         <div className="w-5 h-5 rounded bg-[#1a1a18] text-white flex items-center justify-center text-[10px] font-black shrink-0">{idx + 1}</div>
                                         <span className="font-black text-[14px] text-[#1a1a18] truncate max-w-[100px]" title={String(displayId)}>
-                                          #{displayId}
+                                          {displayId}
                                         </span>
                                       </div>
                                       <span className="text-[10px] font-bold text-[#6b6860] bg-[#f5f4f0] px-1.5 py-0.5 rounded border border-[#e8e6df] shrink-0">
@@ -641,7 +642,7 @@ export default function ManagerDashboard() {
 
                                     {/* БЛОК КОНТАКТОВ И КОММЕНТАРИЕВ */}
                                     <div className="flex flex-col gap-2 mt-1 mb-2">
-                                      
+
                                       {/* Заказчик */}
                                       {(customerName || customerPhone !== "—") && (
                                         <div className="flex flex-col gap-1.5">
@@ -718,7 +719,7 @@ export default function ManagerDashboard() {
 
                                     {/* Кнопка Собран */}
                                     <div className="pt-3 mt-1">
-                                      <button 
+                                      <button
                                         onClick={() => updateOrderToAssembled(order.id)}
                                         className={`w-full py-1.5 rounded-lg text-[12px] font-bold border transition-colors shadow-sm ${isAssembled ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
                                       >
@@ -739,7 +740,7 @@ export default function ManagerDashboard() {
                 {routes.length === 0 && <p className="text-[#a8a49c] font-medium text-center py-12">На сегодня маршрутов еще нет</p>}
               </>
             )}
-            
+
             {activeTab === 'history' && (
               <>
                 {history.map((task) => (
@@ -765,7 +766,7 @@ export default function ManagerDashboard() {
                 {history.length === 0 && <p className="text-[#a8a49c] text-center py-12">История пуста</p>}
               </>
             )}
-            
+
           </div>
         )}
       </main>
