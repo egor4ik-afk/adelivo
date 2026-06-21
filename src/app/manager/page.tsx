@@ -330,12 +330,20 @@ export default function ManagerDashboard() {
     }
   };
 
-  const updateRouteToAssembling = async (routeId: string) => {
-    if (!confirm("Отправить все заказы маршрута на сборку в CRM?")) return;
+  // 🔥 НОВАЯ УМНАЯ ФУНКЦИЯ ДЛЯ МАССОВОГО ОБНОВЛЕНИЯ
+  const updateRouteBulkStatus = async (routeId: string, action: 'assembling' | 'assembling-complete' | 'send-to-delivery') => {
+    const messages = {
+      'assembling': "Отправить все заказы маршрута на сборку (CRM)?",
+      'assembling-complete': "Отметить все заказы маршрута как собранные (CRM)?",
+      'send-to-delivery': "Передать все заказы маршрута курьеру (CRM)?"
+    };
+    
+    if (!confirm(messages[action])) return;
+    
     try {
       await fetch(`/api/manager/routes/${routeId}/status`, {
         method: 'PATCH',
-        body: JSON.stringify({ crmStatus: 'assembling' })
+        body: JSON.stringify({ crmStatus: action })
       });
       loadData(false);
     } catch (e) { console.error(e); }
@@ -569,77 +577,109 @@ export default function ManagerDashboard() {
                 </div>
 
                 <div className="flex flex-col gap-4 mt-2">
-                  {routes.map((route) => {
-                    const isExpanded = expandedRoutes[route.id];
-                    const routeOrderIds = route.orders?.map((o: any) => o.id) || [];
-                    const isAllSelected = routeOrderIds.length > 0 && routeOrderIds.every((id: string) => selectedOrders.has(id));
-                    const routeTimeRange = getRouteTimeRange(route.orders);
-                    const courierPhone = route.courier?.phone || "—";
-                    const cleanPhoneForTg = courierPhone !== "—" ? courierPhone.replace(/[^\d+]/g, "") : "";
-                    const encodedMsg = encodeURIComponent("Привет! Это менеджер EventWave.");
+                {routes.map((route) => {
+                  const isExpanded = expandedRoutes[route.id];
+                  const routeOrderIds = route.orders?.map((o: any) => o.id) || [];
+                  const isAllSelected = routeOrderIds.length > 0 && routeOrderIds.every((id: string) => selectedOrders.has(id));
+                  const routeTimeRange = getRouteTimeRange(route.orders);
+                  const courierPhone = route.courier?.phone || "—";
+                  const cleanPhoneForTg = courierPhone !== "—" ? courierPhone.replace(/[^\d+]/g, "") : "";
+                  const encodedMsg = encodeURIComponent("Привет! Это менеджер EventWave.");
 
-                    return (
-                      <div key={route.id} className="bg-white border border-[#e8e6df] rounded-2xl shadow-sm transition-all overflow-hidden">
+                  // 🔥 УМНАЯ ЛОГИКА ОПРЕДЕЛЕНИЯ КНОПКИ МАРШРУТА
+                  const activeOrders = route.orders?.filter((o: any) => o.status !== 'CANCELLED' && o.status !== 'RETURNED') || [];
+                  const isAllInDeliveryOrDone = activeOrders.length > 0 && activeOrders.every((o: any) => 
+                    o.status === 'IN_DELIVERY' || o.status === 'DELIVERED' || o.crmStatus === 'send-to-delivery'
+                  );
 
-                        {/* ШАПКА МАРШРУТА: СТРОГО 1 СТРОКА */}
-                        <div
-                          className="flex flex-row items-center justify-between p-3 hover:bg-[#fafaf8] cursor-pointer transition-colors gap-2"
-                          onClick={() => toggleRouteExpansion(route.id)}
-                        >
-                          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap overflow-hidden">
-                            <input
-                              type="checkbox"
-                              className="w-4 h-4 accent-[#1a1a18] rounded cursor-pointer shrink-0"
-                              checked={isAllSelected}
-                              onChange={(e) => { e.stopPropagation(); toggleRouteOrders(routeOrderIds); }}
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                            <span className="text-[#a8a49c] w-4 text-center text-[10px] shrink-0">{isExpanded ? '▼' : '▶'}</span>
+                  let routeBulkAction: 'assembling' | 'assembling-complete' | 'send-to-delivery' | null = null;
+                  let routeBulkText = "";
+                  let routeBulkStyles = "";
 
-                            <span className="font-black text-[14px] text-[#1a1a18] whitespace-nowrap">
-                              {route.courier?.firstName || 'Не назначен'} {route.courier?.lastName || ''}
+                  if (!isAllInDeliveryOrDone && activeOrders.length > 0) {
+                      const hasNew = activeOrders.some((o: any) => !o.crmStatus || o.crmStatus === 'new');
+                      const hasAssembling = activeOrders.some((o: any) => o.crmStatus === 'assembling');
+                      const hasAssembled = activeOrders.some((o: any) => o.crmStatus === 'assembling-complete');
+
+                      if (hasNew) {
+                        routeBulkAction = 'assembling';
+                        routeBulkText = '📦 В сборку';
+                        routeBulkStyles = 'bg-[#fff8e6] text-[#b38a00] border-[#ffe082] hover:bg-[#fff0c2]';
+                      } else if (hasAssembling) {
+                        routeBulkAction = 'assembling-complete';
+                        routeBulkText = '✅ Собраны';
+                        routeBulkStyles = 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100';
+                      } else if (hasAssembled) {
+                        routeBulkAction = 'send-to-delivery';
+                        routeBulkText = '🚀 Передать курьеру';
+                        routeBulkStyles = 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100';
+                      }
+                  }
+
+                  return (
+                    <div key={route.id} className="bg-white border border-[#e8e6df] rounded-2xl shadow-sm transition-all overflow-hidden">
+
+                      {/* ШАПКА МАРШРУТА: СТРОГО 1 СТРОКА */}
+                      <div
+                        className="flex flex-row items-center justify-between p-3 hover:bg-[#fafaf8] cursor-pointer transition-colors gap-2"
+                        onClick={() => toggleRouteExpansion(route.id)}
+                      >
+                        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap overflow-hidden">
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 accent-[#1a1a18] rounded cursor-pointer shrink-0"
+                            checked={isAllSelected}
+                            onChange={(e) => { e.stopPropagation(); toggleRouteOrders(routeOrderIds); }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <span className="text-[#a8a49c] w-4 text-center text-[10px] shrink-0">{isExpanded ? '▼' : '▶'}</span>
+
+                          <span className="font-black text-[14px] text-[#1a1a18] whitespace-nowrap">
+                            {route.courier?.firstName || 'Не назначен'} {route.courier?.lastName || ''}
+                          </span>
+
+                          {courierPhone !== "—" && (
+                            <div className="flex items-center gap-1.5 ml-1">
+                              <a href={`tel:${courierPhone}`} onClick={e => e.stopPropagation()} className="text-[#4a7aff] font-semibold text-[13px] hover:underline whitespace-nowrap">
+                                📞 {courierPhone}
+                              </a>
+                              {cleanPhoneForTg && (
+                                <>
+                                  <a href={`https://t.me/${cleanPhoneForTg}?text=${encodedMsg}`} onClick={e => e.stopPropagation()} target="_blank" rel="noopener noreferrer" className="bg-[#2AABEE] w-5 h-5 flex items-center justify-center rounded-full hover:opacity-90">
+                                    <svg viewBox="0 0 24 24" width="10" height="10" fill="#ffffff"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z" /></svg>
+                                  </a>
+                                  <a href={`sms:${cleanPhoneForTg}?body=${encodedMsg}`} onClick={e => e.stopPropagation()} className="bg-[#34C759] w-5 h-5 flex items-center justify-center rounded-full hover:opacity-90">
+                                    <svg viewBox="0 0 24 24" width="10" height="10" fill="#ffffff"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" /></svg>
+                                  </a>
+                                </> 
+                              )}
+                            </div>
+                          )}
+
+                          {route.plannedDepartureTime && (
+                            <span className="text-[12px] font-bold text-[#1a1a18] bg-[#f5f4f0] px-2 py-0.5 rounded-lg border border-[#e8e6df] shadow-sm flex items-center gap-1">
+                            🏠 {route.plannedDepartureTime}
+                          </span>
+                          )}
+                          {routeTimeRange && (
+                            <span className="text-[11px] font-black text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 whitespace-nowrap">
+                              Слоты: {routeTimeRange}
                             </span>
-
-                            {courierPhone !== "—" && (
-                              <div className="flex items-center gap-1.5 ml-1">
-                                <a href={`tel:${courierPhone}`} onClick={e => e.stopPropagation()} className="text-[#4a7aff] font-semibold text-[13px] hover:underline whitespace-nowrap">
-                                  📞 {courierPhone}
-                                </a>
-                                {cleanPhoneForTg && (
-                                  <>
-                                    <a href={`https://t.me/${cleanPhoneForTg}?text=${encodedMsg}`} onClick={e => e.stopPropagation()} target="_blank" rel="noopener noreferrer" className="bg-[#2AABEE] w-5 h-5 flex items-center justify-center rounded-full hover:opacity-90">
-                                      <svg viewBox="0 0 24 24" width="10" height="10" fill="#ffffff"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z" /></svg>
-                                    </a>
-                                    <a href={`sms:${cleanPhoneForTg}?body=${encodedMsg}`} onClick={e => e.stopPropagation()} className="bg-[#34C759] w-5 h-5 flex items-center justify-center rounded-full hover:opacity-90">
-                                      <svg viewBox="0 0 24 24" width="10" height="10" fill="#ffffff"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" /></svg>
-                                    </a>
-                                  </>
-                                )}
-                              </div>
-                            )}
-
-                            {route.plannedDepartureTime && (
-                              <span className="text-[12px] font-bold text-[#1a1a18] bg-[#f5f4f0] px-2 py-0.5 rounded-lg border border-[#e8e6df] shadow-sm flex items-center gap-1">
-                              🏠 {route.plannedDepartureTime}
-                            </span>
-                            )}
-                            {routeTimeRange && (
-                              <span className="text-[11px] font-black text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 whitespace-nowrap">
-                                Слоты: {routeTimeRange}
-                              </span>
-                            )}
-                            <span className="text-[11px] font-bold text-[#6b6860] bg-[#f5f4f0] px-1.5 py-0.5 rounded border border-[#e8e6df] whitespace-nowrap hidden sm:inline-block">
-                              Точек: {route.orders?.length || 0}
-                            </span>
-                          </div>
-
-                          <button
-                            onClick={(e) => { e.stopPropagation(); updateRouteToAssembling(route.id); }}
-                            className="shrink-0 bg-[#fff8e6] text-[#b38a00] border border-[#ffe082] px-3 py-1.5 rounded-lg text-[12px] font-bold hover:bg-[#fff0c2] transition-colors shadow-sm ml-auto"
-                          >
-                            📦 В сборку
-                          </button>
+                          )}
+                          <span className="text-[11px] font-bold text-[#6b6860] bg-[#f5f4f0] px-1.5 py-0.5 rounded border border-[#e8e6df] whitespace-nowrap hidden sm:inline-block">
+                            Точек: {route.orders?.length || 0}
+                          </span>
                         </div>
+
+                        {routeBulkAction && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); updateRouteBulkStatus(route.id, routeBulkAction!); }}
+                            className={`shrink-0 border px-3 py-1.5 rounded-lg text-[12px] font-bold transition-colors shadow-sm ml-auto ${routeBulkStyles}`}
+                          >
+                            {routeBulkText}
+                          </button>
+                        )}
+                      </div>
 
                         {/* КАРТОЧКИ ЗАКАЗОВ В МАРШРУТЕ */}
                         {isExpanded && (

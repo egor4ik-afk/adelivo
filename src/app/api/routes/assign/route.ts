@@ -241,14 +241,17 @@ export async function POST(req: Request) {
 
     // 🔥 2. ГЕНЕРАЦИЯ ПЛАШКИ И ПУША ДЛЯ МЕНЕДЖЕРА
     try {
-      let changeType: 'ROUTE_REASSIGNED' | 'TIME_CHANGED' | 'ORDERS_CHANGED' | null = null;
+      // Расширяем тип
+      let changeType: 'ROUTE_REASSIGNED' | 'COURIER_CHANGED' | 'TIME_CHANGED' | 'ORDERS_CHANGED' | null = null;
       
-      if (isNewRoute) {
-        changeType = 'ROUTE_REASSIGNED';
+      if (!oldRouteId) {
+        changeType = 'ROUTE_REASSIGNED'; // Это абсолютно новый маршрут
+      } else if (oldCourierId !== Number(courierId)) {
+        changeType = 'COURIER_CHANGED';  // Маршрут старый, но курьера заменили
       } else if (plannedDepartureTime !== undefined && plannedDepartureTime !== fallbackPlannedTime) {
-        changeType = 'TIME_CHANGED';
+        changeType = 'TIME_CHANGED';     // Поменяли только время
       } else if (pointsChanged) {
-        changeType = 'ORDERS_CHANGED';
+        changeType = 'ORDERS_CHANGED';   // Перетасовали заказы
       }
 
       // Если было изменение и курьер существует, отправляем плашку
