@@ -245,24 +245,29 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     }
 
     // 🔥 ДОБАВЛЕНО: Создаем плашку в Табло при изменении комментария
-    if (changes.opCommentChanged && updatedOrder.courierId) {
-      const courierDb = await prisma.courier.findUnique({ where: { id: updatedOrder.courierId } });
-      
-      // user уже получен в самом начале файла через getSession
-      const authorName = user?.firstName 
-        ? `${user.firstName} ${user.lastName || ''}`.trim() 
-        : "Оператор";
+    if (changes.opCommentChanged) {
+      try {
+        // Ищем курьера, только если заказ кому-то назначен
+        const courierDb = updatedOrder.courierId 
+          ? await prisma.courier.findUnique({ where: { id: updatedOrder.courierId } }) 
+          : null;
+        
+        const authorName = user?.firstName 
+          ? `${user.firstName} ${user.lastName || ''}`.trim() 
+          : "Оператор";
 
-      if (courierDb) {
-        createManagerPlaque({
-          courierId: courierDb.id,
-          firstName: courierDb.firstName || '',
-          lastName: courierDb.lastName || '',
-          newValue: updatedOrder.opComment || "Удалён",  // Что стало
-          oldValue: order.opComment || "Не было",        // Что было
+        // 🔥 ВАЖНО: Добавлен await. Без него Next.js "убивает" запрос до записи в БД!
+        await createManagerPlaque({
+          courierId: courierDb?.id || 'UNASSIGNED',
+          firstName: courierDb?.firstName || 'Без',
+          lastName: courierDb?.lastName || 'курьера',
+          newValue: updatedOrder.opComment || "Удалён",
+          oldValue: order.opComment || "Не было",
           changeType: 'OP_COMMENT_ADDED',
           authorName: authorName
-        }).catch(console.error);
+        });
+      } catch (e: any) {
+         console.error("Ошибка вызова плашки коммента:", e);
       }
     }
 

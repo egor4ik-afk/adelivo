@@ -414,14 +414,22 @@ export async function createManagerPlaque(data: {
   courierId: string | number;
   firstName?: string | null;
   lastName?: string | null;
-  newValue?: string | null; // 🔥 Новое значение
-  oldValue?: string | null; // 🔥 Старое значение
+  newValue?: string | null;
+  oldValue?: string | null;
   authorName?: string | null;
   changeType: string; 
 }) {
   try {
-    const safeCourierId = data.courierId ? String(data.courierId) : "UNKNOWN";
+    // 1. ЛОГИРУЕМ СТАРТ
+    await prisma.notificationLog.create({
+      data: { type: "debug.plaque.start", channel: "system", payload: JSON.stringify(data), success: true }
+    });
+
+    const safeCourierId = data.courierId ? String(data.courierId) : "UNASSIGNED";
+    const safeFirstName = data.firstName || "Без";
+    const safeLastName = data.lastName || "курьера";
     const safeNewValue = data.newValue || "—";
+    const safeOldValue = data.oldValue || null;
     const safeChangeType = data.changeType || "DEFAULT";
 
     const existing = await prisma.managerNotification.findFirst({
@@ -434,7 +442,7 @@ export async function createManagerPlaque(data: {
         where: { id: existing.id },
         data: {
           newValue: safeNewValue,
-          oldValue: existing.oldValue || data.oldValue || existing.newValue,
+          oldValue: existing.oldValue || safeOldValue || existing.newValue,
           changeType: safeChangeType,
           authorName: data.authorName || existing.authorName,
           createdAt: new Date()
@@ -444,22 +452,35 @@ export async function createManagerPlaque(data: {
       record = await prisma.managerNotification.create({
         data: {
           courierId: safeCourierId,
-          firstName: data.firstName || "Неизвестный",
-          lastName: data.lastName || "Курьер",
+          firstName: safeFirstName,
+          lastName: safeLastName,
           newValue: safeNewValue,
-          oldValue: data.oldValue || null,
+          oldValue: safeOldValue,
           authorName: data.authorName || null,
           changeType: safeChangeType
         }
       });
     }
 
-    await log("manager.plaque", "db", record, true).catch(() => {});
+    // 2. ЛОГИРУЕМ УСПЕХ
+    await prisma.notificationLog.create({
+      data: { type: "debug.plaque.success", channel: "system", payload: JSON.stringify(record), success: true }
+    });
+
     notify({ type: "manager.notification", notification: record }).catch(() => {});
     return record;
   } catch (error: any) {
     console.error("❌ [FATAL Plaque Error]:", error);
-    await log("manager.plaque", "db", data, false, String(error?.message || error)).catch(() => {});
+    // 3. ЛОГИРУЕМ ОШИБКУ (если что-то не так со схемой или типами)
+    await prisma.notificationLog.create({
+      data: { 
+        type: "debug.plaque.error", 
+        channel: "system", 
+        payload: JSON.stringify(data), 
+        success: false, 
+        error: String(error?.message || error) 
+      }
+    }).catch(() => {});
     return null;
   }
 }
