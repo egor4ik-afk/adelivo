@@ -260,8 +260,8 @@ export async function POST(req: Request) {
           courierId: String(courierDb.id),
           firstName: courierDb.firstName || '',
           lastName: courierDb.lastName || '',
-          baseTime: newRoute.plannedDepartureTime || '—',
-          oldTime: changeType === 'TIME_CHANGED' ? fallbackPlannedTime : null,
+          newValue: newRoute.plannedDepartureTime || '—',
+          oldValue: changeType === 'TIME_CHANGED' ? fallbackPlannedTime : null,
           changeType: changeType,
           authorName: authorName
         });

@@ -9,7 +9,7 @@ type ChangeType = 'TIME_CHANGED' | 'ORDERS_CHANGED' | 'ROUTE_REASSIGNED' | 'COUR
 
 interface Notification {
   id: string; firstName: string; lastName: string;
-  baseTime: string; oldTime?: string | null; authorName?: string | null;
+  newValue: string; oldValue?: string | null; authorName?: string | null;
   changeType: ChangeType; isSeen: boolean; createdAt: string;
 }
 
@@ -368,7 +368,7 @@ export default function ManagerDashboard() {
   const tasksWithRoutes = tasks.map(task => {
     const matchedRoute = routes.find(r => r.courier?.firstName === task.firstName && r.courier?.lastName === task.lastName);
     return { ...task, routeData: matchedRoute };
-  }).sort((a, b) => a.baseTime.localeCompare(b.baseTime));
+  }).sort((a, b) => a.newValue.localeCompare(b.newValue));
 
   const pendingRoutes = routes.filter((route) => {
     if (!route.orders || route.orders.length === 0) return false;
@@ -418,10 +418,10 @@ export default function ManagerDashboard() {
                       <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-[2fr_1fr_2fr_1fr_auto] gap-3 sm:gap-4 items-center">
                         <div className="font-extrabold text-[#1a1a18] text-base">{item.firstName} {item.lastName}</div>
                         <div className="flex items-center gap-2 text-base font-black">
-                          {item.oldTime && (
-                            <><span className="text-[#a8a49c] line-through decoration-rose-500 decoration-2">{item.oldTime}</span><span className="text-[#a8a49c]">→</span></>
+                          {item.oldValue && (
+                            <><span className="text-[#a8a49c] line-through decoration-rose-500 decoration-2">{item.oldValue}</span><span className="text-[#a8a49c]">→</span></>
                           )}
-                          <span className="text-[#1a1a18]">{item.baseTime}</span>
+                          <span className="text-[#1a1a18]">{item.newValue}</span>
                         </div>
                         <div>
                           <span className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg ${badgeConfig[item.changeType]?.styles || badgeConfig.DEFAULT.styles}`}>
@@ -911,7 +911,7 @@ export default function ManagerDashboard() {
                 {history.map((task) => (
                   <div key={task.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-[#fafaf8] border border-[#e8e6df] rounded-xl opacity-80 gap-3">
                     <div className="flex items-center gap-4">
-                      <div className="text-xs font-black text-[#a8a49c] w-12 text-center">{task.baseTime}</div>
+                      <div className="text-xs font-black text-[#a8a49c] w-12 text-center">{task.newValue}</div>
                       <div className="w-px h-8 bg-[#e8e6df]"></div>
                       <div>
                         <p className="text-[15px] font-bold text-[#1a1a18]">{task.firstName} {task.lastName}</p>

@@ -169,9 +169,7 @@ async function sendIndividualPushes(event: NotificationEvent) {
       // Базовый урл: Админов кидаем в дашборд, Менеджеров — в их кабинет
       targetUrl = user.role === "OPERATOR" ? "/manager" : "/dashboard";
 
-      // 🔥 НОВЫЙ БЛОК: Уведомления от логистов (для плашек менеджера)
       if (event.type === "manager.notification") {
-        // Защита, если поля еще нет в базе
         if ((user as any).notifyLogistChanges ?? true) { 
           shouldSend = true;
           const pushTitles: Record<string, string> = {
@@ -183,9 +181,15 @@ async function sendIndividualPushes(event: NotificationEvent) {
           };
           title = pushTitles[event.notification.changeType] || "🔔 Изменение на базе";
           bodyTexts.push(`Курьер: ${event.notification.firstName} ${event.notification.lastName}`);
-          bodyTexts.push(`Время: ${event.notification.baseTime}`);
+          
+          // 🔥 Выводим универсальные значения
+          if (event.notification.oldValue) {
+             bodyTexts.push(`Было: ${event.notification.oldValue}`);
+          }
+          bodyTexts.push(`Стало: ${event.notification.newValue}`);
+
           if (event.notification.authorName) {
-             bodyTexts.push(`Логист: ${event.notification.authorName}`);
+             bodyTexts.push(`Автор: ${event.notification.authorName}`);
           }
           targetUrl = "/manager?tab=new";
         }
@@ -407,69 +411,55 @@ export async function notify(event: NotificationEvent) {
 }
 
 export async function createManagerPlaque(data: {
-  courierId: string | number; // 🔥 Разрешаем number для страховки от ошибок
+  courierId: string | number;
   firstName?: string | null;
   lastName?: string | null;
-  baseTime?: string | null;
-  oldTime?: string | null;
+  newValue?: string | null; // 🔥 Новое значение
+  oldValue?: string | null; // 🔥 Старое значение
   authorName?: string | null;
-  changeType: string; // 🔥 Любой строковый статус
+  changeType: string; 
 }) {
   try {
-    console.log("[Plaque Init] Получены данные:", data);
-
-    // 🔥 ЖЕСТКАЯ ЗАЩИТА ТИПОВ ДЛЯ PRISMA
     const safeCourierId = data.courierId ? String(data.courierId) : "UNKNOWN";
-    const safeBaseTime = data.baseTime || "—";
+    const safeNewValue = data.newValue || "—";
     const safeChangeType = data.changeType || "DEFAULT";
-    const safeFirstName = data.firstName || "Неизвестный";
-    const safeLastName = data.lastName || "Курьер";
 
-    // Ищем непрочитанную плашку для этого курьера
     const existing = await prisma.managerNotification.findFirst({
       where: { courierId: safeCourierId, isSeen: false }
     });
 
     let record;
-
     if (existing) {
       record = await prisma.managerNotification.update({
         where: { id: existing.id },
         data: {
-          baseTime: safeBaseTime,
-          oldTime: existing.oldTime || data.oldTime || existing.baseTime,
+          newValue: safeNewValue,
+          oldValue: existing.oldValue || data.oldValue || existing.newValue,
           changeType: safeChangeType,
           authorName: data.authorName || existing.authorName,
-          createdAt: new Date() // Поднимаем наверх
+          createdAt: new Date()
         }
       });
-      console.log("✅ [Plaque Updated] ID:", record.id);
     } else {
       record = await prisma.managerNotification.create({
         data: {
           courierId: safeCourierId,
-          firstName: safeFirstName,
-          lastName: safeLastName,
-          baseTime: safeBaseTime,
-          oldTime: data.oldTime || null,
+          firstName: data.firstName || "Неизвестный",
+          lastName: data.lastName || "Курьер",
+          newValue: safeNewValue,
+          oldValue: data.oldValue || null,
           authorName: data.authorName || null,
           changeType: safeChangeType
         }
       });
-      console.log("✅ [Plaque Created] ID:", record.id);
     }
 
-    // 🔥 ЗАПИСЫВАЕМ УСПЕХ В БД (чтобы было видно в логах)
     await log("manager.plaque", "db", record, true).catch(() => {});
-
-    // Отправляем PUSH, чтобы Табло пискнуло и обновилось в риалтайме!
-    notify({ type: "manager.notification", notification: record }).catch(e => console.error("[Push Plaque Err]:", e));
-
+    notify({ type: "manager.notification", notification: record }).catch(() => {});
     return record;
   } catch (error: any) {
     console.error("❌ [FATAL Plaque Error]:", error);
-    // 🔥 ЛОГИРУЕМ ОШИБКУ В БД
     await log("manager.plaque", "db", data, false, String(error?.message || error)).catch(() => {});
-    return null; // Возвращаем null, чтобы ошибка не роняла сохранение маршрутов
+    return null;
   }
 }

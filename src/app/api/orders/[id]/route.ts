@@ -236,7 +236,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       }).catch(console.error);
     }
 
-    // 🔥 ДОБАВЛЯЕМ СЮДА: Создание плашки в Табло при изменении комментария
+    // 🔥 ДОБАВЛЕНО: Создаем универсальную плашку при изменении комментария
     if (changes.opCommentChanged && updatedOrder.courierId) {
       const courierDb = await prisma.courier.findUnique({ where: { id: updatedOrder.courierId } });
       const session = await getSession(req as any);
@@ -245,11 +245,13 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         : "Оператор";
 
       if (courierDb) {
+        // Вызываем функцию без await, чтобы не блокировать ответ клиенту
         createManagerPlaque({
-          courierId: courierDb.id, // ID курьера, к которому относится заказ
+          courierId: courierDb.id,
           firstName: courierDb.firstName || '',
           lastName: courierDb.lastName || '',
-          baseTime: updatedOrder.opComment || "—", // Передаем текст комментария вместо времени
+          newValue: updatedOrder.opComment || "Удалён",  // Что стало
+          oldValue: order.opComment || "Не было",        // Что было
           changeType: 'OP_COMMENT_ADDED',
           authorName: authorName
         }).catch(console.error);
