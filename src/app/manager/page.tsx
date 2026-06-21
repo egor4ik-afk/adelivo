@@ -32,14 +32,13 @@ const CRM_STATUSES: Record<string, { label: string, color: string }> = {
   'new': { label: 'Новый (CRM)', color: 'border-[#e8e6df] text-[#8c8880] bg-[#fafaf8]' },
   'assembling': { label: 'Сборка', color: 'border-yellow-200 text-yellow-700 bg-yellow-50' },
   'assembling-complete': { label: 'Собран', color: 'border-teal-200 text-teal-700 bg-teal-50' },
-  'send-to-delivery': { label: 'Передан курьеру', color: 'border-purple-200 text-purple-700 bg-purple-50' },
+  'send-to-delivery': { label: 'Передан', color: 'border-purple-200 text-purple-700 bg-purple-50' },
   'complete': { label: 'Выполнен', color: 'border-green-200 text-green-700 bg-green-50' },
   'cancel-other': { label: 'Отменен (CRM)', color: 'border-gray-200 text-gray-500 bg-gray-50' },
   'return': { label: 'Возврат (CRM)', color: 'border-red-200 text-red-700 bg-red-50' },
   'chastichnyi-vozvrat': { label: 'Част. возврат', color: 'border-orange-200 text-orange-700 bg-orange-50' },
 };
 
-// Функция для объединения всех слотов маршрута в итоговый (например, "10:00 - 14:00")
 function getRouteTimeRange(orders: any[]) {
   if (!orders || orders.length === 0) return null;
   let min = 24;
@@ -63,18 +62,17 @@ function getRouteTimeRange(orders: any[]) {
   return `(${min}:00 - ${max}:00)`;
 }
 
-// Компонент для вывода кнопок связи
 const ContactBadge = ({ phone, name, isCourier }: { phone: string, name?: string, isCourier?: boolean }) => {
   if (!phone || phone === "—") return null;
   const cleanPhoneForTg = phone.replace(/[^\d+]/g, "");
   const encodedMsg = encodeURIComponent(isCourier ? "Привет! Это менеджер EventWave." : `Здравствуйте${name ? `, ${name}` : ''}! Это доставка EventWave.`);
 
   return (
-    <div className="flex flex-wrap items-center gap-2.5 text-[13px] font-semibold text-[#4a7aff]">
-      <div className="flex items-center gap-1.5">
+    <div className="flex flex-col gap-2 mt-1.5">
+      <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[#4a7aff] flex-wrap">
         {name && <span className="text-[#1a1a18]">👤 {name}</span>}
         {name && <span className="text-[#a8a49c]">·</span>}
-        <a href={`tel:${phone}`} onClick={e => e.stopPropagation()} className="hover:underline">
+        <a href={`tel:${phone}`} onClick={e => e.stopPropagation()} className="hover:underline flex items-center gap-1">
           📞 {phone}
         </a>
       </div>
@@ -86,7 +84,7 @@ const ContactBadge = ({ phone, name, isCourier }: { phone: string, name?: string
             rel="noopener noreferrer"
             onClick={e => e.stopPropagation()}
             title="Написать в Telegram"
-            className="flex items-center justify-center bg-[#2AABEE] w-7 h-7 rounded-full shadow-sm hover:opacity-90 transition-opacity"
+            className="flex items-center justify-center bg-[#2AABEE] w-[28px] h-[28px] rounded-full shadow-sm hover:opacity-90 transition-opacity"
           >
             <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z" /></svg>
           </a>
@@ -94,7 +92,7 @@ const ContactBadge = ({ phone, name, isCourier }: { phone: string, name?: string
             href={`sms:${cleanPhoneForTg}?body=${encodedMsg}`}
             title="Отправить SMS"
             onClick={e => e.stopPropagation()}
-            className="flex items-center justify-center bg-[#34C759] w-7 h-7 rounded-full shadow-sm hover:opacity-90 transition-opacity"
+            className="flex items-center justify-center bg-[#34C759] w-[28px] h-[28px] rounded-full shadow-sm hover:opacity-90 transition-opacity"
           >
             <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" /></svg>
           </a>
@@ -103,7 +101,6 @@ const ContactBadge = ({ phone, name, isCourier }: { phone: string, name?: string
     </div>
   );
 };
-
 
 export default function ManagerDashboard() {
   const [activeTab, setActiveTab] = useState<'new' | 'routes' | 'history'>('routes');
@@ -114,7 +111,9 @@ export default function ManagerDashboard() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(false);
   
-  const [selectedRoutes, setSelectedRoutes] = useState<Set<string>>(new Set());
+  // Состояния для аккордеона и чекбоксов
+  const [expandedRoutes, setExpandedRoutes] = useState<Record<string, boolean>>({});
+  const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -149,6 +148,16 @@ export default function ManagerDashboard() {
             return timeA.localeCompare(timeB);
           });
           setRoutes(sortedRoutes);
+          
+          // По умолчанию разворачиваем все маршруты при первой загрузке
+          setExpandedRoutes(prev => {
+            if (Object.keys(prev).length === 0) {
+              const initialExpanded: Record<string, boolean> = {};
+              sortedRoutes.forEach(r => initialExpanded[r.id] = true);
+              return initialExpanded;
+            }
+            return prev;
+          });
         }
       } else if (activeTab === 'history') {
         const res = await fetch('/api/manager/notifications?history=true');
@@ -170,41 +179,47 @@ export default function ManagerDashboard() {
     };
     if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', handleSWMessage);
 
-    const interval = setInterval(() => loadData(false), 300000);
+    const interval = setInterval(() => loadData(false), 15000);
     return () => {
       if ('serviceWorker' in navigator) navigator.serviceWorker.removeEventListener('message', handleSWMessage);
       clearInterval(interval);
     };
   }, [isAuthorized, loadData]);
 
-  const markAsSeen = async (id: string) => {
-    setTasks((prev) => prev.filter((task) => task.id !== id));
-    try {
-      await fetch(`/api/manager/notifications/${id}`, { method: 'PATCH' });
-    } catch (error) { console.error(error); }
-  };
-  
-  const handleLogout = async () => {
-    await performLogout();
+  // --- ЛОГИКА ВЫДЕЛЕНИЯ ---
+  const toggleRouteExpansion = (routeId: string) => {
+    setExpandedRoutes(prev => ({ ...prev, [routeId]: !prev[routeId] }));
   };
 
-  const toggleRouteSelection = (routeId: string) => {
-    setSelectedRoutes(prev => {
+  const toggleOrderSelection = (orderId: string) => {
+    setSelectedOrders(prev => {
       const next = new Set(prev);
-      if (next.has(routeId)) next.delete(routeId);
-      else next.add(routeId);
+      if (next.has(orderId)) next.delete(orderId);
+      else next.add(orderId);
       return next;
     });
   };
-  
+
+  const toggleRouteOrders = (orderIds: string[]) => {
+    setSelectedOrders(prev => {
+      const next = new Set(prev);
+      const allSelected = orderIds.every(id => next.has(id));
+      if (allSelected) {
+        orderIds.forEach(id => next.delete(id));
+      } else {
+        orderIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  };
+
   const handlePrintLabels = async () => {
-    if (selectedRoutes.size === 0) return alert("Выберите хотя бы один маршрут для печати");
-    
+    if (selectedOrders.size === 0) return alert("Выберите хотя бы один заказ для печати");
     try {
       const response = await fetch('/api/manager/routes/print', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ routeIds: Array.from(selectedRoutes) })
+        body: JSON.stringify({ orderIds: Array.from(selectedOrders) })
       });
 
       if (!response.ok) throw new Error("Ошибка при генерации PDF");
@@ -245,6 +260,13 @@ export default function ManagerDashboard() {
     } catch (e) { console.error(e); }
   };
 
+  const markAsSeen = async (id: string) => {
+    setTasks((prev) => prev.filter((task) => task.id !== id));
+    try {
+      await fetch(`/api/manager/notifications/${id}`, { method: 'PATCH' });
+    } catch (error) { console.error(error); }
+  };
+
   if (!isAuthorized) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#f5f4f0]">
@@ -278,7 +300,7 @@ export default function ManagerDashboard() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto p-4 sm:p-6 w-full overflow-hidden">
+      <main className="max-w-[1600px] mx-auto p-4 sm:p-6 w-full overflow-hidden">
         <div className="w-full overflow-x-auto hide-scrollbar mb-6 pb-2">
           <div className="flex bg-[#e8e6df] p-1 rounded-xl w-max shadow-inner gap-1">
             <button onClick={() => setActiveTab('new')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 whitespace-nowrap shrink-0 ${activeTab === 'new' ? 'bg-white shadow-sm text-[#1a1a18]' : 'text-[#8c8880] hover:text-[#1a1a18]'}`}>
@@ -371,6 +393,7 @@ export default function ManagerDashboard() {
                   )}
                 </div>
 
+                {/* БЛОК "ОЖИДАЮТ ЗАГРУЗКИ НА БАЗЕ" */}
                 <div className="pt-6 border-t-2 border-dashed border-[#e8e6df]">
                   <div className="flex items-center gap-3 mb-6">
                     <span className="text-2xl">🚚</span>
@@ -441,132 +464,141 @@ export default function ManagerDashboard() {
                   <h2 className="text-lg font-bold text-[#1a1a18]">Управление маршрутами</h2>
                   <button 
                     onClick={handlePrintLabels}
-                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm ${selectedRoutes.size > 0 ? 'bg-[#1a1a18] text-white hover:bg-gray-800' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm ${selectedOrders.size > 0 ? 'bg-[#1a1a18] text-white hover:bg-gray-800' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
                   >
-                    🖨️ Печать этикеток (120x85)
+                    🖨️ Печать этикеток (75x120) {selectedOrders.size > 0 && `(${selectedOrders.size})`}
                   </button>
                 </div>
 
-                <div className="flex flex-col gap-6 mt-2">
+                <div className="flex flex-col gap-4 mt-2">
                   {routes.map((route) => {
-                    // Подсчет общих слотов по маршруту
+                    const isExpanded = expandedRoutes[route.id];
+                    const routeOrderIds = route.orders?.map((o: any) => o.id) || [];
+                    const isAllSelected = routeOrderIds.length > 0 && routeOrderIds.every((id: string) => selectedOrders.has(id));
                     const routeTimeRange = getRouteTimeRange(route.orders);
                     
                     return (
-                      <div key={route.id} className={`bg-white border-2 rounded-2xl p-5 shadow-sm transition-all ${selectedRoutes.has(route.id) ? 'border-[#1a1a18]' : 'border-[#e8e6df]'}`}>
+                      <div key={route.id} className="bg-white border border-[#e8e6df] rounded-2xl shadow-sm transition-all overflow-hidden">
                         
-                        {/* ШАПКА МАРШРУТА */}
-                        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-5 pb-4 border-b border-[#f0efe9] gap-4">
-                          <div className="flex flex-wrap items-center gap-3">
+                        {/* ШАПКА МАРШРУТА (Аккордеон) */}
+                        <div 
+                          className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 hover:bg-[#fafaf8] cursor-pointer transition-colors gap-4"
+                          onClick={() => toggleRouteExpansion(route.id)}
+                        >
+                          <div className="flex items-center gap-3">
+                            {/* Выделение всего маршрута */}
                             <input 
                               type="checkbox" 
                               className="w-5 h-5 accent-[#1a1a18] rounded cursor-pointer shrink-0"
-                              checked={selectedRoutes.has(route.id)}
-                              onChange={() => toggleRouteSelection(route.id)}
+                              checked={isAllSelected}
+                              onChange={(e) => { e.stopPropagation(); toggleRouteOrders(routeOrderIds); }}
+                              onClick={(e) => e.stopPropagation()}
                             />
                             
-                            <h3 className="font-black text-[17px] text-[#1a1a18] leading-tight flex flex-wrap items-center gap-2">
-                              {route.courier?.firstName || 'Не назначен'} {route.courier?.lastName || ''}
-                              {route.courier?.phone && (
-                                <div className="ml-1 inline-flex">
-                                  <ContactBadge phone={route.courier.phone} isCourier={true} />
-                                </div>
-                              )}
-                            </h3>
-                            
-                            <div className="flex flex-wrap items-center gap-3 ml-2">
-                              {route.plannedDepartureTime && (
-                                <span className="text-[12px] font-black text-rose-700 bg-rose-50 px-2 py-1 rounded uppercase tracking-wider border border-rose-200">
-                                  На базе: {route.plannedDepartureTime}
+                            <div className="flex flex-col gap-1">
+                              <h3 className="font-black text-[16px] text-[#1a1a18] flex items-center gap-2">
+                                <span className="text-[#a8a49c] w-4 text-center">{isExpanded ? '▼' : '▶'}</span>
+                                {route.courier?.firstName || 'Не назначен'} {route.courier?.lastName || ''}
+                                {route.courier?.phone && (
+                                  <a href={`tel:${route.courier.phone}`} onClick={e => e.stopPropagation()} className="text-[#4a7aff] font-medium text-[13px] hover:underline">
+                                    📞 {route.courier.phone}
+                                  </a>
+                                )}
+                              </h3>
+                              
+                              <div className="flex flex-wrap items-center gap-2 pl-6">
+                                {route.plannedDepartureTime && (
+                                  <span className="text-[11px] font-black text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                                    На базе: {route.plannedDepartureTime}
+                                  </span>
+                                )}
+                                {routeTimeRange && (
+                                  <span className="text-[11px] font-black text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                                    Слоты: {routeTimeRange}
+                                  </span>
+                                )}
+                                <span className="text-[11px] font-bold text-[#6b6860] bg-[#f5f4f0] px-1.5 py-0.5 rounded border border-[#e8e6df]">
+                                  Точек: {route.orders?.length || 0}
                                 </span>
-                              )}
-                              {routeTimeRange && (
-                                <span className="text-[12px] font-black text-blue-700 bg-blue-50 px-2 py-1 rounded uppercase tracking-wider border border-blue-200">
-                                  Слоты: {routeTimeRange}
-                                </span>
-                              )}
-                              <span className="text-xs font-bold text-[#6b6860] bg-[#f5f4f0] px-2 py-1 rounded border border-[#e8e6df]">
-                                Точек: {route.orders?.length || 0}
-                              </span>
+                              </div>
                             </div>
                           </div>
                           
                           <button 
-                            onClick={() => updateRouteToAssembling(route.id)}
-                            className="w-full lg:w-auto bg-[#fff8e6] text-[#b38a00] border border-[#ffe082] px-4 py-2 rounded-lg text-sm font-bold hover:bg-[#fff0c2] transition-colors whitespace-nowrap shadow-sm"
+                            onClick={(e) => { e.stopPropagation(); updateRouteToAssembling(route.id); }}
+                            className="w-full sm:w-auto bg-[#fff8e6] text-[#b38a00] border border-[#ffe082] px-4 py-2 rounded-lg text-[13px] font-bold hover:bg-[#fff0c2] transition-colors shadow-sm ml-auto"
                           >
-                            📦 Отправить на сборку
+                            📦 В сборку
                           </button>
                         </div>
                         
                         {/* КАРТОЧКИ ЗАКАЗОВ В МАРШРУТЕ */}
-                        <div className="flex flex-col gap-4 flex-grow">
-                          {route.orders?.length > 0 ? route.orders.map((order: any, idx: number) => {
-                            const isAssembled = order.crmStatus === 'assembling-complete';
-                            const crmConf = order.crmStatus ? (CRM_STATUSES[order.crmStatus] || { label: order.crmStatus, color: 'border-gray-200 text-gray-500' }) : null;
-                            
-                            return (
-                              <div key={order.id} className="flex gap-4 p-4 bg-[#fafaf8] rounded-xl border border-[#f0efe9]">
-                                <div className="w-8 h-8 rounded-lg bg-[#1a1a18] text-white flex items-center justify-center text-sm font-black shrink-0 mt-0.5">{idx + 1}</div>
+                        {isExpanded && (
+                          <div className="p-4 bg-[#f5f4f0] border-t border-[#e8e6df]">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+                              {route.orders?.length > 0 ? route.orders.map((order: any, idx: number) => {
+                                const isAssembled = order.crmStatus === 'assembling-complete';
+                                const crmConf = order.crmStatus ? (CRM_STATUSES[order.crmStatus] || { label: order.crmStatus, color: 'border-gray-200 text-gray-500 bg-white' }) : null;
+                                const localStatus = LOCAL_STATUSES[order.status] || LOCAL_STATUSES.NEW;
                                 
-                                <div className="flex-grow min-w-0 flex flex-col gap-3">
-                                  
-                                  <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
-                                    <div className="flex flex-col gap-1.5">
-                                      {/* Номер, Слот, CRM Статус */}
-                                      <div className="flex flex-wrap items-center gap-2">
-                                        <span className="font-black text-base text-[#1a1a18]">Заказ #{order.number || order.id.slice(-4)}</span>
-                                        <span className="text-xs font-bold text-[#6b6860] bg-white px-2 py-0.5 rounded border border-[#e8e6df] shadow-sm">⏱ {order.slotRaw || '—'}</span>
-                                        {crmConf && <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${crmConf.color}`}>CRM: {crmConf.label}</span>}
-                                      </div>
-                                      
-                                      {/* Адрес с ETA */}
-                                      <div className="text-[14px] font-medium text-[#1a1a18] leading-snug flex items-center flex-wrap gap-2">
-                                        {order.address || 'Адрес не указан'}
-                                        {order.eta && <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 shadow-sm">~ {order.eta}</span>}
-                                      </div>
-                                    </div>
+                                return (
+                                  <div key={order.id} className="flex flex-col bg-white rounded-xl border border-[#e8e6df] shadow-sm p-3 relative hover:border-[#dcd9d1] transition-colors">
                                     
-                                    <button 
-                                      onClick={() => updateOrderToAssembled(order.id)}
-                                      className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors shadow-sm ${isAssembled ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                                    >
-                                      {isAssembled ? '✅ Собран' : 'Сделать Собран'}
-                                    </button>
-                                  </div>
-
-                                  {/* Состав заказа */}
-                                  <div className="text-sm font-medium text-[#4a4740] bg-white p-2.5 rounded-lg border border-[#e8e6df] shadow-sm">
-                                    <span className="font-bold text-[#1a1a18] block mb-1">📦 Состав:</span> 
-                                    {order.composition || order.items || 'Состав не загружен'}
-                                  </div>
-
-                                  {/* Данные получателя и иконки связи */}
-                                  <div className="mt-1">
-                                    <ContactBadge phone={order.clientPhone} name={order.clientName} />
-                                  </div>
-
-                                  {/* Комментарии */}
-                                  {(order.clientComment || order.opComment) && (
-                                    <div className="flex flex-col gap-2 mt-1">
-                                      {order.clientComment && (
-                                        <div className="bg-[#fff1f2] border border-[#ffe4e6] p-2 rounded-lg">
-                                          <p className="text-sm text-[#881337]"><span className="font-bold text-[#be123c] uppercase tracking-wider text-[10px] block mb-0.5">Комментарий клиента</span> {order.clientComment}</p>
-                                        </div>
-                                      )}
-                                      {order.opComment && (
-                                        <div className="bg-[#f0fdf4] border border-[#dcfce7] p-2 rounded-lg">
-                                          <p className="text-sm text-[#14532d]"><span className="font-bold text-[#15803d] uppercase tracking-wider text-[10px] block mb-0.5">Заметка оператора</span> {order.opComment}</p>
-                                        </div>
-                                      )}
+                                    {/* Шапка карточки: Чекбокс, Номер, Слот */}
+                                    <div className="flex justify-between items-start mb-2">
+                                      <div className="flex items-center gap-2">
+                                        <input 
+                                          type="checkbox" 
+                                          className="w-4 h-4 accent-[#1a1a18] rounded cursor-pointer"
+                                          checked={selectedOrders.has(order.id)}
+                                          onChange={() => toggleOrderSelection(order.id)}
+                                        />
+                                        <div className="w-5 h-5 rounded bg-[#1a1a18] text-white flex items-center justify-center text-[10px] font-black">{idx + 1}</div>
+                                        <span className="font-black text-[13px] text-[#1a1a18] truncate max-w-[80px]">
+                                          #{order.number || order.id}
+                                        </span>
+                                      </div>
+                                      <span className="text-[10px] font-bold text-[#6b6860] bg-[#f5f4f0] px-1.5 py-0.5 rounded border border-[#e8e6df]">
+                                        ⏱ {order.slotRaw || '—'}
+                                      </span>
                                     </div>
-                                  )}
-                                  
-                                </div>
-                              </div>
-                            );
-                          }) : <p className="text-sm text-[#a8a49c] font-medium p-2 text-center my-auto">В данном маршруте нет точек</p>}
-                        </div>
+
+                                    {/* Статусы */}
+                                    <div className="flex flex-wrap gap-1 mb-2">
+                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${localStatus.color}`}>{localStatus.label}</span>
+                                      {crmConf && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${crmConf.color}`}>CRM: {crmConf.label}</span>}
+                                    </div>
+
+                                    {/* Адрес с ETA */}
+                                    <div className="text-[12px] font-medium text-[#1a1a18] leading-tight mb-2 min-h-[34px]">
+                                      {order.address || 'Адрес не указан'}
+                                      {order.eta && <span className="inline-block ml-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200">~{order.eta}</span>}
+                                    </div>
+
+                                    {/* Контакты клиента */}
+                                    <ContactBadge phone={order.clientPhone} name={order.clientName} />
+
+                                    {/* Состав заказа */}
+                                    <div className="mt-2 text-[11px] font-medium text-[#4a4740] bg-[#fafaf8] p-1.5 rounded border border-[#e8e6df] line-clamp-2" title={order.composition || order.items}>
+                                      <span className="font-bold text-[#1a1a18]">📦</span> {order.composition || order.items || '—'}
+                                    </div>
+
+                                    {/* Кнопка Собран */}
+                                    <div className="mt-auto pt-3">
+                                      <button 
+                                        onClick={() => updateOrderToAssembled(order.id)}
+                                        className={`w-full py-1.5 rounded-lg text-[12px] font-bold border transition-colors shadow-sm ${isAssembled ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                                      >
+                                        {isAssembled ? '✅ Собран' : 'Собран'}
+                                      </button>
+                                    </div>
+
+                                  </div>
+                                );
+                              }) : <p className="text-sm text-[#a8a49c] font-medium p-2 col-span-full text-center">Нет точек</p>}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
