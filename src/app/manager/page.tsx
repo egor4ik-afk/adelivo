@@ -22,10 +22,10 @@ const badgeConfig: Record<string, { text: string; styles: string; icon: string }
 const LOCAL_STATUSES: Record<string, { label: string, color: string }> = {
   NEW: { label: 'Новый', color: 'bg-gray-100 text-gray-700' },
   ASSIGNED: { label: 'Назначен', color: 'bg-blue-100 text-blue-700' },
-  IN_DELIVERY: { label: 'В пути', color: 'bg-yellow-100 text-yellow-800' },
-  DELIVERED: { label: 'Доставлен', color: 'bg-green-100 text-green-800' },
-  RETURNED: { label: 'Возврат', color: 'bg-red-100 text-red-800' },
-  CANCELLED: { label: 'Отменён', color: 'bg-gray-200 text-gray-500' },
+  IN_DELIVERY: { label: '🚀 В пути', color: 'bg-yellow-100 text-yellow-800' },
+  DELIVERED: { label: '✅ Доставлен', color: 'bg-green-100 text-green-800' },
+  RETURNED: { label: '↩️ Возврат', color: 'bg-red-100 text-red-800' },
+  CANCELLED: { label: '❌ Отменен', color: 'bg-gray-200 text-gray-500' },
 };
 
 const CRM_STATUSES: Record<string, { label: string, color: string }> = {
@@ -39,6 +39,7 @@ const CRM_STATUSES: Record<string, { label: string, color: string }> = {
   'chastichnyi-vozvrat': { label: 'Част. возврат', color: 'border-orange-200 text-orange-700 bg-orange-50' },
 };
 
+// Функция для объединения всех слотов маршрута в итоговый (например, "с 10:00 до 14:00")
 function getRouteTimeRange(orders: any[]) {
   if (!orders || orders.length === 0) return null;
   let min = 24;
@@ -46,10 +47,11 @@ function getRouteTimeRange(orders: any[]) {
   let found = false;
   orders.forEach(o => {
     if (!o.slotRaw) return;
-    const nums = o.slotRaw.match(/\d{1,2}(?=:|-[0-5][0-9]|$|\s|-)/g); 
-    if (nums) {
-      nums.forEach((n: string) => {
-        const num = parseInt(n, 10);
+    // Ищем только часы до двоеточия (например, 10 из 10:00)
+    const matches = o.slotRaw.match(/(\d{1,2})(?=:)/g);
+    if (matches) {
+      matches.forEach((m: string) => {
+        const num = parseInt(m, 10);
         if (num >= 0 && num <= 24) {
           if (num < min) min = num;
           if (num > max) max = num;
@@ -149,7 +151,6 @@ export default function ManagerDashboard() {
           });
           setRoutes(sortedRoutes);
           
-          // По умолчанию разворачиваем все маршруты при первой загрузке
           setExpandedRoutes(prev => {
             if (Object.keys(prev).length === 0) {
               const initialExpanded: Record<string, boolean> = {};
@@ -186,7 +187,6 @@ export default function ManagerDashboard() {
     };
   }, [isAuthorized, loadData]);
 
-  // --- ЛОГИКА ВЫДЕЛЕНИЯ ---
   const toggleRouteExpansion = (routeId: string) => {
     setExpandedRoutes(prev => ({ ...prev, [routeId]: !prev[routeId] }));
   };
@@ -322,17 +322,8 @@ export default function ManagerDashboard() {
             
             {activeTab === 'new' && (
               <div className="flex flex-col gap-8">
-                <div className="flex flex-col gap-3">
-                  {tasksWithRoutes.length > 0 && (
-                    <div className="hidden sm:grid grid-cols-[2fr_1fr_2fr_1fr_auto] gap-4 px-4 py-2 text-xs font-bold text-[#a8a49c] uppercase tracking-wider border-b border-[#e8e6df]">
-                      <div>Курьер</div>
-                      <div>Время на базе</div>
-                      <div>Событие</div>
-                      <div>Кто изменил</div>
-                      <div className="text-right">Увидел</div>
-                    </div>
-                  )}
-
+                 {/* Блок новых уведомлений */}
+                 <div className="flex flex-col gap-3">
                   {tasksWithRoutes.map((item) => (
                     <div key={item.id} className="bg-white border-2 border-transparent hover:border-rose-100 rounded-2xl shadow-sm transition-all group overflow-hidden">
                       <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-[2fr_1fr_2fr_1fr_auto] gap-3 sm:gap-4 items-center">
@@ -476,7 +467,10 @@ export default function ManagerDashboard() {
                     const routeOrderIds = route.orders?.map((o: any) => o.id) || [];
                     const isAllSelected = routeOrderIds.length > 0 && routeOrderIds.every((id: string) => selectedOrders.has(id));
                     const routeTimeRange = getRouteTimeRange(route.orders);
-                    
+                    const courierPhone = route.courier?.phone || "—";
+                    const cleanPhoneForTg = courierPhone !== "—" ? courierPhone.replace(/[^\d+]/g, "") : "";
+                    const encodedMsg = encodeURIComponent("Привет! Это менеджер EventWave.");
+
                     return (
                       <div key={route.id} className="bg-white border border-[#e8e6df] rounded-2xl shadow-sm transition-all overflow-hidden">
                         
@@ -485,26 +479,51 @@ export default function ManagerDashboard() {
                           className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 hover:bg-[#fafaf8] cursor-pointer transition-colors gap-4"
                           onClick={() => toggleRouteExpansion(route.id)}
                         >
-                          <div className="flex items-center gap-3">
-                            {/* Выделение всего маршрута */}
+                          <div className="flex items-start gap-3">
                             <input 
                               type="checkbox" 
-                              className="w-5 h-5 accent-[#1a1a18] rounded cursor-pointer shrink-0"
+                              className="w-5 h-5 accent-[#1a1a18] rounded cursor-pointer shrink-0 mt-1"
                               checked={isAllSelected}
                               onChange={(e) => { e.stopPropagation(); toggleRouteOrders(routeOrderIds); }}
                               onClick={(e) => e.stopPropagation()}
                             />
                             
-                            <div className="flex flex-col gap-1">
+                            <div className="flex flex-col gap-2">
                               <h3 className="font-black text-[16px] text-[#1a1a18] flex items-center gap-2">
                                 <span className="text-[#a8a49c] w-4 text-center">{isExpanded ? '▼' : '▶'}</span>
                                 {route.courier?.firstName || 'Не назначен'} {route.courier?.lastName || ''}
-                                {route.courier?.phone && (
-                                  <a href={`tel:${route.courier.phone}`} onClick={e => e.stopPropagation()} className="text-[#4a7aff] font-medium text-[13px] hover:underline">
-                                    📞 {route.courier.phone}
-                                  </a>
-                                )}
+                                {route.name && <span className="text-[#a8a49c] font-medium text-sm ml-2">Маршрут {route.name || route.id.slice(-5).toUpperCase()}</span>}
                               </h3>
+
+                              {courierPhone !== "—" && (
+                                <div className="flex items-center gap-3 pl-6">
+                                  <a href={`tel:${courierPhone}`} onClick={e => e.stopPropagation()} className="text-[13px] font-semibold text-[#4a7aff] hover:underline">
+                                    📞 {courierPhone}
+                                  </a>
+                                  {cleanPhoneForTg && (
+                                    <div className="flex items-center gap-2">
+                                      <a
+                                        href={`https://t.me/${cleanPhoneForTg}?text=${encodedMsg}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={e => e.stopPropagation()}
+                                        title="Написать в Telegram"
+                                        className="flex items-center justify-center bg-[#2AABEE] w-7 h-7 rounded-full shadow-sm hover:opacity-90 transition-opacity"
+                                      >
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z" /></svg>
+                                      </a>
+                                      <a
+                                        href={`sms:${cleanPhoneForTg}?body=${encodedMsg}`}
+                                        title="Отправить SMS"
+                                        onClick={e => e.stopPropagation()}
+                                        className="flex items-center justify-center bg-[#34C759] w-7 h-7 rounded-full shadow-sm hover:opacity-90 transition-opacity"
+                                      >
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" /></svg>
+                                      </a>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                               
                               <div className="flex flex-wrap items-center gap-2 pl-6">
                                 {route.plannedDepartureTime && (
@@ -541,6 +560,11 @@ export default function ManagerDashboard() {
                                 const crmConf = order.crmStatus ? (CRM_STATUSES[order.crmStatus] || { label: order.crmStatus, color: 'border-gray-200 text-gray-500 bg-white' }) : null;
                                 const localStatus = LOCAL_STATUSES[order.status] || LOCAL_STATUSES.NEW;
                                 
+                                const oName = order.name || order.clientName;
+                                const oPhone = order.phone || order.clientPhone || "—";
+                                const oCleanPhone = oPhone !== "—" ? oPhone.replace(/[^\d+]/g, "") : "";
+                                const oEncodedMsg = encodeURIComponent(`Здравствуйте${oName ? `, ${oName}` : ''}! Это доставка EventWave.`);
+
                                 return (
                                   <div key={order.id} className="flex flex-col bg-white rounded-xl border border-[#e8e6df] shadow-sm p-3 relative hover:border-[#dcd9d1] transition-colors">
                                     
@@ -554,8 +578,8 @@ export default function ManagerDashboard() {
                                           onChange={() => toggleOrderSelection(order.id)}
                                         />
                                         <div className="w-5 h-5 rounded bg-[#1a1a18] text-white flex items-center justify-center text-[10px] font-black">{idx + 1}</div>
-                                        <span className="font-black text-[13px] text-[#1a1a18] truncate max-w-[80px]">
-                                          #{order.number || order.id}
+                                        <span className="font-black text-[13px] text-[#1a1a18] truncate max-w-[80px]" title={order.number || order.id}>
+                                          #{order.number || order.id.slice(-6)}
                                         </span>
                                       </div>
                                       <span className="text-[10px] font-bold text-[#6b6860] bg-[#f5f4f0] px-1.5 py-0.5 rounded border border-[#e8e6df]">
@@ -570,16 +594,72 @@ export default function ManagerDashboard() {
                                     </div>
 
                                     {/* Адрес с ETA */}
-                                    <div className="text-[12px] font-medium text-[#1a1a18] leading-tight mb-2 min-h-[34px]">
+                                    <div className="text-[13px] font-medium text-[#1a1a18] leading-tight mb-3">
                                       {order.address || 'Адрес не указан'}
-                                      {order.eta && <span className="inline-block ml-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200">~{order.eta}</span>}
+                                      {order.eta && <span className="inline-block ml-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">~{order.eta}</span>}
                                     </div>
 
-                                    {/* Контакты клиента */}
-                                    <ContactBadge phone={order.clientPhone} name={order.clientName} />
+                                    {/* Контакты клиента (Код 1-в-1 как просил) */}
+                                    {(oName || oPhone !== "—") && (
+                                      <div style={{ fontSize: 13, fontWeight: 600, color: "#4a7aff", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 2, marginBottom: 10 }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                          {oName && <span>👤 {oName}</span>}
+                                          {oName && oPhone !== "—" && <span style={{ color: "#a8a49c" }}>·</span>}
+                                          {oPhone !== "—" && (
+                                            <a href={`tel:${oPhone}`} onClick={e => e.stopPropagation()} style={{ color: "#4a7aff", textDecoration: "none" }}>
+                                              📞 {oPhone}
+                                            </a>
+                                          )}
+                                        </div>
+
+                                        {oCleanPhone && (
+                                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                            <a
+                                              href={`https://t.me/${oCleanPhone}?text=${oEncodedMsg}`}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              onClick={e => e.stopPropagation()}
+                                              title="Написать в Telegram"
+                                              style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#2AABEE", width: 26, height: 26, borderRadius: "50%", textDecoration: "none", boxShadow: "0 2px 4px rgba(42, 171, 238, 0.3)" }}
+                                            >
+                                              <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff">
+                                                <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z" />
+                                              </svg>
+                                            </a>
+
+                                            <a
+                                              href={`sms:${oCleanPhone}?body=${oEncodedMsg}`}
+                                              title="Отправить SMS"
+                                              onClick={e => e.stopPropagation()}
+                                              style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#34C759", width: 26, height: 26, borderRadius: "50%", textDecoration: "none", boxShadow: "0 2px 4px rgba(52, 199, 89, 0.3)" }}
+                                            >
+                                              <svg viewBox="0 0 24 24" width="14" height="14" fill="#ffffff">
+                                                <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" />
+                                              </svg>
+                                            </a>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {/* Комментарии */}
+                                    {(order.clientComment || order.opComment) && (
+                                      <div className="flex flex-col gap-1.5 mb-2">
+                                        {order.clientComment && (
+                                          <div className="bg-[#fff1f2] border border-[#ffe4e6] p-1.5 rounded">
+                                            <p className="text-[11px] text-[#881337]"><span className="font-bold text-[#be123c] uppercase tracking-wider text-[9px] block mb-0.5">Коммент клиента</span> {order.clientComment}</p>
+                                          </div>
+                                        )}
+                                        {order.opComment && (
+                                          <div className="bg-[#f0fdf4] border border-[#dcfce7] p-1.5 rounded">
+                                            <p className="text-[11px] text-[#14532d]"><span className="font-bold text-[#15803d] uppercase tracking-wider text-[9px] block mb-0.5">Оператор</span> {order.opComment}</p>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
 
                                     {/* Состав заказа */}
-                                    <div className="mt-2 text-[11px] font-medium text-[#4a4740] bg-[#fafaf8] p-1.5 rounded border border-[#e8e6df] line-clamp-2" title={order.composition || order.items}>
+                                    <div className="text-[11px] font-medium text-[#4a4740] bg-[#fafaf8] p-1.5 rounded border border-[#e8e6df]" title={order.composition || order.items}>
                                       <span className="font-bold text-[#1a1a18]">📦</span> {order.composition || order.items || '—'}
                                     </div>
 
