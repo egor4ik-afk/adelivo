@@ -1,3 +1,4 @@
+// next.config.ts
 import type { NextConfig } from "next";
 // @ts-ignore
 import withPWAInit from "next-pwa";
@@ -5,9 +6,8 @@ import withPWAInit from "next-pwa";
 const withPWA = withPWAInit({
   dest: "public",
   disable: process.env.NODE_ENV === "development",
-  workboxOptions: {
-    importScripts: ["/push-sw.js"], // 🔥 Вот эта строчка объединит PWA и Пуши
-  },
+  // 🔥 Вот исправление: выносим importScripts в корень объекта
+  importScripts: ["/push-sw.js"], 
   runtimeCaching: [
     {
       urlPattern: /^https?.*/,
