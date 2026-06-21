@@ -6,7 +6,7 @@ import { getSession } from "@/lib/auth";
 import { updateCrmOrder, updateCrmOrderDeliveryPrice } from "@/lib/crm";
 import { OrderStatus } from "@prisma/client";
 import { applyUniversalEtaShift } from "@/lib/eta";
-import { notify } from "@/lib/notifications"; 
+import { notify, createManagerPlaque } from "@/lib/notifications"; 
 
 const STORE_COORDS = "55.749511,37.596205";
 
@@ -234,6 +234,26 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         previousStatus: changes.statusChanged ? order.status : undefined,
         changes,
       }).catch(console.error);
+    }
+
+    // 🔥 ДОБАВЛЯЕМ СЮДА: Создание плашки в Табло при изменении комментария
+    if (changes.opCommentChanged && updatedOrder.courierId) {
+      const courierDb = await prisma.courier.findUnique({ where: { id: updatedOrder.courierId } });
+      const session = await getSession(req as any);
+      const authorName = session?.firstName 
+        ? `${session.firstName} ${session.lastName || ''}`.trim() 
+        : "Оператор";
+
+      if (courierDb) {
+        createManagerPlaque({
+          courierId: courierDb.id, // ID курьера, к которому относится заказ
+          firstName: courierDb.firstName || '',
+          lastName: courierDb.lastName || '',
+          baseTime: updatedOrder.opComment || "—", // Передаем текст комментария вместо времени
+          changeType: 'OP_COMMENT_ADDED',
+          authorName: authorName
+        }).catch(console.error);
+      }
     }
 
     const statusChanged = body.status !== undefined && order.status !== body.status;
