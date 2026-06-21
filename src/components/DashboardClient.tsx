@@ -2075,29 +2075,31 @@ export function DashboardClient({ user }: { user: User }) {
                 dateFormat="dd.MM.yyyy"
                 customInput={<CustomDateInput />}
 
-                // 🔥 ДОБАВЛЕНО: Удобный выбор месяца и года сверху
+                // Удобный выбор месяца и года сверху
                 showMonthDropdown
                 showYearDropdown
-                dropdownMode="select" // На мобилках вызовет удобный нативный селект (барабан)
+                dropdownMode="select"
 
-                // Настройки отображения дропдауна
+                // Настройки отображения
                 withPortal={false}
                 portalId="dashboard-datepicker-portal"
                 popperPlacement="bottom-start"
                 popperClassName="relative z-[99999]"
+
+                // 🔥 ПРАВИЛЬНЫЙ ФИКС TYPESCRIPT
                 popperModifiers={[
                   {
                     name: "offset",
                     options: {
-                      offset: [0, 8], // Смещение вниз, чтобы календарь не прилипал к кнопке
+                      offset: [0, 8],
                     },
-                  },
+                  } as any, // Успокаиваем TypeScript
                   {
                     name: "preventOverflow",
                     options: {
-                      boundary: "viewport", // Не дает календарю уезжать за края экрана
+                      boundary: "viewport",
                     },
-                  },
+                  } as any, // Успокаиваем TypeScript
                 ]}
               />
             </div>
