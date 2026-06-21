@@ -1,32 +1,39 @@
 // src/lib/logout.ts
 
 export async function performLogout() {
-    try {
-      // 1. Отписываем устройство от пушей перед выходом
-      if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-        const reg = await navigator.serviceWorker.ready;
-        const sub = await reg.pushManager.getSubscription();
-        
-        if (sub) {
-          // Удаляем токен из базы
-          await fetch('/api/push/subscribe', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ endpoint: sub.endpoint }),
-          }).catch(() => {}); // игнорируем ошибку сети
+  // 1. Запускаем отписку от пушей в фоне (не блокируем выполнение функции через await)
+  if (typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window) {
+    // Оборачиваем в анонимную функцию, чтобы не ждать завершения
+    (async () => {
+      try {
+        // getRegistration() не зависает навечно, в отличие от .ready
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg && reg.pushManager) {
+          const sub = await reg.pushManager.getSubscription();
           
-          // Удаляем подписку в браузере
-          await sub.unsubscribe();
+          if (sub) {
+            await fetch('/api/push/subscribe', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ endpoint: sub.endpoint }),
+            }).catch(() => {}); // Игнорируем ошибки сети
+            
+            await sub.unsubscribe();
+          }
         }
+      } catch (err) {
+        console.warn('[Logout] Не удалось отписаться от пушей:', err);
       }
-  
-      // 2. Делаем обычный логаут
-      await fetch('/api/auth/logout', { method: 'POST' });
-      
-      // 3. Перенаправляем на страницу входа
-      window.location.replace('/login');
-    } catch (err) {
-      console.error('Ошибка при выходе', err);
-      window.location.replace('/login');
-    }
+    })();
   }
+
+  // 2. Гарантированно выполняем сам логаут
+  try {
+    await fetch('/api/auth/logout', { method: 'POST' });
+  } catch (err) {
+    console.error('Ошибка сервера при выходе', err);
+  } finally {
+    // 3. В любом случае перекидываем пользователя на страницу входа
+    window.location.replace('/login');
+  }
+}
