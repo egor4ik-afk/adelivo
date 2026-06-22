@@ -8,7 +8,7 @@ import { ProfilePanel } from '@/components/ProfilePanel';
 type ChangeType = 'TIME_CHANGED' | 'ORDERS_CHANGED' | 'ROUTE_REASSIGNED' | 'COURIER_CHANGED' | 'OP_COMMENT_ADDED' | string;
 
 interface Notification {
-  id: string; firstName: string; lastName: string;
+  id: string; courierId?: string; courierName: string; // 🔥 Обновили поля
   newValue: string; oldValue?: string | null; authorName?: string | null;
   changeType: ChangeType; isSeen: boolean; createdAt: string;
 }
@@ -366,7 +366,8 @@ export default function ManagerDashboard() {
   }
 
   const tasksWithRoutes = tasks.map(task => {
-    const matchedRoute = routes.find(r => r.courier?.firstName === task.firstName && r.courier?.lastName === task.lastName);
+    // 🔥 Теперь ищем маршрут надежно по ID курьера
+    const matchedRoute = routes.find(r => String(r.courier?.id) === String(task.courierId));
     return { ...task, routeData: matchedRoute };
   }).sort((a, b) => a.newValue.localeCompare(b.newValue));
 
@@ -416,7 +417,7 @@ export default function ManagerDashboard() {
                   {tasksWithRoutes.map((item) => (
                     <div key={item.id} className="bg-white border-2 border-transparent hover:border-rose-100 rounded-2xl shadow-sm transition-all group overflow-hidden">
                       <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-[2fr_1fr_2fr_1fr_auto] gap-3 sm:gap-4 items-center">
-                        <div className="font-extrabold text-[#1a1a18] text-base">{item.firstName} {item.lastName}</div>
+                        <div className="font-extrabold text-[#1a1a18] text-base">{item.courierName}</div>
                         <div className="flex items-center gap-2 text-base font-black">
                           <div className="flex flex-col mt-2.5 p-2.5 bg-[#fafaf8] border border-[#e8e6df] rounded-lg text-[12px] leading-snug">
                             {item.oldValue && item.oldValue !== item.newValue && item.oldValue !== "Не было" && item.oldValue !== "—" && (
@@ -478,7 +479,7 @@ export default function ManagerDashboard() {
                         <div className="flex justify-between items-start mb-4 border-b border-[#f0efe9] pb-3 gap-2">
                           <div>
                             <h3 className="font-extrabold text-lg text-[#1a1a18] leading-tight flex flex-wrap items-center gap-2">
-                              {route.courier?.firstName || 'Не назначен'} {route.courier?.lastName || ''}
+                              {route.courier?.fullName || 'Не назначен'}
 
                               {/* 🔥 Спокойный и читаемый бейдж времени выезда */}
                               {route.plannedDepartureTime && (
@@ -647,7 +648,7 @@ export default function ManagerDashboard() {
                           <span className="text-[#a8a49c] w-4 text-center text-[10px] shrink-0">{isExpanded ? '▼' : '▶'}</span>
 
                           <span className="font-black text-[14px] text-[#1a1a18] whitespace-nowrap">
-                            {route.courier?.firstName || 'Не назначен'} {route.courier?.lastName || ''}
+                            {route.courier?.fullName || 'Не назначен'}
                           </span>
 
                           {courierPhone !== "—" && (
@@ -939,7 +940,7 @@ export default function ManagerDashboard() {
                       </div>
                       <div className="w-px h-8 bg-[#e8e6df]"></div>
                       <div>
-                        <p className="text-[15px] font-bold text-[#1a1a18]">{task.firstName} {task.lastName}</p>
+                        <p className="text-[15px] font-bold text-[#1a1a18]">{task.courierName}</p>
                         {task.authorName && <p className="text-[10px] font-bold text-[#a8a49c] uppercase tracking-wider mt-0.5">Изменил: {task.authorName}</p>}
                       </div>
                     </div>
