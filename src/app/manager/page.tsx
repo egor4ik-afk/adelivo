@@ -141,7 +141,7 @@ export default function ManagerDashboard() {
   const loadData = useCallback(async (showLoadingState = true) => {
     if (showLoadingState) setLoading(true);
     try {
-      if (activeTab === 'new' || activeTab === 'routes') {
+      if (activeTab === 'new' || activeTab === 'routes' || activeTab === 'history') {
         const [notifRes, routesRes] = await Promise.all([
           fetch('/api/manager/notifications'),
           fetch('/api/manager/routes')
@@ -182,7 +182,8 @@ export default function ManagerDashboard() {
             return prev;
           });
         }
-      } else if (activeTab === 'history') {
+      } 
+      if (activeTab === 'history') {
         const res = await fetch('/api/manager/notifications?history=true');
         const data = await res.json();
         if (Array.isArray(data)) setHistory(data);
@@ -417,7 +418,14 @@ export default function ManagerDashboard() {
                   {tasksWithRoutes.map((item) => (
                     <div key={item.id} className="bg-white border-2 border-transparent hover:border-rose-100 rounded-2xl shadow-sm transition-all group overflow-hidden">
                       <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-[2fr_1fr_2fr_1fr_auto] gap-3 sm:gap-4 items-center">
-                        <div className="font-extrabold text-[#1a1a18] text-base">{item.courierName}</div>
+                        <div>
+                          <div className="font-extrabold text-[#1a1a18] text-base">{item.courierName}</div>
+                          {item.routeData?.name && (
+                            <div className="text-[10px] font-bold text-[#a8a49c] uppercase tracking-wider mt-0.5">
+                              Маршрут {item.routeData.name}
+                            </div>
+                          )}
+                        </div>
                         <div className="flex items-center gap-2 text-base font-black">
                           <div className="flex flex-col mt-2.5 p-2.5 bg-[#fafaf8] border border-[#e8e6df] rounded-lg text-[12px] leading-snug">
                             {item.oldValue && item.oldValue !== item.newValue && item.oldValue !== "Не было" && item.oldValue !== "—" && (
@@ -940,7 +948,15 @@ export default function ManagerDashboard() {
                       </div>
                       <div className="w-px h-8 bg-[#e8e6df]"></div>
                       <div>
-                        <p className="text-[15px] font-bold text-[#1a1a18]">{task.courierName}</p>
+                        <div>
+                          <p className="text-[15px] font-bold text-[#1a1a18]">{task.courierName}</p>
+                          {/* Пытаемся найти маршрут курьера среди активных */}
+                          {routes.find(r => String(r.courier?.id) === String(task.courierId))?.name && (
+                            <p className="text-[10px] font-bold text-[#a8a49c] uppercase tracking-wider mt-0.5">
+                              Маршрут {routes.find(r => String(r.courier?.id) === String(task.courierId))?.name}
+                            </p>
+                          )}
+                        </div>
                         {task.authorName && <p className="text-[10px] font-bold text-[#a8a49c] uppercase tracking-wider mt-0.5">Изменил: {task.authorName}</p>}
                       </div>
                     </div>
