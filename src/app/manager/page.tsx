@@ -421,8 +421,8 @@ export default function ManagerDashboard() {
                         <div>
                           <div className="font-extrabold text-[#1a1a18] text-base">{item.courierName}</div>
                           {item.routeData?.name && (
-                            <div className="text-[10px] font-bold text-[#a8a49c] uppercase tracking-wider mt-0.5">
-                              Маршрут {item.routeData.name}
+                            <div className="text-[11px] font-medium text-[#a8a49c] mt-0.5">
+                              маршрут {item.routeData.name}
                             </div>
                           )}
                         </div>
@@ -952,8 +952,8 @@ export default function ManagerDashboard() {
                           <p className="text-[15px] font-bold text-[#1a1a18]">{task.courierName}</p>
                           {/* Пытаемся найти маршрут курьера среди активных */}
                           {routes.find(r => String(r.courier?.id) === String(task.courierId))?.name && (
-                            <p className="text-[10px] font-bold text-[#a8a49c] uppercase tracking-wider mt-0.5">
-                              Маршрут {routes.find(r => String(r.courier?.id) === String(task.courierId))?.name}
+                            <p className="text-[11px] font-medium text-[#a8a49c] mt-0.5">
+                              маршрут {routes.find(r => String(r.courier?.id) === String(task.courierId))?.name}
                             </p>
                           )}
                         </div>
