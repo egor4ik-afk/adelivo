@@ -180,7 +180,7 @@ async function sendIndividualPushes(event: NotificationEvent) {
             OP_COMMENT_ADDED: "💬 Комментарий оператора",
           };
           title = pushTitles[event.notification.changeType] || "🔔 Изменение на базе";
-          bodyTexts.push(`Курьер: ${event.notification.firstName} ${event.notification.lastName}`);
+          bodyTexts.push(`Курьер: ${event.notification.courierName}`);
           
           // 🔥 Выводим универсальные значения
           if (event.notification.oldValue) {
@@ -229,8 +229,12 @@ async function sendIndividualPushes(event: NotificationEvent) {
           bodyTexts.push(`Коммент: ${event.order.comment.trim()}`);
         }
         if (user.notifyOpComment && event.changes.opCommentChanged && event.order.opComment?.trim()) {
-          shouldSend = true;
-          bodyTexts.push(`Коммент оператора: ${event.order.opComment.trim()}`);
+          // 🔥 ИСКЛЮЧАЕМ ДУБЛЬ: Если у менеджера включено Табло, стандартный пуш не шлем
+          const isManagerWithPlaque = user.role === "OPERATOR" && (user as any).notifyLogistChanges;
+          if (!isManagerWithPlaque) {
+            shouldSend = true;
+            bodyTexts.push(`Коммент оператора: ${event.order.opComment.trim()}`);
+          }
         }
         if (user.notifyItems && event.changes.itemsChanged) {
           shouldSend = true;
@@ -247,10 +251,13 @@ async function sendIndividualPushes(event: NotificationEvent) {
           targetUrl = user.role === "OPERATOR" ? "/manager" : `/dashboard?orderId=${event.order.id}`;
         }
       } else if (event.type === "address.invalid") {
-        shouldSend = true;
-        title = `⚠️ Ошибка геокодинга`;
-        bodyTexts.push(`Адресов не найдено: ${event.orders.length}`);
-        targetUrl = user.role === "OPERATOR" ? "/manager" : "/dashboard";
+        // 🔥 Менеджерам ошибки геокодинга не нужны, отправляем только Админам
+        if (user.role === "ADMIN") { 
+          shouldSend = true;
+          title = `⚠️ Ошибка геокодинга`;
+          bodyTexts.push(`Адресов не найдено: ${event.orders.length}`);
+          targetUrl = "/dashboard";
+        }
       }
     }
 
@@ -412,22 +419,15 @@ export async function notify(event: NotificationEvent) {
 
 export async function createManagerPlaque(data: {
   courierId: string | number;
-  firstName?: string | null;
-  lastName?: string | null;
+  courierName?: string | null;
   newValue?: string | null;
   oldValue?: string | null;
   authorName?: string | null;
   changeType: string; 
 }) {
   try {
-    // 1. ЛОГИРУЕМ СТАРТ
-    await prisma.notificationLog.create({
-      data: { type: "debug.plaque.start", channel: "system", payload: JSON.stringify(data), success: true }
-    });
-
     const safeCourierId = data.courierId ? String(data.courierId) : "UNASSIGNED";
-    const safeFirstName = data.firstName || "Без";
-    const safeLastName = data.lastName || "курьера";
+    const safeCourierName = data.courierName || "Без курьера";
     const safeNewValue = data.newValue || "—";
     const safeOldValue = data.oldValue || null;
     const safeChangeType = data.changeType || "DEFAULT";
@@ -452,8 +452,7 @@ export async function createManagerPlaque(data: {
       record = await prisma.managerNotification.create({
         data: {
           courierId: safeCourierId,
-          firstName: safeFirstName,
-          lastName: safeLastName,
+          courierName: safeCourierName,
           newValue: safeNewValue,
           oldValue: safeOldValue,
           authorName: data.authorName || null,

@@ -576,7 +576,7 @@ export async function upsertOrder(crmOrder: CrmOrder) {
       commentChanged:        (existing.comment         ?? "") !== (order.comment         ?? ""),
       opCommentChanged:      (existing.opComment       ?? "") !== (order.opComment       ?? ""),
       itemsChanged:          (existing.items           ?? "") !== (order.items           ?? ""),
-      recipientPhoneChanged: (existing.recipientPhone  ?? "") !== (order.recipientPhone  ?? ""),
+      recipientPhoneChanged: !!existing.recipientPhone && existing.recipientPhone.trim() !== "" && existing.recipientPhone !== order.recipientPhone,
       customerPhoneChanged:  (existing.customerPhone   ?? "") !== (order.customerPhone   ?? ""),
     };
 

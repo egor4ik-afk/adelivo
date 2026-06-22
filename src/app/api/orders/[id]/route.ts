@@ -224,7 +224,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       commentChanged:        (order.comment    ?? "") !== (updatedOrder.comment    ?? ""),
       opCommentChanged:      (order.opComment  ?? "") !== (updatedOrder.opComment  ?? ""),
       itemsChanged:          (order.items      ?? "") !== (updatedOrder.items      ?? ""),
-      recipientPhoneChanged: (order.recipientPhone ?? "") !== (updatedOrder.recipientPhone ?? ""),
+      recipientPhoneChanged: !!order.recipientPhone && order.recipientPhone.trim() !== "" && order.recipientPhone !== updatedOrder.recipientPhone,
 
       // 🔥 ЯВНЫЕ ПОЛЯ ДЛЯ ИСТОРИИ ЛОГОВ (Теперь в БД будет видно Было/Стало)
       oldOpComment: order.opComment || "Не было",
@@ -247,7 +247,6 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     // 🔥 ДОБАВЛЕНО: Создаем плашку в Табло при изменении комментария
     if (changes.opCommentChanged) {
       try {
-        // Ищем курьера, только если заказ кому-то назначен
         const courierDb = updatedOrder.courierId 
           ? await prisma.courier.findUnique({ where: { id: updatedOrder.courierId } }) 
           : null;
@@ -256,11 +255,9 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
           ? `${user.firstName} ${user.lastName || ''}`.trim() 
           : "Оператор";
 
-        // 🔥 ВАЖНО: Добавлен await. Без него Next.js "убивает" запрос до записи в БД!
         await createManagerPlaque({
           courierId: courierDb?.id || 'UNASSIGNED',
-          firstName: courierDb?.firstName || 'Без',
-          lastName: courierDb?.lastName || 'курьера',
+          courierName: courierDb?.fullName || 'No name', // 🔥 Чисто и логично
           newValue: updatedOrder.opComment || "Удалён",
           oldValue: order.opComment || "Не было",
           changeType: 'OP_COMMENT_ADDED',

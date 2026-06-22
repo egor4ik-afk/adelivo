@@ -322,10 +322,9 @@ model KonsolTask {
 model ManagerNotification {
   id          String   @id @default(cuid())
   courierId   String?
-  firstName   String   
-  lastName    String   
-  newValue    String   // 🔥 Заменили baseTime (Новое значение / Текст)
-  oldValue    String?  // 🔥 Заменили oldTime (Старое значение)
+  courierName String   // 🔥 Одно чистое поле вместо firstName и lastName
+  newValue    String   
+  oldValue    String?  
   authorName  String?
   changeType  String   
   isSeen      Boolean  @default(false)

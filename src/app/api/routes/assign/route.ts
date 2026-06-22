@@ -53,7 +53,8 @@ export async function POST(req: Request) {
       }
       
       oldOrders = await prisma.order.findMany({
-        where: { routeId: oldRouteId }
+        where: { routeId: oldRouteId },
+        select: { id: true, externalId: true, crmId: true }
       });
       
       const oldOrderIdsStr = oldOrders.map(o => o.id).sort().join(',');
@@ -95,7 +96,7 @@ export async function POST(req: Request) {
 
     const orders = await prisma.order.findMany({
       where: { id: { in: orderIds } },
-      select: { id: true, lat: true, lng: true, crmId: true, deliveryDate: true, crmCreatedAt: true, status: true, opComment: true, price: true, courierId: true }
+      select: { id: true, externalId: true, lat: true, lng: true, crmId: true, deliveryDate: true, crmCreatedAt: true, status: true, opComment: true, price: true, courierId: true }
     });
 
     const sortedOrders = orderIds.map((id: string) => orders.find((o) => o.id === id)).filter(Boolean);
@@ -261,10 +262,8 @@ export async function POST(req: Request) {
 
         // 🔥 УМНАЯ ЛОГИКА ДЛЯ old/new ЗНАЧЕНИЙ
         if (changeType === 'ORDERS_CHANGED') {
-          // Собираем красивые списки заказов (например: "1001, 1002, 1005")
-          // oldOrders и sortedOrders у тебя уже определены выше по коду!
-          finalOldValue = oldOrders.map(o => o.crmId || o.id).join(', ');
-          finalNewValue = sortedOrders.map((o: any) => o.crmId || o.id).join(', ');
+          finalOldValue = oldOrders.map(o => o.externalId || o.crmId || o.id).join(', ');
+          finalNewValue = sortedOrders.map((o: any) => o.externalId || o.crmId || o.id).join(', ');
         } else if (changeType === 'COURIER_CHANGED') {
           // При смене курьера можно выводить ID старого и нового (или их имена, если подтянешь из БД)
           finalOldValue = `Курьер ID: ${oldCourierId}`;
@@ -272,10 +271,9 @@ export async function POST(req: Request) {
         }
 
         // Вызываем функцию асинхронно
-        createManagerPlaque({
+        await createManagerPlaque({
           courierId: courierDb.id,
-          firstName: courierDb.firstName || '',
-          lastName: courierDb.lastName || '',
+          courierName: courierDb.fullName, // 🔥 Чисто и логично
           newValue: finalNewValue, 
           oldValue: finalOldValue, 
           changeType: changeType,
