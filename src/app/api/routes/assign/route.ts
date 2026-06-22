@@ -243,47 +243,57 @@ export async function POST(req: Request) {
 
     // 🔥 2. ГЕНЕРАЦИЯ ПЛАШКИ И ПУША ДЛЯ МЕНЕДЖЕРА
     try {
-      let changeType: 'ROUTE_REASSIGNED' | 'COURIER_CHANGED' | 'TIME_CHANGED' | 'ORDERS_CHANGED' | null = null;
-      
-      // Вычисляем, что именно изменилось
-      if (!oldRouteId) {
-        changeType = 'ROUTE_REASSIGNED';
-      } else if (oldCourierId !== Number(courierId)) {
-        changeType = 'COURIER_CHANGED';
-      } else if (plannedDepartureTime !== undefined && plannedDepartureTime !== fallbackPlannedTime) {
-        changeType = 'TIME_CHANGED';
-      } else if (pointsChanged) {
-        changeType = 'ORDERS_CHANGED';
-      }
+      if (courierDb) {
+        let changeTypes: string[] = [];
+        let oldValues: string[] = [];
+        let newValues: string[] = [];
 
-      if (changeType && courierDb) {
-        let finalNewValue = newRoute.plannedDepartureTime || '—';
-        let finalOldValue = fallbackPlannedTime || null;
-
-        // 🔥 УМНАЯ ЛОГИКА ДЛЯ old/new ЗНАЧЕНИЙ
-        if (changeType === 'ORDERS_CHANGED') {
-          finalOldValue = oldOrders.map(o => o.externalId || o.crmId || o.id).join(', ');
-          finalNewValue = sortedOrders.map((o: any) => o.externalId || o.crmId || o.id).join(', ');
-        } else if (changeType === 'COURIER_CHANGED') {
-          // 🔥 Тянем из БД старого курьера, чтобы получить его fullName
-          const oldCourierDb = oldCourierId 
-            ? await prisma.courier.findUnique({ where: { id: oldCourierId } }) 
-            : null;
-
-          // Универсально пишем имена в Было / Стало
-          finalOldValue = oldCourierDb?.fullName || 'Без курьера';
-          finalNewValue = courierDb.fullName || 'Без курьера';
+        // 1. Проверяем, новый ли это маршрут
+        if (!oldRouteId) {
+          changeTypes.push('ROUTE_REASSIGNED');
+          newValues.push(`📦 ${sortedOrders.map((o: any) => o.externalId || o.crmId || o.id).join(', ')}`);
+        } else {
+          // 2. Проверяем КАЖДОЕ изменение независимо (без else!)
+          if (oldCourierId !== Number(courierId)) {
+            changeTypes.push('COURIER_CHANGED');
+            const oldCourierDb = oldCourierId 
+              ? await prisma.courier.findUnique({ where: { id: oldCourierId } }) 
+              : null;
+            oldValues.push(`👤 ${oldCourierDb?.fullName || 'Без курьера'}`);
+            newValues.push(`👤 ${courierDb.fullName || 'Без курьера'}`);
+          }
+          
+          if (pointsChanged) {
+            changeTypes.push('ORDERS_CHANGED');
+            oldValues.push(`📦 ${oldOrders.map(o => o.externalId || o.crmId || o.id).join(', ')}`);
+            newValues.push(`📦 ${sortedOrders.map((o: any) => o.externalId || o.crmId || o.id).join(', ')}`);
+          }
+          
+          if (plannedDepartureTime !== undefined && plannedDepartureTime !== fallbackPlannedTime) {
+            changeTypes.push('TIME_CHANGED');
+            oldValues.push(`⏱ ${fallbackPlannedTime || "—"}`);
+            newValues.push(`⏱ ${plannedDepartureTime || "—"}`);
+          }
         }
 
-        // Вызываем функцию с универсальными полями
-        await createManagerPlaque({
-          courierId: courierDb.id,
-          courierName: courierDb.fullName || 'Без курьера', // 🔥 Текущий владелец плашки
-          newValue: finalNewValue, 
-          oldValue: finalOldValue, 
-          changeType: changeType,
-          authorName: authorName
-        }).catch(console.error);
+        // Если есть хоть какие-то изменения — отправляем плашку
+        if (changeTypes.length > 0) {
+          // Если изменений несколько, даем общий тип MULTIPLE_CHANGES
+          const finalChangeType = changeTypes.length === 1 ? changeTypes[0] : 'MULTIPLE_CHANGES';
+          
+          // Склеиваем массивы через перенос строки (\n)
+          const finalOldValue = oldValues.length > 0 ? oldValues.join('\n') : null;
+          const finalNewValue = newValues.join('\n');
+
+          await createManagerPlaque({
+            courierId: courierDb.id,
+            courierName: courierDb.fullName || 'Без курьера',
+            newValue: finalNewValue, 
+            oldValue: finalOldValue, 
+            changeType: finalChangeType,
+            authorName: authorName
+          }).catch(console.error);
+        }
       }
     } catch (err) {
       console.error("[Manager Plaque Error]:", err);
