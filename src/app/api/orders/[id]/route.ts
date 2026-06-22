@@ -240,11 +240,11 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         type: "order.updated",
         order: updatedOrder as any,
         previousStatus: changes.statusChanged ? order.status : undefined,
-        changes, // В логи теперь улетят подробные old/new значения
+        changes, // Оставляем чистым, без выдуманных полей
       }).catch(console.error);
     }
 
-    // 🔥 ДОБАВЛЕНО: Создаем плашку в Табло при изменении комментария
+    // 🔥 Строго универсальная запись в Табло (только oldValue и newValue)
     if (changes.opCommentChanged) {
       try {
         const courierDb = updatedOrder.courierId 
@@ -257,14 +257,14 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
 
         await createManagerPlaque({
           courierId: courierDb?.id || 'UNASSIGNED',
-          courierName: courierDb?.fullName || 'No name', // 🔥 Чисто и логично
-          newValue: updatedOrder.opComment || "Удалён",
-          oldValue: order.opComment || "Не было",
+          courierName: courierDb?.fullName || 'Без курьера',
+          newValue: updatedOrder.opComment || "Удалён", // Универсально
+          oldValue: order.opComment || "Не было",       // Универсально
           changeType: 'OP_COMMENT_ADDED',
           authorName: authorName
         });
       } catch (e: any) {
-         console.error("Ошибка вызова плашки коммента:", e);
+         console.error("Ошибка вызова плашки комментария:", e);
       }
     }
 

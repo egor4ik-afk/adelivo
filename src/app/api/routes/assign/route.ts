@@ -265,15 +265,20 @@ export async function POST(req: Request) {
           finalOldValue = oldOrders.map(o => o.externalId || o.crmId || o.id).join(', ');
           finalNewValue = sortedOrders.map((o: any) => o.externalId || o.crmId || o.id).join(', ');
         } else if (changeType === 'COURIER_CHANGED') {
-          // При смене курьера можно выводить ID старого и нового (или их имена, если подтянешь из БД)
-          finalOldValue = `Курьер ID: ${oldCourierId}`;
-          finalNewValue = `Курьер ID: ${courierId}`;
+          // 🔥 Тянем из БД старого курьера, чтобы получить его fullName
+          const oldCourierDb = oldCourierId 
+            ? await prisma.courier.findUnique({ where: { id: oldCourierId } }) 
+            : null;
+
+          // Универсально пишем имена в Было / Стало
+          finalOldValue = oldCourierDb?.fullName || 'Без курьера';
+          finalNewValue = courierDb.fullName || 'Без курьера';
         }
 
-        // Вызываем функцию асинхронно
+        // Вызываем функцию с универсальными полями
         await createManagerPlaque({
           courierId: courierDb.id,
-          courierName: courierDb.fullName, // 🔥 Чисто и логично
+          courierName: courierDb.fullName || 'Без курьера', // 🔥 Текущий владелец плашки
           newValue: finalNewValue, 
           oldValue: finalOldValue, 
           changeType: changeType,
