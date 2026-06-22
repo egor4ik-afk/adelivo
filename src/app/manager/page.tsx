@@ -929,47 +929,71 @@ export default function ManagerDashboard() {
             {activeTab === 'history' && (
               <>
                 {history.map((task) => (
-                  <div key={task.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-[#fafaf8] border border-[#e8e6df] rounded-xl opacity-80 gap-3">
-                    <div className="flex items-center gap-4">
-                       <div className="flex flex-col mt-2.5 p-2.5 bg-[#fafaf8] border border-[#e8e6df] rounded-lg text-[12px] leading-snug">
-                        {task.oldValue && task.oldValue !== task.newValue && task.oldValue !== "Не было" && task.oldValue !== "—" && (
-                          <div className="flex items-start gap-2 text-[#a8a49c] mb-1">
-                            <span className="shrink-0 text-[10px] uppercase tracking-wider font-semibold mt-0.5">Было:</span>
-                            <s className="break-words line-clamp-2">{task.oldValue}</s>
-                          </div>
-                        )}
-                        
-                        <div className="flex items-start gap-2 text-[#1a1a18]">
-                          {task.oldValue && task.oldValue !== task.newValue && task.oldValue !== "Не было" && task.oldValue !== "—" && (
-                            <span className="shrink-0 text-[10px] uppercase tracking-wider font-semibold mt-0.5 text-[#a8a49c]">Стало:</span>
-                          )}
-                          <span className="font-bold break-words whitespace-pre-wrap">{task.newValue}</span>
-                        </div>
-                      </div>
-                      <div className="w-px h-8 bg-[#e8e6df]"></div>
-                      <div>
-                        <div>
-                          <p className="text-[15px] font-bold text-[#1a1a18]">{task.courierName}</p>
-                          {/* Пытаемся найти маршрут курьера среди активных */}
-                          {routes.find(r => String(r.courier?.id) === String(task.courierId))?.name && (
-                            <p className="text-[11px] font-medium text-[#a8a49c] mt-0.5">
-                              маршрут {routes.find(r => String(r.courier?.id) === String(task.courierId))?.name}
-                            </p>
-                          )}
-                        </div>
-                        {task.authorName && <p className="text-[10px] font-bold text-[#a8a49c] uppercase tracking-wider mt-0.5">Изменил: {task.authorName}</p>}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 justify-between sm:justify-end">
-                      <span className={`px-3 py-1 text-xs font-bold border rounded-lg ${badgeConfig[task.changeType]?.styles || 'bg-gray-100 text-gray-800'}`}>
-                        {badgeConfig[task.changeType]?.text || 'Изменение'}
+            <div 
+              key={task.id} 
+              className="bg-white border-2 border-[#e8e6df] rounded-2xl p-5 shadow-sm hover:border-[#dcd9d1] transition-colors flex flex-col md:flex-row justify-between items-start gap-6"
+            >
+              {/* 🔥 ЛЕВЫЙ БЛОК: КТО, ГДЕ и КОГДА */}
+              <div className="flex flex-col gap-1 w-full md:w-1/3 shrink-0">
+                <div>
+                  <p className="text-[16px] font-extrabold text-[#1a1a18]">{task.courierName}</p>
+                  {routes.find(r => String(r.courier?.id) === String(task.courierId))?.name && (
+                    <p className="text-[11px] font-medium text-[#a8a49c] mt-0.5">
+                      маршрут {routes.find(r => String(r.courier?.id) === String(task.courierId))?.name}
+                    </p>
+                  )}
+                </div>
+                
+                <div className="mt-3">
+                  <p className="text-[12px] font-medium text-[#878378]">
+                    Изменил: <span className="font-bold text-[#1a1a18]">{task.authorName || 'Система'}</span>
+                  </p>
+                  <p className="text-[12px] font-medium text-[#a8a49c] mt-0.5">
+                    {new Date(task.createdAt).toLocaleString('ru-RU', { 
+                      day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' 
+                    })}
+                  </p>
+                </div>
+              </div>
+
+              {/* 🔥 ПРАВЫЙ БЛОК: ЧТО ИЗМЕНИЛОСЬ (БЫЛО/СТАЛО) */}
+              <div className="flex flex-col gap-2 w-full md:w-2/3 md:items-end">
+                
+                {/* Бэйдж с типом изменения */}
+                <span className="inline-block px-3 py-1 bg-[#f4f3ee] text-[#1a1a18] text-[12px] font-bold rounded-lg whitespace-nowrap">
+                  {task.changeType === 'ROUTE_REASSIGNED' ? '🗺️ Новый маршрут' :
+                   task.changeType === 'COURIER_CHANGED' ? '👤 Смена курьера' :
+                   task.changeType === 'TIME_CHANGED' ? '⏱ Изменилось время' :
+                   task.changeType === 'ORDERS_CHANGED' ? '📦 Изменились заказы' :
+                   task.changeType === 'OP_COMMENT_ADDED' ? '💬 Комментарий оператора' : task.changeType}
+                </span>
+
+                {/* Плашка Было/Стало */}
+                <div className="bg-[#faf9f7] rounded-xl p-3.5 border border-[#e8e6df] w-full text-left mt-1">
+                  {task.oldValue && (
+                    <div className="mb-2.5">
+                      <span className="text-[10px] font-bold text-[#a8a49c] uppercase tracking-widest block mb-1">
+                        Было:
                       </span>
-                      <span className="text-xs text-[#a8a49c] font-medium">
-                        {new Date(task.createdAt).toLocaleDateString("ru-RU", { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      <span className="text-[13px] font-medium text-[#878378] line-through break-words">
+                        {task.oldValue}
                       </span>
                     </div>
+                  )}
+                  
+                  <div>
+                    <span className="text-[10px] font-bold text-[#a8a49c] uppercase tracking-widest block mb-1">
+                      Стало:
+                    </span>
+                    <span className="text-[14px] font-extrabold text-[#1a1a18] break-words">
+                      {task.newValue}
+                    </span>
                   </div>
-                ))}
+                </div>
+
+              </div>
+            </div>
+          ))}
                 {history.length === 0 && <p className="text-[#a8a49c] text-center py-12">История пуста</p>}
               </>
             )}
