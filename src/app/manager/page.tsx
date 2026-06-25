@@ -668,6 +668,11 @@ export default function ManagerDashboard() {
                           <span className="font-black text-[14px] text-[#1a1a18] whitespace-nowrap">
                             {route.courier?.fullName || 'Не назначен'}
                           </span>
+                          
+                          {/* 🔥 НОВЫЙ БЛОК: АККУРАТНЫЙ НОМЕР МАРШРУТА */}
+                          <span className="text-[11px] font-extrabold text-[#6b6860] bg-[#f5f4f0] px-2 py-0.5 rounded-lg border border-[#e8e6df] whitespace-nowrap shadow-sm hidden sm:inline-block">
+                            🗺️ {route.name || `#${route.id.slice(-5).toUpperCase()}`}
+                          </span>
 
                           {courierPhone !== "—" && (
                             <div className="flex items-center gap-1.5 ml-1">
