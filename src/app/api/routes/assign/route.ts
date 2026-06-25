@@ -244,62 +244,69 @@ export async function POST(req: Request) {
     // 🔥 2. ГЕНЕРАЦИЯ ПЛАШКИ И ПУША ДЛЯ МЕНЕДЖЕРА
     try {
       if (courierDb) {
-        let changeTypes: string[] = [];
-        let oldValues: string[] = [];
-        let newValues: string[] = [];
+        let oldLines: string[] = [];
+        let newLines: string[] = [];
+        let finalChangeType = 'MULTIPLE_CHANGES';
 
-        // 1. Проверяем, новый ли это маршрут
+        // 🔥 ЖЕСТКО ФИКСИРУЕМ МАРШРУТ, чтобы фронтенд больше не гадал!
+        const routeHeader = `🗺️ ${newRoute.name}`;
+
         if (!oldRouteId) {
-          changeTypes.push('ROUTE_REASSIGNED');
-          // Для нового маршрута просто пишем всё, что добавили
-          newValues.push(`📦 Добавили: ${sortedOrders.map((o: any) => o.externalId || o.crmId || o.id).join(', ')}`);
+          // НОВЫЙ МАРШРУТ
+          finalChangeType = 'ROUTE_REASSIGNED';
+          newLines.push(routeHeader);
+          if (plannedDepartureTime) newLines.push(`⏱ ${plannedDepartureTime}`);
+          newLines.push(`📦 Добавили: ${sortedOrders.map((o: any) => o.externalId || o.crmId || o.id).join(', ')}`);
         } else {
-          // 2. Проверяем КАЖДОЕ изменение независимо
+          // СУЩЕСТВУЮЩИЙ МАРШРУТ: Собираем только реальные изменения
+          let changesCount = 0;
+
           if (oldCourierId !== Number(courierId)) {
-            changeTypes.push('COURIER_CHANGED');
-            const oldCourierDb = oldCourierId 
-              ? await prisma.courier.findUnique({ where: { id: oldCourierId } }) 
-              : null;
-            oldValues.push(`👤 ${oldCourierDb?.fullName || 'Без курьера'}`);
-            newValues.push(`👤 ${courierDb.fullName || 'Без курьера'}`);
-          }
-          
-          if (pointsChanged) {
-            changeTypes.push('ORDERS_CHANGED');
-            
-            // 🔥 ВЫЧИСЛЯЕМ РАЗНИЦУ В ЗАКАЗАХ (Что убрали, а что добавили)
-            const oldIds = oldOrders.map(o => String(o.externalId || o.crmId || o.id));
-            const newIds = sortedOrders.map((o: any) => String(o.externalId || o.crmId || o.id));
-
-            const added = newIds.filter((id: string) => !oldIds.includes(id));
-            const removed = oldIds.filter((id: string) => !newIds.includes(id));
-
-            let diffs = [];
-            if (added.length > 0) diffs.push(`➕ Добавили: ${added.join(', ')}`);
-            if (removed.length > 0) diffs.push(`➖ Убрали: ${removed.join(', ')}`);
-
-            // Записываем красивые строки
-            oldValues.push(`📦 Изменение состава`);
-            newValues.push(diffs.join('\n'));
+            changesCount++;
+            finalChangeType = 'COURIER_CHANGED';
+            const oldCourierDb = oldCourierId ? await prisma.courier.findUnique({ where: { id: oldCourierId } }) : null;
+            oldLines.push(`👤 ${oldCourierDb?.fullName || 'Без курьера'}`);
+            newLines.push(`👤 ${courierDb.fullName || 'Без курьера'}`);
           }
           
           if (plannedDepartureTime !== undefined && plannedDepartureTime !== fallbackPlannedTime) {
-            changeTypes.push('TIME_CHANGED');
-            oldValues.push(`⏱ ${fallbackPlannedTime || "—"}`);
-            newValues.push(`⏱ ${plannedDepartureTime || "—"}`);
+            changesCount++;
+            finalChangeType = 'TIME_CHANGED';
+            oldLines.push(`⏱ ${fallbackPlannedTime || "—"}`);
+            newLines.push(`⏱ ${plannedDepartureTime || "—"}`);
+          }
+
+          if (pointsChanged) {
+            changesCount++;
+            finalChangeType = 'ORDERS_CHANGED';
+            const oldIds = oldOrders.map(o => String(o.externalId || o.crmId || o.id));
+            const newIds = sortedOrders.map((o: any) => String(o.externalId || o.crmId || o.id));
+            const added = newIds.filter((id: string) => !oldIds.includes(id));
+            const removed = oldIds.filter((id: string) => !newIds.includes(id));
+            
+            oldLines.push(`📦 Состав изменён`);
+            let diffs = [];
+            if (added.length > 0) diffs.push(`➕ Добавили: ${added.join(', ')}`);
+            if (removed.length > 0) diffs.push(`➖ Убрали: ${removed.join(', ')}`);
+            newLines.push(diffs.join('\n'));
+          }
+
+          if (changesCount > 1) finalChangeType = 'MULTIPLE_CHANGES';
+
+          // Добавляем заголовок маршрута только если были реальные изменения
+          if (changesCount > 0) {
+            oldLines.unshift(routeHeader);
+            newLines.unshift(routeHeader);
           }
         }
 
-        if (changeTypes.length > 0) {
-          const finalChangeType = changeTypes.length === 1 ? changeTypes[0] : 'MULTIPLE_CHANGES';
-          const finalOldValue = oldValues.length > 0 ? oldValues.join('\n') : null;
-          const finalNewValue = newValues.join('\n');
-
+        // 🔥 ОТПРАВЛЯЕМ ОДНУ ОБЩУЮ ПЛАШКУ ЗА 1 КЛИК
+        if (oldLines.length > 0 || newLines.length > 0 || finalChangeType === 'ROUTE_REASSIGNED') {
           await createManagerPlaque({
             courierId: courierDb.id,
             courierName: courierDb.fullName || 'Без курьера',
-            newValue: finalNewValue, 
-            oldValue: finalOldValue, 
+            newValue: newLines.join('\n'), 
+            oldValue: oldLines.length > 0 ? oldLines.join('\n') : null, 
             changeType: finalChangeType,
             authorName: authorName
           }).catch(console.error);
