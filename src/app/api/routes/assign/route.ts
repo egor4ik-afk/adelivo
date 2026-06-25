@@ -111,28 +111,46 @@ export async function POST(req: Request) {
     
     const link = `https://yandex.ru/maps/?rtext=${rtextArr.join("~")}&rtt=${rttMode}`;
 
-    let finalRouteDate = routeDate;
-    if (!finalRouteDate && sortedOrders.length > 0) {
+    // 🔥 1. СТРОГАЯ НОРМАЛИЗАЦИЯ ДАТЫ В ФОРМАТ YYYY-MM-DD
+    let rawDate = routeDate;
+    if (!rawDate && sortedOrders.length > 0) {
       const firstOrder = sortedOrders[0];
-      if (firstOrder) {
-        finalRouteDate = firstOrder.deliveryDate || (firstOrder.crmCreatedAt ? firstOrder.crmCreatedAt.split('T')[0] : null);
+      rawDate = firstOrder?.deliveryDate || firstOrder?.crmCreatedAt;
+    }
+
+    let finalRouteDate = "";
+    if (rawDate) {
+      const d = new Date(rawDate);
+      if (!isNaN(d.getTime())) {
+        finalRouteDate = d.toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" });
       }
     }
-    if (!finalRouteDate) {
+    
+    // Фолбек на сегодня, если дата битая
+    if (!finalRouteDate || finalRouteDate.includes("Invalid")) {
       finalRouteDate = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }); 
     }
+    
+    // Отрезаем любые хвосты со временем, оставляем только чистый YYYY-MM-DD
+    finalRouteDate = finalRouteDate.split('T')[0].split(' ')[0]; 
 
     let routeName = existingRouteName;
     if (!routeName) {
       const routeDay = finalRouteDate.split('-')[2];
       const prefix = `M-${routeDay}`;
+      
+      // 🔥 2. ИЩЕМ СТРОГО ПО НОРМАЛИЗОВАННОЙ ДАТЕ И ПРЕФИКСУ
       const routes = await prisma.route.findMany({
-        where: { name: { startsWith: prefix }, date: finalRouteDate },
+        where: { 
+          date: finalRouteDate, // Ищем строго по "2026-06-25"
+          name: { startsWith: prefix } 
+        },
         select: { name: true }
       });
+      
       let maxNum = 0;
       for (const r of routes) {
-        const match = r.name.match(new RegExp(`^${prefix}(\d+)$`));
+        const match = r.name.match(new RegExp(`^${prefix}(\\d+)$`));
         if (match) {
           const num = parseInt(match[1], 10);
           if (num > maxNum) maxNum = num;

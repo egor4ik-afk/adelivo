@@ -144,23 +144,41 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         if (siblingsCount === 0) await prisma.route.deleteMany({ where: { id: order.routeId } });
       }
       
+      // 🔥 СТРОГАЯ НОРМАЛИЗАЦИЯ ДАТЫ (Как в массовом назначении)
       const rawDate = updateData.deliveryDate || order.deliveryDate || order.crmCreatedAt || new Date();
-      const orderDate = (rawDate instanceof Date ? rawDate : new Date(rawDate))
-           .toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" });
+      let orderDate = "";
+      const d = new Date(rawDate);
+      
+      if (!isNaN(d.getTime())) {
+         orderDate = d.toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" });
+      } else {
+         orderDate = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" });
+      }
+      // Оставляем только чистый YYYY-MM-DD
+      orderDate = orderDate.split('T')[0].split(' ')[0]; 
+
       const routeDay = orderDate.split("-")[2];
       const prefix = `M-${routeDay}`;
 
-      const routes = await prisma.route.findMany({ where: { name: { startsWith: prefix }, date: orderDate }, select: { name: true }});
+      // 🔥 Ищем СТРОГО по очищенной дате
+      const routes = await prisma.route.findMany({ 
+          where: { date: orderDate, name: { startsWith: prefix } }, 
+          select: { name: true }
+      });
+      
       let maxNum = 0;
       for (const r of routes) {
         const match = r.name.match(new RegExp(`^${prefix}(\\d+)$`));
         if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10));
       }
+      
+      const newRouteName = `${prefix}${(maxNum + 1).toString().padStart(3, "0")}`;
+
       const newRoute = await prisma.route.create({
         data: { 
-            name: `${prefix}${(maxNum + 1).toString().padStart(3, "0")}`, 
+            name: newRouteName, 
             link: updateData.courierLink, 
-            date: orderDate, 
+            date: orderDate, // 🔥 СОХРАНЯЕМ ИМЕННО ЭТУ ОЧИЩЕННУЮ ДАТУ
             courierId: newCourierId,
             estimatedReturnTime: body.estimatedReturnTime || null
         },
@@ -244,30 +262,61 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       }).catch(console.error);
     }
 
-    // 🔥 Строго универсальная запись в Табло (только oldValue и newValue)
-    if (changes.opCommentChanged) {
-      try {
-        const courierDb = updatedOrder.courierId 
-          ? await prisma.courier.findUnique({ where: { id: updatedOrder.courierId } }) 
-          : null;
-        
-        const authorName = user?.firstName 
-          ? `${user.firstName} ${user.lastName || ''}`.trim() 
-          : "Оператор";
+   // 🔥 ГЕНЕРАЦИЯ ПЛАШЕК ИЗ КАРТОЧКИ ЗАКАЗА
+   const authorName = user?.firstName 
+   ? `${user.firstName} ${user.lastName || ''}`.trim() 
+   : "Оператор";
 
-        await createManagerPlaque({
-          courierId: courierDb?.id || 'UNASSIGNED',
-          courierName: courierDb?.fullName || 'Без курьера',
-          newValue: updatedOrder.opComment || "Удалён", // Универсально
-          oldValue: order.opComment || "Не было",       // Универсально
-          changeType: 'OP_COMMENT_ADDED',
-          authorName: authorName
-        });
-      } catch (e: any) {
-         console.error("Ошибка вызова плашки комментария:", e);
-      }
-    }
+ // Умно достаем название маршрута (если курьера сняли, берем из старого состояния)
+ const routeName = updatedOrder.route?.name || order.route?.name || null;
 
+ // 1. Плашка изменения комментария
+ if (changes.opCommentChanged) {
+   try {
+     const courierDb = updatedOrder.courierId 
+       ? await prisma.courier.findUnique({ where: { id: updatedOrder.courierId } }) 
+       : null;
+
+     await createManagerPlaque({
+       courierId: courierDb?.id || 'UNASSIGNED',
+       courierName: courierDb?.fullName || 'Без курьера',
+       routeName: routeName, // 🔥 ПЕРЕДАЕМ МАРШРУТ
+       newValue: updatedOrder.opComment || "Удалён",
+       oldValue: order.opComment || "Не было",
+       changeType: 'OP_COMMENT_ADDED',
+       authorName: authorName
+     });
+   } catch (e: any) {
+      console.error("Ошибка вызова плашки комментария:", e);
+   }
+ }
+
+ // 2. 🔥 НОВОЕ: Плашка смены курьера из карточки заказа
+ if (changes.courierChanged) {
+   try {
+     const oldCourierDb = order.courierId 
+       ? await prisma.courier.findUnique({ where: { id: order.courierId } }) 
+       : null;
+     const newCourierDb = updatedOrder.courierId 
+       ? await prisma.courier.findUnique({ where: { id: updatedOrder.courierId } }) 
+       : null;
+     
+     // Вешаем плашку на нового курьера (если назначили) или на старого (если сняли)
+     const targetCourier = newCourierDb || oldCourierDb;
+
+     await createManagerPlaque({
+       courierId: targetCourier?.id || 'UNASSIGNED',
+       courierName: targetCourier?.fullName || 'Без курьера',
+       routeName: routeName, // 🔥 ПЕРЕДАЕМ МАРШРУТ
+       newValue: `👤 ${newCourierDb?.fullName || 'Без курьера'}`,
+       oldValue: `👤 ${oldCourierDb?.fullName || 'Без курьера'}`,
+       changeType: 'COURIER_CHANGED',
+       authorName: authorName
+     });
+   } catch (e: any) {
+      console.error("Ошибка вызова плашки курьера:", e);
+   }
+ }
     const statusChanged = body.status !== undefined && order.status !== body.status;
     if (statusChanged && (body.status === "IN_DELIVERY" || body.status === "DELIVERED")) {
        await applyUniversalEtaShift(id, body.status, body.eta);
