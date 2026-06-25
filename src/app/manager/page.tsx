@@ -19,7 +19,7 @@ const badgeConfig: Record<string, { text: string; styles: string; icon: string }
   ROUTE_REASSIGNED: { text: 'Новый маршрут', styles: 'bg-rose-100 text-rose-800', icon: '🗺️' },
   COURIER_CHANGED: { text: 'Смена курьера', styles: 'bg-purple-100 text-purple-800', icon: '👤' },
   OP_COMMENT_ADDED: { text: 'Комментарий оператора', styles: 'bg-yellow-100 text-yellow-800', icon: '💬' }, // 🔥 Добавлено
-  DEFAULT: { text: 'Изменение', styles: 'bg-gray-100 text-gray-800', icon: '🔔' }
+  DEFAULT: { text: 'Изменения', styles: 'bg-gray-100 text-gray-800', icon: '🔔' }
 };
 
 const LOCAL_STATUSES: Record<string, { label: string, color: string }> = {
@@ -161,11 +161,11 @@ export default function ManagerDashboard() {
               if (hasStarted) return 2; // В пути (в середину)
               return 1; // Еще не забрали (наверх)
             };
-            
+
             const prioA = getRoutePriority(a);
             const prioB = getRoutePriority(b);
             if (prioA !== prioB) return prioA - prioB; // Сначала по статусу
-            
+
             // Если статус одинаковый - сортируем по времени выезда
             const timeA = a.plannedDepartureTime || "23:59";
             const timeB = b.plannedDepartureTime || "23:59";
@@ -182,7 +182,7 @@ export default function ManagerDashboard() {
             return prev;
           });
         }
-      } 
+      }
       else if (activeTab === 'history') {
         const res = await fetch('/api/manager/notifications?history=true');
         const data = await res.json();
@@ -214,11 +214,11 @@ export default function ManagerDashboard() {
     if (!isAuthorized) return;
     const handleSWMessage = (event: MessageEvent) => {
       if (!event.data) return;
-      
+
       // Простое фоновое обновление данных
       if (event.data.type === 'PUSH_RECEIVED') {
         loadData(false);
-      } 
+      }
       // 🔥 Если кликнули по пушу и мы уже находимся в открытой вкладке менеджера
       else if (event.data.type === 'NOTIFICATION_CLICK') {
         if (event.data.tab === 'new' || (!event.data.orderId && event.data.role !== 'COURIER')) {
@@ -226,7 +226,7 @@ export default function ManagerDashboard() {
         }
       }
     };
-    
+
     if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', handleSWMessage);
 
     const interval = setInterval(() => loadData(false), 15000);
@@ -342,9 +342,9 @@ export default function ManagerDashboard() {
       'assembling-complete': "Отметить все заказы маршрута как собранные (CRM)?",
       'send-to-delivery': "Передать все заказы маршрута курьеру (CRM)?"
     };
-    
+
     if (!confirm(messages[action])) return;
-    
+
     try {
       await fetch(`/api/manager/routes/${routeId}/status`, {
         method: 'PATCH',
@@ -370,7 +370,7 @@ export default function ManagerDashboard() {
   }
 
   const tasksWithRoutes = tasks.map(task => {
-    return { ...task, routeData: null }; 
+    return { ...task, routeData: null };
   }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   const pendingRoutes = routes.filter((route) => {
@@ -425,7 +425,7 @@ export default function ManagerDashboard() {
                           <div className="text-[11px] font-semibold text-[#a8a49c] mb-1">
                             ⏱ {new Date(item.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
                           </div>
-                          
+
                           <div className="font-extrabold text-[#1a1a18] text-base">
                             {item.courierName}
                           </div>
@@ -444,7 +444,7 @@ export default function ManagerDashboard() {
                                 <s className="break-words line-clamp-2">{item.oldValue}</s>
                               </div>
                             )}
-                            
+
                             <div className="flex items-start gap-2 text-[#1a1a18]">
                               {item.oldValue && item.oldValue !== item.newValue && item.oldValue !== "Не было" && item.oldValue !== "—" && (
                                 <span className="shrink-0 text-[10px] uppercase tracking-wider font-semibold mt-0.5 text-[#a8a49c]">Стало:</span>
@@ -608,26 +608,26 @@ export default function ManagerDashboard() {
                 </div>
 
                 <div className="flex flex-col gap-4 mt-2">
-                {routes.map((route) => {
-                  const isExpanded = expandedRoutes[route.id];
-                  const routeOrderIds = route.orders?.map((o: any) => o.id) || [];
-                  const isAllSelected = routeOrderIds.length > 0 && routeOrderIds.every((id: string) => selectedOrders.has(id));
-                  const routeTimeRange = getRouteTimeRange(route.orders);
-                  const courierPhone = route.courier?.phone || "—";
-                  const cleanPhoneForTg = courierPhone !== "—" ? courierPhone.replace(/[^\d+]/g, "") : "";
-                  const encodedMsg = encodeURIComponent("Привет! Это менеджер EventWave.");
+                  {routes.map((route) => {
+                    const isExpanded = expandedRoutes[route.id];
+                    const routeOrderIds = route.orders?.map((o: any) => o.id) || [];
+                    const isAllSelected = routeOrderIds.length > 0 && routeOrderIds.every((id: string) => selectedOrders.has(id));
+                    const routeTimeRange = getRouteTimeRange(route.orders);
+                    const courierPhone = route.courier?.phone || "—";
+                    const cleanPhoneForTg = courierPhone !== "—" ? courierPhone.replace(/[^\d+]/g, "") : "";
+                    const encodedMsg = encodeURIComponent("Привет! Это менеджер EventWave.");
 
-                  // 🔥 УМНАЯ ЛОГИКА ОПРЕДЕЛЕНИЯ КНОПКИ МАРШРУТА
-                  const activeOrders = route.orders?.filter((o: any) => o.status !== 'CANCELLED' && o.status !== 'RETURNED') || [];
-                  const isAllInDeliveryOrDone = activeOrders.length > 0 && activeOrders.every((o: any) => 
-                    o.status === 'IN_DELIVERY' || o.status === 'DELIVERED' || o.crmStatus === 'send-to-delivery'
-                  );
+                    // 🔥 УМНАЯ ЛОГИКА ОПРЕДЕЛЕНИЯ КНОПКИ МАРШРУТА
+                    const activeOrders = route.orders?.filter((o: any) => o.status !== 'CANCELLED' && o.status !== 'RETURNED') || [];
+                    const isAllInDeliveryOrDone = activeOrders.length > 0 && activeOrders.every((o: any) =>
+                      o.status === 'IN_DELIVERY' || o.status === 'DELIVERED' || o.crmStatus === 'send-to-delivery'
+                    );
 
-                  let routeBulkAction: 'assembling' | 'assembling-complete' | 'send-to-delivery' | null = null;
-                  let routeBulkText = "";
-                  let routeBulkStyles = "";
+                    let routeBulkAction: 'assembling' | 'assembling-complete' | 'send-to-delivery' | null = null;
+                    let routeBulkText = "";
+                    let routeBulkStyles = "";
 
-                  if (!isAllInDeliveryOrDone && activeOrders.length > 0) {
+                    if (!isAllInDeliveryOrDone && activeOrders.length > 0) {
                       const hasNew = activeOrders.some((o: any) => !o.crmStatus || o.crmStatus === 'new');
                       const hasAssembling = activeOrders.some((o: any) => o.crmStatus === 'assembling');
                       const hasAssembled = activeOrders.some((o: any) => o.crmStatus === 'assembling-complete');
@@ -645,77 +645,77 @@ export default function ManagerDashboard() {
                         routeBulkText = '🚀 Передать курьеру';
                         routeBulkStyles = 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100';
                       }
-                  }
+                    }
 
-                  return (
-                    <div key={route.id} className="bg-white border border-[#e8e6df] rounded-2xl shadow-sm transition-all overflow-hidden">
+                    return (
+                      <div key={route.id} className="bg-white border border-[#e8e6df] rounded-2xl shadow-sm transition-all overflow-hidden">
 
-                      {/* ШАПКА МАРШРУТА: СТРОГО 1 СТРОКА */}
-                      <div
-                        className="flex flex-row items-center justify-between p-3 hover:bg-[#fafaf8] cursor-pointer transition-colors gap-2"
-                        onClick={() => toggleRouteExpansion(route.id)}
-                      >
-                        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap overflow-hidden">
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4 accent-[#1a1a18] rounded cursor-pointer shrink-0"
-                            checked={isAllSelected}
-                            onChange={(e) => { e.stopPropagation(); toggleRouteOrders(routeOrderIds); }}
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                          <span className="text-[#a8a49c] w-4 text-center text-[10px] shrink-0">{isExpanded ? '▼' : '▶'}</span>
+                        {/* ШАПКА МАРШРУТА: СТРОГО 1 СТРОКА */}
+                        <div
+                          className="flex flex-row items-center justify-between p-3 hover:bg-[#fafaf8] cursor-pointer transition-colors gap-2"
+                          onClick={() => toggleRouteExpansion(route.id)}
+                        >
+                          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap overflow-hidden">
+                            <input
+                              type="checkbox"
+                              className="w-4 h-4 accent-[#1a1a18] rounded cursor-pointer shrink-0"
+                              checked={isAllSelected}
+                              onChange={(e) => { e.stopPropagation(); toggleRouteOrders(routeOrderIds); }}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <span className="text-[#a8a49c] w-4 text-center text-[10px] shrink-0">{isExpanded ? '▼' : '▶'}</span>
 
-                          <span className="font-black text-[14px] text-[#1a1a18] whitespace-nowrap">
-                            {route.courier?.fullName || 'Не назначен'}
-                          </span>
-                          
-                          {/* 🔥 НОВЫЙ БЛОК: АККУРАТНЫЙ НОМЕР МАРШРУТА */}
-                          <span className="text-[11px] font-extrabold text-[#6b6860] bg-[#f5f4f0] px-2 py-0.5 rounded-lg border border-[#e8e6df] whitespace-nowrap shadow-sm hidden sm:inline-block">
-                            🗺️ {route.name || `#${route.id.slice(-5).toUpperCase()}`}
-                          </span>
-
-                          {courierPhone !== "—" && (
-                            <div className="flex items-center gap-1.5 ml-1">
-                              <a href={`tel:${courierPhone}`} onClick={e => e.stopPropagation()} className="text-[#4a7aff] font-semibold text-[13px] hover:underline whitespace-nowrap">
-                                📞 {courierPhone}
-                              </a>
-                              {cleanPhoneForTg && (
-                                <>
-                                  <a href={`https://t.me/${cleanPhoneForTg}?text=${encodedMsg}`} onClick={e => e.stopPropagation()} target="_blank" rel="noopener noreferrer" className="bg-[#2AABEE] w-5 h-5 flex items-center justify-center rounded-full hover:opacity-90">
-                                    <svg viewBox="0 0 24 24" width="10" height="10" fill="#ffffff"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z" /></svg>
-                                  </a>
-                                  <a href={`sms:${cleanPhoneForTg}?body=${encodedMsg}`} onClick={e => e.stopPropagation()} className="bg-[#34C759] w-5 h-5 flex items-center justify-center rounded-full hover:opacity-90">
-                                    <svg viewBox="0 0 24 24" width="10" height="10" fill="#ffffff"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" /></svg>
-                                  </a>
-                                </> 
-                              )}
-                            </div>
-                          )}
-
-                          {route.plannedDepartureTime && (
-                            <span className="text-[12px] font-bold text-[#1a1a18] bg-[#f5f4f0] px-2 py-0.5 rounded-lg border border-[#e8e6df] shadow-sm flex items-center gap-1">
-                            🏠 {route.plannedDepartureTime}
-                          </span>
-                          )}
-                          {routeTimeRange && (
-                            <span className="text-[11px] font-black text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 whitespace-nowrap">
-                              Слоты: {routeTimeRange}
+                            <span className="font-black text-[14px] text-[#1a1a18] whitespace-nowrap">
+                              {route.courier?.fullName || 'Не назначен'}
                             </span>
-                          )}
-                          <span className="text-[11px] font-bold text-[#6b6860] bg-[#f5f4f0] px-1.5 py-0.5 rounded border border-[#e8e6df] whitespace-nowrap hidden sm:inline-block">
-                            Точек: {route.orders?.length || 0}
-                          </span>
-                        </div>
 
-                        {routeBulkAction && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); updateRouteBulkStatus(route.id, routeBulkAction!); }}
-                            className={`shrink-0 border px-3 py-1.5 rounded-lg text-[12px] font-bold transition-colors shadow-sm ml-auto ${routeBulkStyles}`}
-                          >
-                            {routeBulkText}
-                          </button>
-                        )}
-                      </div>
+                            {/* 🔥 НОВЫЙ БЛОК: АККУРАТНЫЙ НОМЕР МАРШРУТА */}
+                            <span className="text-[11px] font-extrabold text-[#6b6860] bg-[#f5f4f0] px-2 py-0.5 rounded-lg border border-[#e8e6df] whitespace-nowrap shadow-sm">
+                              🗺️ {route.name || `#${route.id.slice(-5).toUpperCase()}`}
+                            </span>
+
+                            {courierPhone !== "—" && (
+                              <div className="flex items-center gap-1.5 ml-1">
+                                <a href={`tel:${courierPhone}`} onClick={e => e.stopPropagation()} className="text-[#4a7aff] font-semibold text-[13px] hover:underline whitespace-nowrap">
+                                  📞 {courierPhone}
+                                </a>
+                                {cleanPhoneForTg && (
+                                  <>
+                                    <a href={`https://t.me/${cleanPhoneForTg}?text=${encodedMsg}`} onClick={e => e.stopPropagation()} target="_blank" rel="noopener noreferrer" className="bg-[#2AABEE] w-5 h-5 flex items-center justify-center rounded-full hover:opacity-90">
+                                      <svg viewBox="0 0 24 24" width="10" height="10" fill="#ffffff"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z" /></svg>
+                                    </a>
+                                    <a href={`sms:${cleanPhoneForTg}?body=${encodedMsg}`} onClick={e => e.stopPropagation()} className="bg-[#34C759] w-5 h-5 flex items-center justify-center rounded-full hover:opacity-90">
+                                      <svg viewBox="0 0 24 24" width="10" height="10" fill="#ffffff"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" /></svg>
+                                    </a>
+                                  </>
+                                )}
+                              </div>
+                            )}
+
+                            {route.plannedDepartureTime && (
+                              <span className="text-[12px] font-bold text-[#1a1a18] bg-[#f5f4f0] px-2 py-0.5 rounded-lg border border-[#e8e6df] shadow-sm flex items-center gap-1">
+                                🏠 {route.plannedDepartureTime}
+                              </span>
+                            )}
+                            {routeTimeRange && (
+                              <span className="text-[11px] font-black text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 whitespace-nowrap">
+                                Слоты: {routeTimeRange}
+                              </span>
+                            )}
+                            <span className="text-[11px] font-bold text-[#6b6860] bg-[#f5f4f0] px-1.5 py-0.5 rounded border border-[#e8e6df] whitespace-nowrap hidden sm:inline-block">
+                              Точек: {route.orders?.length || 0}
+                            </span>
+                          </div>
+
+                          {routeBulkAction && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); updateRouteBulkStatus(route.id, routeBulkAction!); }}
+                              className={`shrink-0 border px-3 py-1.5 rounded-lg text-[12px] font-bold transition-colors shadow-sm ml-auto ${routeBulkStyles}`}
+                            >
+                              {routeBulkText}
+                            </button>
+                          )}
+                        </div>
 
                         {/* КАРТОЧКИ ЗАКАЗОВ В МАРШРУТЕ */}
                         {isExpanded && (
@@ -752,7 +752,7 @@ export default function ManagerDashboard() {
                                   const isMeura = order.shop === 'kaktusfiori' || order.shop === 'meura-flowers';
                                   const shopBadge = isMeura ? "🌸 Meura" : "📦 Bunch";
 
-                                const displayId = order.externalId || order.crmId || order.number || order.id.slice(-6);
+                                  const displayId = order.externalId || order.crmId || order.number || order.id.slice(-6);
                                   const createdAt = order.crmCreatedAt
                                     ? new Date(order.crmCreatedAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
                                     : null;
@@ -770,8 +770,8 @@ export default function ManagerDashboard() {
                                           />
                                           {/* Номер по порядку теперь будет идти правильно, 1, 2, 3... по времени прибытия */}
                                           <div className="w-5 h-5 rounded bg-[#1a1a18] text-white flex items-center justify-center text-[10px] font-black shrink-0">{idx + 1}</div>
-                                        <span className="font-black text-[14px] text-[#1a1a18] truncate max-w-[100px]" title={String(displayId)}>
-                                          {displayId}
+                                          <span className="font-black text-[14px] text-[#1a1a18] truncate max-w-[100px]" title={String(displayId)}>
+                                            {displayId}
                                           </span>
                                         </div>
                                         <span className="text-[10px] font-bold text-[#6b6860] bg-[#f5f4f0] px-1.5 py-0.5 rounded border border-[#e8e6df] shrink-0">
@@ -875,7 +875,7 @@ export default function ManagerDashboard() {
 
                                       {/* 🔥 УМНАЯ ЛОГИКА И ДРОПДАУН ДЛЯ ЗАКАЗА */}
                                       <div className="pt-2 mt-1 flex flex-col gap-2">
-                                        
+
                                         {/* Умная кнопка действий */}
                                         {(() => {
                                           const isCancelledOrReturned = order.status === 'CANCELLED' || order.status === 'RETURNED' || order.crmStatus === 'cancel-other' || order.crmStatus === 'return' || order.crmStatus === 'chastichnyi-vozvrat';
@@ -944,8 +944,8 @@ export default function ManagerDashboard() {
             {activeTab === 'history' && (
               <>
                 {history.map((task) => (
-                  <div 
-                    key={task.id} 
+                  <div
+                    key={task.id}
                     className="bg-white border-2 border-[#e8e6df] rounded-2xl p-5 shadow-sm hover:border-[#dcd9d1] transition-colors flex flex-col md:flex-row justify-between items-start gap-6"
                   >
                     {/* 🔥 ЛЕВЫЙ БЛОК: КТО, ГДЕ и КОГДА */}
@@ -958,14 +958,14 @@ export default function ManagerDashboard() {
                           </div>
                         )}
                       </div>
-                      
+
                       <div className="mt-3">
                         <p className="text-[12px] font-medium text-[#878378]">
                           Изменил: <span className="font-bold text-[#1a1a18]">{task.authorName || 'Система'}</span>
                         </p>
                         <p className="text-[12px] font-medium text-[#a8a49c] mt-0.5">
-                          {new Date(task.createdAt).toLocaleString('ru-RU', { 
-                            day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' 
+                          {new Date(task.createdAt).toLocaleString('ru-RU', {
+                            day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
                           })}
                         </p>
                       </div>
@@ -973,15 +973,15 @@ export default function ManagerDashboard() {
 
                     {/* 🔥 ПРАВЫЙ БЛОК: ЧТО ИЗМЕНИЛОСЬ (БЫЛО/СТАЛО) */}
                     <div className="flex flex-col gap-2 w-full md:w-2/3 md:items-end">
-                      
+
                       {/* Бэйдж с типом изменения */}
                       <span className="inline-block px-3 py-1 bg-[#f4f3ee] text-[#1a1a18] text-[12px] font-bold rounded-lg whitespace-nowrap">
                         {task.changeType === 'ROUTE_REASSIGNED' ? '🗺️ Новый маршрут' :
-                         task.changeType === 'COURIER_CHANGED' ? '👤 Смена курьера' :
-                         task.changeType === 'TIME_CHANGED' ? '⏱ Изменилось время' :
-                         task.changeType === 'ORDERS_CHANGED' ? '📦 Изменились заказы' :
-                         task.changeType === 'OP_COMMENT_ADDED' ? '💬 Комментарий оператора' : 
-                         task.changeType === 'MULTIPLE_CHANGES' ? '📝 Маршрут изменён' : task.changeType}
+                          task.changeType === 'COURIER_CHANGED' ? '👤 Смена курьера' :
+                            task.changeType === 'TIME_CHANGED' ? '⏱ Изменилось время' :
+                              task.changeType === 'ORDERS_CHANGED' ? '📦 Изменились заказы' :
+                                task.changeType === 'OP_COMMENT_ADDED' ? '💬 Комментарий оператора' :
+                                  task.changeType === 'MULTIPLE_CHANGES' ? '📝 Маршрут изменён' : task.changeType}
                       </span>
 
                       {/* Плашка Было/Стало */}
@@ -997,7 +997,7 @@ export default function ManagerDashboard() {
                             </span>
                           </div>
                         )}
-                        
+
                         <div>
                           <span className="text-[10px] font-bold text-[#a8a49c] uppercase tracking-widest block mb-1">
                             Стало:

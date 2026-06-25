@@ -1779,6 +1779,10 @@ export function DashboardClient({ user }: { user: User }) {
                     const isLateCalc = o.slotTo && etaInfo.timeStr !== "—" && parseTime(etaInfo.timeStr) > parseTime(o.slotTo);
                     const displayColor = isLateCalc ? "#d94040" : etaInfo.color;
 
+                    // 🔥 1. РОЛЕВАЯ МОДЕЛЬ ДЛЯ ПОДСВЕТКИ
+                    const showWarning = (user.role === "ADMIN" || user.role === "OPERATOR") && o.isInvalid && !/самовывоз|большой афанасьевский/i.test(o.address || "");
+                    const showRedBg = user.role === "ADMIN" && showWarning;
+
                     return (
                       <React.Fragment key={o.id}>
                         {routeLegs[index] && (
@@ -1789,7 +1793,8 @@ export function DashboardClient({ user }: { user: User }) {
                           </div>
                         )}
 
-                        <div style={{ padding: "10px 12px 10px 16px", background: o.status === "IN_DELIVERY" ? "#fffbeb" : "#fff", border: "1px solid #e8e6df", borderRadius: 8, display: "flex", gap: 12, alignItems: "center", position: "relative", overflow: "hidden" }}>
+                        {/* 🔥 2. ПРИМЕНЯЕМ ФОН ТОЛЬКО ДЛЯ АДМИНА */}
+                        <div style={{ padding: "10px 12px 10px 16px", background: o.status === "IN_DELIVERY" ? "#fffbeb" : (showRedBg ? "#fff8f8" : "#fff"), border: showRedBg ? "1px solid #fecaca" : "1px solid #e8e6df", borderRadius: 8, display: "flex", gap: 12, alignItems: "center", position: "relative", overflow: "hidden" }}>
                           <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: 4, background: color }} />
 
                           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -1800,7 +1805,17 @@ export function DashboardClient({ user }: { user: User }) {
                           <div style={{ width: 24, height: 24, borderRadius: "50%", background: color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{index + 1}</div>
 
                           <div style={{ flex: 1, overflow: "hidden" }}>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: "#1a1a18", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.address}</div>
+                            
+                            {/* 🔥 3. АДРЕС И УВЕДОМЛЕНИЕ ДЛЯ ОПЕРАТОРА И АДМИНА */}
+                            <div style={{ fontSize: 13, fontWeight: 600, color: showRedBg ? "#d94040" : "#1a1a18", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {showWarning && "⚠️ "} {o.address}
+                            </div>
+
+                            {showWarning && o.invalidReason && (
+                              <div style={{ fontSize: 10, color: "#d94040", fontWeight: 700, marginTop: 2 }}>
+                                {o.invalidReason}
+                              </div>
+                            )}
 
                             <div style={{ fontSize: 11, color: "#a8a49c", marginTop: 4, display: "flex", flexDirection: "column", gap: 3 }}>
                               <div>
@@ -2319,7 +2334,12 @@ export function DashboardClient({ user }: { user: User }) {
                             <span style={{ color: late ? "#d94040" : "#4a7aff", fontWeight: 700 }}>{late ? "⏰ " : ""}{o.eta ?? "—"}</span>
                           )}
                         </td>
-                        <td style={{ ...s.td, minWidth: 160, maxWidth: 220 }}>{o.address ?? "—"}</td>
+                        <td style={{ ...s.td, minWidth: 160, maxWidth: 220 }}>
+                          {o.address ?? "—"}
+                          {o.isInvalid && o.invalidReason && (
+                            <div style={{ fontSize: 10, color: "#d94040", fontWeight: 700, marginTop: 2 }}>⚠️ {o.invalidReason}</div>
+                          )}
+                        </td>
                         <td style={{ ...s.td, whiteSpace: "nowrap", fontWeight: 600 }}>{o.courier ?? <span style={{ color: "#d94040" }}>—</span>}</td>
                         <td style={{ ...s.td, whiteSpace: "nowrap", color: o.wrongPrice ? "#d94040" : "inherit", fontWeight: o.wrongPrice ? 700 : 500 }}>{o.price ? `${o.price} ₽` : "—"}</td>
                         <td style={{ ...s.td, whiteSpace: "nowrap" }}><span style={{ padding: "2px 7px", borderRadius: 10, fontSize: 10, fontWeight: 500, background: `${color}18`, color }}>{STATUS_LABELS[o.status] ?? o.status}</span></td>

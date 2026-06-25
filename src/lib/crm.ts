@@ -318,6 +318,21 @@ function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// 🔥 АНАЛИЗАТОР ПРОБЛЕМНЫХ АДРЕСОВ (Ищет просьбы уточнить или неполные данные)
+export function checkAddressIssues(address: string = "", customerComment: string = "", opComment: string = "") {
+  const fullText = `${address} ${customerComment} ${opComment}`.toLowerCase();
+  
+  const clarifyRegex = /уточнить\s*(адрес|время|кв|квартиру|подъезд|этаж|домофон|данные|место)/i;
+  const missingRegex = /(не указан|нет|без)\s*(кв\.|кв|квартир|подъезд|этаж|домофон)/i;
+  const callRegex = /(узнать|спросить|созвон|созвониться)\s*(адрес|куда|кв|квартиру|время)/i;
+
+  if (clarifyRegex.test(fullText)) return "Просят уточнить адрес/время";
+  if (missingRegex.test(fullText)) return "Не указана кв/подъезд/этаж/домофон";
+  if (callRegex.test(fullText)) return "Нужно узнать адрес у получателя";
+
+  return null;
+}
+
 export async function geocodeAddress(address: string) {
   if (!GEO_KEY || !address) return null;
   try {
@@ -403,8 +418,12 @@ export async function geocodeNewOrders() {
       if (!geo.isExact) {
         await prisma.order.update({ where: { id: order.id }, data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: true, invalidReason: `Неточный геокод: ${geo.precision}` } });
         invalidOrders.push({ externalId: order.externalId, address: order.address, reason: `Неточный геокод: ${geo.precision}` });
-        continue;
+        continue; // 🔥 Прерываем! Если геокод кривой, двойной проверки текста не будет
       }
+
+      // 🔥 ЕСЛИ ГЕОКОД ИДЕАЛЬНЫЙ (дошел до сюда), ПРОВЕРЯЕМ ТЕКСТ НА КОСЯКИ
+      const issueReason = checkAddressIssues(order.address || "", order.comment || "", order.opComment || "");
+      const isTextInvalid = !!issueReason;
 
       const basePrice = calcBaseDeliveryPrice(geo.lat, geo.lng);
       const crmPrice = order.price ?? 0;
@@ -416,11 +435,16 @@ export async function geocodeNewOrders() {
           lat: geo.lat,
           lng: geo.lng,
           geocoded: true,
-          isInvalid: false,
-          invalidReason: null,
+          isInvalid: isTextInvalid, // ❌ Если текст кривой, заказ будет светиться как проблемный
+          invalidReason: issueReason || null, // Пишем причину (например, "Не указана кв/подъезд")
           wrongPrice,
         },
       });
+
+      // Пушим уведомление для менеджеров
+      if (isTextInvalid) {
+        invalidOrders.push({ externalId: order.externalId, address: order.address, reason: issueReason! });
+      }
 
       if (wrongPrice) {
         const tgToken = process.env.TELEGRAM_BOT_TOKEN?.replace(/\s+/g, "")?.replace(/^bot/i, "");
