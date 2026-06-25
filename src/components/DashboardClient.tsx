@@ -1693,6 +1693,35 @@ export function DashboardClient({ user }: { user: User }) {
             </div>
           )}
 
+          {/* 🔥 НОВЫЙ БЛОК: ФОЛБЭК РУЧНОГО ВВОДА */}
+          {/* Показывается, если выбраны точки, но routeTotals от Яндекса так и не пришел */}
+          {bulkSelectedIds.length > 0 && !routeTotals && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, background: "#fff8f8", padding: "10px 14px", borderRadius: 8, border: "1px dashed #fecaca" }}>
+              <span style={{ fontSize: 12, color: "#d94040", fontWeight: 700 }}>
+                {isCalculatingRoute ? "⏳ Ждем Яндекс..." : "⚠️ Яндекс недоступен."} Укажите выезд:
+              </span>
+              <input
+                type="text"
+                placeholder="10:00"
+                maxLength={5}
+                value={manualDepartureTime || ""}
+                onChange={(e) => {
+                  let val = e.target.value.replace(/[^\d:]/g, "");
+                  const isDeleting = (e.nativeEvent as any).inputType === "deleteContentBackward";
+                  if (val.length === 2 && !val.includes(":") && !isDeleting) {
+                    val += ":";
+                  }
+                  setManualDepartureTime(val);
+                }}
+                style={{
+                  padding: "4px 8px", borderRadius: 6, border: "1px solid #f87171",
+                  outline: "none", fontWeight: 700, fontFamily: "monospace",
+                  fontSize: 13, color: "#b91c1c", width: 60, background: "#fff"
+                }}
+              />
+            </div>
+          )}
+
           <div style={{ display: "flex", gap: 10, marginBottom: 20, flexDirection: "column" }}>
             <button onClick={optimizeRoute} style={{ ...s.actionBtn, background: "#f4f7ff", color: "#4a7aff", border: "1px solid #c9d8ff" }}>✨ Умная оптимизация (Время + Расстояние)</button>
             {selectedRouteOrders.length > 0 && (
@@ -2039,53 +2068,20 @@ export function DashboardClient({ user }: { user: User }) {
               </div>
             </>
           )}
-       </div>
+        </div>
 
-{/* 🔥 Защита от сплющивания: flexShrink: 0 */}
-{invalid.length > 0 && (
-  <button 
-    style={{ ...s.alertBadge, flexShrink: 0 }} 
-    onClick={() => { setAlertsOpen(!alertsOpen); setProfileOpen(false); }}
-  >
-    ⚠ {!isMobile && `${invalid.length}`}
-  </button>
-)}
+        {invalid.length > 0 && <button style={s.alertBadge} onClick={() => { setAlertsOpen(!alertsOpen); setProfileOpen(false); }}>⚠ {!isMobile && `${invalid.length}`}</button>}
 
-{/* 🔥 Компактное время: только иконка и время */}
-{!isMobile && lastSync && (
-  <span 
-    style={{ 
-      ...s.syncLabel, 
-      marginLeft: 'auto', 
-      flexShrink: 0, 
-      display: 'flex', 
-      alignItems: 'center', 
-      gap: 4 
-    }} 
-    title="Время последнего обновления"
-  >
-    ↻ {lastSync}
-  </span>
-)}
+        {!isMobile && lastSync && <span style={{ ...s.syncLabel, marginLeft: 'auto' }}>обновлено {lastSync}</span>}
 
-{/* 🔥 Аватарка (тоже защищаем от сжатия) */}
-<button 
-  style={{ 
-    ...s.userBtn, 
-    padding: 0, 
-    overflow: "hidden", 
-    marginLeft: isMobile ? "auto" : 12, // Даем чуть отступа от времени на десктопе
-    flexShrink: 0 
-  }} 
-  onClick={() => { setProfileOpen(!profileOpen); setAlertsOpen(false); }}
->
-  {user.avatarUrl ? (
-    <img src={user.avatarUrl} alt="Profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-  ) : (
-    (user.firstName?.[0] || user.email.slice(0, 1)).toUpperCase()
-  )}
-</button>
-</div>
+        <button style={{ ...s.userBtn, padding: 0, overflow: "hidden", marginLeft: isMobile ? "auto" : 0 }} onClick={() => { setProfileOpen(!profileOpen); setAlertsOpen(false); }}>
+          {user.avatarUrl ? (
+            <img src={user.avatarUrl} alt="Profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          ) : (
+            (user.firstName?.[0] || user.email.slice(0, 1)).toUpperCase()
+          )}
+        </button>
+      </div>
 
       {!isMobile && invalid.length > 0 && !dismissedInvalid && (
         <div style={s.invalidBanner}>
@@ -2501,14 +2497,8 @@ function CourierSearchSelect({ value, onChange, options }: { value: string, onCh
 
 const s: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", overflow: "hidden" },
-  topbar: { 
-    display: "flex", alignItems: "center", gap: 6, padding: "0 16px", 
-    height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", 
-    flexShrink: 0, zIndex: 100, position: "relative", 
-    overflowX: "auto",  // было: overflow: "hidden"
-    flexWrap: "nowrap",
-    scrollbarWidth: "none", // скрываем скроллбар в Firefox
-  },
+  topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 16px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 100, position: "relative", overflow: "visible", flexWrap: "nowrap" },
+
   dropdownMenu: { position: "absolute", top: "100%", left: 0, marginTop: 6, background: "#fff", border: "1px solid #e8e6df", borderRadius: 12, padding: 8, zIndex: 100, display: "flex", flexDirection: "column", gap: 2, minWidth: 180, maxHeight: 300, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,0.12)" },
   dropdownItem: { display: "flex", alignItems: "center", gap: 10, fontSize: 13, cursor: "pointer", padding: "6px 8px", borderRadius: 6, transition: "background 0.15s", whiteSpace: "nowrap" },
   logo: { fontSize: 15, fontWeight: 600, color: "#1a1a18", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap", flexShrink: 0, minWidth: "max-content", marginRight: "auto" },
@@ -2563,14 +2553,8 @@ const s: Record<string, React.CSSProperties> = {
 
 const sm: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", overflow: "hidden" },
-  topbar: { 
-    display: "flex", alignItems: "center", gap: 6, padding: "0 10px", 
-    height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", 
-    flexShrink: 0, zIndex: 100, position: "relative", 
-    overflowX: "auto",  // было: overflow: "hidden"
-    flexWrap: "nowrap",
-    scrollbarWidth: "none",
-  },  mobileSlotsWrap: { display: "flex", gap: 4, padding: "6px 10px", background: "#fff", borderBottom: "1px solid #e8e6df", overflowX: "auto", flexShrink: 0 },
+  topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 10px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 100, position: "relative", overflow: "visible", flexWrap: "nowrap" },
+  mobileSlotsWrap: { display: "flex", gap: 4, padding: "6px 10px", background: "#fff", borderBottom: "1px solid #e8e6df", overflowX: "auto", flexShrink: 0 },
   body: { display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", minHeight: 0 },
   map: { width: "100%", minHeight: 200 },
   panelsWrap: { display: "flex", flexDirection: "column", background: "#fff", overflow: "hidden", flex: 1, minHeight: 0 },
