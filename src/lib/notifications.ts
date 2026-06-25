@@ -420,6 +420,7 @@ export async function notify(event: NotificationEvent) {
 export async function createManagerPlaque(data: {
   courierId: string | number;
   courierName?: string | null;
+  routeName?: string | null; // 🔥 ДОБАВИЛИ
   newValue?: string | null;
   oldValue?: string | null;
   authorName?: string | null;
@@ -437,6 +438,7 @@ export async function createManagerPlaque(data: {
       data: {
         courierId: safeCourierId,
         courierName: safeCourierName,
+        routeName: data.routeName || null, // 🔥 СОХРАНЯЕМ В БД
         newValue: safeNewValue,
         oldValue: safeOldValue,
         authorName: data.authorName || null,

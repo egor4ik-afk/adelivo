@@ -248,14 +248,9 @@ export async function POST(req: Request) {
         let newLines: string[] = [];
         let finalChangeType = 'MULTIPLE_CHANGES';
 
-        // 🔥 ЖЕСТКО ФИКСИРУЕМ МАРШРУТ, чтобы фронтенд больше не гадал!
-        const routeHeader = `🗺️ ${newRoute.name}`;
-
         if (!oldRouteId) {
           // НОВЫЙ МАРШРУТ
           finalChangeType = 'ROUTE_REASSIGNED';
-          newLines.push(routeHeader);
-          // 🔥 Берем 100% сохраненное время из БД
           if (newRoute.plannedDepartureTime) {
              newLines.push(`⏱ ${newRoute.plannedDepartureTime}`);
           }
@@ -296,18 +291,14 @@ export async function POST(req: Request) {
 
           if (changesCount > 1) finalChangeType = 'MULTIPLE_CHANGES';
 
-          // Добавляем заголовок маршрута только если были реальные изменения
-          if (changesCount > 0) {
-            oldLines.unshift(routeHeader);
-            newLines.unshift(routeHeader);
-          }
         }
 
-        // 🔥 ОТПРАВЛЯЕМ ОДНУ ОБЩУЮ ПЛАШКУ ЗА 1 КЛИК
+        // 🔥 ОТПРАВЛЯЕМ ЧИСТУЮ ПЛАШКУ
         if (oldLines.length > 0 || newLines.length > 0 || finalChangeType === 'ROUTE_REASSIGNED') {
           await createManagerPlaque({
             courierId: courierDb.id,
             courierName: courierDb.fullName || 'Без курьера',
+            routeName: newRoute.name, // 🔥 ПЕРЕДАЕМ МАРШРУТ СЮДА!
             newValue: newLines.join('\n'), 
             oldValue: oldLines.length > 0 ? oldLines.join('\n') : null, 
             changeType: finalChangeType,

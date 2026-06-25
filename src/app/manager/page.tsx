@@ -429,6 +429,11 @@ export default function ManagerDashboard() {
                           <div className="font-extrabold text-[#1a1a18] text-base">
                             {item.courierName}
                           </div>
+                          {item.routeName && (
+                            <div className="text-[11px] font-medium text-[#a8a49c] mt-0.5">
+                              маршрут {item.routeName}
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-2 text-base font-black">
@@ -942,6 +947,11 @@ export default function ManagerDashboard() {
                     <div className="flex flex-col gap-1 w-full md:w-1/3 shrink-0">
                       <div>
                         <p className="text-[16px] font-extrabold text-[#1a1a18]">{task.courierName}</p>
+                        {task.routeName && (
+                          <div className="text-[11px] font-medium text-[#a8a49c] mt-0.5">
+                            маршрут {task.routeName}
+                          </div>
+                        )}
                       </div>
                       
                       <div className="mt-3">

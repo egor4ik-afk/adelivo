@@ -323,6 +323,7 @@ model ManagerNotification {
   id          String   @id @default(cuid())
   courierId   String?
   courierName String   // 🔥 Одно чистое поле вместо firstName и lastName
+  routeName   String?  // 🔥 Добавляем это поле
   newValue    String   
   oldValue    String?  
   authorName  String?
