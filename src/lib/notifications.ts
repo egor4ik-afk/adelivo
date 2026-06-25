@@ -432,34 +432,18 @@ export async function createManagerPlaque(data: {
     const safeOldValue = data.oldValue || null;
     const safeChangeType = data.changeType || "DEFAULT";
 
-    const existing = await prisma.managerNotification.findFirst({
-      where: { courierId: safeCourierId, isSeen: false }
+    // 🔥 БОЛЬШЕ НИКАКИХ ПРОВЕРОК И АПДЕЙТОВ. ТОЛЬКО ЧИСТЫЙ CREATE!
+    const record = await prisma.managerNotification.create({
+      data: {
+        courierId: safeCourierId,
+        courierName: safeCourierName,
+        newValue: safeNewValue,
+        oldValue: safeOldValue,
+        authorName: data.authorName || null,
+        changeType: safeChangeType,
+        isSeen: false // По умолчанию всегда не прочитано
+      }
     });
-
-    let record;
-    if (existing) {
-      record = await prisma.managerNotification.update({
-        where: { id: existing.id },
-        data: {
-          newValue: safeNewValue,
-          oldValue: existing.oldValue || safeOldValue || existing.newValue,
-          changeType: safeChangeType,
-          authorName: data.authorName || existing.authorName,
-          createdAt: new Date()
-        }
-      });
-    } else {
-      record = await prisma.managerNotification.create({
-        data: {
-          courierId: safeCourierId,
-          courierName: safeCourierName,
-          newValue: safeNewValue,
-          oldValue: safeOldValue,
-          authorName: data.authorName || null,
-          changeType: safeChangeType
-        }
-      });
-    }
 
     // 2. ЛОГИРУЕМ УСПЕХ
     await prisma.notificationLog.create({
@@ -470,7 +454,7 @@ export async function createManagerPlaque(data: {
     return record;
   } catch (error: any) {
     console.error("❌ [FATAL Plaque Error]:", error);
-    // 3. ЛОГИРУЕМ ОШИБКУ (если что-то не так со схемой или типами)
+    // 3. ЛОГИРУЕМ ОШИБКУ
     await prisma.notificationLog.create({
       data: { 
         type: "debug.plaque.error", 
