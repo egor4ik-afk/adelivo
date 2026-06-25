@@ -141,7 +141,7 @@ export default function ManagerDashboard() {
   const loadData = useCallback(async (showLoadingState = true) => {
     if (showLoadingState) setLoading(true);
     try {
-      if (activeTab === 'new' || activeTab === 'routes' || activeTab === 'history') {
+      if (activeTab === 'new' || activeTab === 'routes') {
         const [notifRes, routesRes] = await Promise.all([
           fetch('/api/manager/notifications'),
           fetch('/api/manager/routes')
@@ -183,10 +183,13 @@ export default function ManagerDashboard() {
           });
         }
       } 
-      if (activeTab === 'history') {
+      else if (activeTab === 'history') {
         const res = await fetch('/api/manager/notifications?history=true');
         const data = await res.json();
-        if (Array.isArray(data)) setHistory(data);
+        if (Array.isArray(data)) {
+          // Строго новые сверху
+          setHistory(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+        }
       }
     } catch (error) { console.error(error); }
     if (showLoadingState) setLoading(false);
@@ -367,10 +370,8 @@ export default function ManagerDashboard() {
   }
 
   const tasksWithRoutes = tasks.map(task => {
-    // 🔥 Теперь ищем маршрут надежно по ID курьера
-    const matchedRoute = routes.find(r => String(r.courier?.id) === String(task.courierId));
-    return { ...task, routeData: matchedRoute };
-  }).sort((a, b) => a.newValue.localeCompare(b.newValue));
+    return { ...task, routeData: null }; 
+  }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   const pendingRoutes = routes.filter((route) => {
     if (!route.orders || route.orders.length === 0) return false;

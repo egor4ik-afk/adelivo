@@ -255,7 +255,10 @@ export async function POST(req: Request) {
           // НОВЫЙ МАРШРУТ
           finalChangeType = 'ROUTE_REASSIGNED';
           newLines.push(routeHeader);
-          if (plannedDepartureTime) newLines.push(`⏱ ${plannedDepartureTime}`);
+          // 🔥 Берем 100% сохраненное время из БД
+          if (newRoute.plannedDepartureTime) {
+             newLines.push(`⏱ ${newRoute.plannedDepartureTime}`);
+          }
           newLines.push(`📦 Добавили: ${sortedOrders.map((o: any) => o.externalId || o.crmId || o.id).join(', ')}`);
         } else {
           // СУЩЕСТВУЮЩИЙ МАРШРУТ: Собираем только реальные изменения
