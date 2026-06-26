@@ -228,6 +228,7 @@ export async function POST(req: Request) {
     // 🔥 1. УМНАЯ ОТПРАВКА PUSH-УВЕДОМЛЕНИЙ КУРЬЕРУ
     let shouldSendPush = false;
     let isNewRoute = false;
+    let isTimeChangedOnly = false; // Добавляем флаг только для времени
 
     if (!oldRouteId || oldCourierId !== Number(courierId)) {
       shouldSendPush = true;
@@ -235,6 +236,11 @@ export async function POST(req: Request) {
     } else if (pointsChanged) {
       shouldSendPush = true;
       isNewRoute = false;
+    } else if (plannedDepartureTime !== undefined && plannedDepartureTime !== fallbackPlannedTime) {
+      // 🔥 ЕСЛИ ПОМЕНЯЛОСЬ ТОЛЬКО ВРЕМЯ
+      shouldSendPush = true;
+      isNewRoute = false;
+      isTimeChangedOnly = true;
     }
 
     if (shouldSendPush && courierDb?.email) {
@@ -247,7 +253,17 @@ export async function POST(req: Request) {
             routeId: newRoute.name,
             pointsCount: orderIds.length
           });
+        } else if (isTimeChangedOnly) {
+          // 🔥 ПУШ КУРЬЕРУ ПРО ИЗМЕНЕНИЕ ВРЕМЕНИ
+          await notify({
+            type: "custom",
+            userId: userObj.id,
+            title: `⏰ Изменено время выезда`,
+            body: `Маршрут ${newRoute.name}. Новое время: ${plannedDepartureTime || "не указано"}`,
+            url: "/courier/routes"
+          });
         } else {
+          // ПУШ КУРЬЕРУ ПРО ИЗМЕНЕНИЕ ТОЧЕК
           await notify({
             type: "custom",
             userId: userObj.id,
