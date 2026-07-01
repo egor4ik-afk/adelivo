@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
     where,
     // Сортируем строго по дате (самые свежие сверху).
     orderBy: { crmCreatedAt: "desc" },
-    take: 3500,
+    take: 7500,
     // 🔥 ЭТО САМОЕ ГЛАВНОЕ: теперь маршруты подтянутся вместе с isDraft!
     include: { route: true } 
   });

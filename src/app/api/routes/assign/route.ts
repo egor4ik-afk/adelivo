@@ -54,7 +54,7 @@ export async function POST(req: Request) {
       
       oldOrders = await prisma.order.findMany({
         where: { routeId: oldRouteId },
-        select: { id: true, externalId: true, crmId: true }
+        select: { id: true, externalId: true, crmId: true, status: true }
       });
       
       const oldOrderIdsStr = oldOrders.map(o => o.id).sort().join(',');
@@ -77,7 +77,7 @@ export async function POST(req: Request) {
           where: { id: o.id },
           data: {
             courierId: null, courier: null, routeId: null, routeOrder: null,
-            status: o.status === "ASSIGNED" ? "NEW" : o.status,
+            status: o.status === "ASSIGNED" ? "ASSEMBLING" : o.status,
             eta: null,
             price: resetPrice 
           }
@@ -214,7 +214,7 @@ export async function POST(req: Request) {
         data: { 
           courierId: Number(courierId), courier: courierFullName,
           routeId: newRoute.id, routeOrder: i + 1,
-          status: orderToUpdate.status === "NEW" ? "ASSIGNED" : undefined,
+          status: (orderToUpdate.status === "NEW" || orderToUpdate.status === "ASSEMBLING") ? "ASSIGNED" : undefined,
           opComment: newOpComment, price: finalPrice, 
           eta: orderEta 
         }

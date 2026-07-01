@@ -24,6 +24,7 @@ const badgeConfig: Record<string, { text: string; styles: string; icon: string }
 
 const LOCAL_STATUSES: Record<string, { label: string, color: string }> = {
   NEW: { label: 'Новый', color: 'bg-gray-100 text-gray-700' },
+  ASSEMBLING: { label: 'В сборке', color: 'bg-[#fff8e6] text-[#b38a00] border border-[#ffe082]' },
   ASSIGNED: { label: 'Назначен', color: 'bg-blue-100 text-blue-700' },
   IN_DELIVERY: { label: '🚀 В пути', color: 'bg-yellow-100 text-yellow-800' },
   DELIVERED: { label: '✅ Доставлен', color: 'bg-green-100 text-green-800' },

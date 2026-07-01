@@ -483,13 +483,13 @@ export function DashboardClient({ user }: { user: User }) {
 
   const sidePanelOrders = [...filtered].sort((a, b) => {
     const getPriority = (o: DashboardOrder) => {
-      // 🔥 Теперь и самовывоз, и магазин уходят в самый конец списка (приоритет 6)
-      if (/самовывоз|большой афанасьевский 39/i.test(o.address || "")) return 6;
+      if (/самовывоз|большой афанасьевский 39/i.test(o.address || "")) return 7;
       if (o.status === "IN_DELIVERY") return 1;
       if (o.status === "NEW") return 2;
-      if (o.status === "ASSIGNED") return 3;
-      if (o.status === "DELIVERED") return 4;
-      return 5;
+      if (o.status === "ASSEMBLING") return 3; // 🔥 Добавили в приоритет
+      if (o.status === "ASSIGNED") return 4;
+      if (o.status === "DELIVERED") return 5;
+      return 6;
     };
     const pA = getPriority(a);
     const pB = getPriority(b);
@@ -1262,6 +1262,7 @@ export function DashboardClient({ user }: { user: User }) {
 
   const ROUTE_STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
     NEW: { label: "Новый", color: "#d94040", bg: "#fef2f2" },
+    ASSEMBLING: { label: "В сборке", color: "#d97706", bg: "#fffbeb" }, // 🔥 Цвет для отображения
     ASSIGNED: { label: "Назначен", color: "#4a7aff", bg: "#eef3ff" },
     IN_DELIVERY: { label: "🚀 В пути", color: "#10b981", bg: "#ecfdf5" },
     DELIVERED: { label: "✅ Доставлен", color: "#6b6860", bg: "#f5f4f0" },
@@ -1834,7 +1835,7 @@ export function DashboardClient({ user }: { user: User }) {
                           <div style={{ width: 24, height: 24, borderRadius: "50%", background: color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{index + 1}</div>
 
                           <div style={{ flex: 1, overflow: "hidden" }}>
-                            
+
                             {/* 🔥 3. АДРЕС И УВЕДОМЛЕНИЕ ДЛЯ ОПЕРАТОРА И АДМИНА */}
                             <div style={{ fontSize: 13, fontWeight: 600, color: showRedBg ? "#d94040" : "#1a1a18", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                               {showWarning && "⚠️ "} {o.address}
@@ -1874,6 +1875,7 @@ export function DashboardClient({ user }: { user: User }) {
                               style={{ background: st.bg, color: st.color, border: "none", padding: "4px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, outline: "none", cursor: "pointer", marginTop: 6, display: "block" }}
                             >
                               <option value="NEW">Новый</option>
+                              <option value="ASSEMBLING">В сборке</option>
                               <option value="ASSIGNED">Назначен</option>
                               <option value="IN_DELIVERY">🚀 В пути</option>
                               <option value="DELIVERED">✅ Доставлен</option>
@@ -1983,10 +1985,18 @@ export function DashboardClient({ user }: { user: User }) {
                 <>
                   <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setIsStatusMenuOpen(false)} />
                   <div style={s.dropdownMenu}>
-                    {["NEW", "ASSIGNED", "IN_DELIVERY", "DELIVERED"].map(st => (
+                    {["NEW", "ASSEMBLING", "ASSIGNED", "IN_DELIVERY", "DELIVERED"].map(st => (
                       <label key={st} style={s.dropdownItem}>
-                        <input type="checkbox" checked={selectedStatuses.includes(st)} onChange={(e) => { if (e.target.checked) setSelectedStatuses([...selectedStatuses, st]); else setSelectedStatuses(selectedStatuses.filter(item => item !== st)); }} style={{ accentColor: "#4a7aff", width: 16, height: 16 }} />
-                        {st === "NEW" ? "Новые" : st === "ASSIGNED" ? "Назначены" : st === "IN_DELIVERY" ? "В пути" : "Доставлены"}
+                        <input
+                          type="checkbox"
+                          checked={selectedStatuses.includes(st)}
+                          onChange={(e) => {
+                            if (e.target.checked) setSelectedStatuses([...selectedStatuses, st]);
+                            else setSelectedStatuses(selectedStatuses.filter(item => item !== st));
+                          }}
+                          style={{ accentColor: "#4a7aff", width: 16, height: 16 }}
+                        />
+                        {st === "NEW" ? "Новые" : st === "ASSEMBLING" ? "В сборке" : st === "ASSIGNED" ? "Назначены" : st === "IN_DELIVERY" ? "В пути" : "Доставлены"}
                       </label>
                     ))}
                   </div>
@@ -2159,10 +2169,18 @@ export function DashboardClient({ user }: { user: User }) {
                   <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.2)" }} onClick={() => setIsStatusMenuOpen(false)} />
                   <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#fff", borderRadius: "16px 16px 0 0", padding: "16px 16px 24px", zIndex: 1000, display: "flex", flexDirection: "column", gap: 4, maxHeight: "60vh", overflowY: "auto", boxShadow: "0 -8px 24px rgba(0,0,0,0.15)" }}>
                     <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Статусы</div>
-                    {["NEW", "ASSIGNED", "IN_DELIVERY", "DELIVERED"].map(st => (
-                      <label key={st} style={{ ...s.dropdownItem, padding: "12px 8px", fontSize: 15 }}>
-                        <input type="checkbox" checked={selectedStatuses.includes(st)} onChange={(e) => { if (e.target.checked) setSelectedStatuses([...selectedStatuses, st]); else setSelectedStatuses(selectedStatuses.filter(item => item !== st)); }} style={{ accentColor: "#4a7aff", width: 18, height: 18 }} />
-                        {st === "NEW" ? "Новые" : st === "ASSIGNED" ? "Назначены" : st === "IN_DELIVERY" ? "В пути" : "Доставлены"}
+                    {["NEW", "ASSEMBLING", "ASSIGNED", "IN_DELIVERY", "DELIVERED"].map(st => (
+                      <label key={st} style={s.dropdownItem}>
+                        <input
+                          type="checkbox"
+                          checked={selectedStatuses.includes(st)}
+                          onChange={(e) => {
+                            if (e.target.checked) setSelectedStatuses([...selectedStatuses, st]);
+                            else setSelectedStatuses(selectedStatuses.filter(item => item !== st));
+                          }}
+                          style={{ accentColor: "#4a7aff", width: 16, height: 16 }}
+                        />
+                        {st === "NEW" ? "Новые" : st === "ASSEMBLING" ? "В сборке" : st === "ASSIGNED" ? "Назначены" : st === "IN_DELIVERY" ? "В пути" : "Доставлены"}
                       </label>
                     ))}
                   </div>

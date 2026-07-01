@@ -57,7 +57,7 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         updateData.pickedUpAt = new Date();
       }
       
-      if (body.status === "NEW") {
+      if (body.status === "NEW" || body.status === "ASSEMBLING") {
         updateData.pickedUpAt = null;
         updateData.eta = null;
         updateData.deliveredAt = null;
@@ -184,12 +184,12 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         },
       });
       updateData.routeId = newRoute.id; updateData.routeOrder = 1;
-      if (order.status === "NEW") updateData.status = "ASSIGNED";
+      if (order.status === "NEW" || order.status === "ASSEMBLING") updateData.status = "ASSIGNED";
     }
 
     // 🔥 ВОЗВРАЩЕННЫЙ БЛОК: Снятие курьера
     if ((body.courier === "" || body.courier === null) && order.courierId !== null) {
-      if (order.status === "ASSIGNED" && body.status === undefined) updateData.status = "NEW";
+      if (order.status === "ASSIGNED" && body.status === undefined) updateData.status = "ASSEMBLING";
       updateData.pickedUpAt = null;
       if (order.routeId) {
         const siblingsCount = await prisma.order.count({ where: { routeId: order.routeId, id: { not: id } }});

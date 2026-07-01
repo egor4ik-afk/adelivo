@@ -24,9 +24,13 @@ export const SLOTS = [
 
 export const STATUS_OPTIONS = [
   { value: "ALL", label: "Все статусы" },
-  { value: "NEW", label: "Новый" }, { value: "ASSIGNED", label: "Назначен" },
-  { value: "IN_DELIVERY", label: "В пути" }, { value: "DELIVERED", label: "Доставлен" },
-  { value: "RETURNED", label: "Возврат" }, { value: "CANCELLED", label: "Отменён" },
+  { value: "NEW", label: "Новый" }, 
+  { value: "ASSEMBLING", label: "В сборке" },
+  { value: "ASSIGNED", label: "Назначен" },
+  { value: "IN_DELIVERY", label: "В пути" }, 
+  { value: "DELIVERED", label: "Доставлен" },
+  { value: "RETURNED", label: "Возврат" }, 
+  { value: "CANCELLED", label: "Отменён" },
 ];
 
 export const STATUS_LABELS: Record<string, string> = Object.fromEntries(STATUS_OPTIONS.map(o => [o.value, o.label]));

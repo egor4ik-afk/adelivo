@@ -39,12 +39,18 @@ export function parseSlot(raw: unknown) {
 }
 
 const CRM_STATUS_MAP: Record<string, OrderStatus> = {
-  "new": OrderStatus.NEW, "accepted": OrderStatus.ASSIGNED,
-  "send-to-assembling": OrderStatus.ASSIGNED, "assembling": OrderStatus.ASSIGNED,
-  "assembling-complete": OrderStatus.ASSIGNED, "kurer-naznachen": OrderStatus.ASSIGNED,
-  "send-to-delivery": OrderStatus.IN_DELIVERY, "delivering": OrderStatus.IN_DELIVERY,
-  "complete": OrderStatus.DELIVERED, "cancel-other": OrderStatus.CANCELLED,
-  "return": OrderStatus.RETURNED, "chastichnyi-vozvrat": OrderStatus.RETURNED,
+  "new": OrderStatus.NEW, 
+  "accepted": OrderStatus.NEW,
+  "send-to-assembling": OrderStatus.ASSEMBLING, 
+  "assembling": OrderStatus.ASSEMBLING,         
+  "assembling-complete": OrderStatus.ASSEMBLING,
+  "kurer-naznachen": OrderStatus.ASSIGNED,
+  "send-to-delivery": OrderStatus.IN_DELIVERY, 
+  "delivering": OrderStatus.IN_DELIVERY,
+  "complete": OrderStatus.DELIVERED, 
+  "cancel-other": OrderStatus.CANCELLED,
+  "return": OrderStatus.RETURNED, 
+  "chastichnyi-vozvrat": OrderStatus.RETURNED,
 };
 
 export function mapCrmStatus(crmStatus?: string): OrderStatus {
@@ -54,6 +60,7 @@ export function mapCrmStatus(crmStatus?: string): OrderStatus {
 
 const STATUS_TO_CRM: Partial<Record<OrderStatus, string>> = {
   [OrderStatus.NEW]: "new",
+  [OrderStatus.ASSEMBLING]: "assembling",
   [OrderStatus.ASSIGNED]: "kurer-naznachen",
   [OrderStatus.IN_DELIVERY]: "send-to-delivery",
   [OrderStatus.DELIVERED]: "complete",
