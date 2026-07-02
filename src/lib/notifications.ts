@@ -40,6 +40,7 @@ interface InvalidOrderPayload {
 const STATUS_LABELS: Record<string, string> = {
   NEW: "Новый",
   ASSIGNED: "Назначен",
+  ASSEMBLING: "В сборке", // 🔥 ОБЯЗАТЕЛЬНО ДОБАВИТЬ!
   IN_DELIVERY: "В пути",
   DELIVERED: "Доставлен",
   RETURNED: "Возврат",
@@ -288,11 +289,18 @@ async function sendIndividualPushes(event: NotificationEvent) {
 
         if (courierRecord && eventCourierId === courierRecord.id) {
           // 🔥 ИСПРАВЛЕНО: Блокируем спам при первичном назначении (NEW -> ASSIGNED)
+          // 🔥 ИСПРАВЛЕНО: Блокируем спам при первичном назначении и статусах сборки
           if (event.changes.statusChanged) {
             const oldLabel = event.previousStatus ? statusLabel(event.previousStatus) : "—";
             const newLabel = statusLabel(event.order.status);
             
-            if (oldLabel !== newLabel && !(event.previousStatus === "NEW" && event.order.status === "ASSIGNED")) {
+            // Игнорируем переходы, которые не требуют внимания курьера
+            const isIgnoredTransition = 
+              (event.previousStatus === "NEW" && event.order.status === "ASSIGNED") ||
+              (event.previousStatus === "NEW" && event.order.status === "ASSEMBLING") ||
+              (event.previousStatus === "ASSEMBLING" && event.order.status === "ASSIGNED");
+
+            if (oldLabel !== newLabel && !isIgnoredTransition) {
               shouldSend = true;
               bodyTexts.push(`Статус: ${oldLabel} ➔ ${newLabel}`);
             }
