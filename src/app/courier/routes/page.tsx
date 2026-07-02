@@ -31,6 +31,7 @@ interface RouteOrder {
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
   ASSIGNED: { label: "Назначен", color: "#4a7aff", bg: "#eef3ff" },
+  ASSEMBLING: { label: "В сборке", color: "#d97706", bg: "#fffbeb" }, // 🔥 Цвет для отображения
   IN_DELIVERY: { label: "🚀 В пути", color: "#10b981", bg: "#ecfdf5" },
   DELIVERED: { label: "✅ Доставлен", color: "#6b6860", bg: "#f5f4f0" },
 };
@@ -154,10 +155,12 @@ export default function CourierRoutesPage() {
     });
   };
 
-  const handlePickupAll = async (routeId: string) => {
+ const handlePickupAll = async (routeId: string) => {
     if (!window.confirm("Отметить все неначатые заказы в маршруте как «В пути»?")) return;
+    
     setOrders(prev => prev.map(o =>
-      o.route?.id === routeId && o.status === "ASSIGNED"
+      // 🔥 Добавили условие o.status === "ASSEMBLING"
+      o.route?.id === routeId && (o.status === "ASSIGNED" || o.status === "ASSEMBLING")
         ? { ...o, status: "IN_DELIVERY" }
         : o
     ));
