@@ -12,9 +12,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   try {
     const { id } = await context.params;
     
-    // Находим все заказы в маршруте, которые еще "Назначены" или "Новые", сортируем по порядку
+    // Находим все заказы в маршруте, которые еще "В сборке", "Назначены" или "Новые"
     const orders = await prisma.order.findMany({
-      where: { routeId: id, status: { in: ["NEW", "ASSIGNED"] } },
+      where: { routeId: id, status: { in: ["NEW", "ASSIGNED", "ASSEMBLING"] } },
       orderBy: { routeOrder: 'asc' }
     });
 

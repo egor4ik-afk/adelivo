@@ -1262,8 +1262,8 @@ export function DashboardClient({ user }: { user: User }) {
 
   const ROUTE_STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
     NEW: { label: "Новый", color: "#d94040", bg: "#fef2f2" },
-    ASSEMBLING: { label: "В сборке", color: "#d97706", bg: "#fffbeb" }, // 🔥 Цвет для отображения
     ASSIGNED: { label: "Назначен", color: "#4a7aff", bg: "#eef3ff" },
+    ASSEMBLING: { label: "В сборке", color: "#d97706", bg: "#fffbeb" }, // 🔥 Цвет для отображения
     IN_DELIVERY: { label: "🚀 В пути", color: "#10b981", bg: "#ecfdf5" },
     DELIVERED: { label: "✅ Доставлен", color: "#6b6860", bg: "#f5f4f0" },
     RETURNED: { label: "↩️ Возврат", color: "#d94040", bg: "#fef2f2" },
@@ -1875,8 +1875,8 @@ export function DashboardClient({ user }: { user: User }) {
                               style={{ background: st.bg, color: st.color, border: "none", padding: "4px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, outline: "none", cursor: "pointer", marginTop: 6, display: "block" }}
                             >
                               <option value="NEW">Новый</option>
-                              <option value="ASSEMBLING">В сборке</option>
                               <option value="ASSIGNED">Назначен</option>
+                              <option value="ASSEMBLING">В сборке</option>
                               <option value="IN_DELIVERY">🚀 В пути</option>
                               <option value="DELIVERED">✅ Доставлен</option>
                               <option value="RETURNED">↩️ Возврат</option>
@@ -1985,7 +1985,7 @@ export function DashboardClient({ user }: { user: User }) {
                 <>
                   <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setIsStatusMenuOpen(false)} />
                   <div style={s.dropdownMenu}>
-                    {["NEW", "ASSEMBLING", "ASSIGNED", "IN_DELIVERY", "DELIVERED"].map(st => (
+                    {["NEW", "ASSIGNED", "ASSEMBLING", "IN_DELIVERY", "DELIVERED"].map(st => (
                       <label key={st} style={s.dropdownItem}>
                         <input
                           type="checkbox"
@@ -1996,7 +1996,7 @@ export function DashboardClient({ user }: { user: User }) {
                           }}
                           style={{ accentColor: "#4a7aff", width: 16, height: 16 }}
                         />
-                        {st === "NEW" ? "Новые" : st === "ASSEMBLING" ? "В сборке" : st === "ASSIGNED" ? "Назначены" : st === "IN_DELIVERY" ? "В пути" : "Доставлены"}
+                        {st === "NEW" ? "Новые" :  st === "ASSIGNED" ? "Назначены" : st === "ASSEMBLING" ? "В сборке" : st === "IN_DELIVERY" ? "В пути" : "Доставлены"}
                       </label>
                     ))}
                   </div>
@@ -2169,7 +2169,7 @@ export function DashboardClient({ user }: { user: User }) {
                   <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.2)" }} onClick={() => setIsStatusMenuOpen(false)} />
                   <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#fff", borderRadius: "16px 16px 0 0", padding: "16px 16px 24px", zIndex: 1000, display: "flex", flexDirection: "column", gap: 4, maxHeight: "60vh", overflowY: "auto", boxShadow: "0 -8px 24px rgba(0,0,0,0.15)" }}>
                     <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Статусы</div>
-                    {["NEW", "ASSEMBLING", "ASSIGNED", "IN_DELIVERY", "DELIVERED"].map(st => (
+                    {["NEW", "ASSIGNED",  "ASSEMBLING", "IN_DELIVERY", "DELIVERED"].map(st => (
                       <label key={st} style={s.dropdownItem}>
                         <input
                           type="checkbox"
@@ -2180,7 +2180,7 @@ export function DashboardClient({ user }: { user: User }) {
                           }}
                           style={{ accentColor: "#4a7aff", width: 16, height: 16 }}
                         />
-                        {st === "NEW" ? "Новые" : st === "ASSEMBLING" ? "В сборке" : st === "ASSIGNED" ? "Назначены" : st === "IN_DELIVERY" ? "В пути" : "Доставлены"}
+                        {st === "NEW" ? "Новые" : st === "ASSIGNED" ? "Назначены" : st === "ASSEMBLING" ? "В сборке" :  st === "IN_DELIVERY" ? "В пути" : "Доставлены"}
                       </label>
                     ))}
                   </div>
