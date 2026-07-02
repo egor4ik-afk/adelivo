@@ -77,7 +77,7 @@ export async function POST(req: Request) {
           where: { id: o.id },
           data: {
             courierId: null, courier: null, routeId: null, routeOrder: null,
-            status: o.status === "ASSIGNED" ? "ASSEMBLING" : o.status,
+            // 🔥 Статус вообще не трогаем, он остается тем, которым был
             eta: null,
             price: resetPrice 
           }
@@ -214,7 +214,8 @@ export async function POST(req: Request) {
         data: { 
           courierId: Number(courierId), courier: courierFullName,
           routeId: newRoute.id, routeOrder: i + 1,
-          status: (orderToUpdate.status === "NEW" || orderToUpdate.status === "ASSEMBLING") ? "ASSIGNED" : undefined,
+          // 🔥 Переводим в ASSIGNED ТОЛЬКО заказы со статусом NEW. Если он "В сборке", он там и остается.
+          status: orderToUpdate.status === "NEW" ? "ASSIGNED" : undefined,
           opComment: newOpComment, price: finalPrice, 
           eta: orderEta 
         }
