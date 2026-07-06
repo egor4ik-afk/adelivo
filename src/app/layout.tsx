@@ -45,7 +45,7 @@ export const metadata: Metadata = {
     siteName: "Event Wave",
     images: [
       {
-        url: "/og-image.jpg",
+        url: "/og-image.png",
         width: 1200,
         height: 630,
         alt: "Event Wave — Система диспетчеризации и логистики",
@@ -60,7 +60,7 @@ export const metadata: Metadata = {
     title: "Event Wave — Диспетчеризация курьеров",
     description:
       "Система управления курьерами и доставкой в реальном времени. Интеграция с любой CRM.",
-    images: ["/og-image.jpg"],
+    images: ["/og-image.png"],
   },
 
   robots: {

@@ -29,7 +29,7 @@ export const metadata: Metadata = {
       "Система управления курьерами для любого доставочного бизнеса. Умные маршруты, контроль в реальном времени, PWA-приложение для курьеров.",
     url: `${SITE_URL}/about`,
     siteName: "Event Wave",
-    images: [{ url: "/og-image.jpg", width: 1200, height: 630, alt: "Event Wave — Система диспетчеризации" }],
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Event Wave — Система диспетчеризации" }],
     locale: "ru_RU",
     type: "website",
   },
@@ -373,7 +373,7 @@ export default function AboutPage() {
                 {/* Dashboard mockup */}
                 <div>
                 <Image
-                    src="/og-image.jpg"
+                    src="/og-image.png"
                     alt="Event Wave — интерфейс системы диспетчеризации курьеров"
                     width={1200} height={630}
                     style={{ width: "100%", height: "auto", display: "block" }}
