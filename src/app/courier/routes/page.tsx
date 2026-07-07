@@ -15,7 +15,7 @@ interface RouteOrder {
   routeId: string | null; routeOrder: number | null;
   deliveryDate: string | null;
   deliveredAt?: string | null;
-  pickedUpAt?: string | null; // 🔥 ДОБАВЛЕНО ПОЛЕ ДЛЯ ФИКСАЦИИ ВРЕМЕНИ ВЫЕЗДА
+  pickedUpAt?: string | null;
   eta?: string | null;
   photoUrl?: string | null;
   route?: {
@@ -31,7 +31,7 @@ interface RouteOrder {
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
   ASSIGNED: { label: "Назначен", color: "#4a7aff", bg: "#eef3ff" },
-  ASSEMBLING: { label: "В сборке", color: "#d97706", bg: "#fffbeb" }, // 🔥 Цвет для отображения
+  ASSEMBLING: { label: "В сборке", color: "#d97706", bg: "#fffbeb" },
   IN_DELIVERY: { label: "🚀 В пути", color: "#10b981", bg: "#ecfdf5" },
   DELIVERED: { label: "✅ Доставлен", color: "#6b6860", bg: "#f5f4f0" },
 };
@@ -53,6 +53,45 @@ export default function CourierRoutesPage() {
     setCollapsedOrders(prev => ({ ...prev, [orderId]: !prev[orderId] }));
   };
 
+  const fetchWithTimeout = async (resource: string, options: RequestInit & { timeout?: number }) => {
+    const { timeout = 20000 } = options;
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    const response = await fetch(resource, { ...options, signal: controller.signal });
+    clearTimeout(id);
+    return response;
+  };
+
+  // 🔥 Синхронизация статусов из очереди
+  const syncPendingStatuses = async () => {
+    if (typeof window === "undefined") return;
+    const pendingStr = localStorage.getItem('pendingStatuses');
+    if (!pendingStr) return;
+    
+    const pending = JSON.parse(pendingStr);
+    let hasUpdates = false;
+
+    for (const [id, status] of Object.entries(pending)) {
+      try {
+        const res = await fetch(`/api/orders/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        });
+        if (res.ok) {
+          delete pending[id];
+          hasUpdates = true;
+        }
+      } catch (e) {
+        console.warn(`Синхронизация отложена для ${id}, ждем сеть...`);
+      }
+    }
+
+    if (hasUpdates) {
+      localStorage.setItem('pendingStatuses', JSON.stringify(pending));
+    }
+  };
+
   const fetchOrders = async () => {
     try {
       const res = await fetch("/api/courier/my-orders");
@@ -60,11 +99,9 @@ export default function CourierRoutesPage() {
         const fetchedOrders = await res.json();
         setOrders(fetchedOrders);
 
-        // 🔥 Автоматически помечаем текущее время как прочитанное при загрузке
         setAcknowledgedTimes(prev => {
           const newAcks = { ...prev };
           fetchedOrders.forEach((o: any) => {
-            // 🔥 ИСПРАВЛЕНИЕ: Используем имя маршрута (o.route.name)
             if (o.route?.name && o.route?.plannedDepartureTime) {
               if (newAcks[o.route.name] === undefined) {
                 newAcks[o.route.name] = o.route.plannedDepartureTime;
@@ -77,20 +114,19 @@ export default function CourierRoutesPage() {
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
+
   useEffect(() => {
-    fetchOrders();
-    const iv = setInterval(fetchOrders, 15_000);
+    const initFetch = async () => {
+      if (typeof window !== "undefined" && navigator.onLine) {
+        await syncPendingStatuses(); // Сначала пытаемся отправить зависшие статусы
+      }
+      fetchOrders();
+    };
+
+    initFetch();
+    const iv = setInterval(initFetch, 15_000);
     return () => clearInterval(iv);
   }, []);
-
-  const fetchWithTimeout = async (resource: string, options: RequestInit & { timeout?: number }) => {
-    const { timeout = 20000 } = options;
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), timeout);
-    const response = await fetch(resource, { ...options, signal: controller.signal });
-    clearTimeout(id);
-    return response;
-  };
 
   const handleStatusChange = async (id: string, newStatus: string, checkTime?: string | null) => {
     if ((newStatus === "IN_DELIVERY" || newStatus === "DELIVERED") && checkTime) {
@@ -105,38 +141,27 @@ export default function CourierRoutesPage() {
       }
     }
 
-    const prevOrders = [...orders];
+    // 🔥 Оптимистичное обновление UI: сразу меняем статус визуально
     setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o));
 
-    let success = false;
-    let attempts = 0;
-    const maxAttempts = newStatus === "DELIVERED" ? 3 : 1;
+    try {
+      const res = await fetchWithTimeout(`/api/orders/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+        timeout: 5000 // Ждем недолго. Если связи нет, упадет в ошибку и сохранится
+      });
 
-    while (attempts < maxAttempts && !success) {
-      attempts++;
-      try {
-        const res = await fetchWithTimeout(`/api/orders/${id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: newStatus }),
-          timeout: 20000
-        });
-
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}));
-          throw new Error(errorData.error || `Ошибка сервера ${res.status}`);
-        }
-        success = true;
-      } catch (error: any) {
-        if (attempts >= maxAttempts) {
-          setOrders(prevOrders);
-          alert(error.name === "AbortError"
-            ? "Сервер не ответил за 20 секунд. Проверьте интернет и попробуйте еще раз."
-            : `Ошибка изменения статуса: ${error.message}`);
-          return;
-        }
-        await new Promise(r => setTimeout(r, 1500));
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `Ошибка сервера ${res.status}`);
       }
+    } catch (error: any) {
+      // 🔥 Сохраняем в оффлайн-очередь при ошибке/отсутствии сети
+      console.warn("Ошибка сети. Статус сохранен локально и будет отправлен позже.");
+      const pending = JSON.parse(localStorage.getItem('pendingStatuses') || '{}');
+      pending[id] = newStatus;
+      localStorage.setItem('pendingStatuses', JSON.stringify(pending));
     }
   };
 
@@ -159,7 +184,6 @@ export default function CourierRoutesPage() {
     if (!window.confirm("Отметить все неначатые заказы в маршруте как «В пути»?")) return;
 
     setOrders(prev => prev.map(o =>
-      // 🔥 Добавили условие o.status === "ASSEMBLING"
       o.route?.id === routeId && (o.status === "ASSIGNED" || o.status === "ASSEMBLING")
         ? { ...o, status: "IN_DELIVERY" }
         : o
@@ -167,6 +191,7 @@ export default function CourierRoutesPage() {
     await fetch(`/api/routes/${routeId}/pickup-all`, { method: "POST" });
   };
 
+  // 🔥 Загрузку фото оставляем как была, без изменений
   const handlePhotoUpload = async (orderId: string, file: File) => {
     setUploading(prev => ({ ...prev, [orderId]: true }));
     try {
@@ -374,7 +399,6 @@ export default function CourierRoutesPage() {
           const hasStarted = routePoints.some(p => p.status === "IN_DELIVERY" || p.status === "DELIVERED");
           const isRouteAccepted = (routeObj as any)?.isAccepted !== false || acceptedLocally[rId];
 
-          // 🔥 Ищем точное время выезда с базы
           let pickedUpTimeStr = null;
           if (hasStarted) {
             const firstStarted = routePoints.find(p => p.pickedUpAt);
@@ -394,7 +418,6 @@ export default function CourierRoutesPage() {
               <div style={{ padding: "14px 16px", background: "#fafaf8", borderBottom: isExpanded ? "1px solid #e8e6df" : "none" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "stretch", cursor: "pointer", marginBottom: isExpanded ? 12 : 0 }} onClick={onRouteHeaderClick}>
 
-                  {/* ЛЕВАЯ ЧАСТЬ — инфо */}
                   <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
                     <div style={{ fontSize: 14, fontWeight: 800, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       Маршрут {routeName}
@@ -403,9 +426,7 @@ export default function CourierRoutesPage() {
                     <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 4 }}>
                       {delivered}/{total} доставлено • <span style={{ fontWeight: 600, color: "#6b6860" }}>{routePriceTotal} ₽</span>
                     </div>
-                    {/* 🔥 ИНТЕРАКТИВНЫЕ ПЛАШКИ (Выезд / Факт / Изменение времени) */}
                     {(() => {
-                      // 1. Если курьер уже забрал заказы — показываем зеленую галку факта
                       if (pickedUpTimeStr) {
                         return (
                           <div style={{ marginTop: 8, padding: "4px 8px", background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: 6, display: "inline-flex", gap: 6, alignItems: "center" }}>
@@ -416,8 +437,6 @@ export default function CourierRoutesPage() {
                       }
 
                       const plannedTime = routeObj?.plannedDepartureTime;
-
-                      // 🔥 ИСПРАВЛЕНИЕ: Привязываемся к routeName, так как ID меняется при редактировании оператором!
                       const isTimeChanged = isRouteAccepted && plannedTime && acknowledgedTimes[routeName] !== plannedTime && acknowledgedTimes[routeName] !== undefined;
 
                       if (isTimeChanged) {
@@ -425,7 +444,6 @@ export default function CourierRoutesPage() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              // 🔥 ИСПРАВЛЕНИЕ: Сохраняем по имени маршрута
                               setAcknowledgedTimes(prev => ({ ...prev, [routeName]: plannedTime }));
                             }}
                             style={{
@@ -442,7 +460,6 @@ export default function CourierRoutesPage() {
                         );
                       }
 
-                      // 3. Обычная спокойная плашка (если время не менялось или курьер его уже "принял" кликом)
                       if (advice) {
                         return (
                           <div style={{ marginTop: 8, padding: "4px 8px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 6, display: "inline-flex", gap: 6, alignItems: "center" }}>
@@ -456,9 +473,7 @@ export default function CourierRoutesPage() {
                     })()}
                   </div>
 
-                  {/* ПРАВАЯ ЧАСТЬ — кнопки + жирная стрелка внизу */}
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "space-between", flexShrink: 0, minHeight: "100%" }}>
-
                     {(() => {
                       const validPoints = routePoints.filter(o => o.lat && o.lng);
                       const routeUrl = validPoints.length > 0
@@ -471,7 +486,6 @@ export default function CourierRoutesPage() {
 
                       return (
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
-                          {/* Маршрут прячется, когда всё доставлено */}
                           {routeUrl && !isAllDelivered && (
                             <a href={routeUrl} target="_blank" rel="noopener noreferrer"
                               onClick={e => e.stopPropagation()}
@@ -481,7 +495,6 @@ export default function CourierRoutesPage() {
                             </a>
                           )}
 
-                          {/* Возврат на базу появляется ТОЛЬКО когда всё доставлено */}
                           {isAllDelivered && toBaseUrl && (
                             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
                               <a href={toBaseUrl} target="_blank" rel="noopener noreferrer"
@@ -499,7 +512,6 @@ export default function CourierRoutesPage() {
                       );
                     })()}
 
-                    {/* 🔥 Жирная стрелка, прижатая к нижнему углу */}
                     <div style={{ fontSize: 18, color: "#1a1a18", fontWeight: 900, transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s", marginTop: "auto", paddingTop: 10 }}>
                       ▼
                     </div>
@@ -507,7 +519,6 @@ export default function CourierRoutesPage() {
                   </div>
 
                 </div>
-                {/* 🔥 Панель скрывается, если курьер уже нажал "Забрал все" (!hasStarted) и если висит синий баннер (isRouteAccepted) */}
                 {isExpanded && isRouteAccepted && !hasStarted && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px dashed #e8e6df", paddingTop: 12 }} onClick={e => e.stopPropagation()}>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -722,11 +733,7 @@ export default function CourierRoutesPage() {
                                   WebkitAppearance: "none",
                                 }}
                               >
-                                {/* 🔥 Добавляем "В сборке" только если заказ сейчас в этом статусе */}
-                                {o.status === "ASSEMBLING" && (
-                                  <option value="ASSEMBLING" disabled>В сборке</option>
-                                )}
-
+                                {/* 🔥 Статуса "В сборке" здесь больше нет! */}
                                 <option value="ASSIGNED">Назначен</option>
 
                                 <option value="IN_DELIVERY" disabled={isTooEarly}>
