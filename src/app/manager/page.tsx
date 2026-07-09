@@ -153,8 +153,17 @@ export default function ManagerDashboard() {
     if (showLoadingState) setLoading(false);
   }, [activeTab]);
 
-  useEffect(() => { if (isAuthorized) loadData(); }, [activeTab, isAuthorized, loadData]);
-
+  useEffect(() => { 
+    if (isAuthorized) {
+      // Показываем экран загрузки только если массив данных пуст
+      const needsLoading = 
+        (activeTab === 'new' && tasks.length === 0) || 
+        (activeTab === 'routes' && routes.length === 0) || 
+        (activeTab === 'history' && history.length === 0);
+      
+      loadData(needsLoading); 
+    }
+  }, [activeTab, isAuthorized, loadData]);
   useEffect(() => {
     if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('tab') === 'new') setActiveTab('new');
   }, []);
@@ -400,31 +409,34 @@ export default function ManagerDashboard() {
 
             {activeTab === 'routes' && (
               <>
-                {/* 🔥 КОМПАКТНАЯ СТРОКА ПОИСКА */}
-                <div className="mb-3 flex flex-col sm:flex-row gap-3 items-center z-10">
-                  <div className="relative flex-grow w-full">
-                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-[#a8a49c] text-sm">🔍</span>
+                {/* 🔥 СТРОКА ПОИСКА И ЧЕКБОКС (В одну строку) */}
+                <div className="mb-4 flex flex-row gap-2 items-center z-10">
+                  <div className="relative flex-grow min-w-0">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-[#a8a49c] text-lg">🔍</span>
                     <input 
                       type="text" 
-                      placeholder={searchByIdOnly ? "Поиск по номеру заказа или ID..." : "Поиск по номеру, адресу, имени, телефону, комментарию..."}
+                      placeholder={searchByIdOnly ? "Поиск по ID..." : "Поиск по номеру, имени, адресу..."}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-9 pr-10 py-2 rounded-xl border border-[#e8e6df] bg-white text-[#1a1a18] text-sm focus:outline-none focus:border-[#4a7aff] focus:ring-2 focus:ring-blue-100 shadow-sm transition-all font-medium placeholder-[#a8a49c]"
+                      className="w-full pl-12 pr-10 py-3.5 rounded-2xl border border-[#e8e6df] bg-white text-[#1a1a18] focus:outline-none focus:border-[#4a7aff] focus:ring-4 focus:ring-blue-100 shadow-sm transition-all font-medium placeholder-[#a8a49c]"
                     />
                     {searchQuery && (
-                      <button onClick={() => setSearchQuery('')} className="absolute inset-y-0 right-0 flex items-center pr-3 text-[#a8a49c] hover:text-[#1a1a18] transition-colors">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                      <button onClick={() => setSearchQuery('')} className="absolute inset-y-0 right-0 flex items-center pr-4 text-[#a8a49c] hover:text-[#1a1a18] transition-colors">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                       </button>
                     )}
                   </div>
-                  <label className="flex items-center gap-2 text-sm font-semibold text-[#6b6860] cursor-pointer shrink-0 bg-white px-3 py-2 border border-[#e8e6df] rounded-xl shadow-sm hover:bg-[#fafaf8] transition-colors w-full sm:w-auto">
+                  
+                  {/* Чекбокс, который адаптируется под мобилки */}
+                  <label className="flex items-center gap-2 text-sm font-bold text-[#6b6860] cursor-pointer shrink-0 bg-white px-4 py-3.5 border border-[#e8e6df] rounded-2xl shadow-sm hover:bg-[#fafaf8] transition-colors h-[54px]">
                     <input 
                       type="checkbox" 
                       checked={searchByIdOnly} 
                       onChange={(e) => setSearchByIdOnly(e.target.checked)} 
-                      className="w-4 h-4 accent-[#1a1a18] rounded cursor-pointer"
+                      className="w-5 h-5 accent-[#1a1a18] rounded cursor-pointer shrink-0"
                     />
-                    Только ID / Номер
+                    <span className="hidden sm:inline">Только ID / Номер</span>
+                    <span className="sm:hidden">ID</span>
                   </label>
                 </div>
 
