@@ -376,8 +376,17 @@ export default function ManagerDashboard() {
 
   const pendingRoutes = routes.filter((route) => {
     if (!route.orders || route.orders.length === 0) return false;
-    const hasAssigned = route.orders.some((o: any) => o.status === 'ASSIGNED');
-    const hasStarted = route.orders.some((o: any) => o.status === 'IN_DELIVERY' || o.status === 'DELIVERED');
+    
+    // 🔥 ИСПРАВЛЕНИЕ ЗДЕСЬ: теперь ищем хотя бы одну точку со статусом ASSIGNED или ASSEMBLING
+    const hasAssigned = route.orders.some((o: any) => 
+      o.status === 'ASSIGNED' || o.status === 'ASSEMBLING'
+    );
+    
+    // Проверяем, что курьер еще не поехал (нет статусов "В пути" или "Доставлен")
+    const hasStarted = route.orders.some((o: any) => 
+      o.status === 'IN_DELIVERY' || o.status === 'DELIVERED'
+    );
+    
     return hasAssigned && !hasStarted;
   });
 
