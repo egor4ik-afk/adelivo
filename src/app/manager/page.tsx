@@ -123,7 +123,7 @@ export default function ManagerDashboard() {
     if (showLoadingState) setLoading(true);
     try {
       if (activeTab === 'new' || activeTab === 'routes') {
-        const [notifRes, routesRes] = await Promise.all([ fetch('/api/manager/notifications'), fetch('/api/manager/routes') ]);
+        const [notifRes, routesRes] = await Promise.all([fetch('/api/manager/notifications'), fetch('/api/manager/routes')]);
         const notifData = await notifRes.json();
         const routesData = await routesRes.json();
         if (Array.isArray(notifData)) setTasks(notifData);
@@ -153,15 +153,15 @@ export default function ManagerDashboard() {
     if (showLoadingState) setLoading(false);
   }, [activeTab]);
 
-  useEffect(() => { 
+  useEffect(() => {
     if (isAuthorized) {
       // Показываем экран загрузки только если массив данных пуст
-      const needsLoading = 
-        (activeTab === 'new' && tasks.length === 0) || 
-        (activeTab === 'routes' && routes.length === 0) || 
+      const needsLoading =
+        (activeTab === 'new' && tasks.length === 0) ||
+        (activeTab === 'routes' && routes.length === 0) ||
         (activeTab === 'history' && history.length === 0);
-      
-      loadData(needsLoading); 
+
+      loadData(needsLoading);
     }
   }, [activeTab, isAuthorized, loadData]);
   useEffect(() => {
@@ -184,29 +184,29 @@ export default function ManagerDashboard() {
   }, [isAuthorized, loadData]);
 
   // 🔥 КОМПАКТНАЯ И ОПЦИОНАЛЬНАЯ ФИЛЬТРАЦИЯ
- // 🔥 ФИЛЬТРАЦИЯ МАРШРУТОВ И ЗАКАЗОВ (С ПОИСКОМ ПО КУРЬЕРУ)
- const displayedRoutes = useMemo(() => {
-  if (!searchQuery.trim()) return routes;
-  const lowerQ = searchQuery.toLowerCase().trim();
-  
-  return routes.map(route => {
-    // Ищем совпадение по имени курьера (только если галочка "Только ID" выключена)
-    const courierName = route.courier?.fullName?.toLowerCase() || "";
-    const isCourierMatch = !searchByIdOnly && courierName.includes(lowerQ);
+  // 🔥 ФИЛЬТРАЦИЯ МАРШРУТОВ И ЗАКАЗОВ (С ПОИСКОМ ПО КУРЬЕРУ)
+  const displayedRoutes = useMemo(() => {
+    if (!searchQuery.trim()) return routes;
+    const lowerQ = searchQuery.toLowerCase().trim();
 
-    const matchingOrders = (route.orders || []).filter((o: any) => {
-      // Если совпало имя курьера, показываем все его заказы
-      if (isCourierMatch) return true;
+    return routes.map(route => {
+      // Ищем совпадение по имени курьера (только если галочка "Только ID" выключена)
+      const courierName = route.courier?.fullName?.toLowerCase() || "";
+      const isCourierMatch = !searchByIdOnly && courierName.includes(lowerQ);
 
-      const displayId = String(o.externalId || o.crmId || o.number || o.id || "").toLowerCase();
-      
-      // Если включена галочка, ищем строго по номеру
-      if (searchByIdOnly) {
-        return displayId.includes(lowerQ);
-      }
+      const matchingOrders = (route.orders || []).filter((o: any) => {
+        // Если совпало имя курьера, показываем все его заказы
+        if (isCourierMatch) return true;
 
-      // Иначе ищем по всем полям заказа
-      const searchStr = `
+        const displayId = String(o.externalId || o.crmId || o.number || o.id || "").toLowerCase();
+
+        // Если включена галочка, ищем строго по номеру
+        if (searchByIdOnly) {
+          return displayId.includes(lowerQ);
+        }
+
+        // Иначе ищем по всем полям заказа
+        const searchStr = `
         ${displayId} 
         ${o.address || ""} 
         ${o.name || ""} 
@@ -216,14 +216,14 @@ export default function ManagerDashboard() {
         ${o.comment || ""}
         ${o.opComment || ""}
       `.toLowerCase();
-      
-      return searchStr.includes(lowerQ);
-    });
-    
-    // Возвращаем маршрут только если в нем остался хотя бы один заказ
-    return { ...route, orders: matchingOrders };
-  }).filter(r => r.orders.length > 0); 
-}, [routes, searchQuery, searchByIdOnly]); // 👈 Не забудь добавить searchByIdOnly в зависимости!
+
+        return searchStr.includes(lowerQ);
+      });
+
+      // Возвращаем маршрут только если в нем остался хотя бы один заказ
+      return { ...route, orders: matchingOrders };
+    }).filter(r => r.orders.length > 0);
+  }, [routes, searchQuery, searchByIdOnly]); // 👈 Не забудь добавить searchByIdOnly в зависимости!
 
   const toggleRouteExpansion = (id: string) => setExpandedRoutes(prev => ({ ...prev, [id]: !prev[id] }));
   const toggleOrderSelection = (id: string) => setSelectedOrders(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
@@ -248,7 +248,7 @@ export default function ManagerDashboard() {
   };
 
   const updateOrderStatusSingle = async (id: string, crmStatus: string) => {
-    try { await fetch(`/api/manager/orders/${id}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ crmStatus }) }); loadData(false); } catch (e) {}
+    try { await fetch(`/api/manager/orders/${id}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ crmStatus }) }); loadData(false); } catch (e) { }
   };
 
   const massUpdateToAssembling = async () => {
@@ -263,12 +263,12 @@ export default function ManagerDashboard() {
   const updateRouteBulkStatus = async (id: string, action: 'assembling' | 'assembling-complete' | 'send-to-delivery') => {
     const msgs = { 'assembling': "Все на сборку?", 'assembling-complete': "Все собраны?", 'send-to-delivery': "Все передать курьеру?" };
     if (!confirm(msgs[action])) return;
-    try { await fetch(`/api/manager/routes/${id}/status`, { method: 'PATCH', body: JSON.stringify({ crmStatus: action }) }); loadData(false); } catch (e) {}
+    try { await fetch(`/api/manager/routes/${id}/status`, { method: 'PATCH', body: JSON.stringify({ crmStatus: action }) }); loadData(false); } catch (e) { }
   };
 
   const markAsSeen = async (id: string) => {
     setTasks(prev => prev.filter(t => t.id !== id));
-    try { await fetch(`/api/manager/notifications/${id}`, { method: 'PATCH' }); } catch (e) {}
+    try { await fetch(`/api/manager/notifications/${id}`, { method: 'PATCH' }); } catch (e) { }
   };
 
   if (!isAuthorized) return <div className="min-h-screen flex items-center justify-center bg-[#f5f4f0]"><p className="text-[#a8a49c] font-medium animate-pulse">Проверка прав...</p></div>;
@@ -409,16 +409,16 @@ export default function ManagerDashboard() {
 
             {activeTab === 'routes' && (
               <>
-                {/* 🔥 СТРОКА ПОИСКА И ЧЕКБОКС (В одну строку) */}
-                <div className="mb-4 flex flex-row gap-2 items-center z-10">
-                  <div className="relative flex-grow min-w-0">
+                {/* 🔥 СТРОКА ПОИСКА И ЧЕКБОКС (Компактная, 2:1 на мобильных) */}
+                <div className="mb-4 flex flex-row gap-2 items-center z-10 max-w-3xl">
+                  <div className="relative w-2/3 sm:flex-1 min-w-0">
                     <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-[#a8a49c] text-lg">🔍</span>
-                    <input 
-                      type="text" 
-                      placeholder={searchByIdOnly ? "Поиск по ID..." : "Поиск по номеру, имени, адресу..."}
+                    <input
+                      type="text"
+                      placeholder={searchByIdOnly ? "Поиск по ID..." : "Номер, имя, адрес..."}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-12 pr-10 py-3.5 rounded-2xl border border-[#e8e6df] bg-white text-[#1a1a18] focus:outline-none focus:border-[#4a7aff] focus:ring-4 focus:ring-blue-100 shadow-sm transition-all font-medium placeholder-[#a8a49c]"
+                      className="w-full pl-11 pr-10 py-3.5 rounded-2xl border border-[#e8e6df] bg-white text-[#1a1a18] focus:outline-none focus:border-[#4a7aff] focus:ring-4 focus:ring-blue-100 shadow-sm transition-all font-medium placeholder-[#a8a49c]"
                     />
                     {searchQuery && (
                       <button onClick={() => setSearchQuery('')} className="absolute inset-y-0 right-0 flex items-center pr-4 text-[#a8a49c] hover:text-[#1a1a18] transition-colors">
@@ -426,17 +426,16 @@ export default function ManagerDashboard() {
                       </button>
                     )}
                   </div>
-                  
-                  {/* Чекбокс, который адаптируется под мобилки */}
-                  <label className="flex items-center gap-2 text-sm font-bold text-[#6b6860] cursor-pointer shrink-0 bg-white px-4 py-3.5 border border-[#e8e6df] rounded-2xl shadow-sm hover:bg-[#fafaf8] transition-colors h-[54px]">
-                    <input 
-                      type="checkbox" 
-                      checked={searchByIdOnly} 
-                      onChange={(e) => setSearchByIdOnly(e.target.checked)} 
-                      className="w-5 h-5 accent-[#1a1a18] rounded cursor-pointer shrink-0"
+
+                  <label className="w-1/3 sm:w-auto flex items-center justify-center gap-1.5 text-sm font-bold text-[#6b6860] cursor-pointer shrink-0 bg-white px-2 sm:px-4 py-3.5 border border-[#e8e6df] rounded-2xl shadow-sm hover:bg-[#fafaf8] transition-colors h-[54px]">
+                    <input
+                      type="checkbox"
+                      checked={searchByIdOnly}
+                      onChange={(e) => setSearchByIdOnly(e.target.checked)}
+                      className="w-4 h-4 sm:w-5 sm:h-5 accent-[#1a1a18] rounded cursor-pointer shrink-0"
                     />
                     <span className="hidden sm:inline">Только ID / Номер</span>
-                    <span className="sm:hidden">ID</span>
+                    <span className="sm:hidden text-[11px] uppercase tracking-wider">Только ID</span>
                   </label>
                 </div>
 
@@ -462,7 +461,7 @@ export default function ManagerDashboard() {
                     const routeOrderIds = route.orders?.map((o: any) => o.id) || [];
                     const isAllSelected = routeOrderIds.length > 0 && routeOrderIds.every((id: string) => selectedOrders.has(id));
                     const routeTimeRange = getRouteTimeRange(route.orders);
-                    
+
                     const activeOrders = route.orders?.filter((o: any) => !['CANCELLED', 'RETURNED'].includes(o.status)) || [];
                     const isAllInDeliveryOrDone = activeOrders.length > 0 && activeOrders.every((o: any) => ['IN_DELIVERY', 'DELIVERED'].includes(o.status) || o.crmStatus === 'send-to-delivery');
 
@@ -478,6 +477,10 @@ export default function ManagerDashboard() {
                         bulkAction = 'send-to-delivery'; bulkText = '🚀 Передать курьеру'; bulkStyles = 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100';
                       }
                     }
+                    // 🔥 ВСТАВЬ ЭТИ ТРИ СТРОКИ ПРЯМО СЮДА, перед return:
+                    const courierPhone = route.courier?.phone || "—";
+                    const cleanPhoneForTg = courierPhone !== "—" ? courierPhone.replace(/[^\d+]/g, "") : "";
+                    const encodedMsg = encodeURIComponent("Привет! Это менеджер EventWave.");
 
                     return (
                       <div key={route.id} className="bg-white border border-[#e8e6df] rounded-2xl shadow-sm transition-all overflow-hidden">
@@ -487,10 +490,24 @@ export default function ManagerDashboard() {
                             <span className="text-[#a8a49c] w-4 text-center text-[10px] shrink-0">{isExpanded ? '▼' : '▶'}</span>
                             <span className="font-black text-[14px] text-[#1a1a18] whitespace-nowrap">{route.courier?.fullName || 'Не назначен'}</span>
                             <span className="text-[11px] font-extrabold text-[#6b6860] bg-[#f5f4f0] px-2 py-0.5 rounded-lg border border-[#e8e6df] whitespace-nowrap shadow-sm">🗺️ {route.name || `#${route.id.slice(-5).toUpperCase()}`}</span>
-                            
-                            <div className="ml-1" onClick={e => e.stopPropagation()}>
-                              <ContactBadge phone={route.courier?.phone || "—"} isCourier={true} />
-                            </div>
+
+                            {courierPhone !== "—" && (
+                              <div className="flex items-center gap-1.5 ml-1">
+                                <a href={`tel:${courierPhone}`} onClick={e => e.stopPropagation()} className="text-[#4a7aff] font-semibold text-[13px] hover:underline whitespace-nowrap">
+                                  📞 {courierPhone}
+                                </a>
+                                {cleanPhoneForTg && (
+                                  <>
+                                    <a href={`https://t.me/${cleanPhoneForTg}?text=${encodedMsg}`} onClick={e => e.stopPropagation()} target="_blank" rel="noopener noreferrer" className="bg-[#2AABEE] w-5 h-5 flex items-center justify-center rounded-full hover:opacity-90">
+                                      <svg viewBox="0 0 24 24" width="10" height="10" fill="#ffffff"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z" /></svg>
+                                    </a>
+                                    <a href={`sms:${cleanPhoneForTg}?body=${encodedMsg}`} onClick={e => e.stopPropagation()} className="bg-[#34C759] w-5 h-5 flex items-center justify-center rounded-full hover:opacity-90">
+                                      <svg viewBox="0 0 24 24" width="10" height="10" fill="#ffffff"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" /></svg>
+                                    </a>
+                                  </>
+                                )}
+                              </div>
+                            )}
 
                             {route.plannedDepartureTime && <span className="text-[12px] font-bold text-[#1a1a18] bg-[#f5f4f0] px-2 py-0.5 rounded-lg border border-[#e8e6df] shadow-sm">🏠 {route.plannedDepartureTime}</span>}
                             {routeTimeRange && <span className="text-[11px] font-black text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 whitespace-nowrap">Слоты: {routeTimeRange}</span>}
@@ -541,7 +558,7 @@ export default function ManagerDashboard() {
 
                                       <div className="flex flex-col gap-1 mt-1 mb-2">
                                         <ContactBadge title="Заказчик:" name={order.customerName} phone={order.customerPhone || "—"} />
-                                        
+
                                         {order.comment && (
                                           <div className="bg-[#fff1f2] border border-[#ffe4e6] p-1.5 rounded">
                                             <p className="text-[11px] text-[#881337]"><span className="font-bold text-[#be123c] uppercase tracking-wider text-[9px] block mb-0.5">Коммент заказчика</span> {order.comment}</p>
