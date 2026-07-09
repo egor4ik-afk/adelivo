@@ -1,14 +1,14 @@
 // src/app/manager/page.tsx
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ProfilePanel } from '@/components/ProfilePanel';
 
 // Делаем тип расширяемым
 type ChangeType = 'TIME_CHANGED' | 'ORDERS_CHANGED' | 'ROUTE_REASSIGNED' | 'COURIER_CHANGED' | 'OP_COMMENT_ADDED' | string;
 
 interface Notification {
-  id: string; courierId?: string; courierName: string; // 🔥 Обновили поля
+  id: string; courierId?: string; courierName: string;
   newValue: string; oldValue?: string | null; authorName?: string | null;
   changeType: ChangeType; isSeen: boolean; createdAt: string;
 }
@@ -18,7 +18,7 @@ const badgeConfig: Record<string, { text: string; styles: string; icon: string }
   ORDERS_CHANGED: { text: 'Изменились заказы', styles: 'bg-blue-100 text-blue-800', icon: '📦' },
   ROUTE_REASSIGNED: { text: 'Новый маршрут', styles: 'bg-rose-100 text-rose-800', icon: '🗺️' },
   COURIER_CHANGED: { text: 'Смена курьера', styles: 'bg-purple-100 text-purple-800', icon: '👤' },
-  OP_COMMENT_ADDED: { text: 'Комментарий оператора', styles: 'bg-yellow-100 text-yellow-800', icon: '💬' }, // 🔥 Добавлено
+  OP_COMMENT_ADDED: { text: 'Комментарий оператора', styles: 'bg-yellow-100 text-yellow-800', icon: '💬' },
   DEFAULT: { text: 'Изменения', styles: 'bg-gray-100 text-gray-800', icon: '🔔' }
 };
 
@@ -66,52 +66,6 @@ function getRouteTimeRange(orders: any[]) {
   return `с ${min}:00 до ${max}:00`;
 }
 
-// Компонент контактов (Заказчик / Получатель / Курьер)
-const ContactBadge = ({ title, phone, name, isCourier }: { title?: string, phone: string, name?: string, isCourier?: boolean }) => {
-  const hasPhone = phone && phone !== "—";
-  if (!name && !hasPhone) return null;
-
-  const cleanPhoneForTg = hasPhone ? phone.replace(/[^\d+]/g, "") : "";
-  const encodedMsg = encodeURIComponent(isCourier ? "Привет! Это менеджер EventWave." : `Здравствуйте${name ? `, ${name}` : ''}! Это доставка EventWave.`);
-
-  return (
-    <div className="flex flex-col gap-1.5 mt-1">
-      <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[#4a7aff] flex-wrap">
-        {title && <span className="text-[#8c8880] text-[10px] uppercase tracking-wider font-bold mr-1">{title}</span>}
-        {name && <span className="text-[#1a1a18]">👤 {name}</span>}
-        {name && hasPhone && <span className="text-[#a8a49c]">·</span>}
-        {hasPhone && (
-          <a href={`tel:${phone}`} onClick={e => e.stopPropagation()} className="hover:underline flex items-center gap-1">
-            📞 {phone}
-          </a>
-        )}
-      </div>
-      {cleanPhoneForTg && (
-        <div className="flex items-center gap-2">
-          <a
-            href={`https://t.me/${cleanPhoneForTg}?text=${encodedMsg}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={e => e.stopPropagation()}
-            title="Написать в Telegram"
-            className="flex items-center justify-center bg-[#2AABEE] w-[26px] h-[26px] rounded-full shadow-sm hover:opacity-90 transition-opacity"
-          >
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="#ffffff"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z" /></svg>
-          </a>
-          <a
-            href={`sms:${cleanPhoneForTg}?body=${encodedMsg}`}
-            title="Отправить SMS"
-            onClick={e => e.stopPropagation()}
-            className="flex items-center justify-center bg-[#34C759] w-[26px] h-[26px] rounded-full shadow-sm hover:opacity-90 transition-opacity"
-          >
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="#ffffff"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z" /></svg>
-          </a>
-        </div>
-      )}
-    </div>
-  );
-};
-
 export default function ManagerDashboard() {
   const [activeTab, setActiveTab] = useState<'new' | 'routes' | 'history'>('new');
   const [tasks, setTasks] = useState<any[]>([]);
@@ -124,6 +78,9 @@ export default function ManagerDashboard() {
   const [expandedRoutes, setExpandedRoutes] = useState<Record<string, boolean>>({});
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
   const [isMassUpdating, setIsMassUpdating] = useState(false);
+  
+  // 🔥 СТЕЙТ ДЛЯ ПОИСКА
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -152,22 +109,20 @@ export default function ManagerDashboard() {
         if (Array.isArray(notifData)) setTasks(notifData);
 
         if (Array.isArray(routesData)) {
-          // 🔥 ИСПРАВЛЕННАЯ СОРТИРОВКА: Сначала статус, потом время
           const sortedRoutes = routesData.sort((a, b) => {
             const getRoutePriority = (route: any) => {
-              if (!route.orders || route.orders.length === 0) return 1; // Не забрали (наверх)
+              if (!route.orders || route.orders.length === 0) return 1;
               const isAllFinished = route.orders.every((o: any) => o.status === 'DELIVERED' || o.status === 'RETURNED' || o.status === 'CANCELLED');
-              if (isAllFinished) return 3; // Все завершены (в самый низ)
+              if (isAllFinished) return 3;
               const hasStarted = route.orders.some((o: any) => o.status === 'IN_DELIVERY' || o.status === 'DELIVERED');
-              if (hasStarted) return 2; // В пути (в середину)
-              return 1; // Еще не забрали (наверх)
+              if (hasStarted) return 2;
+              return 1;
             };
 
             const prioA = getRoutePriority(a);
             const prioB = getRoutePriority(b);
-            if (prioA !== prioB) return prioA - prioB; // Сначала по статусу
+            if (prioA !== prioB) return prioA - prioB;
 
-            // Если статус одинаковый - сортируем по времени выезда
             const timeA = a.plannedDepartureTime || "23:59";
             const timeB = b.plannedDepartureTime || "23:59";
             return timeA.localeCompare(timeB);
@@ -188,7 +143,6 @@ export default function ManagerDashboard() {
         const res = await fetch('/api/manager/notifications?history=true');
         const data = await res.json();
         if (Array.isArray(data)) {
-          // Строго новые сверху
           setHistory(data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
         }
       }
@@ -200,7 +154,6 @@ export default function ManagerDashboard() {
     if (isAuthorized) loadData();
   }, [activeTab, isAuthorized, loadData]);
 
-  // 🔥 ДОБАВИТЬ: Проверяем URL при загрузке страницы (если открыли по клику на пуш)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -210,17 +163,13 @@ export default function ManagerDashboard() {
     }
   }, []);
 
-  // ЗАМЕНИТЬ текущий useEffect с handleSWMessage на этот:
   useEffect(() => {
     if (!isAuthorized) return;
     const handleSWMessage = (event: MessageEvent) => {
       if (!event.data) return;
-
-      // Простое фоновое обновление данных
       if (event.data.type === 'PUSH_RECEIVED') {
         loadData(false);
       }
-      // 🔥 Если кликнули по пушу и мы уже находимся в открытой вкладке менеджера
       else if (event.data.type === 'NOTIFICATION_CLICK') {
         if (event.data.tab === 'new' || (!event.data.orderId && event.data.role !== 'COURIER')) {
           setActiveTab('new');
@@ -236,6 +185,33 @@ export default function ManagerDashboard() {
       clearInterval(interval);
     };
   }, [isAuthorized, loadData]);
+
+  // 🔥 ФИЛЬТРАЦИЯ МАРШРУТОВ И ЗАКАЗОВ НА ОСНОВЕ СТРОКИ ПОИСКА
+  const displayedRoutes = useMemo(() => {
+    if (!searchQuery.trim()) return routes;
+    const lowerQ = searchQuery.toLowerCase().trim();
+    
+    return routes.map(route => {
+      const matchingOrders = (route.orders || []).filter((o: any) => {
+        const displayId = String(o.externalId || o.crmId || o.number || o.id || "");
+        // Собираем все поля в одну строку для удобного поиска
+        const searchStr = `
+          ${displayId} 
+          ${o.address || ""} 
+          ${o.name || ""} 
+          ${o.recipientPhone || o.phone || ""} 
+          ${o.customerName || ""} 
+          ${o.customerPhone || ""}
+        `.toLowerCase();
+        
+        return searchStr.includes(lowerQ);
+      });
+      
+      // Возвращаем маршрут только с теми заказами, которые совпали
+      return { ...route, orders: matchingOrders };
+    }).filter(r => r.orders.length > 0); // Скрываем маршрут, если в нем нет совпадений
+  }, [routes, searchQuery]);
+
 
   const toggleRouteExpansion = (routeId: string) => {
     setExpandedRoutes(prev => ({ ...prev, [routeId]: !prev[routeId] }));
@@ -263,7 +239,8 @@ export default function ManagerDashboard() {
     });
   };
 
-  const allRouteOrderIds = routes.flatMap(r => r.orders?.map((o: any) => o.id) || []);
+  // 🔥 Используем displayedRoutes для массового выделения (чтобы выделялись только найденные заказы)
+  const allRouteOrderIds = displayedRoutes.flatMap(r => r.orders?.map((o: any) => o.id) || []);
   const isAllGlobalSelected = allRouteOrderIds.length > 0 && allRouteOrderIds.every(id => selectedOrders.has(id));
 
   const toggleAllGlobalOrders = () => {
@@ -336,7 +313,6 @@ export default function ManagerDashboard() {
     }
   };
 
-  // 🔥 НОВАЯ УМНАЯ ФУНКЦИЯ ДЛЯ МАССОВОГО ОБНОВЛЕНИЯ
   const updateRouteBulkStatus = async (routeId: string, action: 'assembling' | 'assembling-complete' | 'send-to-delivery') => {
     const messages = {
       'assembling': "Отправить все заказы маршрута на сборку (CRM)?",
@@ -376,17 +352,8 @@ export default function ManagerDashboard() {
 
   const pendingRoutes = routes.filter((route) => {
     if (!route.orders || route.orders.length === 0) return false;
-    
-    // 🔥 ИСПРАВЛЕНИЕ ЗДЕСЬ: теперь ищем хотя бы одну точку со статусом ASSIGNED или ASSEMBLING
-    const hasAssigned = route.orders.some((o: any) => 
-      o.status === 'ASSIGNED' || o.status === 'ASSEMBLING'
-    );
-    
-    // Проверяем, что курьер еще не поехал (нет статусов "В пути" или "Доставлен")
-    const hasStarted = route.orders.some((o: any) => 
-      o.status === 'IN_DELIVERY' || o.status === 'DELIVERED'
-    );
-    
+    const hasAssigned = route.orders.some((o: any) => o.status === 'ASSIGNED' || o.status === 'ASSEMBLING');
+    const hasStarted = route.orders.some((o: any) => o.status === 'IN_DELIVERY' || o.status === 'DELIVERED');
     return hasAssigned && !hasStarted;
   });
 
@@ -429,9 +396,7 @@ export default function ManagerDashboard() {
                   {tasksWithRoutes.map((item) => (
                     <div key={item.id} className="bg-white border-2 border-transparent hover:border-rose-100 rounded-2xl shadow-sm transition-all group overflow-hidden">
                       <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-[2fr_1fr_2fr_1fr_auto] gap-3 sm:gap-4 items-center">
-                        {/* 🔥 ПЕРВАЯ КОЛОНКА: ВРЕМЯ ЛОГА, КУРЬЕР И МАРШРУТ */}
                         <div>
-                          {/* Маленькое аккуратное время сверху */}
                           <div className="text-[11px] font-semibold text-[#a8a49c] mb-1">
                             ⏱ {new Date(item.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
                           </div>
@@ -508,8 +473,6 @@ export default function ManagerDashboard() {
                           <div>
                             <h3 className="font-extrabold text-lg text-[#1a1a18] leading-tight flex flex-wrap items-center gap-2">
                               {route.courier?.fullName || 'Не назначен'}
-
-                              {/* 🔥 Спокойный и читаемый бейдж времени выезда */}
                               {route.plannedDepartureTime && (
                                 <span className="text-[12px] font-bold text-[#1a1a18] bg-[#f5f4f0] px-2 py-0.5 rounded-lg border border-[#e8e6df] shadow-sm flex items-center gap-1">
                                   🏠Будет {route.plannedDepartureTime}
@@ -526,7 +489,6 @@ export default function ManagerDashboard() {
                         </div>
 
                         <div className="flex flex-col gap-3 flex-grow">
-                          {/* 🔥 Добавлена сортировка точек по ETA */}
                           {(() => {
                             const sortedOrders = [...(route.orders || [])].sort((a: any, b: any) => {
                               if (a.eta && b.eta) return a.eta.localeCompare(b.eta);
@@ -581,6 +543,30 @@ export default function ManagerDashboard() {
 
             {activeTab === 'routes' && (
               <>
+                {/* 🔥 СТРОКА ПОИСКА ПО ЗАКАЗАМ */}
+                <div className="mb-4">
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-[#a8a49c] text-lg">
+                      🔍
+                    </span>
+                    <input 
+                      type="text" 
+                      placeholder="Поиск по номеру заказа, адресу, имени или телефону..." 
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-12 pr-10 py-3.5 rounded-2xl border border-[#e8e6df] bg-white text-[#1a1a18] focus:outline-none focus:border-[#4a7aff] focus:ring-4 focus:ring-blue-100 shadow-sm transition-all font-medium placeholder-[#a8a49c]"
+                    />
+                    {searchQuery && (
+                      <button 
+                        onClick={() => setSearchQuery('')}
+                        className="absolute inset-y-0 right-0 flex items-center pr-4 text-[#a8a49c] hover:text-[#1a1a18] transition-colors"
+                      >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
                 {/* ПАНЕЛЬ МАССОВЫХ ДЕЙСТВИЙ */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-2xl border border-[#e8e6df] shadow-sm mb-2 sticky top-[84px] z-10 gap-4">
                   <div className="flex items-center gap-3">
@@ -590,7 +576,7 @@ export default function ManagerDashboard() {
                       checked={isAllGlobalSelected}
                       onChange={toggleAllGlobalOrders}
                     />
-                    <span className="font-bold text-[#1a1a18] text-[15px]">Выбрать все</span>
+                    <span className="font-bold text-[#1a1a18] text-[15px]">Выбрать все {searchQuery ? 'найденные' : ''}</span>
 
                     {selectedOrders.size > 0 && (
                       <span className="bg-[#eef3ff] text-[#4a7aff] px-2.5 py-1 rounded-lg text-sm font-bold border border-[#dce6ff] ml-2 shadow-sm transition-all">
@@ -618,8 +604,10 @@ export default function ManagerDashboard() {
                 </div>
 
                 <div className="flex flex-col gap-4 mt-2">
-                  {routes.map((route) => {
-                    const isExpanded = expandedRoutes[route.id];
+                  {displayedRoutes.map((route) => {
+                    // 🔥 При активном поиске маршруты разворачиваются автоматически
+                    const isExpanded = expandedRoutes[route.id] || searchQuery.trim().length > 0;
+                    
                     const routeOrderIds = route.orders?.map((o: any) => o.id) || [];
                     const isAllSelected = routeOrderIds.length > 0 && routeOrderIds.every((id: string) => selectedOrders.has(id));
                     const routeTimeRange = getRouteTimeRange(route.orders);
@@ -627,7 +615,6 @@ export default function ManagerDashboard() {
                     const cleanPhoneForTg = courierPhone !== "—" ? courierPhone.replace(/[^\d+]/g, "") : "";
                     const encodedMsg = encodeURIComponent("Привет! Это менеджер EventWave.");
 
-                    // 🔥 УМНАЯ ЛОГИКА ОПРЕДЕЛЕНИЯ КНОПКИ МАРШРУТА
                     const activeOrders = route.orders?.filter((o: any) => o.status !== 'CANCELLED' && o.status !== 'RETURNED') || [];
                     const isAllInDeliveryOrDone = activeOrders.length > 0 && activeOrders.every((o: any) =>
                       o.status === 'IN_DELIVERY' || o.status === 'DELIVERED' || o.crmStatus === 'send-to-delivery'
@@ -659,8 +646,6 @@ export default function ManagerDashboard() {
 
                     return (
                       <div key={route.id} className="bg-white border border-[#e8e6df] rounded-2xl shadow-sm transition-all overflow-hidden">
-
-                        {/* ШАПКА МАРШРУТА: СТРОГО 1 СТРОКА */}
                         <div
                           className="flex flex-row items-center justify-between p-3 hover:bg-[#fafaf8] cursor-pointer transition-colors gap-2"
                           onClick={() => toggleRouteExpansion(route.id)}
@@ -679,7 +664,6 @@ export default function ManagerDashboard() {
                               {route.courier?.fullName || 'Не назначен'}
                             </span>
 
-                            {/* 🔥 НОВЫЙ БЛОК: АККУРАТНЫЙ НОМЕР МАРШРУТА */}
                             <span className="text-[11px] font-extrabold text-[#6b6860] bg-[#f5f4f0] px-2 py-0.5 rounded-lg border border-[#e8e6df] whitespace-nowrap shadow-sm">
                               🗺️ {route.name || `#${route.id.slice(-5).toUpperCase()}`}
                             </span>
@@ -727,13 +711,11 @@ export default function ManagerDashboard() {
                           )}
                         </div>
 
-                        {/* КАРТОЧКИ ЗАКАЗОВ В МАРШРУТЕ */}
                         {isExpanded && (
                           <div className="p-4 bg-[#f5f4f0] border-t border-[#e8e6df]">
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
 
                               {(() => {
-                                // 1. Сортируем заказы по ETA (сначала те, у кого есть ETA по времени, потом остальные)
                                 const sortedOrders = [...(route.orders || [])].sort((a: any, b: any) => {
                                   if (a.eta && b.eta) return a.eta.localeCompare(b.eta);
                                   if (a.eta) return -1;
@@ -741,14 +723,11 @@ export default function ManagerDashboard() {
                                   return (a.routeOrder || 0) - (b.routeOrder || 0);
                                 });
 
-                                // 2. Если заказов нет, показываем заглушку
                                 if (sortedOrders.length === 0) {
                                   return <p className="text-sm text-[#a8a49c] font-medium p-2 col-span-full text-center">Нет точек</p>;
                                 }
 
-                                // 3. Рендерим отсортированный массив
                                 return sortedOrders.map((order: any, idx: number) => {
-                                  const isAssembled = order.crmStatus === 'assembling-complete';
                                   const crmConf = order.crmStatus ? (CRM_STATUSES[order.crmStatus] || { label: order.crmStatus, color: 'border-gray-200 text-gray-500 bg-white' }) : null;
                                   const localStatus = LOCAL_STATUSES[order.status] || LOCAL_STATUSES.NEW;
 
@@ -769,7 +748,6 @@ export default function ManagerDashboard() {
 
                                   return (
                                     <div key={order.id} className="flex flex-col bg-white rounded-xl border border-[#e8e6df] shadow-sm p-3 relative hover:border-[#dcd9d1] transition-colors">
-                                      {/* Шапка карточки: Чекбокс, Номер, Слот */}
                                       <div className="flex justify-between items-start mb-2">
                                         <div className="flex items-center gap-2">
                                           <input
@@ -778,7 +756,6 @@ export default function ManagerDashboard() {
                                             checked={selectedOrders.has(order.id)}
                                             onChange={() => toggleOrderSelection(order.id)}
                                           />
-                                          {/* Номер по порядку теперь будет идти правильно, 1, 2, 3... по времени прибытия */}
                                           <div className="w-5 h-5 rounded bg-[#1a1a18] text-white flex items-center justify-center text-[10px] font-black shrink-0">{idx + 1}</div>
                                           <span className="font-black text-[14px] text-[#1a1a18] truncate max-w-[100px]" title={String(displayId)}>
                                             {displayId}
@@ -789,7 +766,6 @@ export default function ManagerDashboard() {
                                         </span>
                                       </div>
 
-                                      {/* Значок магазина и Время создания */}
                                       <div className="flex flex-wrap items-center justify-between gap-1 mb-2">
                                         <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${isMeura ? 'bg-pink-50 text-pink-600 border-pink-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>
                                           {shopBadge}
@@ -797,22 +773,17 @@ export default function ManagerDashboard() {
                                         {createdAt && <span className="text-[9px] text-[#a8a49c] font-medium">Создан: {createdAt}</span>}
                                       </div>
 
-                                      {/* Статусы */}
                                       <div className="flex flex-wrap gap-1 mb-2">
                                         <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${localStatus.color}`}>{localStatus.label}</span>
                                         {crmConf && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${crmConf.color}`}>CRM: {crmConf.label}</span>}
                                       </div>
 
-                                      {/* Адрес с ETA */}
                                       <div className="text-[13px] font-medium text-[#1a1a18] leading-tight mb-2 min-h-[30px]">
                                         {order.address || 'Адрес не указан'}
                                         {order.eta && <span className="inline-block ml-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">~{order.eta}</span>}
                                       </div>
 
-                                      {/* БЛОК КОНТАКТОВ И КОММЕНТАРИЕВ */}
                                       <div className="flex flex-col gap-2 mt-1 mb-2">
-
-                                        {/* Заказчик */}
                                         {(customerName || customerPhone !== "—") && (
                                           <div className="flex flex-col gap-1.5">
                                             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#4a7aff] flex-wrap">
@@ -841,12 +812,10 @@ export default function ManagerDashboard() {
                                           </div>
                                         )}
 
-                                        {/* Разделитель */}
                                         {(customerName || customerPhone !== "—") && (recipientName || recipientPhone !== "—") && (
                                           <div className="h-px bg-[#e8e6df] w-full my-0.5"></div>
                                         )}
 
-                                        {/* Получатель */}
                                         {(recipientName || recipientPhone !== "—") && (
                                           <div className="flex flex-col gap-1.5">
                                             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#4a7aff] flex-wrap">
@@ -870,7 +839,6 @@ export default function ManagerDashboard() {
                                           </div>
                                         )}
 
-                                        {/* Комментарий оператора */}
                                         {order.opComment && (
                                           <div className="bg-[#f0fdf4] border border-[#dcfce7] p-1.5 rounded mt-1">
                                             <p className="text-[11px] text-[#14532d]"><span className="font-bold text-[#15803d] uppercase tracking-wider text-[9px] block mb-0.5">Оператор</span> {order.opComment}</p>
@@ -878,15 +846,11 @@ export default function ManagerDashboard() {
                                         )}
                                       </div>
 
-                                      {/* Состав заказа */}
                                       <div className="text-[11px] font-medium text-[#4a4740] bg-[#fafaf8] p-1.5 rounded border border-[#e8e6df] mt-auto line-clamp-3" title={order.composition || order.items}>
                                         <span className="font-bold text-[#1a1a18]">📦</span> {order.composition || order.items || '—'}
                                       </div>
 
-                                      {/* 🔥 УМНАЯ ЛОГИКА И ДРОПДАУН ДЛЯ ЗАКАЗА */}
                                       <div className="pt-2 mt-1 flex flex-col gap-2">
-
-                                        {/* Умная кнопка действий */}
                                         {(() => {
                                           const isCancelledOrReturned = order.status === 'CANCELLED' || order.status === 'RETURNED' || order.crmStatus === 'cancel-other' || order.crmStatus === 'return' || order.crmStatus === 'chastichnyi-vozvrat';
                                           const isHandedOver = order.status === 'IN_DELIVERY' || order.status === 'DELIVERED' || order.crmStatus === 'send-to-delivery' || order.crmStatus === 'complete';
@@ -904,7 +868,6 @@ export default function ManagerDashboard() {
                                             );
                                           }
 
-                                          // До передачи курьеру (Smart Logic)
                                           if (!order.crmStatus || order.crmStatus === 'new') {
                                             return <button onClick={() => updateOrderStatusSingle(order.id, 'assembling')} className="w-full py-1.5 rounded-lg text-[12px] font-bold border border-[#ffe082] bg-[#fff8e6] text-[#b38a00] hover:bg-[#fff0c2] transition-colors shadow-sm">📦 В сборку</button>;
                                           }
@@ -918,7 +881,6 @@ export default function ManagerDashboard() {
                                           return null;
                                         })()}
 
-                                        {/* Универсальный дропдаун (ручное управление статусом) */}
                                         <select
                                           value={order.crmStatus || 'new'}
                                           onChange={(e) => updateOrderStatusSingle(order.id, e.target.value)}
@@ -933,9 +895,7 @@ export default function ManagerDashboard() {
                                           <option value="chastichnyi-vozvrat">Частичный возврат (CRM)</option>
                                           <option value="cancel-other">Отменен (CRM)</option>
                                         </select>
-
                                       </div>
-
                                     </div>
                                   );
                                 });
@@ -947,7 +907,11 @@ export default function ManagerDashboard() {
                     );
                   })}
                 </div>
-                {routes.length === 0 && <p className="text-[#a8a49c] font-medium text-center py-12">На сегодня маршрутов еще нет</p>}
+                {displayedRoutes.length === 0 && (
+                  <p className="text-[#a8a49c] font-medium text-center py-12">
+                    {searchQuery ? 'По вашему запросу ничего не найдено' : 'На сегодня маршрутов еще нет'}
+                  </p>
+                )}
               </>
             )}
 
@@ -958,7 +922,6 @@ export default function ManagerDashboard() {
                     key={task.id}
                     className="bg-white border-2 border-[#e8e6df] rounded-2xl p-5 shadow-sm hover:border-[#dcd9d1] transition-colors flex flex-col md:flex-row justify-between items-start gap-6"
                   >
-                    {/* 🔥 ЛЕВЫЙ БЛОК: КТО, ГДЕ и КОГДА */}
                     <div className="flex flex-col gap-1 w-full md:w-1/3 shrink-0">
                       <div>
                         <p className="text-[16px] font-extrabold text-[#1a1a18]">{task.courierName}</p>
@@ -981,10 +944,7 @@ export default function ManagerDashboard() {
                       </div>
                     </div>
 
-                    {/* 🔥 ПРАВЫЙ БЛОК: ЧТО ИЗМЕНИЛОСЬ (БЫЛО/СТАЛО) */}
                     <div className="flex flex-col gap-2 w-full md:w-2/3 md:items-end">
-
-                      {/* Бэйдж с типом изменения */}
                       <span className="inline-block px-3 py-1 bg-[#f4f3ee] text-[#1a1a18] text-[12px] font-bold rounded-lg whitespace-nowrap">
                         {task.changeType === 'ROUTE_REASSIGNED' ? '🗺️ Новый маршрут' :
                           task.changeType === 'COURIER_CHANGED' ? '👤 Смена курьера' :
@@ -994,14 +954,12 @@ export default function ManagerDashboard() {
                                   task.changeType === 'MULTIPLE_CHANGES' ? '📝 Маршрут изменён' : task.changeType}
                       </span>
 
-                      {/* Плашка Было/Стало */}
                       <div className="bg-[#faf9f7] rounded-xl p-3.5 border border-[#e8e6df] w-full text-left mt-1">
                         {task.oldValue && (
                           <div className="mb-2.5">
                             <span className="text-[10px] font-bold text-[#a8a49c] uppercase tracking-widest block mb-1">
                               Было:
                             </span>
-                            {/* 🔥 ДОБАВЛЕН whitespace-pre-wrap ДЛЯ ПЕРЕНОСОВ */}
                             <span className="text-[13px] font-medium text-[#878378] line-through break-words whitespace-pre-wrap">
                               {task.oldValue}
                             </span>
@@ -1012,7 +970,6 @@ export default function ManagerDashboard() {
                           <span className="text-[10px] font-bold text-[#a8a49c] uppercase tracking-widest block mb-1">
                             Стало:
                           </span>
-                          {/* 🔥 ДОБАВЛЕН whitespace-pre-wrap ДЛЯ ПЕРЕНОСОВ */}
                           <span className="text-[14px] font-extrabold text-[#1a1a18] break-words whitespace-pre-wrap">
                             {task.newValue}
                           </span>
