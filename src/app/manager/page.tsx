@@ -316,60 +316,74 @@ export default function ManagerDashboard() {
               <div className="flex flex-col gap-6">
                 
                 {/* БЛОК УВЕДОМЛЕНИЙ */}
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5 sm:gap-3">
-                  {tasksWithRoutes.map((item) => (
-                    <div key={item.id} className="bg-white border border-[#e8e6df] hover:border-rose-100 rounded-xl shadow-sm transition-all group overflow-hidden">
-                      <div className="p-2.5 sm:p-4 flex flex-col gap-2 sm:gap-3 relative">
-                        
-                        <div className="pr-8 w-full flex flex-col">
-                          {/* Автор на одном уровне со временем, справа */}
-                          <div className="flex justify-between items-center mb-1">
-                            <div className="text-[10px] sm:text-[11px] font-semibold text-[#a8a49c]">⏱ {new Date(item.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</div>
-                            <span className="text-[10px] sm:text-[11px] font-semibold text-[#8c8880]">{item.authorName ? `От: ${item.authorName}` : 'Система'}</span>
-                          </div>
-                          
-                          <div className="font-extrabold text-[#1a1a18] text-[13px] sm:text-base leading-tight">{item.courierName}</div>
-                          
-                          {/* Тип изменения напротив Маршрута */}
-                          <div className="flex justify-between items-center mt-1.5">
-                            {item.routeName ? <div className="text-[10px] sm:text-[11px] font-medium text-[#a8a49c]">{item.routeName}</div> : <div />}
-                            <span className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] font-bold rounded-lg ${badgeConfig[item.changeType]?.styles || badgeConfig.DEFAULT.styles}`}>
-                              {badgeConfig[item.changeType]?.icon || badgeConfig.DEFAULT.icon} {badgeConfig[item.changeType]?.text || badgeConfig.DEFAULT.text}
-                            </span>
-                          </div>
-                        </div>
+                <div className="flex flex-col gap-2.5 sm:gap-3">
+                  {tasksWithRoutes.map((item) => {
+                    // Одно уведомление может содержать несколько изменений (MULTIPLE_CHANGES),
+                    // каждое на отдельной строке в oldValue/newValue — раскладываем их в ряд на ПК.
+                    const oldLines = (item.oldValue || '').split('\n').map((s: string) => s.trim()).filter(Boolean);
+                    const newLines = (item.newValue || '').split('\n').map((s: string) => s.trim()).filter(Boolean);
+                    const changeCount = Math.max(oldLines.length, newLines.length, 1);
+                    const isNoStrike = (line?: string) => item.changeType === 'ORDERS_CHANGED' || (!!line && /📦|Состав|Добавили|Удалили/.test(line));
 
-                        {/* Кнопка прочитано для мобилок (абсолютно вверху справа) */}
-                        <button onClick={() => markAsSeen(item.id)} className="sm:hidden absolute top-2 right-2 w-7 h-7 border border-[#e8e6df] rounded-lg flex items-center justify-center text-[#a8a49c] hover:border-green-500 hover:bg-green-50 hover:text-green-600 transition-colors shadow-sm" title="Пометить увиденным">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                        </button>
+                    return (
+                      <div key={item.id} className="bg-white border border-[#e8e6df] hover:border-rose-100 rounded-xl shadow-sm transition-all group overflow-hidden">
+                        <div className="p-2.5 sm:p-4 flex flex-col sm:grid sm:grid-cols-[2fr_3fr_auto] gap-2 sm:gap-4 sm:items-center relative">
 
-                        <div className="flex flex-col flex-grow bg-[#fafaf8] border border-[#e8e6df] rounded-lg p-2 sm:p-2.5 text-[11px] sm:text-[12px] leading-snug">
-                          {item.oldValue && item.oldValue !== item.newValue && item.oldValue !== "Не было" && item.oldValue !== "—" && (
-                            <div className="flex items-start gap-1.5 text-[#a8a49c] mb-1">
-                              <span className="shrink-0 text-[9px] uppercase tracking-wider font-semibold mt-0.5">Было:</span>
-                              {item.changeType === 'ORDERS_CHANGED'
-                                ? <span className="break-words line-clamp-1">{item.oldValue}</span>
-                                : <s className="break-words line-clamp-1">{item.oldValue}</s>}
+                          <div className="pr-8 sm:pr-0 w-full flex flex-col">
+                            {/* Автор на одном уровне со временем, справа */}
+                            <div className="flex justify-between items-center mb-1">
+                              <div className="text-[10px] sm:text-[11px] font-semibold text-[#a8a49c]">⏱ {new Date(item.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</div>
+                              <span className="text-[10px] sm:text-[11px] font-semibold text-[#8c8880]">{item.authorName ? `От: ${item.authorName}` : 'Система'}</span>
                             </div>
-                          )}
-                          <div className="flex items-start gap-1.5 text-[#1a1a18]">
-                            {item.oldValue && item.oldValue !== item.newValue && item.oldValue !== "Не было" && item.oldValue !== "—" && (
-                              <span className="shrink-0 text-[9px] uppercase tracking-wider font-semibold mt-0.5 text-[#a8a49c]">Стало:</span>
-                            )}
-                            <span className="font-bold break-words whitespace-pre-wrap">{item.newValue}</span>
-                          </div>
-                        </div>
 
-                        {/* Кнопка прочитано для ПК */}
-                        <div className="hidden sm:flex justify-end">
-                          <button onClick={() => markAsSeen(item.id)} className="w-10 h-10 border-2 border-[#e8e6df] rounded-xl flex items-center justify-center text-transparent hover:border-green-500 hover:bg-green-50 hover:text-green-600 transition-all shadow-sm" title="Пометить увиденным">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            <div className="font-extrabold text-[#1a1a18] text-[13px] sm:text-base leading-tight">{item.courierName}</div>
+
+                            {/* Тип изменения напротив Маршрута */}
+                            <div className="flex justify-between items-center mt-1.5">
+                              {item.routeName ? <div className="text-[10px] sm:text-[11px] font-medium text-[#a8a49c]">{item.routeName}</div> : <div />}
+                              <span className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] font-bold rounded-lg ${badgeConfig[item.changeType]?.styles || badgeConfig.DEFAULT.styles}`}>
+                                {badgeConfig[item.changeType]?.icon || badgeConfig.DEFAULT.icon} {badgeConfig[item.changeType]?.text || badgeConfig.DEFAULT.text}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Кнопка прочитано для мобилок (абсолютно вверху справа) */}
+                          <button onClick={() => markAsSeen(item.id)} className="sm:hidden absolute top-2 right-2 w-7 h-7 border border-[#e8e6df] rounded-lg flex items-center justify-center text-[#a8a49c] hover:border-green-500 hover:bg-green-50 hover:text-green-600 transition-colors shadow-sm" title="Пометить увиденным">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                           </button>
+
+                          <div className="flex flex-col sm:flex-row sm:flex-wrap flex-grow bg-[#fafaf8] border border-[#e8e6df] rounded-lg p-2 sm:p-2.5 gap-2 sm:gap-3 text-[11px] sm:text-[12px] leading-snug">
+                            {Array.from({ length: changeCount }).map((_, i) => {
+                              const oldL = oldLines[i];
+                              const newL = newLines[i] ?? newLines[0] ?? item.newValue;
+                              const showOld = !!oldL && oldL !== newL && oldL !== "Не было" && oldL !== "—";
+                              return (
+                                <div key={i} className="flex flex-col sm:flex-1 sm:min-w-[120px]">
+                                  {showOld && (
+                                    <div className="flex items-start gap-1.5 text-[#a8a49c] mb-1">
+                                      <span className="shrink-0 text-[9px] uppercase tracking-wider font-semibold mt-0.5">Было:</span>
+                                      {isNoStrike(oldL) ? <span className="break-words line-clamp-1">{oldL}</span> : <s className="break-words line-clamp-1">{oldL}</s>}
+                                    </div>
+                                  )}
+                                  <div className="flex items-start gap-1.5 text-[#1a1a18]">
+                                    {showOld && <span className="shrink-0 text-[9px] uppercase tracking-wider font-semibold mt-0.5 text-[#a8a49c]">Стало:</span>}
+                                    <span className="font-bold break-words whitespace-pre-wrap">{newL}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Кнопка прочитано для ПК */}
+                          <div className="hidden sm:flex justify-end">
+                            <button onClick={() => markAsSeen(item.id)} className="w-10 h-10 border-2 border-[#e8e6df] rounded-xl flex items-center justify-center text-transparent hover:border-green-500 hover:bg-green-50 hover:text-green-600 transition-all shadow-sm" title="Пометить увиденным">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {tasksWithRoutes.length === 0 && (
                     <div className="flex flex-col items-center justify-center py-8 text-center bg-white rounded-xl border border-[#e8e6df] shadow-sm">
                       <div className="text-3xl mb-3">☕</div><p className="text-[#1a1a18] font-bold text-base">Всё спокойно</p><p className="text-[#a8a49c] text-sm mt-1">Непрочитанных изменений нет</p>
