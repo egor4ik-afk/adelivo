@@ -442,7 +442,7 @@ export default function ManagerDashboard() {
                               </span>
                               
                               {route.plannedDepartureTime && (
-                                <span className="text-[10px] font-bold text-[#1a1a18] bg-[#f5f4f0] px-1.5 py-0.5 rounded-md border border-[#e8e6df] shadow-sm whitespace-nowrap shrink-0">
+                                <span className="text-[12px] font-bold text-[#1a1a18] bg-[#f5f4f0] px-1.5 py-0.5 rounded-md border border-[#e8e6df] shadow-sm whitespace-nowrap shrink-0">
                                   🏠 {route.plannedDepartureTime}
                                 </span>
                               )}
@@ -479,7 +479,7 @@ export default function ManagerDashboard() {
                                             {crmConf && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${crmConf.color}`}>CRM: {crmConf.label}</span>}
                                           </div>
                                           {/* Номер заказа справа */}
-                                          <span className="text-[10px] font-semibold text-[#a8a49c]">#{displayId}</span>
+                                          <span className="text-[10px] font-semibold text-[#a8a49c]">{displayId}</span>
                                         </div>
 
                                       </div>
