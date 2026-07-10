@@ -316,12 +316,12 @@ export default function ManagerDashboard() {
               <div className="flex flex-col gap-6">
                 
                 {/* БЛОК УВЕДОМЛЕНИЙ */}
-                <div className="flex flex-col gap-2.5 sm:gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5 sm:gap-3">
                   {tasksWithRoutes.map((item) => (
                     <div key={item.id} className="bg-white border border-[#e8e6df] hover:border-rose-100 rounded-xl shadow-sm transition-all group overflow-hidden">
-                      <div className="p-2.5 sm:p-4 flex flex-col sm:grid sm:grid-cols-[2fr_1fr_2fr_1fr_auto] gap-2 sm:gap-4 sm:items-center relative">
+                      <div className="p-2.5 sm:p-4 flex flex-col gap-2 sm:gap-3 relative">
                         
-                        <div className="pr-8 sm:pr-0 w-full flex flex-col">
+                        <div className="pr-8 w-full flex flex-col">
                           {/* Автор на одном уровне со временем, справа */}
                           <div className="flex justify-between items-center mb-1">
                             <div className="text-[10px] sm:text-[11px] font-semibold text-[#a8a49c]">⏱ {new Date(item.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</div>
@@ -332,7 +332,7 @@ export default function ManagerDashboard() {
                           
                           {/* Тип изменения напротив Маршрута */}
                           <div className="flex justify-between items-center mt-1.5">
-                            {item.routeName ? <div className="text-[10px] sm:text-[11px] font-medium text-[#a8a49c]">маршрут {item.routeName}</div> : <div />}
+                            {item.routeName ? <div className="text-[10px] sm:text-[11px] font-medium text-[#a8a49c]">{item.routeName}</div> : <div />}
                             <span className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] font-bold rounded-lg ${badgeConfig[item.changeType]?.styles || badgeConfig.DEFAULT.styles}`}>
                               {badgeConfig[item.changeType]?.icon || badgeConfig.DEFAULT.icon} {badgeConfig[item.changeType]?.text || badgeConfig.DEFAULT.text}
                             </span>
@@ -344,10 +344,13 @@ export default function ManagerDashboard() {
                           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                         </button>
 
-                        <div className="flex flex-col flex-grow bg-[#fafaf8] border border-[#e8e6df] rounded-lg p-2 sm:p-2.5 text-[11px] sm:text-[12px] leading-snug col-span-3">
+                        <div className="flex flex-col flex-grow bg-[#fafaf8] border border-[#e8e6df] rounded-lg p-2 sm:p-2.5 text-[11px] sm:text-[12px] leading-snug">
                           {item.oldValue && item.oldValue !== item.newValue && item.oldValue !== "Не было" && item.oldValue !== "—" && (
                             <div className="flex items-start gap-1.5 text-[#a8a49c] mb-1">
-                              <span className="shrink-0 text-[9px] uppercase tracking-wider font-semibold mt-0.5">Было:</span><s className="break-words line-clamp-1">{item.oldValue}</s>
+                              <span className="shrink-0 text-[9px] uppercase tracking-wider font-semibold mt-0.5">Было:</span>
+                              {item.changeType === 'ORDERS_CHANGED'
+                                ? <span className="break-words line-clamp-1">{item.oldValue}</span>
+                                : <s className="break-words line-clamp-1">{item.oldValue}</s>}
                             </div>
                           )}
                           <div className="flex items-start gap-1.5 text-[#1a1a18]">
@@ -398,10 +401,10 @@ export default function ManagerDashboard() {
                           >
                             <div className="flex items-center gap-2 flex-wrap min-w-0">
                               <span className="text-[#a8a49c] w-3 text-center text-[10px] shrink-0">{isExpanded ? '▼' : '▶'}</span>
-                              <span className="font-extrabold text-[14px] text-[#1a1a18] truncate max-w-[140px]">{route.courier?.fullName || 'Не назначен'}</span>
+                              <span className="font-extrabold text-[14px] text-[#1a1a18]">{route.courier?.fullName || 'Не назначен'}</span>
                               
                               <span className="text-[10px] font-medium text-[#6b6860] bg-[#f5f4f0] px-1.5 py-0.5 rounded-md border border-[#e8e6df] shadow-sm whitespace-nowrap shrink-0">
-                                маршрут {route.name || route.id.slice(-5).toUpperCase()}
+                                {route.name || route.id.slice(-5).toUpperCase()}
                               </span>
                               
                               {route.plannedDepartureTime && (
