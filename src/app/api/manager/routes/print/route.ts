@@ -65,6 +65,10 @@ export async function POST(req: NextRequest) {
     const a4Width = 595.28;
     const a4Height = 841.89;
     const a4CellW = a4Width / 2; // Ровно 2 колонки в ряд
+    
+    // 1 см = 28.35 pt. Внутри renderOrderContent уже есть отступ в 16pt, 
+    // добавляем еще ~12.35pt, чтобы суммарно от края листа выходил ровно 1 см.
+    const a4MarginTop = 8.35; 
 
     // Размеры одиночной этикетки 120 x 75 мм
     const singleWidth = 120 * 2.83465;
@@ -93,19 +97,19 @@ export async function POST(req: NextRequest) {
 
     // Функция точного расчета высоты карточки на основе объема текста
     const getOrderHeight = (order: any, cellWidth: number) => {
-      let currentHeight = 16; // Верхний отступ
+      let currentHeight = 16; // Внутренний верхний отступ
       currentHeight += 12;    // Имя курьера
       currentHeight += 15;    // Разделительная линия
       currentHeight += 18;    // Номер заказа и время
       
       const addressText = order.address || 'Адрес не указан';
-      const addressLines = splitTextToLines(addressText, cellWidth - 24, fontBold, 11);
-      currentHeight += addressLines.length * 14;
+      const addressLines = splitTextToLines(addressText, cellWidth - 24, fontBold, 14); 
+      currentHeight += addressLines.length * 17;
       currentHeight += 12;    // Промежуток перед составом
       
       const compText = `Состав: ${order.items || '—'}`;
-      const compLines = splitTextToLines(compText, cellWidth - 24, fontBold, 14); // Размер 14 Жирный
-      currentHeight += compLines.length * 17;
+      const compLines = splitTextToLines(compText, cellWidth - 24, fontBold, 12); // РАЗМЕР СОСТАВА 12pt
+      currentHeight += compLines.length * 15; // Интервал для 12pt
       
       currentHeight += 16;    // Нижний безопасный отступ ячейки
       return currentHeight;
@@ -113,7 +117,7 @@ export async function POST(req: NextRequest) {
 
     // Общая функция отрисовки содержимого этикетки
     const renderOrderContent = (page: any, order: any, baseX: number, baseY: number, cellW: number) => {
-      let cursorY = baseY - 16;
+      let cursorY = baseY - 16; // Стандартный отступ карточки
       const marginX = 12;
 
       const drawTextLocal = (text: string, xOffset: number, y: number, size = 10, isBold = false) => {
@@ -150,34 +154,33 @@ export async function POST(req: NextRequest) {
       }
       cursorY -= 18;
 
-      // 3. АДРЕС (Значок убран)
+      // 3. АДРЕС (Шрифт 14pt, жирный)
       const addressText = order.address || 'Адрес не указан';
-      const addressLines = splitTextToLines(addressText, cellW - (marginX * 2), fontBold, 11);
+      const addressLines = splitTextToLines(addressText, cellW - (marginX * 2), fontBold, 14);
       for (const line of addressLines) {
-        drawTextLocal(line, marginX, cursorY, 11, true);
-        cursorY -= 14;
+        drawTextLocal(line, marginX, cursorY, 14, true);
+        cursorY -= 17;
       }
       cursorY -= 12;
 
-      // 4. СОСТАВ ЗАКАЗА (Значок убран, шрифт увеличен до 14pt, всё жирное!)
+      // 4. СОСТАВ ЗАКАЗА (Шрифт 12pt, жирный)
       const compText = `Состав: ${order.items || '—'}`;
-      const compLines = splitTextToLines(compText, cellW - (marginX * 2), fontBold, 14);
+      const compLines = splitTextToLines(compText, cellW - (marginX * 2), fontBold, 12);
       for (const line of compLines) {
-        drawTextLocal(line, marginX, cursorY, 14, true);
-        cursorY -= 17;
+        drawTextLocal(line, marginX, cursorY, 12, true);
+        cursorY -= 15; // Интервал под 12pt шрифт
       }
     };
 
     if (isA4) {
-      // ЛОГИКА ДЛЯ ФОРМАТА А4 (Динамические строки, по 2 в ряд)
+      // ЛОГИКА ДЛЯ ФОРМАТА А4
       let currentPage = pdfDoc.addPage([a4Width, a4Height]);
-      let currentY = a4Height;
+      let currentY = a4Height - a4MarginTop; // Сразу отступаем сверху страницы на 1 см
 
       for (let i = 0; i < orders.length; i += 2) {
         const orderLeft = orders[i];
-        const orderRight = orders[i + 1]; // Может отсутствовать, если нечетное кол-во
+        const orderRight = orders[i + 1];
 
-        // Вычисляем необходимую высоту для этой строки по максимальному заказу из пары
         const heightLeft = getOrderHeight(orderLeft, a4CellW);
         const heightRight = orderRight ? getOrderHeight(orderRight, a4CellW) : 0;
         const rowHeight = Math.max(heightLeft, heightRight);
@@ -185,43 +188,42 @@ export async function POST(req: NextRequest) {
         // Если строка не влезает на текущий лист — переносим на новый А4
         if (currentY - rowHeight < 20) {
           currentPage = pdfDoc.addPage([a4Width, a4Height]);
-          currentY = a4Height;
+          currentY = a4Height - a4MarginTop; // На новой странице тоже отступаем 1 см сверху
         }
 
         const baseY = currentY;
 
-        // Рисуем левую карточку
+        // Рисуем левую и правую (если есть) карточку
         renderOrderContent(currentPage, orderLeft, 0, baseY, a4CellW);
-
-        // Рисуем правую карточку (если есть)
         if (orderRight) {
           renderOrderContent(currentPage, orderRight, a4CellW, baseY, a4CellW);
         }
 
-        // РАЗДЕЛИТЕЛЬНЫЕ ЛИНИИ (Обрезанные строго по границам содержимого текущей строки)
-        // 1. Вертикальный пунктир разделения колонок
+        // РАЗДЕЛИТЕЛЬНЫЕ ЛИНИИ (Более контрастные для удобной резки)
+        // Если это верхняя строка страницы, тянем вертикальную линию разреза до самого края листа
+        const lineTopY = (baseY === a4Height - a4MarginTop) ? a4Height : baseY;
+        
         currentPage.drawLine({
-          start: { x: a4CellW, y: baseY },
+          start: { x: a4CellW, y: lineTopY },
           end: { x: a4CellW, y: baseY - rowHeight },
-          thickness: 1,
-          color: rgb(0.75, 0.75, 0.75),
-          dashArray: [4, 4]
+          thickness: 1.2,
+          color: rgb(0.5, 0.5, 0.5),
+          dashArray: [5, 5]
         });
 
-        // 2. Горизонтальный пунктир снизу (ограничивает строку)
+        // Горизонтальный пунктир снизу (ограничивает строку)
         currentPage.drawLine({
           start: { x: 0, y: baseY - rowHeight },
           end: { x: orderRight ? a4Width : a4CellW, y: baseY - rowHeight },
-          thickness: 1,
-          color: rgb(0.75, 0.75, 0.75),
-          dashArray: [4, 4]
+          thickness: 1.2,
+          color: rgb(0.5, 0.5, 0.5),
+          dashArray: [5, 5]
         });
 
-        // Смещаем курсор Y вниз на высоту обработанной строки
         currentY -= rowHeight;
       }
     } else {
-      // ЛОГИКА ДЛЯ ОДИНОЧНОГО ФОРМАТА (120х75мм)
+      // ЛОГИКА ДЛЯ ОДИНОЧНОГО ФОРМАТА (термопринтер 120х75мм)
       for (const order of orders) {
         const currentPage = pdfDoc.addPage([singleWidth, singleHeight]);
         renderOrderContent(currentPage, order, 0, singleHeight, singleWidth);
