@@ -106,7 +106,7 @@ export default function ManagerDashboard() {
   
   // Состояния для аккордеонов (разворачивания маршрутов)
   const [expandedRoutes, setExpandedRoutes] = useState<Record<string, boolean>>({});
-  const [expandedPendingRoutes, setExpandedPendingRoutes] = useState<Record<string, boolean>>({}); // Состояние для таба "Новые"
+  const [expandedPendingRoutes, setExpandedPendingRoutes] = useState<Record<string, boolean>>({}); 
   
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
   const [isMassUpdating, setIsMassUpdating] = useState(false);
@@ -148,7 +148,8 @@ export default function ManagerDashboard() {
             return (a.plannedDepartureTime || "23:59").localeCompare(b.plannedDepartureTime || "23:59");
           });
           setRoutes(sortedRoutes);
-          setExpandedRoutes(prev => Object.keys(prev).length === 0 ? Object.fromEntries(sortedRoutes.map(r => [r.id, true])) : prev);
+          // Убрали принудительное раскрытие маршрутов:
+          // setExpandedRoutes(...) 
         }
       }
       else if (activeTab === 'history') {
@@ -216,7 +217,7 @@ export default function ManagerDashboard() {
   }, [routes, searchQuery, searchByIdOnly]);
 
   const toggleRouteExpansion = (id: string) => setExpandedRoutes(prev => ({ ...prev, [id]: !prev[id] }));
-  const togglePendingRouteExpansion = (id: string) => setExpandedPendingRoutes(prev => ({ ...prev, [id]: !prev[id] })); // Для Табло изменений
+  const togglePendingRouteExpansion = (id: string) => setExpandedPendingRoutes(prev => ({ ...prev, [id]: !prev[id] }));
   const toggleOrderSelection = (id: string) => setSelectedOrders(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
   const toggleRouteOrders = (ids: string[]) => setSelectedOrders(prev => {
     const next = new Set(prev);
@@ -314,16 +315,28 @@ export default function ManagerDashboard() {
             {activeTab === 'new' && (
               <div className="flex flex-col gap-6">
                 
-                {/* 1. БЛОК УВЕДОМЛЕНИЙ (КОМПАКТНЫЙ) */}
+                {/* БЛОК УВЕДОМЛЕНИЙ */}
                 <div className="flex flex-col gap-2.5 sm:gap-3">
                   {tasksWithRoutes.map((item) => (
                     <div key={item.id} className="bg-white border border-[#e8e6df] hover:border-rose-100 rounded-xl shadow-sm transition-all group overflow-hidden">
                       <div className="p-2.5 sm:p-4 flex flex-col sm:grid sm:grid-cols-[2fr_1fr_2fr_1fr_auto] gap-2 sm:gap-4 sm:items-center relative">
                         
-                        <div className="pr-8 sm:pr-0">
-                          <div className="text-[10px] sm:text-[11px] font-semibold text-[#a8a49c] mb-0.5">⏱ {new Date(item.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</div>
+                        <div className="pr-8 sm:pr-0 w-full flex flex-col">
+                          {/* Автор на одном уровне со временем, справа */}
+                          <div className="flex justify-between items-center mb-1">
+                            <div className="text-[10px] sm:text-[11px] font-semibold text-[#a8a49c]">⏱ {new Date(item.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</div>
+                            <span className="text-[10px] sm:text-[11px] font-semibold text-[#8c8880]">{item.authorName ? `От: ${item.authorName}` : 'Система'}</span>
+                          </div>
+                          
                           <div className="font-extrabold text-[#1a1a18] text-[13px] sm:text-base leading-tight">{item.courierName}</div>
-                          {item.routeName && <div className="text-[10px] sm:text-[11px] font-medium text-[#a8a49c] mt-0.5">маршрут {item.routeName}</div>}
+                          
+                          {/* Тип изменения напротив Маршрута */}
+                          <div className="flex justify-between items-center mt-1.5">
+                            {item.routeName ? <div className="text-[10px] sm:text-[11px] font-medium text-[#a8a49c]">маршрут {item.routeName}</div> : <div />}
+                            <span className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] font-bold rounded-lg ${badgeConfig[item.changeType]?.styles || badgeConfig.DEFAULT.styles}`}>
+                              {badgeConfig[item.changeType]?.icon || badgeConfig.DEFAULT.icon} {badgeConfig[item.changeType]?.text || badgeConfig.DEFAULT.text}
+                            </span>
+                          </div>
                         </div>
 
                         {/* Кнопка прочитано для мобилок (абсолютно вверху справа) */}
@@ -331,7 +344,7 @@ export default function ManagerDashboard() {
                           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                         </button>
 
-                        <div className="flex flex-col flex-grow bg-[#fafaf8] border border-[#e8e6df] rounded-lg p-2 sm:p-2.5 text-[11px] sm:text-[12px] leading-snug">
+                        <div className="flex flex-col flex-grow bg-[#fafaf8] border border-[#e8e6df] rounded-lg p-2 sm:p-2.5 text-[11px] sm:text-[12px] leading-snug col-span-3">
                           {item.oldValue && item.oldValue !== item.newValue && item.oldValue !== "Не было" && item.oldValue !== "—" && (
                             <div className="flex items-start gap-1.5 text-[#a8a49c] mb-1">
                               <span className="shrink-0 text-[9px] uppercase tracking-wider font-semibold mt-0.5">Было:</span><s className="break-words line-clamp-1">{item.oldValue}</s>
@@ -343,13 +356,6 @@ export default function ManagerDashboard() {
                             )}
                             <span className="font-bold break-words whitespace-pre-wrap">{item.newValue}</span>
                           </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-bold rounded-lg ${badgeConfig[item.changeType]?.styles || badgeConfig.DEFAULT.styles}`}>
-                            {badgeConfig[item.changeType]?.icon || badgeConfig.DEFAULT.icon} {badgeConfig[item.changeType]?.text || badgeConfig.DEFAULT.text}
-                          </span>
-                          <span className="text-[10px] sm:text-xs font-semibold text-[#6b6860]">{item.authorName ? `От: ${item.authorName}` : 'Система'}</span>
                         </div>
 
                         {/* Кнопка прочитано для ПК */}
@@ -368,7 +374,7 @@ export default function ManagerDashboard() {
                   )}
                 </div>
 
-                {/* 2. БЛОК ОЖИДАЮТ ЗАГРУЗКИ (СВЕРНУТЫЕ АККОРДЕОНЫ) */}
+                {/* БЛОК ОЖИДАЮТ ЗАГРУЗКИ (СВЕРНУТЫЕ АККОРДЕОНЫ) */}
                 <div className="pt-4 border-t-2 border-dashed border-[#e8e6df]">
                   <div className="flex items-center gap-3 mb-4">
                     <span className="text-xl sm:text-2xl">🚚</span>
@@ -386,7 +392,6 @@ export default function ManagerDashboard() {
                       return (
                         <div key={route.id} className="bg-white border border-[#e8e6df] rounded-xl shadow-sm flex flex-col hover:border-[#dcd9d1] transition-colors overflow-hidden h-fit">
                           
-                          {/* ШАПКА АККОРДЕОНА */}
                           <div 
                             className="flex justify-between items-center p-3 cursor-pointer hover:bg-[#fafaf8] transition-colors gap-2"
                             onClick={() => togglePendingRouteExpansion(route.id)}
@@ -395,8 +400,8 @@ export default function ManagerDashboard() {
                               <span className="text-[#a8a49c] w-3 text-center text-[10px] shrink-0">{isExpanded ? '▼' : '▶'}</span>
                               <span className="font-extrabold text-[14px] text-[#1a1a18] truncate max-w-[140px]">{route.courier?.fullName || 'Не назначен'}</span>
                               
-                              <span className="text-[10px] font-extrabold text-[#6b6860] bg-[#f5f4f0] px-1.5 py-0.5 rounded-md border border-[#e8e6df] shadow-sm whitespace-nowrap shrink-0">
-                                🗺️ {route.name || `#${route.id.slice(-5).toUpperCase()}`}
+                              <span className="text-[10px] font-medium text-[#6b6860] bg-[#f5f4f0] px-1.5 py-0.5 rounded-md border border-[#e8e6df] shadow-sm whitespace-nowrap shrink-0">
+                                маршрут {route.name || route.id.slice(-5).toUpperCase()}
                               </span>
                               
                               {route.plannedDepartureTime && (
@@ -413,7 +418,6 @@ export default function ManagerDashboard() {
                             </div>
                           </div>
 
-                          {/* ТЕЛО АККОРДЕОНА (Отображается только если развернуто) */}
                           {isExpanded && (
                             <div className="flex flex-col gap-2 p-2.5 bg-[#f5f4f0] border-t border-[#e8e6df]">
                               {(() => {
@@ -423,17 +427,24 @@ export default function ManagerDashboard() {
                                 return sortedOrders.map((order: any, idx: number) => {
                                   const localStatus = LOCAL_STATUSES[order.status] || LOCAL_STATUSES.NEW;
                                   const crmConf = order.crmStatus ? (CRM_STATUSES[order.crmStatus] || { label: order.crmStatus, color: 'border-gray-200 text-gray-500 bg-white' }) : null;
+                                  const displayId = order.externalId || order.crmId || order.number || order.id.slice(-6);
                                   
                                   return (
                                     <div key={order.id} className="flex gap-2 items-start p-2.5 bg-white rounded-lg border border-[#e8e6df] shadow-sm">
                                       <div className="w-5 h-5 rounded-md bg-[#1a1a18] text-white flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">{idx + 1}</div>
                                       <div className="flex-grow min-w-0">
                                         <p className="text-[12px] sm:text-[13px] font-bold text-[#1a1a18] leading-snug break-words mb-1.5">{order.address || 'Адрес не указан'}</p>
-                                        <div className="flex flex-wrap items-center gap-1.5">
-                                          <span className="inline-block bg-[#fafaf8] text-[#6b6860] px-1.5 py-0.5 rounded text-[10px] font-bold border border-[#e8e6df]">⏱ {order.slotRaw || '—'}</span>
-                                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${localStatus.color}`}>{localStatus.label}</span>
-                                          {crmConf && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${crmConf.color}`}>CRM: {crmConf.label}</span>}
+                                        
+                                        <div className="flex justify-between items-center">
+                                          <div className="flex flex-wrap items-center gap-1.5">
+                                            <span className="inline-block bg-[#fafaf8] text-[#6b6860] px-1.5 py-0.5 rounded text-[10px] font-bold border border-[#e8e6df]">⏱ {order.slotRaw || '—'}</span>
+                                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${localStatus.color}`}>{localStatus.label}</span>
+                                            {crmConf && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${crmConf.color}`}>CRM: {crmConf.label}</span>}
+                                          </div>
+                                          {/* Номер заказа справа */}
+                                          <span className="text-[10px] font-semibold text-[#a8a49c]">#{displayId}</span>
                                         </div>
+
                                       </div>
                                     </div>
                                   );
@@ -492,7 +503,6 @@ export default function ManagerDashboard() {
                       {isMassUpdating ? '⏳...' : '📦 В сборку'}
                     </button>
                     
-                    {/* Галочка А4 */}
                     <label className={`flex items-center gap-1.5 text-xs sm:text-sm font-bold cursor-pointer px-2 sm:px-3 py-2 border rounded-lg shadow-sm transition-colors ${selectedOrders.size > 0 ? 'bg-white border-[#e8e6df] text-[#1a1a18] hover:bg-[#fafaf8]' : 'bg-gray-100 border-gray-200 text-gray-400'}`}>
                       <input 
                         type="checkbox" 
@@ -602,8 +612,8 @@ export default function ManagerDashboard() {
                                       </div>
 
                                       <div className="flex flex-wrap gap-1 mb-2">
-                                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${localStatus.color}`}>{localStatus.label}</span>
-                                        {crmConf && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${crmConf.color}`}>CRM: {crmConf.label}</span>}
+                                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${localStatus.color}`}>{localStatus.label}</span>
+                                          {crmConf && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${crmConf.color}`}>CRM: {crmConf.label}</span>}
                                       </div>
 
                                       <div className="text-[12px] sm:text-[13px] font-medium text-[#1a1a18] leading-tight mb-2 min-h-[30px]">
@@ -639,25 +649,31 @@ export default function ManagerDashboard() {
 
                                       <div className="pt-2 mt-1 flex flex-col gap-2">
                                         {(() => {
-                                          if (['CANCELLED', 'RETURNED', 'cancel-other', 'return', 'chastichnyi-vozvrat'].includes(order.status) || ['cancel-other', 'return', 'chastichnyi-vozvrat'].includes(order.crmStatus)) {
+                                          const isCancelled = ['CANCELLED', 'RETURNED'].includes(order.status) || ['cancel-other', 'return', 'chastichnyi-vozvrat'].includes(order.crmStatus);
+                                          if (isCancelled) {
                                             return <div className="text-center text-[11px] font-bold text-[#a8a49c] py-1.5 border border-dashed border-[#e8e6df] rounded-lg">Отменен / Возврат</div>;
                                           }
-                                          if (['IN_DELIVERY', 'DELIVERED'].includes(order.status) || ['send-to-delivery', 'complete'].includes(order.crmStatus)) {
-                                            return (
-                                              <div className="flex gap-2">
-                                                <button onClick={() => updateOrderStatusSingle(order.id, 'cancel-other')} className="flex-1 py-1.5 rounded-lg text-[11px] font-bold border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-colors shadow-sm">❌ Отмена</button>
-                                                <button onClick={() => updateOrderStatusSingle(order.id, 'return')} className="flex-1 py-1.5 rounded-lg text-[11px] font-bold border border-orange-200 bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors shadow-sm">↩️ Возврат</button>
-                                              </div>
-                                            );
-                                          }
-                                          if (!order.crmStatus || order.crmStatus === 'new') return <button onClick={() => updateOrderStatusSingle(order.id, 'assembling')} className="w-full py-1.5 rounded-lg text-[11px] sm:text-[12px] font-bold border border-[#ffe082] bg-[#fff8e6] text-[#b38a00] hover:bg-[#fff0c2] transition-colors shadow-sm">📦 В сборку</button>;
-                                          if (order.crmStatus === 'assembling') return <button onClick={() => updateOrderStatusSingle(order.id, 'assembling-complete')} className="w-full py-1.5 rounded-lg text-[11px] sm:text-[12px] font-bold border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 transition-colors shadow-sm">✅ Собран</button>;
-                                          if (order.crmStatus === 'assembling-complete') return <button onClick={() => updateOrderStatusSingle(order.id, 'send-to-delivery')} className="w-full py-1.5 rounded-lg text-[11px] sm:text-[12px] font-bold border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors shadow-sm">🚀 Передать</button>;
-                                          return null;
+                                          const isInDeliveryOrDone = ['IN_DELIVERY', 'DELIVERED'].includes(order.status) || ['send-to-delivery', 'complete'].includes(order.crmStatus);
+                                          return (
+                                            <>
+                                              {isInDeliveryOrDone ? (
+                                                <div className="flex gap-2">
+                                                  <button onClick={() => updateOrderStatusSingle(order.id, 'cancel-other')} className="flex-1 py-1.5 rounded-lg text-[11px] font-bold border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-colors shadow-sm">❌ Отмена</button>
+                                                  <button onClick={() => updateOrderStatusSingle(order.id, 'return')} className="flex-1 py-1.5 rounded-lg text-[11px] font-bold border border-orange-200 bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors shadow-sm">↩️ Возврат</button>
+                                                </div>
+                                              ) : (
+                                                <>
+                                                  {(!order.crmStatus || order.crmStatus === 'new') && <button onClick={() => updateOrderStatusSingle(order.id, 'assembling')} className="w-full py-1.5 rounded-lg text-[11px] sm:text-[12px] font-bold border border-[#ffe082] bg-[#fff8e6] text-[#b38a00] hover:bg-[#fff0c2] transition-colors shadow-sm">📦 В сборку</button>}
+                                                  {order.crmStatus === 'assembling' && <button onClick={() => updateOrderStatusSingle(order.id, 'assembling-complete')} className="w-full py-1.5 rounded-lg text-[11px] sm:text-[12px] font-bold border border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 transition-colors shadow-sm">✅ Собран</button>}
+                                                  {order.crmStatus === 'assembling-complete' && <button onClick={() => updateOrderStatusSingle(order.id, 'send-to-delivery')} className="w-full py-1.5 rounded-lg text-[11px] sm:text-[12px] font-bold border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors shadow-sm">🚀 Передать</button>}
+                                                </>
+                                              )}
+                                              <select value={order.crmStatus || 'new'} onChange={(e) => updateOrderStatusSingle(order.id, e.target.value)} className="w-full p-1.5 text-[10px] sm:text-[11px] font-semibold border border-[#e8e6df] rounded-lg bg-[#fafaf8] text-[#6b6860] outline-none focus:border-[#4a7aff] hover:bg-white transition-colors cursor-pointer">
+                                                <option value="new">Новый (CRM)</option><option value="assembling">В сборке (CRM)</option><option value="assembling-complete">Собран (CRM)</option><option value="send-to-delivery">Передан курьеру (CRM)</option><option value="complete">Выполнен (CRM)</option><option value="return">Возврат (CRM)</option><option value="chastichnyi-vozvrat">Частичный возврат (CRM)</option><option value="cancel-other">Отменен (CRM)</option>
+                                              </select>
+                                            </>
+                                          );
                                         })()}
-                                        <select value={order.crmStatus || 'new'} onChange={(e) => updateOrderStatusSingle(order.id, e.target.value)} className="w-full p-1.5 text-[10px] sm:text-[11px] font-semibold border border-[#e8e6df] rounded-lg bg-[#fafaf8] text-[#6b6860] outline-none focus:border-[#4a7aff] hover:bg-white transition-colors cursor-pointer">
-                                          <option value="new">Новый (CRM)</option><option value="assembling">В сборке (CRM)</option><option value="assembling-complete">Собран (CRM)</option><option value="send-to-delivery">Передан курьеру (CRM)</option><option value="complete">Выполнен (CRM)</option><option value="return">Возврат (CRM)</option><option value="chastichnyi-vozvrat">Частичный возврат (CRM)</option><option value="cancel-other">Отменен (CRM)</option>
-                                        </select>
                                       </div>
                                     </div>
                                   );
