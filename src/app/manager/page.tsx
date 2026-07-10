@@ -108,6 +108,7 @@ export default function ManagerDashboard() {
   const [isMassUpdating, setIsMassUpdating] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchByIdOnly, setSearchByIdOnly] = useState(false);
+  const [printA4, setPrintA4] = useState(false);
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -240,10 +241,21 @@ export default function ManagerDashboard() {
   const handlePrintLabels = async () => {
     if (selectedOrders.size === 0) return alert("Выберите заказы для печати");
     try {
-      const res = await fetch('/api/manager/routes/print', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderIds: Array.from(selectedOrders) }) });
+      const res = await fetch('/api/manager/routes/print', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderIds: Array.from(selectedOrders),
+          format: printA4 ? 'A4' : '120x75'
+        })
+      });
       if (!res.ok) throw new Error("Ошибка генерации");
       const url = window.URL.createObjectURL(await res.blob());
-      const link = document.createElement('a'); link.href = url; link.download = `Labels_${Date.now()}.pdf`; link.click(); window.URL.revokeObjectURL(url);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Labels_${printA4 ? 'A4' : '120x75'}_${Date.now()}.pdf`;
+      link.click();
+      window.URL.revokeObjectURL(url);
     } catch (e) { alert("Ошибка печати"); }
   };
 
@@ -449,8 +461,22 @@ export default function ManagerDashboard() {
                     <button onClick={massUpdateToAssembling} disabled={selectedOrders.size === 0 || isMassUpdating} className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm flex items-center justify-center gap-2 ${selectedOrders.size > 0 ? 'bg-[#fff8e6] text-[#b38a00] border border-[#ffe082] hover:bg-[#fff0c2]' : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'}`}>
                       {isMassUpdating ? '⏳ Загрузка...' : '📦 В сборку'}
                     </button>
+                    
+                    {/* Новая галочка A4 */}
+                    <label className={`flex items-center gap-2 text-sm font-bold cursor-pointer px-3 py-2 border rounded-lg shadow-sm transition-colors ${selectedOrders.size > 0 ? 'bg-white border-[#e8e6df] text-[#1a1a18] hover:bg-[#fafaf8]' : 'bg-gray-100 border-gray-200 text-gray-400'}`}>
+                      <input 
+                        type="checkbox" 
+                        checked={printA4} 
+                        onChange={(e) => setPrintA4(e.target.checked)} 
+                        disabled={selectedOrders.size === 0}
+                        className="w-4 h-4 accent-[#1a1a18] rounded cursor-pointer" 
+                      />
+                      А4
+                    </label>
+
+                    {/* Обновленная кнопка печати с динамическим текстом */}
                     <button onClick={handlePrintLabels} disabled={selectedOrders.size === 0} className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm flex items-center justify-center gap-2 ${selectedOrders.size > 0 ? 'bg-[#1a1a18] text-white hover:bg-gray-800' : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'}`}>
-                      🖨️ Печать (75x120)
+                      🖨️ Печать ({printA4 ? 'А4' : '75x120'})
                     </button>
                   </div>
                 </div>
