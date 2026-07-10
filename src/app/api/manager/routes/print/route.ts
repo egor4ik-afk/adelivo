@@ -1,3 +1,4 @@
+// src/app/api/manager/routes/print/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { PDFDocument, rgb } from 'pdf-lib';
@@ -14,8 +15,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Нет выбранных заказов для печати' }, { status: 400 });
     }
 
-    // Получаем заказы
-    let orders = await prisma.order.findMany({
+    // Загружаем заказы из БД
+    const orders = await prisma.order.findMany({
       where: { id: { in: orderIds } },
       include: { 
         route: { 
@@ -28,27 +29,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Заказы не найдены в БД' }, { status: 404 });
     }
 
-    // 1. СОРТИРОВКА: Группируем по курьеру, затем по порядку маршрута
+    // СОРТИРОВКА: Сначала по курьеру (алфавит), затем по их порядку в маршруте (routeOrder)
     orders.sort((a, b) => {
       const courierA = a.route?.courier 
         ? `${a.route.courier.firstName} ${a.route.courier.lastName}`.trim() 
-        : 'ЯЯЯ_Без курьера'; // Чтобы заказы без курьера были в конце
+        : 'ЯЯЯ_Без курьера';
       const courierB = b.route?.courier 
         ? `${b.route.courier.firstName} ${b.route.courier.lastName}`.trim() 
         : 'ЯЯЯ_Без курьера';
       
-      // Сначала сортируем по имени курьера
       if (courierA !== courierB) {
         return courierA.localeCompare(courierB);
       }
-      
-      // Если курьер один и тот же, сортируем по номеру в маршруте
       return (a.routeOrder ?? 9999) - (b.routeOrder ?? 9999);
     });
 
     const pdfDoc = await PDFDocument.create();
     pdfDoc.registerFontkit(fontkit);
 
+    // Подгружаем шрифты Roboto с Google Fonts
     const fontUrl = 'https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Me5WZLCzYlKw.ttf';
     const fontBoldUrl = 'https://fonts.gstatic.com/s/roboto/v30/KFOlCnqEu92Fr1MmWUlvAx05IsDqlA.ttf';
     
@@ -62,18 +61,16 @@ export async function POST(req: NextRequest) {
 
     const isA4 = format === 'A4';
 
-    // Размеры А4 в поинтах
+    // Размеры листа А4 в поинтах
     const a4Width = 595.28;
     const a4Height = 841.89;
-    const a4Cols = 2;
-    const a4Rows = 4; 
-    const a4CellW = a4Width / a4Cols; 
-    const a4CellH = a4Height / a4Rows; 
+    const a4CellW = a4Width / 2; // Ровно 2 колонки в ряд
 
     // Размеры одиночной этикетки 120 x 75 мм
     const singleWidth = 120 * 2.83465;
     const singleHeight = 75 * 2.83465;
 
+    // Умный перенос текста по словам
     const splitTextToLines = (text: string, maxWidth: number, textFont: any, fontSize: number) => {
       if (!text) return [];
       const words = text.split(' ');
@@ -94,54 +91,36 @@ export async function POST(req: NextRequest) {
       return lines;
     };
 
-    let currentPage: any;
+    // Функция точного расчета высоты карточки на основе объема текста
+    const getOrderHeight = (order: any, cellWidth: number) => {
+      let currentHeight = 16; // Верхний отступ
+      currentHeight += 12;    // Имя курьера
+      currentHeight += 15;    // Разделительная линия
+      currentHeight += 18;    // Номер заказа и время
+      
+      const addressText = order.address || 'Адрес не указан';
+      const addressLines = splitTextToLines(addressText, cellWidth - 24, fontBold, 11);
+      currentHeight += addressLines.length * 14;
+      currentHeight += 12;    // Промежуток перед составом
+      
+      const compText = `Состав: ${order.items || '—'}`;
+      const compLines = splitTextToLines(compText, cellWidth - 24, fontBold, 14); // Размер 14 Жирный
+      currentHeight += compLines.length * 17;
+      
+      currentHeight += 16;    // Нижний безопасный отступ ячейки
+      return currentHeight;
+    };
 
-    for (let i = 0; i < orders.length; i++) {
-      const order = orders[i];
-      let baseX = 0;
-      let baseY = 0;
-      let cellW = singleWidth;
-      let cellH = singleHeight;
-
-      if (isA4) {
-        const posInPage = i % (a4Cols * a4Rows);
-        
-        // Создаем новую страницу каждые 8 заказов
-        if (posInPage === 0) {
-          currentPage = pdfDoc.addPage([a4Width, a4Height]);
-        }
-        
-        const col = posInPage % a4Cols;
-        const row = Math.floor(posInPage / a4Cols);
-        
-        baseX = col * a4CellW;
-        baseY = a4Height - (row * a4CellH); 
-        cellW = a4CellW;
-        cellH = a4CellH;
-
-        // 2. ОГРАНИЧЕНИЕ ЛИНИЙ ПО СОДЕРЖИМОМУ: рисуем сетку только для текущей этикетки
-        // Вертикальная линия (только если это левая колонка)
-        if (col === 0) {
-          currentPage.drawLine({ start: { x: a4CellW, y: baseY }, end: { x: a4CellW, y: baseY - a4CellH }, thickness: 1, color: rgb(0.8, 0.8, 0.8), dashArray: [5, 5] });
-        }
-        // Горизонтальная (нижняя) линия ТОЛЬКО под шириной текущей заполненной ячейки
-        if (row < a4Rows - 1) {
-          currentPage.drawLine({ start: { x: baseX, y: baseY - a4CellH }, end: { x: baseX + a4CellW, y: baseY - a4CellH }, thickness: 1, color: rgb(0.8, 0.8, 0.8), dashArray: [5, 5] });
-        }
-      } else {
-        currentPage = pdfDoc.addPage([singleWidth, singleHeight]);
-        baseX = 0;
-        baseY = singleHeight;
-      }
-
+    // Общая функция отрисовки содержимого этикетки
+    const renderOrderContent = (page: any, order: any, baseX: number, baseY: number, cellW: number) => {
       let cursorY = baseY - 16;
       const marginX = 12;
 
-      const drawTextLocal = (text: string, xOffset: number, y: number, size = 10, isBold = false, color = rgb(0,0,0)) => {
-        currentPage.drawText(text, { x: baseX + xOffset, y, size, font: isBold ? fontBold : font, color });
+      const drawTextLocal = (text: string, xOffset: number, y: number, size = 10, isBold = false) => {
+        page.drawText(text, { x: baseX + xOffset, y, size, font: isBold ? fontBold : font, color: rgb(0,0,0) });
       };
 
-      // ИМЯ КУРЬЕРА
+      // 1. ИМЯ КУРЬЕРА
       const courierName = order.route?.courier 
         ? `${order.route.courier.firstName} ${order.route.courier.lastName}`.trim() 
         : 'Не назначен';
@@ -149,11 +128,16 @@ export async function POST(req: NextRequest) {
       drawTextLocal(`Курьер: ${courierName}`, marginX, cursorY, 11, true);
       cursorY -= 12;
       
-      // Горизонтальная полоска под именем курьера
-      currentPage.drawLine({ start: { x: baseX + 10, y: cursorY }, end: { x: baseX + cellW - 10, y: cursorY }, thickness: 1, color: rgb(0.8, 0.8, 0.8) });
-      cursorY -= 20;
+      // Линия под курьером
+      page.drawLine({ 
+        start: { x: baseX + 10, y: cursorY }, 
+        end: { x: baseX + cellW - 10, y: cursorY }, 
+        thickness: 1, 
+        color: rgb(0.8, 0.8, 0.8) 
+      });
+      cursorY -= 15;
 
-      // НОМЕР ЗАКАЗА И СЛОТ
+      // 2. НОМЕР ЗАКАЗА И СЛОТ ВРЕМЕНИ
       const rawId = order.externalId || order.crmId || order.id.slice(-6);
       const cleanId = String(rawId).replace(/^#/, '');
       
@@ -164,26 +148,83 @@ export async function POST(req: NextRequest) {
         const slotWidth = fontBold.widthOfTextAtSize(slotText, 12);
         drawTextLocal(slotText, cellW - slotWidth - marginX, cursorY, 12, true);
       }
-      cursorY -= 22;
+      cursorY -= 18;
 
-      // АДРЕС
-      const addressLines = splitTextToLines(`📍 ${order.address || 'Адрес не указан'}`, cellW - (marginX * 2), fontBold, 11);
+      // 3. АДРЕС (Значок убран)
+      const addressText = order.address || 'Адрес не указан';
+      const addressLines = splitTextToLines(addressText, cellW - (marginX * 2), fontBold, 11);
       for (const line of addressLines) {
-        if (cursorY < baseY - cellH + 15) break; // Защита от переполнения
         drawTextLocal(line, marginX, cursorY, 11, true);
         cursorY -= 14;
       }
-      cursorY -= 6;
+      cursorY -= 12;
 
-      // СОСТАВ ЗАКАЗА
-      const compLines = splitTextToLines(`📦 Состав: ${order.items || '—'}`, cellW - (marginX * 2), font, 10);
+      // 4. СОСТАВ ЗАКАЗА (Значок убран, шрифт увеличен до 14pt, всё жирное!)
+      const compText = `Состав: ${order.items || '—'}`;
+      const compLines = splitTextToLines(compText, cellW - (marginX * 2), fontBold, 14);
       for (const line of compLines) {
-        if (cursorY < baseY - cellH + 15) {
-          drawTextLocal('...', marginX, cursorY, 10, false, rgb(0.1, 0.1, 0.1));
-          break; // Защита от переполнения (ограничение текста границей)
+        drawTextLocal(line, marginX, cursorY, 14, true);
+        cursorY -= 17;
+      }
+    };
+
+    if (isA4) {
+      // ЛОГИКА ДЛЯ ФОРМАТА А4 (Динамические строки, по 2 в ряд)
+      let currentPage = pdfDoc.addPage([a4Width, a4Height]);
+      let currentY = a4Height;
+
+      for (let i = 0; i < orders.length; i += 2) {
+        const orderLeft = orders[i];
+        const orderRight = orders[i + 1]; // Может отсутствовать, если нечетное кол-во
+
+        // Вычисляем необходимую высоту для этой строки по максимальному заказу из пары
+        const heightLeft = getOrderHeight(orderLeft, a4CellW);
+        const heightRight = orderRight ? getOrderHeight(orderRight, a4CellW) : 0;
+        const rowHeight = Math.max(heightLeft, heightRight);
+
+        // Если строка не влезает на текущий лист — переносим на новый А4
+        if (currentY - rowHeight < 20) {
+          currentPage = pdfDoc.addPage([a4Width, a4Height]);
+          currentY = a4Height;
         }
-        drawTextLocal(line, marginX, cursorY, 10, false, rgb(0.1, 0.1, 0.1));
-        cursorY -= 12;
+
+        const baseY = currentY;
+
+        // Рисуем левую карточку
+        renderOrderContent(currentPage, orderLeft, 0, baseY, a4CellW);
+
+        // Рисуем правую карточку (если есть)
+        if (orderRight) {
+          renderOrderContent(currentPage, orderRight, a4CellW, baseY, a4CellW);
+        }
+
+        // РАЗДЕЛИТЕЛЬНЫЕ ЛИНИИ (Обрезанные строго по границам содержимого текущей строки)
+        // 1. Вертикальный пунктир разделения колонок
+        currentPage.drawLine({
+          start: { x: a4CellW, y: baseY },
+          end: { x: a4CellW, y: baseY - rowHeight },
+          thickness: 1,
+          color: rgb(0.75, 0.75, 0.75),
+          dashArray: [4, 4]
+        });
+
+        // 2. Горизонтальный пунктир снизу (ограничивает строку)
+        currentPage.drawLine({
+          start: { x: 0, y: baseY - rowHeight },
+          end: { x: orderRight ? a4Width : a4CellW, y: baseY - rowHeight },
+          thickness: 1,
+          color: rgb(0.75, 0.75, 0.75),
+          dashArray: [4, 4]
+        });
+
+        // Смещаем курсор Y вниз на высоту обработанной строки
+        currentY -= rowHeight;
+      }
+    } else {
+      // ЛОГИКА ДЛЯ ОДИНОЧНОГО ФОРМАТА (120х75мм)
+      for (const order of orders) {
+        const currentPage = pdfDoc.addPage([singleWidth, singleHeight]);
+        renderOrderContent(currentPage, order, 0, singleHeight, singleWidth);
       }
     }
 
