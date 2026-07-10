@@ -1,4 +1,3 @@
-// src/app/api/manager/routes/print/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { PDFDocument, rgb } from 'pdf-lib';
@@ -15,19 +14,37 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Нет выбранных заказов для печати' }, { status: 400 });
     }
 
-    const orders = await prisma.order.findMany({
+    // Получаем заказы
+    let orders = await prisma.order.findMany({
       where: { id: { in: orderIds } },
       include: { 
         route: { 
           include: { courier: true } 
         } 
-      },
-      orderBy: { routeOrder: 'asc' }
+      }
     });
 
     if (orders.length === 0) {
       return NextResponse.json({ error: 'Заказы не найдены в БД' }, { status: 404 });
     }
+
+    // 1. СОРТИРОВКА: Группируем по курьеру, затем по порядку маршрута
+    orders.sort((a, b) => {
+      const courierA = a.route?.courier 
+        ? `${a.route.courier.firstName} ${a.route.courier.lastName}`.trim() 
+        : 'ЯЯЯ_Без курьера'; // Чтобы заказы без курьера были в конце
+      const courierB = b.route?.courier 
+        ? `${b.route.courier.firstName} ${b.route.courier.lastName}`.trim() 
+        : 'ЯЯЯ_Без курьера';
+      
+      // Сначала сортируем по имени курьера
+      if (courierA !== courierB) {
+        return courierA.localeCompare(courierB);
+      }
+      
+      // Если курьер один и тот же, сортируем по номеру в маршруте
+      return (a.routeOrder ?? 9999) - (b.routeOrder ?? 9999);
+    });
 
     const pdfDoc = await PDFDocument.create();
     pdfDoc.registerFontkit(fontkit);
@@ -49,7 +66,7 @@ export async function POST(req: NextRequest) {
     const a4Width = 595.28;
     const a4Height = 841.89;
     const a4Cols = 2;
-    const a4Rows = 4; // Будет 8 этикеток на страницу
+    const a4Rows = 4; 
     const a4CellW = a4Width / a4Cols; 
     const a4CellH = a4Height / a4Rows; 
 
@@ -86,45 +103,45 @@ export async function POST(req: NextRequest) {
       let cellW = singleWidth;
       let cellH = singleHeight;
 
-      // Логика расстановки по сетке или создания новых страниц
       if (isA4) {
         const posInPage = i % (a4Cols * a4Rows);
         
-        // Создаем новую страницу А4 каждые 8 заказов
+        // Создаем новую страницу каждые 8 заказов
         if (posInPage === 0) {
           currentPage = pdfDoc.addPage([a4Width, a4Height]);
-          
-          // Рисуем пунктирные разделительные линии (для удобства разрезания)
-          currentPage.drawLine({ start: { x: a4CellW, y: 0 }, end: { x: a4CellW, y: a4Height }, thickness: 1, color: rgb(0.8, 0.8, 0.8), dashArray: [5, 5] });
-          for (let r = 1; r < a4Rows; r++) {
-            currentPage.drawLine({ start: { x: 0, y: r * a4CellH }, end: { x: a4Width, y: r * a4CellH }, thickness: 1, color: rgb(0.8, 0.8, 0.8), dashArray: [5, 5] });
-          }
         }
         
         const col = posInPage % a4Cols;
         const row = Math.floor(posInPage / a4Cols);
         
         baseX = col * a4CellW;
-        baseY = a4Height - (row * a4CellH); // Y считается снизу вверх
+        baseY = a4Height - (row * a4CellH); 
         cellW = a4CellW;
         cellH = a4CellH;
+
+        // 2. ОГРАНИЧЕНИЕ ЛИНИЙ ПО СОДЕРЖИМОМУ: рисуем сетку только для текущей этикетки
+        // Вертикальная линия (только если это левая колонка)
+        if (col === 0) {
+          currentPage.drawLine({ start: { x: a4CellW, y: baseY }, end: { x: a4CellW, y: baseY - a4CellH }, thickness: 1, color: rgb(0.8, 0.8, 0.8), dashArray: [5, 5] });
+        }
+        // Горизонтальная (нижняя) линия ТОЛЬКО под шириной текущей заполненной ячейки
+        if (row < a4Rows - 1) {
+          currentPage.drawLine({ start: { x: baseX, y: baseY - a4CellH }, end: { x: baseX + a4CellW, y: baseY - a4CellH }, thickness: 1, color: rgb(0.8, 0.8, 0.8), dashArray: [5, 5] });
+        }
       } else {
-        // Одиночный формат
         currentPage = pdfDoc.addPage([singleWidth, singleHeight]);
         baseX = 0;
         baseY = singleHeight;
       }
 
-      // Отступы внутри ячейки/страницы
       let cursorY = baseY - 16;
       const marginX = 12;
 
-      // Локальная функция отрисовки с учетом смещения (baseX)
       const drawTextLocal = (text: string, xOffset: number, y: number, size = 10, isBold = false, color = rgb(0,0,0)) => {
         currentPage.drawText(text, { x: baseX + xOffset, y, size, font: isBold ? fontBold : font, color });
       };
 
-      // 1. ИМЯ КУРЬЕРА
+      // ИМЯ КУРЬЕРА
       const courierName = order.route?.courier 
         ? `${order.route.courier.firstName} ${order.route.courier.lastName}`.trim() 
         : 'Не назначен';
@@ -132,11 +149,11 @@ export async function POST(req: NextRequest) {
       drawTextLocal(`Курьер: ${courierName}`, marginX, cursorY, 11, true);
       cursorY -= 12;
       
-      // Разделительная линия
+      // Горизонтальная полоска под именем курьера
       currentPage.drawLine({ start: { x: baseX + 10, y: cursorY }, end: { x: baseX + cellW - 10, y: cursorY }, thickness: 1, color: rgb(0.8, 0.8, 0.8) });
       cursorY -= 20;
 
-      // 2. НОМЕР ЗАКАЗА И СЛОТ
+      // НОМЕР ЗАКАЗА И СЛОТ
       const rawId = order.externalId || order.crmId || order.id.slice(-6);
       const cleanId = String(rawId).replace(/^#/, '');
       
@@ -149,21 +166,21 @@ export async function POST(req: NextRequest) {
       }
       cursorY -= 22;
 
-      // 3. АДРЕС
+      // АДРЕС
       const addressLines = splitTextToLines(`📍 ${order.address || 'Адрес не указан'}`, cellW - (marginX * 2), fontBold, 11);
       for (const line of addressLines) {
+        if (cursorY < baseY - cellH + 15) break; // Защита от переполнения
         drawTextLocal(line, marginX, cursorY, 11, true);
         cursorY -= 14;
       }
       cursorY -= 6;
 
-      // 4. СОСТАВ ЗАКАЗА (с защитой от выхода за пределы ячейки вниз)
+      // СОСТАВ ЗАКАЗА
       const compLines = splitTextToLines(`📦 Состав: ${order.items || '—'}`, cellW - (marginX * 2), font, 10);
       for (const line of compLines) {
-        // Если текст состава слишком длинный и мы рискуем залезть на чужую ячейку — обрезаем
         if (cursorY < baseY - cellH + 15) {
           drawTextLocal('...', marginX, cursorY, 10, false, rgb(0.1, 0.1, 0.1));
-          break;
+          break; // Защита от переполнения (ограничение текста границей)
         }
         drawTextLocal(line, marginX, cursorY, 10, false, rgb(0.1, 0.1, 0.1));
         cursorY -= 12;
