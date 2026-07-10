@@ -103,6 +103,7 @@ export default function ManagerDashboard() {
   const [loading, setLoading] = useState(true);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(false);
+  const [headerProfile, setHeaderProfile] = useState<{ firstName?: string | null; lastName?: string | null; email?: string; avatarUrl?: string | null } | null>(null);
   
   // Состояния для аккордеонов (разворачивания маршрутов)
   const [expandedRoutes, setExpandedRoutes] = useState<Record<string, boolean>>({});
@@ -125,6 +126,15 @@ export default function ManagerDashboard() {
       })
       .catch((err) => { if (err.message === 'Not logged in') window.location.replace('/login'); });
   }, []);
+
+  // Аватарка/инициалы для кнопки в шапке — те же данные, что и в ProfilePanel
+  useEffect(() => {
+    if (!isAuthorized) return;
+    fetch('/api/profile')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data) setHeaderProfile(data); })
+      .catch(() => {});
+  }, [isAuthorized]);
 
   const loadData = useCallback(async (showLoadingState = true) => {
     if (showLoadingState) setLoading(true);
@@ -293,7 +303,17 @@ export default function ManagerDashboard() {
           <h1 className="text-xl font-bold text-gray-900 tracking-tight">Кабинет менеджера</h1>
         </div>
         <div className="relative">
-          <button onClick={() => setIsProfileOpen(!isProfileOpen)} className="w-10 h-10 bg-[#e8e6df] rounded-full flex items-center justify-center text-xl hover:bg-[#dcd9d1] transition-colors">👨‍💻</button>
+          <button onClick={() => setIsProfileOpen(!isProfileOpen)} className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center hover:opacity-90 transition-opacity shrink-0" title="Профиль">
+            {headerProfile?.avatarUrl ? (
+              <img src={headerProfile.avatarUrl} alt="Профиль" className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full bg-[#4a7aff] text-white flex items-center justify-center text-[15px] font-semibold">
+                {headerProfile
+                  ? (((headerProfile.firstName?.[0] ?? '') + (headerProfile.lastName?.[0] ?? '')).toUpperCase() || (headerProfile.email?.slice(0, 2).toUpperCase() ?? '??'))
+                  : '··'}
+              </div>
+            )}
+          </button>
           {isProfileOpen && <div className="absolute right-0 top-14 z-50"><ProfilePanel onClose={() => setIsProfileOpen(false)} /></div>}
         </div>
       </header>
@@ -318,12 +338,12 @@ export default function ManagerDashboard() {
                 {/* БЛОК УВЕДОМЛЕНИЙ */}
                 <div className="flex flex-col gap-2.5 sm:gap-3">
                   {tasksWithRoutes.map((item) => {
-                    // Одно уведомление может содержать несколько изменений (MULTIPLE_CHANGES),
-                    // каждое на отдельной строке в oldValue/newValue — раскладываем их в ряд на ПК.
+                    // oldValue/newValue могут содержать несколько строк (через \n) у любого типа
+                    // изменения (не только MULTIPLE_CHANGES) — раскладываем их в ряд на ПК.
                     const oldLines = (item.oldValue || '').split('\n').map((s: string) => s.trim()).filter(Boolean);
                     const newLines = (item.newValue || '').split('\n').map((s: string) => s.trim()).filter(Boolean);
                     const changeCount = Math.max(oldLines.length, newLines.length, 1);
-                    const isNoStrike = (line?: string) => item.changeType === 'ORDERS_CHANGED' || (!!line && /📦|Состав|Добавили|Удалили/.test(line));
+                    const isNoStrike = (line?: string) => item.changeType === 'ORDERS_CHANGED' || (!!line && /📦|➕|➖|Состав|Добавили|Убрали/.test(line));
 
                     return (
                       <div key={item.id} className="bg-white border border-[#e8e6df] hover:border-rose-100 rounded-xl shadow-sm transition-all group overflow-hidden">
