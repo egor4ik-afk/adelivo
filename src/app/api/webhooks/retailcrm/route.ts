@@ -78,17 +78,23 @@ export async function POST(req: Request) {
     const { prisma } = await import("@/lib/prisma"); 
     const localOrderBefore = await prisma.order.findUnique({
       where: { crmId: String(orderPayload.id) },
-      select: { id: true, status: true, items: true, courierId: true, courier: true }
+      select: { id: true, status: true, items: true }
     });
 
     await upsertOrder(orderPayload);
     
     try {
       if (localOrderBefore) {
-        // Вытаскиваем заказ ПОСЛЕ обновления
+        // Вытаскиваем заказ ПОСЛЕ обновления (добавили выгрузку routeId!)
         const localOrderAfter = await prisma.order.findUnique({
           where: { id: localOrderBefore.id },
-          select: { status: true, items: true, courierId: true, courier: true }
+          select: { 
+            status: true, 
+            items: true, 
+            courierId: true, 
+            courier: true,
+            routeId: true // 🔥 Берем ID маршрута
+          }
         });
 
         if (localOrderAfter) {
@@ -108,16 +114,21 @@ export async function POST(req: Request) {
              const newItems = localOrderAfter.items || "Пусто";
              const orderNumber = orderPayload.externalId || orderPayload.id;
 
-             // Вызываем твою готовую функцию. 
-             // Она добавит плашку в табло менеджера и отправит пуш!
+             // 🔥 Определяем, что писать в "маршрут"
+             // Если routeId есть — используем его, если нет — используем номер заказа
+             const routeDisplay = localOrderAfter.routeId 
+                 ? localOrderAfter.routeId 
+                 : `Заказ #${orderNumber}`;
+
+             // Вызываем функцию для табло и пушей
              await createManagerPlaque({
                courierId: localOrderAfter.courierId || "UNASSIGNED",
                courierName: localOrderAfter.courier || "Без курьера",
-               routeName: `Заказ #${orderNumber}`, // Используем поле для номера заказа
+               routeName: routeDisplay, // 🔥 Передаем реальный маршрут
                oldValue: oldItems,
                newValue: newItems,
                authorName: "CRM",
-               changeType: "ITEMS_CHANGED", // Новый тип изменения (добавим ниже)
+               changeType: "ITEMS_CHANGED", 
              });
           }
         }
