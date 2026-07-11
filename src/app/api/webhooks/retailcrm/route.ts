@@ -93,7 +93,11 @@ export async function POST(req: Request) {
             items: true, 
             courierId: true, 
             courier: true,
-            routeId: true // 🔥 Берем ID маршрута
+            route: {                 // 🔥 Раскрываем связь с маршрутом
+              select: {
+                name: true           // Берем человекочитаемое название/номер маршрута
+              }
+            }
           }
         });
 
@@ -115,16 +119,16 @@ export async function POST(req: Request) {
              const orderNumber = orderPayload.externalId || orderPayload.id;
 
              // 🔥 Определяем, что писать в "маршрут"
-             // Если routeId есть — используем его, если нет — используем номер заказа
-             const routeDisplay = localOrderAfter.routeId 
-                 ? localOrderAfter.routeId 
+             // Берем name из связанной таблицы route. Если его нет — используем номер заказа.
+             const routeDisplay = localOrderAfter.route?.name 
+                 ? localOrderAfter.route.name 
                  : `Заказ #${orderNumber}`;
 
              // Вызываем функцию для табло и пушей
              await createManagerPlaque({
                courierId: localOrderAfter.courierId || "UNASSIGNED",
                courierName: localOrderAfter.courier || "Без курьера",
-               routeName: routeDisplay, // 🔥 Передаем реальный маршрут
+               routeName: routeDisplay, // 🔥 Передаем красивое название маршрута
                oldValue: oldItems,
                newValue: newItems,
                authorName: "CRM",
