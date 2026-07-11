@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { upsertOrder, geocodeNewOrders, type CrmOrder } from "@/lib/crm";
 import axios from "axios";
 import { applyUniversalEtaShift } from "@/lib/eta";
+import { createManagerPlaque } from "@/lib/notifications";
 
 
 export async function GET() {
@@ -73,30 +74,56 @@ export async function POST(req: Request) {
     const shopLabel = orderPayload.site === 'kaktusfiori' || orderPayload.site === 'meura-flowers' ? "MEURA" : "BUNCH";
     console.log(`[Webhook] Начинаем обновление заказа #${orderPayload.id} [${shopLabel}] (Внешний ID: ${orderPayload.externalId || 'Нет'})`);
     
+    // Вытаскиваем заказ ДО обновления (берем items и курьера)
     const { prisma } = await import("@/lib/prisma"); 
     const localOrderBefore = await prisma.order.findUnique({
       where: { crmId: String(orderPayload.id) },
-      select: { id: true, status: true }
+      select: { id: true, status: true, items: true, courierId: true, courier: true }
     });
 
     await upsertOrder(orderPayload);
     
     try {
       if (localOrderBefore) {
+        // Вытаскиваем заказ ПОСЛЕ обновления
         const localOrderAfter = await prisma.order.findUnique({
           where: { id: localOrderBefore.id },
-          select: { status: true }
+          select: { status: true, items: true, courierId: true, courier: true }
         });
 
-        if (localOrderAfter && localOrderBefore.status !== localOrderAfter.status) {
-           if (localOrderAfter.status === "IN_DELIVERY" || localOrderAfter.status === "DELIVERED") {
-               console.log(`[Webhook] Смена статуса! Запускаем пересчет ETA для заказа ${orderPayload.id}`);
-               await applyUniversalEtaShift(localOrderBefore.id, localOrderAfter.status);
-           }
+        if (localOrderAfter) {
+          // 1. Проверка изменения статуса
+          if (localOrderBefore.status !== localOrderAfter.status) {
+             if (localOrderAfter.status === "IN_DELIVERY" || localOrderAfter.status === "DELIVERED") {
+                 console.log(`[Webhook] Смена статуса! Запускаем пересчет ETA для заказа ${orderPayload.id}`);
+                 await applyUniversalEtaShift(localOrderBefore.id, localOrderAfter.status);
+             }
+          }
+
+          // 2. Проверка изменения СОСТАВА заказа
+          if (localOrderBefore.items !== localOrderAfter.items) {
+             console.log(`[Webhook] 📦 Изменен состав заказа #${orderPayload.id}!`);
+             
+             const oldItems = localOrderBefore.items || "Пусто";
+             const newItems = localOrderAfter.items || "Пусто";
+             const orderNumber = orderPayload.externalId || orderPayload.id;
+
+             // Вызываем твою готовую функцию. 
+             // Она добавит плашку в табло менеджера и отправит пуш!
+             await createManagerPlaque({
+               courierId: localOrderAfter.courierId || "UNASSIGNED",
+               courierName: localOrderAfter.courier || "Без курьера",
+               routeName: `Заказ #${orderNumber}`, // Используем поле для номера заказа
+               oldValue: oldItems,
+               newValue: newItems,
+               authorName: "CRM",
+               changeType: "ITEMS_CHANGED", // Новый тип изменения (добавим ниже)
+             });
+          }
         }
       }
     } catch (err) {
-      console.error("[Webhook] Ошибка при вызове триггера ETA:", err);
+      console.error("[Webhook] Ошибка при обработке триггеров (ETA/Уведомления):", err);
     }
     
     geocodeNewOrders().catch(console.error);

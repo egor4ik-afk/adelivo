@@ -179,6 +179,7 @@ async function sendIndividualPushes(event: NotificationEvent) {
             ROUTE_REASSIGNED: "🗺️ Назначен новый маршрут",
             COURIER_CHANGED: "👤 Смена курьера",
             OP_COMMENT_ADDED: "💬 Комментарий оператора",
+			ITEMS_CHANGED: "💐 Изменен состав заказа",
           };
           title = pushTitles[event.notification.changeType] || "🔔 Изменение на базе";
           bodyTexts.push(`Курьер: ${event.notification.courierName}`);
