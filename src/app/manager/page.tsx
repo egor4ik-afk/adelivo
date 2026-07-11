@@ -4,8 +4,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ProfilePanel } from '@/components/ProfilePanel';
 
-type ChangeType = 'TIME_CHANGED' | 'ORDERS_CHANGED' | 'ROUTE_REASSIGNED' | 'COURIER_CHANGED' | 'OP_COMMENT_ADDED' | string;
-
+type ChangeType = 'TIME_CHANGED' | 'ORDERS_CHANGED' | 'ROUTE_REASSIGNED' | 'COURIER_CHANGED' | 'OP_COMMENT_ADDED' | 'ITEMS_CHANGED' | string;
 interface Notification {
   id: string; courierId?: string; courierName: string;
   newValue: string; oldValue?: string | null; authorName?: string | null;
@@ -18,6 +17,7 @@ const badgeConfig: Record<string, { text: string; styles: string; icon: string }
   ROUTE_REASSIGNED: { text: 'Новый маршрут', styles: 'bg-rose-100 text-rose-800', icon: '🗺️' },
   COURIER_CHANGED: { text: 'Смена курьера', styles: 'bg-purple-100 text-purple-800', icon: '👤' },
   OP_COMMENT_ADDED: { text: 'Комментарий оператора', styles: 'bg-yellow-100 text-yellow-800', icon: '💬' },
+  ITEMS_CHANGED: { text: 'Изменен состав', styles: 'bg-green-100 text-green-800', icon: '💐' }, // 🔥 Добавили новую строку
   DEFAULT: { text: 'Изменения', styles: 'bg-gray-100 text-gray-800', icon: '🔔' }
 };
 
@@ -104,18 +104,18 @@ export default function ManagerDashboard() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [headerProfile, setHeaderProfile] = useState<{ firstName?: string | null; lastName?: string | null; email?: string; avatarUrl?: string | null } | null>(null);
-  
+
   // Состояния для аккордеонов (разворачивания маршрутов)
   const [expandedRoutes, setExpandedRoutes] = useState<Record<string, boolean>>({});
-  const [expandedPendingRoutes, setExpandedPendingRoutes] = useState<Record<string, boolean>>({}); 
-  
+  const [expandedPendingRoutes, setExpandedPendingRoutes] = useState<Record<string, boolean>>({});
+
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set());
   const [isMassUpdating, setIsMassUpdating] = useState(false);
-  
+
   // Фильтры и поиск
   const [searchQuery, setSearchQuery] = useState('');
   const [searchByIdOnly, setSearchByIdOnly] = useState(false);
-  const [printA4, setPrintA4] = useState(false); 
+  const [printA4, setPrintA4] = useState(false);
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -133,7 +133,7 @@ export default function ManagerDashboard() {
     fetch('/api/profile')
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => { if (data) setHeaderProfile(data); })
-      .catch(() => {});
+      .catch(() => { });
   }, [isAuthorized]);
 
   const loadData = useCallback(async (showLoadingState = true) => {
@@ -242,20 +242,20 @@ export default function ManagerDashboard() {
   const handlePrintLabels = async () => {
     if (selectedOrders.size === 0) return alert("Выберите заказы для печати");
     try {
-      const res = await fetch('/api/manager/routes/print', { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ 
+      const res = await fetch('/api/manager/routes/print', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           orderIds: Array.from(selectedOrders),
           format: printA4 ? 'A4' : '120x75'
-        }) 
+        })
       });
       if (!res.ok) throw new Error("Ошибка генерации");
       const url = window.URL.createObjectURL(await res.blob());
-      const link = document.createElement('a'); 
-      link.href = url; 
-      link.download = `Labels_${printA4 ? 'A4' : '120x75'}_${Date.now()}.pdf`; 
-      link.click(); 
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Labels_${printA4 ? 'A4' : '120x75'}_${Date.now()}.pdf`;
+      link.click();
       window.URL.revokeObjectURL(url);
     } catch (e) { alert("Ошибка печати"); }
   };
@@ -287,7 +287,7 @@ export default function ManagerDashboard() {
   if (!isAuthorized) return <div className="min-h-screen flex items-center justify-center bg-[#f5f4f0]"><p className="text-[#a8a49c] font-medium animate-pulse">Проверка прав...</p></div>;
 
   const tasksWithRoutes = tasks.map(task => ({ ...task, routeData: null })).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  
+
   const pendingRoutes = routes.filter(route => {
     if (!route.orders?.length) return false;
     const hasAssigned = route.orders.some((o: any) => o.status === 'ASSIGNED' || o.status === 'ASSEMBLING');
@@ -334,7 +334,7 @@ export default function ManagerDashboard() {
 
             {activeTab === 'new' && (
               <div className="flex flex-col gap-6">
-                
+
                 {/* БЛОК УВЕДОМЛЕНИЙ */}
                 <div className="flex flex-col gap-2.5 sm:gap-3">
                   {tasksWithRoutes.map((item) => {
@@ -428,26 +428,26 @@ export default function ManagerDashboard() {
 
                       return (
                         <div key={route.id} className="bg-white border border-[#e8e6df] rounded-xl shadow-sm flex flex-col hover:border-[#dcd9d1] transition-colors overflow-hidden h-fit">
-                          
-                          <div 
+
+                          <div
                             className="flex justify-between items-center p-3 cursor-pointer hover:bg-[#fafaf8] transition-colors gap-2"
                             onClick={() => togglePendingRouteExpansion(route.id)}
                           >
                             <div className="flex items-center gap-2 flex-wrap min-w-0">
                               <span className="text-[#a8a49c] w-3 text-center text-[10px] shrink-0">{isExpanded ? '▼' : '▶'}</span>
                               <span className="font-extrabold text-[14px] text-[#1a1a18]">{route.courier?.fullName || 'Не назначен'}</span>
-                              
+
                               <span className="text-[10px] font-medium text-[#6b6860] bg-[#f5f4f0] px-1.5 py-0.5 rounded-md border border-[#e8e6df] shadow-sm whitespace-nowrap shrink-0">
                                 {route.name || route.id.slice(-5).toUpperCase()}
                               </span>
-                              
+
                               {route.plannedDepartureTime && (
                                 <span className="text-[12px] font-bold text-[#1a1a18] bg-[#f5f4f0] px-1.5 py-0.5 rounded-md border border-[#e8e6df] shadow-sm whitespace-nowrap shrink-0">
                                   🏠 {route.plannedDepartureTime}
                                 </span>
                               )}
                             </div>
-                            
+
                             <div className="flex items-center shrink-0">
                               <span className="bg-[#eef3ff] text-[#4a7aff] px-2 py-0.5 rounded-md text-[11px] font-bold border border-[#dce6ff] whitespace-nowrap">
                                 {route.orders?.length || 0} точ.
@@ -460,18 +460,18 @@ export default function ManagerDashboard() {
                               {(() => {
                                 const sortedOrders = [...(route.orders || [])].sort((a: any, b: any) => a.eta && b.eta ? a.eta.localeCompare(b.eta) : a.eta ? -1 : b.eta ? 1 : (a.routeOrder || 0) - (b.routeOrder || 0));
                                 if (sortedOrders.length === 0) return <p className="text-xs text-[#a8a49c] p-2 text-center">Точек нет</p>;
-                                
+
                                 return sortedOrders.map((order: any, idx: number) => {
                                   const localStatus = LOCAL_STATUSES[order.status] || LOCAL_STATUSES.NEW;
                                   const crmConf = order.crmStatus ? (CRM_STATUSES[order.crmStatus] || { label: order.crmStatus, color: 'border-gray-200 text-gray-500 bg-white' }) : null;
                                   const displayId = order.externalId || order.crmId || order.number || order.id.slice(-6);
-                                  
+
                                   return (
                                     <div key={order.id} className="flex gap-2 items-start p-2.5 bg-white rounded-lg border border-[#e8e6df] shadow-sm">
                                       <div className="w-5 h-5 rounded-md bg-[#1a1a18] text-white flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">{idx + 1}</div>
                                       <div className="flex-grow min-w-0">
                                         <p className="text-[12px] sm:text-[13px] font-bold text-[#1a1a18] leading-snug break-words mb-1.5">{order.address || 'Адрес не указан'}</p>
-                                        
+
                                         <div className="flex justify-between items-center">
                                           <div className="flex flex-wrap items-center gap-1.5">
                                             <span className="inline-block bg-[#fafaf8] text-[#6b6860] px-1.5 py-0.5 rounded text-[10px] font-bold border border-[#e8e6df]">⏱ {order.slotRaw || '—'}</span>
@@ -539,14 +539,14 @@ export default function ManagerDashboard() {
                     <button onClick={massUpdateToAssembling} disabled={selectedOrders.size === 0 || isMassUpdating} className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all shadow-sm flex items-center justify-center gap-2 ${selectedOrders.size > 0 ? 'bg-[#fff8e6] text-[#b38a00] border border-[#ffe082] hover:bg-[#fff0c2]' : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'}`}>
                       {isMassUpdating ? '⏳...' : '📦 В сборку'}
                     </button>
-                    
+
                     <label className={`flex items-center gap-1.5 text-xs sm:text-sm font-bold cursor-pointer px-2 sm:px-3 py-2 border rounded-lg shadow-sm transition-colors ${selectedOrders.size > 0 ? 'bg-white border-[#e8e6df] text-[#1a1a18] hover:bg-[#fafaf8]' : 'bg-gray-100 border-gray-200 text-gray-400'}`}>
-                      <input 
-                        type="checkbox" 
-                        checked={printA4} 
-                        onChange={(e) => setPrintA4(e.target.checked)} 
+                      <input
+                        type="checkbox"
+                        checked={printA4}
+                        onChange={(e) => setPrintA4(e.target.checked)}
                         disabled={selectedOrders.size === 0}
-                        className="w-3.5 h-3.5 sm:w-4 sm:h-4 accent-[#1a1a18] rounded cursor-pointer" 
+                        className="w-3.5 h-3.5 sm:w-4 sm:h-4 accent-[#1a1a18] rounded cursor-pointer"
                       />
                       А4
                     </label>
@@ -649,8 +649,8 @@ export default function ManagerDashboard() {
                                       </div>
 
                                       <div className="flex flex-wrap gap-1 mb-2">
-                                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${localStatus.color}`}>{localStatus.label}</span>
-                                          {crmConf && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${crmConf.color}`}>CRM: {crmConf.label}</span>}
+                                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${localStatus.color}`}>{localStatus.label}</span>
+                                        {crmConf && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${crmConf.color}`}>CRM: {crmConf.label}</span>}
                                       </div>
 
                                       <div className="text-[12px] sm:text-[13px] font-medium text-[#1a1a18] leading-tight mb-2 min-h-[30px]">
@@ -717,12 +717,12 @@ export default function ManagerDashboard() {
                                 });
                               })()}
                             </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
                 {displayedRoutes.length === 0 && <p className="text-[#a8a49c] font-medium text-center py-12">{searchQuery ? 'По вашему запросу ничего не найдено' : 'На сегодня маршрутов еще нет'}</p>}
               </>
             )}
@@ -744,7 +744,14 @@ export default function ManagerDashboard() {
 
                     <div className="flex flex-col gap-2 w-full md:w-2/3 md:items-end">
                       <span className="inline-block px-2.5 py-1 bg-[#f4f3ee] text-[#1a1a18] text-[11px] sm:text-[12px] font-bold rounded-lg whitespace-nowrap">
-                        {task.changeType === 'ROUTE_REASSIGNED' ? '🗺️ Новый маршрут' : task.changeType === 'COURIER_CHANGED' ? '👤 Смена курьера' : task.changeType === 'TIME_CHANGED' ? '⏱ Изменилось время' : task.changeType === 'ORDERS_CHANGED' ? '📦 Изменились заказы' : task.changeType === 'OP_COMMENT_ADDED' ? '💬 Комментарий оператора' : task.changeType === 'MULTIPLE_CHANGES' ? '📝 Маршрут изменён' : task.changeType}
+                        {task.changeType === 'ROUTE_REASSIGNED' ? '🗺️ Новый маршрут' :
+                          task.changeType === 'COURIER_CHANGED' ? '👤 Смена курьера' :
+                            task.changeType === 'TIME_CHANGED' ? '⏱ Изменилось время' :
+                              task.changeType === 'ORDERS_CHANGED' ? '📦 Изменились заказы' :
+                                task.changeType === 'OP_COMMENT_ADDED' ? '💬 Комментарий оператора' :
+                                  task.changeType === 'MULTIPLE_CHANGES' ? '📝 Маршрут изменён' :
+                                    task.changeType === 'ITEMS_CHANGED' ? '💐 Изменен состав' : /* 🔥 Добавили условие */
+                                      task.changeType}
                       </span>
                       <div className="bg-[#faf9f7] rounded-lg p-3 border border-[#e8e6df] w-full text-left mt-1">
                         {task.oldValue && (
