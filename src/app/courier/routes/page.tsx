@@ -67,7 +67,7 @@ export default function CourierRoutesPage() {
     if (typeof window === "undefined") return;
     const pendingStr = localStorage.getItem('pendingStatuses');
     if (!pendingStr) return;
-    
+
     const pending = JSON.parse(pendingStr);
     let hasUpdates = false;
 
@@ -733,9 +733,23 @@ export default function CourierRoutesPage() {
                                   WebkitAppearance: "none",
                                 }}
                               >
-                                {/* 🔥 Статуса "В сборке" здесь больше нет! */}
-                                <option value="ASSIGNED">Назначен</option>
+                                {/* 
+    Рендерим "Назначен" ТОЛЬКО если это текущий статус.
+    disabled и hidden скрывают его из раскрытого списка.
+  */}
+                                {o.status === "ASSIGNED" && (
+                                  <option value="ASSIGNED" disabled hidden>Назначен</option>
+                                )}
 
+                                {/* 
+    Рендерим "В сборке" ТОЛЬКО если это текущий статус.
+    Курьер видит его на карточке, но в меню выбора его нет.
+  */}
+                                {o.status === "ASSEMBLING" && (
+                                  <option value="ASSEMBLING" disabled hidden>В сборке</option>
+                                )}
+
+                                {/* Доступные курьеру статусы */}
                                 <option value="IN_DELIVERY" disabled={isTooEarly}>
                                   {isTooEarly ? "⏳ Рано для статуса В пути" : "🚀 В пути"}
                                 </option>
