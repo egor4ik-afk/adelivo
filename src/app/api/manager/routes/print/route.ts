@@ -124,12 +124,20 @@ export async function POST(req: NextRequest) {
         page.drawText(text, { x: baseX + xOffset, y, size, font: isBold ? fontBold : font, color: rgb(0,0,0) });
       };
 
-      // 1. ИМЯ КУРЬЕРА
+      // 1. ИМЯ КУРЬЕРА И ВРЕМЯ ВЫЕЗДА (справа)
       const courierName = order.route?.courier 
         ? `${order.route.courier.firstName} ${order.route.courier.lastName}`.trim() 
         : 'Не назначен';
         
       drawTextLocal(`Курьер: ${courierName}`, marginX, cursorY, 11, true);
+
+      // Если есть время выезда, вычисляем его ширину и печатаем справа
+      if (order.route?.plannedDepartureTime && order.route.plannedDepartureTime !== "—") {
+        const timeText = order.route.plannedDepartureTime;
+        const timeWidth = fontBold.widthOfTextAtSize(timeText, 11);
+        drawTextLocal(timeText, cellW - timeWidth - marginX, cursorY, 11, true);
+      }
+
       cursorY -= 12;
       
       // Линия под курьером
