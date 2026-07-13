@@ -18,7 +18,7 @@ function hasCoords(o: CourierOrder): o is CourierOrder & { lat: number; lng: num
 const FILTERS = [
   { id: 'IN_DELIVERY', label: 'В пути', color: '#10b981' },
   { id: 'ASSIGNED', label: 'Назначен', color: '#4a7aff' },
-  { id: 'ASSEMBLING', label: 'В сборке' },
+  { id: 'ASSEMBLING', label: 'В сборке', color: '#d97706' }, // 🔥 Добавлен цвет
   { id: 'DELIVERED', label: 'Доставлен', color: '#a8a49c' },
   { id: 'ALL', label: 'Все', color: '#1a1a18' },
 ];
