@@ -117,6 +117,20 @@ export default function ManagerDashboard() {
   const [searchByIdOnly, setSearchByIdOnly] = useState(false);
   const [printA4, setPrintA4] = useState(false);
 
+  // Читаем сохраненное значение при первой загрузке страницы
+  useEffect(() => {
+    const savedFormat = localStorage.getItem('printFormatA4');
+    if (savedFormat !== null) {
+      setPrintA4(savedFormat === 'true');
+    }
+  }, []);
+
+  // Функция для обновления и стейта, и localStorage
+  const handlePrintFormatChange = (isChecked: boolean) => {
+    setPrintA4(isChecked);
+    localStorage.setItem('printFormatA4', String(isChecked));
+  };
+
   useEffect(() => {
     fetch('/api/auth/me')
       .then((res) => { if (!res.ok) throw new Error('Not logged in'); return res.json(); })
@@ -544,7 +558,8 @@ export default function ManagerDashboard() {
                       <input
                         type="checkbox"
                         checked={printA4}
-                        onChange={(e) => setPrintA4(e.target.checked)}
+                        // Используем нашу новую функцию
+                        onChange={(e) => handlePrintFormatChange(e.target.checked)}
                         disabled={selectedOrders.size === 0}
                         className="w-3.5 h-3.5 sm:w-4 sm:h-4 accent-[#1a1a18] rounded cursor-pointer"
                       />
