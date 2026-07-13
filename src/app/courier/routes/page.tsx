@@ -62,14 +62,19 @@ export default function CourierRoutesPage() {
     return response;
   };
 
-  // 🔥 Синхронизация статусов из очереди
-  const syncPendingStatuses = async () => {
-    if (typeof window === "undefined") return;
-    const pendingStr = localStorage.getItem('pendingStatuses');
-    if (!pendingStr) return;
+ // Выносим флаг блокировки за пределы компонента (чтобы он был глобальным для инстанса)
+let isSyncing = false;
 
+const syncPendingStatuses = async () => {
+  if (typeof window === "undefined" || isSyncing) return;
+  
+  const pendingStr = localStorage.getItem('pendingStatuses');
+  if (!pendingStr || pendingStr === '{}') return;
+
+  isSyncing = true; // Запираем замок
+
+  try {
     const pending = JSON.parse(pendingStr);
-    let hasUpdates = false;
 
     for (const [id, status] of Object.entries(pending)) {
       try {
@@ -78,19 +83,21 @@ export default function CourierRoutesPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status }),
         });
+        
         if (res.ok) {
-          delete pending[id];
-          hasUpdates = true;
+          // 🔥 Обновляем localStorage СРАЗУ после успешного запроса
+          const currentPending = JSON.parse(localStorage.getItem('pendingStatuses') || '{}');
+          delete currentPending[id];
+          localStorage.setItem('pendingStatuses', JSON.stringify(currentPending));
         }
       } catch (e) {
         console.warn(`Синхронизация отложена для ${id}, ждем сеть...`);
       }
     }
-
-    if (hasUpdates) {
-      localStorage.setItem('pendingStatuses', JSON.stringify(pending));
-    }
-  };
+  } finally {
+    isSyncing = false; // Открываем замок
+  }
+};
 
   const fetchOrders = async () => {
     try {

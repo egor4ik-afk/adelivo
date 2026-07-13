@@ -254,12 +254,36 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       newTime: updatedOrder.slotRaw || "—"
     };
 
-    if (Object.values(changes).some(Boolean)) {
+    // 🔥 Собираем в массив ТОЛЬКО булевые флаги изменений
+    const hasRealChanges = [
+      changes.statusChanged,
+      changes.courierChanged,
+      changes.dateChanged,
+      changes.slotChanged,
+      changes.addressChanged,
+      changes.commentChanged,
+      changes.opCommentChanged,
+      changes.itemsChanged,
+      changes.recipientPhoneChanged
+    ].some(Boolean);
+
+    // Уведомляем только если реально что-то изменилось
+    if (hasRealChanges) {
       notify({
         type: "order.updated",
         order: updatedOrder as any,
         previousStatus: changes.statusChanged ? order.status : undefined,
-        changes, // Оставляем чистым, без выдуманных полей
+        changes, 
+      }).catch(console.error);
+    }
+
+    // Уведомляем только если реально что-то изменилось
+    if (hasRealChanges) {
+      notify({
+        type: "order.updated",
+        order: updatedOrder as any,
+        previousStatus: changes.statusChanged ? order.status : undefined,
+        changes, 
       }).catch(console.error);
     }
 
