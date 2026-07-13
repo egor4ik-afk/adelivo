@@ -34,7 +34,7 @@ interface Order {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  NEW: "Новый", ASSIGNED: "Назначен",ASSEMBLING: "В сборке",
+  NEW: "Новый", ASSIGNED: "Назначен",ASSEMBLING: "В сборке", IN_DELIVERY: "В пути",
   DELIVERED: "Доставлен", RETURNED: "Возврат", CANCELLED: "Отменён",
 };
 
