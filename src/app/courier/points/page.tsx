@@ -18,6 +18,7 @@ function hasCoords(o: CourierOrder): o is CourierOrder & { lat: number; lng: num
 const FILTERS = [
   { id: 'IN_DELIVERY', label: 'В пути', color: '#10b981' },
   { id: 'ASSIGNED', label: 'Назначен', color: '#4a7aff' },
+  { id: 'ASSEMBLING', label: 'В сборке' },
   { id: 'DELIVERED', label: 'Доставлен', color: '#a8a49c' },
   { id: 'ALL', label: 'Все', color: '#1a1a18' },
 ];
@@ -34,7 +35,7 @@ export default function CourierPointsPage() {
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [isCardMinimized, setIsCardMinimized] = useState(false); // 🔥 Состояние свернутой плашки
 
-  const [filterStatus, setFilterStatus] = useState<'IN_DELIVERY' | 'ASSIGNED' | 'DELIVERED' | 'ALL'>('IN_DELIVERY');
+  const [filterStatus, setFilterStatus] = useState<'IN_DELIVERY' | 'ASSIGNED' | 'ASSEMBLING' | 'DELIVERED' | 'ALL'>('IN_DELIVERY');
   const [filterDate, setFilterDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }));
   const [routeType, setRouteType] = useState<"auto" | "mt">("mt");
 
@@ -251,7 +252,7 @@ export default function CourierPointsPage() {
 
               <div style={{ display: "flex", gap: 8 }}>
                 <a href={yandexMapsUrl} target="_blank" rel="noopener noreferrer" style={{ flex: 1, padding: "8px", borderRadius: 8, background: "#facc15", color: "#1a1a18", textDecoration: "none", textAlign: "center", fontSize: 12, fontWeight: 700 }}>🗺 В навигатор</a>
-                {activeOrder.status === "ASSIGNED" && (
+                {(activeOrder.status === "ASSIGNED" || activeOrder.status === "ASSEMBLING") && (
                   <button onClick={async () => { await fetch(`/api/orders/${activeOrder.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "IN_DELIVERY" }) }); fetchOrders(); }} style={{ flex: 1, padding: "8px", borderRadius: 8, background: "#10b981", color: "#fff", border: "none", fontSize: 12, fontWeight: 700 }}>🚀 Поехал</button>
                 )}
                 {activeOrder.status === "IN_DELIVERY" && (

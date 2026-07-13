@@ -34,12 +34,12 @@ interface Order {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  NEW: "Новый", ASSIGNED: "Назначен", IN_DELIVERY: "В пути",
+  NEW: "Новый", ASSIGNED: "Назначен",ASSEMBLING: "В сборке",
   DELIVERED: "Доставлен", RETURNED: "Возврат", CANCELLED: "Отменён",
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  NEW: "#a8a49c", ASSIGNED: "#4a7aff", IN_DELIVERY: "#7c4dff",
+  NEW: "#a8a49c", ASSIGNED: "#4a7aff",ASSEMBLING: "#f59e0b", IN_DELIVERY: "#7c4dff",
   DELIVERED: "#1a9e5c", RETURNED: "#c8780a", CANCELLED: "#d94040",
 };
 
