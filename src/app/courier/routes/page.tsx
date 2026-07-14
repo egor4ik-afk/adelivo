@@ -672,7 +672,7 @@ const syncPendingStatuses = async () => {
                                 {cleanPhoneForTg && (
                                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                     <a
-                                      href={`https://t.me/${cleanPhoneForTg}?text=${encodedMsg}`}
+                                      href={`https://telegram.dog/${cleanPhoneForTg}?text=${encodedMsg}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       onClick={e => e.stopPropagation()}
