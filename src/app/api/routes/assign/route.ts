@@ -222,10 +222,11 @@ export async function POST(req: Request) {
       });
       
       if (courierFullName && orderToUpdate?.crmId) {
+        const finalPlannedTime = plannedDepartureTime !== undefined ? plannedDepartureTime : fallbackPlannedTime;
         await updateCrmOrder(orderToUpdate.crmId, { 
           courier: courierFullName,
           routeName: newRoute.name,
-          returnTime: (estimatedReturnTime ?? fallbackReturnTime) || undefined,
+          returnTime: finalPlannedTime || undefined,   // 🔥 теперь это plannedDepartureTime, а не estimatedReturnTime
           routeDate: finalRouteDate,
           recipientPhone: orderToUpdate.recipientPhone || undefined,
         }).catch(() => {});
