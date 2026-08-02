@@ -736,12 +736,15 @@ export async function updateCrmOrder(
   crmId: string,
   data: {
     status?: OrderStatus;
-    crmStatus?: string; // 🔥 Прямой канал для менеджеров
+    crmStatus?: string;
     courier?: string;
     opComment?: string;
     address?: string;
     deliveryType?: string | null;
     recipientPhone?: string;
+    routeName?: string;       // 🔥 ДОБАВИТЬ
+    returnTime?: string;      // 🔥 ДОБАВИТЬ, формат "HH:MM"
+    routeDate?: string;       // 🔥 ДОБАВИТЬ, формат "YYYY-MM-DD"
   }
 ) {
   if (!CRM_URL) return;
@@ -754,13 +757,9 @@ export async function updateCrmOrder(
 
   const orderPayload: any = {};
 
-  // 🔥 ЛОГИКА И ЗАЩИТА:
   if (data.crmStatus) {
-    // 1. Если менеджер жмет кнопку "В сборку" — отправляем сырой статус как есть
     orderPayload.status = data.crmStatus;
   } else if (data.status && STATUS_TO_CRM[data.status]) {
-    // 2. Если курьер жмет кнопку — отправляем маппинг, НО:
-    // Строго соблюдаем правило: статус "Назначен" (ASSIGNED) в CRM НЕ ОТПРАВЛЯЕТСЯ
     if (data.status !== "ASSIGNED") {
       orderPayload.status = STATUS_TO_CRM[data.status];
     }
@@ -775,6 +774,25 @@ export async function updateCrmOrder(
     orderPayload.phone = data.recipientPhone.replace(/[^\d+]/g, "");
   }
 
+  // 🔥 НОВЫЙ БЛОК: маршрут, время прибытия на базу, номер получателя (кастомные поля)
+  if (data.routeName !== undefined || data.returnTime !== undefined || data.recipientPhone !== undefined) {
+    orderPayload.customFields = orderPayload.customFields ?? {};
+
+    if (data.routeName !== undefined) {
+      orderPayload.customFields.marshrut = data.routeName;
+    }
+
+    if (data.returnTime !== undefined) {
+      const date = data.routeDate || new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" });
+      // Формат подтверждён на реальном заказе CRM: "YYYY-MM-DD HH:MM:SS"
+      orderPayload.customFields.vremia_pribytiia_kurera_na_bazu = `${date} ${data.returnTime}:00`;
+    }
+
+    if (data.recipientPhone !== undefined) {
+      orderPayload.customFields.nomer_poluchatelia = data.recipientPhone.replace(/[^\d+]/g, "");
+    }
+  }
+
   if (data.courier !== undefined) {
     const courierName = data.courier?.trim() || "";
     orderPayload.delivery = orderPayload.delivery ?? {};
@@ -785,7 +803,7 @@ export async function updateCrmOrder(
       if (courierId) {
         orderPayload.delivery.data = { id: courierId, courierId: courierId, courier: courierId };
       }
-      orderPayload.customFields = { courier: courierName, kurier: courierName };
+      orderPayload.customFields = { ...orderPayload.customFields, courier: courierName, kurier: courierName };
     } else {
       const resetParams = new URLSearchParams();
       resetParams.append("apiKey", apiKeyToUse);
@@ -795,7 +813,7 @@ export async function updateCrmOrder(
         headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 5000,
       }).catch(() => {});
       orderPayload.delivery = { code: "logisty", typeId: 5 };
-      orderPayload.customFields = { courier: null, kurier: null };
+      orderPayload.customFields = { ...orderPayload.customFields, courier: null, kurier: null };
     }
   }
 

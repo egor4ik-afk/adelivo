@@ -96,7 +96,7 @@ export async function POST(req: Request) {
 
     const orders = await prisma.order.findMany({
       where: { id: { in: orderIds } },
-      select: { id: true, externalId: true, lat: true, lng: true, crmId: true, deliveryDate: true, crmCreatedAt: true, status: true, opComment: true, price: true, courierId: true }
+      select: { id: true, externalId: true, lat: true, lng: true, crmId: true, deliveryDate: true, crmCreatedAt: true, status: true, opComment: true, price: true, courierId: true, recipientPhone: true } // 🔥 ДОБАВЛЕНО recipientPhone
     });
 
     const sortedOrders = orderIds.map((id: string) => orders.find((o) => o.id === id)).filter(Boolean);
@@ -222,7 +222,13 @@ export async function POST(req: Request) {
       });
       
       if (courierFullName && orderToUpdate?.crmId) {
-        await updateCrmOrder(orderToUpdate.crmId, { courier: courierFullName }).catch(() => {});
+        await updateCrmOrder(orderToUpdate.crmId, { 
+          courier: courierFullName,
+          routeName: newRoute.name,
+          returnTime: (estimatedReturnTime ?? fallbackReturnTime) || undefined,
+          routeDate: finalRouteDate,
+          recipientPhone: orderToUpdate.recipientPhone || undefined,
+        }).catch(() => {});
       }
     }
 
