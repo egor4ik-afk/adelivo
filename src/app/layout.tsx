@@ -21,6 +21,7 @@ const SITE_URL = "https://event-wave.ru";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
+  alternates: { canonical: "./" },
 
   title: {
     default: "Event Wave — Система диспетчеризации и управления курьерами",
@@ -29,7 +30,21 @@ export const metadata: Metadata = {
 
   description:
     "Event Wave — профессиональная система диспетчеризации и логистики для любого курьерного бизнеса. Умная маршрутизация, контроль заказов в реальном времени, PWA для курьеров, интеграция с любой CRM через Webhook. До 1000 заказов в день.",
+  
+  keywords: [
+    "система диспетчеризации курьеров",
+    "управление курьерами и доставкой",
+    "программа для логистики доставки",
+    "автоматизация курьерской доставки",
+    "интеграция доставки с crm",
+    "приложение для курьера pwa",
+    "выплаты самозанятым курьерам",
+  ],
 
+  verification: {
+    google: "googlecee020f869c68a59",
+    yandex: "34ef7d504acdd967",
+  },
 
   applicationName: "Event Wave",
   authors: [{ name: "Event Wave", url: SITE_URL }],

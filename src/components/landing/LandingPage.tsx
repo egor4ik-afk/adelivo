@@ -2,38 +2,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { RequestForm } from "@/components/RequestForm";
-import type { Metadata } from "next";
 
 const SITE_URL = "https://event-wave.ru";
-
-export const metadata: Metadata = {
-  title: "Event Wave — Система диспетчеризации курьеров для любого бизнеса",
-  description:
-    "Профессиональная система управления курьерами и заказами. До 1000 заказов в день, интеграция с любой CRM через Webhook, PWA для курьеров на iOS и Android, Push-уведомления без SMS.",
-  keywords: [
-    "система диспетчеризации курьеров",
-    "управление курьерами онлайн",
-    "программа для диспетчера доставки",
-    "маршрутизация курьеров",
-    "crm для курьерской службы",
-    "логистика доставки программа",
-    "приложение для курьера pwa",
-    "диспетчеризация заказов",
-    "retailcrm интеграция доставка",
-    "стать курьером",
-  ],
-  alternates: { canonical: "/about" },
-  openGraph: {
-    title: "Event Wave — Диспетчеризация курьеров. До 1000 заказов/день",
-    description:
-      "Система управления курьерами для любого доставочного бизнеса. Умные маршруты, контроль в реальном времени, PWA-приложение для курьеров.",
-    url: `${SITE_URL}/about`,
-    siteName: "Event Wave",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Event Wave — Система диспетчеризации" }],
-    locale: "ru_RU",
-    type: "website",
-  },
-};
 
 const jsonLd = {
   "@context": "https://schema.org",
@@ -288,7 +258,7 @@ function Desc({ children }: { children: React.ReactNode }) {
   return <p className="desc">{children}</p>;
 }
 
-export default function AboutPage() {
+export function LandingPage() {
   return (
     <>
       <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -302,7 +272,7 @@ export default function AboutPage() {
         <header className="ew-hdr">
           <div className="wrap">
             <div className="inner">
-              <Link href="/about" className="ew-logo" aria-label="Event Wave">
+              <Link href="/" className="ew-logo" aria-label="Event Wave">
                 <Image src="/web-app-manifest-192x192.png" alt="Event Wave" width={32} height={32} style={{ borderRadius: 8 }} />
                 <span className="ew-logo-txt">Event<span>Wave</span></span>
               </Link>
@@ -314,6 +284,10 @@ export default function AboutPage() {
                   <li><a href="#integrations">Интеграции</a></li>
                   <li><a href="#request">Оставить заявку</a></li>
                   <li><a href="#faq">FAQ</a></li>
+				  <li><Link href="/sistema-upravleniya-kurerami">Платформа</Link></li>
+				  <li><Link href="/integracii">Интеграции</Link></li>
+				  <li><Link href="/keysy">Кейсы</Link></li>
+				  <li><Link href="/about">О компании</Link></li>
                 </ul>
               </nav>
               <div className="ew-hbtns">
