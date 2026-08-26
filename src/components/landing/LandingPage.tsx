@@ -274,7 +274,7 @@ export function LandingPage() {
             <div className="inner">
               <Link href="/" className="ew-logo" aria-label="ADelivo">
                 <Image src="/web-app-manifest-192x192.png" alt="ADelivo" width={32} height={32} style={{ borderRadius: 8 }} />
-                <span className="ew-logo-txt">Event<span>Wave</span></span>
+                <span className="ew-logo-txt">A<span>Delivo</span></span>
               </Link>
               <nav aria-label="Навигация">
                 <ul className="ew-nav">
@@ -317,7 +317,7 @@ export function LandingPage() {
                     letterSpacing: "0.06em", lineHeight: 0.95,
                     color: C.text, marginBottom: "1.5rem",
                   }}>
-                    EVENT<br /><span style={{ color: C.accent }}>WAVE</span>
+                    A<br /><span style={{ color: C.accent }}>Delivo</span>
                   </h1>
                   <p style={{ color: C.sub, fontSize: "clamp(0.9rem,1.5vw,1.05rem)", lineHeight: 1.8, marginBottom: "2rem", maxWidth: 460 }}>
                     Единая платформа для управления курьерами и заказами.
