@@ -396,7 +396,7 @@ export default function CourierProfilePage() {
 
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", opacity: 0.5, flexShrink: 0 }}>
           <img src="/favicon.svg" alt="App Logo" style={{ width: 24, height: 24 }} />
-          <span style={{ fontSize: 9, fontWeight: 800, color: "#1a1a18", marginTop: 2, textTransform: "uppercase", letterSpacing: "0.5px" }}>EventWave</span>
+          <span style={{ fontSize: 9, fontWeight: 800, color: "#1a1a18", marginTop: 2, textTransform: "uppercase", letterSpacing: "0.5px" }}>ADelivo</span>
         </div>
       </div>
 

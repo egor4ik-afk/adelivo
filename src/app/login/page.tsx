@@ -111,7 +111,7 @@ export default function LoginPage() {
       <div style={s.card}>
         <div style={s.logoWrap}>
           <img src="/favicon.svg" alt="Logo" style={{ width: 32, height: 32 }} />
-          <h1 style={s.logoText}>EventWave</h1>
+          <h1 style={s.logoText}>ADelivo</h1>
         </div>
 
         {error && <div style={s.err}>{error}</div>}

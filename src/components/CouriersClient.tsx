@@ -541,7 +541,7 @@ export function CouriersClient({ user }: { user: any }) {
         <Link href="/dashboard" style={{ textDecoration: "none" }}>
           <div style={s.logo}>
             <img src="/favicon.svg" alt="Logo" style={{ width: 22, height: 22 }} />
-            EventWave
+            ADelivo
           </div>
         </Link>
         <button onClick={() => router.push('/dashboard')} style={s.navBtn}>🗺️ Дашборд</button>

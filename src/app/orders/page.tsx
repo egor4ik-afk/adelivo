@@ -306,7 +306,7 @@ export default function OrdersPage() {
       <div style={{ background: "#fff", borderBottom: "1px solid #e8e6df", padding: "0 24px", height: 56, display: "flex", alignItems: "center", gap: 16, overflowX: "auto" }}>
         <Link href="/dashboard" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 7, color: "#1a1a18", fontWeight: 600, fontSize: 15, flexShrink: 0 }}>
           <img src="/favicon.svg" alt="Logo" style={{ width: 22, height: 22 }} />
-          EventWave
+          ADelivo
         </Link>
         <div style={{ width: 1, height: 20, background: "#e8e6df" }} />
         <Link href="/dashboard" style={navBtn}>🗺️ Дашборд</Link>

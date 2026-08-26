@@ -69,7 +69,7 @@ const ContactBadge = ({ title, phone, name, isCourier }: { title?: string, phone
   if (!name && !hasPhone) return null;
 
   const cleanPhoneForTg = hasPhone ? phone.replace(/[^\d+]/g, "") : "";
-  const encodedMsg = encodeURIComponent(isCourier ? "Привет! Это менеджер EventWave." : `Здравствуйте${name ? `, ${name}` : ''}! Это доставка EventWave.`);
+  const encodedMsg = encodeURIComponent(isCourier ? "Привет! Это менеджер ADelivo." : `Здравствуйте${name ? `, ${name}` : ''}! Это доставка ADelivo.`);
 
   return (
     <div className="flex flex-col gap-1.5 mt-1">
@@ -597,7 +597,7 @@ export default function ManagerDashboard() {
 
                     const courierPhone = route.courier?.phone || "—";
                     const cleanPhoneForTg = courierPhone !== "—" ? courierPhone.replace(/[^\d+]/g, "") : "";
-                    const encodedMsg = encodeURIComponent("Привет! Это менеджер EventWave.");
+                    const encodedMsg = encodeURIComponent("Привет! Это менеджер ADelivo.");
 
                     return (
                       <div key={route.id} className="bg-white border border-[#e8e6df] rounded-xl shadow-sm transition-all overflow-hidden">

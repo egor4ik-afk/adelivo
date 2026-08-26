@@ -13,7 +13,7 @@
           data = { title: "Событие", body: event.data ? event.data.text() : "Новое уведомление" };
         }
       
-        const title = data.title || "EventWave";
+        const title = data.title || "ADelivo";
         const options = {
           body: data.body || "",
           icon: "/web-app-manifest-192x192.png",

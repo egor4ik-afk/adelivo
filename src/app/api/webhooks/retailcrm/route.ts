@@ -8,7 +8,7 @@ import { createManagerPlaque } from "@/lib/notifications";
 
 export async function GET() {
   // RetailCRM пингует эндпоинт перед активацией
-  return NextResponse.json({ ok: true, service: "EventWave webhook" });
+  return NextResponse.json({ ok: true, service: "ADelivo webhook" });
 }
 
 export async function POST(req: Request) {

@@ -1934,7 +1934,7 @@ export function DashboardClient({ user }: { user: User }) {
         <Link href="/about" style={{ textDecoration: "none" }}>
           <div style={s.logo}>
             <img src="/favicon.svg" alt="Logo" style={{ width: 22, height: 22 }} />
-            {!isMobile && "EventWave"}
+            {!isMobile && "ADelivo"}
           </div>
         </Link>
 

@@ -360,7 +360,7 @@ async function sendIndividualPushes(event: NotificationEvent) {
           ? `chat-global-${event.senderId}`
           : (event as any).order?.id
             ? `order-${(event as any).order.id}`
-            : "eventwave",
+            : "ADelivo",
         timestamp: Date.now(),
       });
 
