@@ -1,8 +1,6 @@
 {
-  "name": "ADelive",
-  "short_name": "EVENT",
-  "start_url": "/",
-  "scope": "/",
+  "name": "AgentDelivery",
+  "short_name": "ADelive",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",
@@ -18,6 +16,6 @@
     }
   ],
   "theme_color": "#ffffff",
-  "background_color": "#ffffff",
+  "background_color": "#b4c0d4",
   "display": "standalone"
 }

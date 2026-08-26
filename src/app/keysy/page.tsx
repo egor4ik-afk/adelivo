@@ -12,7 +12,7 @@ const PATH = "/keysy";
 export const metadata: Metadata = {
   title: "Кейсы внедрения: доставка цветов, интернет-магазин, курьерская служба",
   description:
-    "Реальные результаты клиентов Event Wave: 700 заказов в день в цветочной доставке, минус 40% ошибок в адресах у интернет-магазина, полный переход курьерской службы на белые выплаты.",
+    "Реальные результаты клиентов ADelive: 700 заказов в день в цветочной доставке, минус 40% ошибок в адресах у интернет-магазина, полный переход курьерской службы на белые выплаты.",
   keywords: [
     "кейсы автоматизации доставки",
     "внедрение системы управления курьерами",
@@ -21,11 +21,11 @@ export const metadata: Metadata = {
   ],
   alternates: { canonical: PATH },
   openGraph: {
-    title: "Кейсы Event Wave",
+    title: "Кейсы ADelive",
     description: "Цветочная доставка, интернет-магазин и курьерская служба — что изменилось после внедрения.",
     url: `${SITE_URL}${PATH}`,
-    siteName: "Event Wave",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Кейсы Event Wave" }],
+    siteName: "ADelive",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Кейсы ADelive" }],
     locale: "ru_RU",
     type: "website",
   },
@@ -78,7 +78,7 @@ export default function Page() {
           />
           <Prose>
             <p>
-              Полная цепочка <strong>RetailCRM → Event Wave → Консоль.Про</strong>: заказы приходят вебхуком,
+              Полная цепочка <strong>RetailCRM → ADelive → Консоль.Про</strong>: заказы приходят вебхуком,
               AI собирает маршруты, курьеры работают в PWA, выплаты и акты формируются автоматически.
             </p>
           </Prose>

@@ -12,7 +12,7 @@ const PATH = "/integracii";
 export const metadata: Metadata = {
   title: "Интеграции с CRM для доставки — подключим бесплатно за 3 дня",
   description:
-    "Event Wave подключается к Битрикс24, RetailCRM, Telegram-чатам, Яндекс Картам и Консоль.Про. Двусторонний вебхук с любой CRM. Настройка бесплатно за 3 рабочих дня.",
+    "ADelive подключается к Битрикс24, RetailCRM, Telegram-чатам, Яндекс Картам и Консоль.Про. Двусторонний вебхук с любой CRM. Настройка бесплатно за 3 рабочих дня.",
   keywords: [
     "интеграция crm с доставкой",
     "вебхук доставка crm",
@@ -23,11 +23,11 @@ export const metadata: Metadata = {
   ],
   alternates: { canonical: PATH },
   openGraph: {
-    title: "Интеграции Event Wave — любая CRM за 3 дня",
+    title: "Интеграции ADelive — любая CRM за 3 дня",
     description: "Битрикс24, RetailCRM, Telegram, Яндекс Карты, Консоль.Про и открытый вебхук.",
     url: `${SITE_URL}${PATH}`,
-    siteName: "Event Wave",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Интеграции Event Wave" }],
+    siteName: "ADelive",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Интеграции ADelive" }],
     locale: "ru_RU",
     type: "website",
   },
@@ -50,11 +50,11 @@ const faq: Faq[] = [
   },
   {
     q: "А если моей CRM нет в списке?",
-    a: "Список — это готовые интеграции «из коробки». Для остальных систем работает открытый вебхук: Event Wave принимает заказ в JSON или form-urlencoded и возвращает статусы обратно. Мы отдаём формат и помогаем вашему разработчику отправить первый заказ.",
+    a: "Список — это готовые интеграции «из коробки». Для остальных систем работает открытый вебхук: ADelive принимает заказ в JSON или form-urlencoded и возвращает статусы обратно. Мы отдаём формат и помогаем вашему разработчику отправить первый заказ.",
   },
   {
     q: "Данные точно не потеряются при переносе?",
-    a: "Мы не переносим вашу базу. Event Wave — надстройка над CRM: источником правды по клиентам и заказам остаётся ваша система, платформа отвечает за доставку и возвращает результат обратно.",
+    a: "Мы не переносим вашу базу. ADelive — надстройка над CRM: источником правды по клиентам и заказам остаётся ваша система, платформа отвечает за доставку и возвращает результат обратно.",
   },
   {
     q: "Что если у нас несколько источников заказов?",
@@ -75,7 +75,7 @@ export default function Page() {
         {
           "@context": "https://schema.org",
           "@type": "ItemList",
-          name: "Интеграции Event Wave",
+          name: "Интеграции ADelive",
           itemListElement: items.map((it, i) => ({
             "@type": "ListItem",
             position: i + 1,
@@ -89,7 +89,7 @@ export default function Page() {
         crumbs={crumbs}
         label="Интеграции"
         h1={<>Подключаем к любой CRM<br /><span>бесплатно за 3 дня</span></>}
-        sub="Битрикс24, RetailCRM, интернет-магазин, самописная система или Telegram-чат — заказы приходят в Event Wave вебхуком, а статусы доставки возвращаются обратно. Никаких выгрузок в Excel и двойного ввода."
+        sub="Битрикс24, RetailCRM, интернет-магазин, самописная система или Telegram-чат — заказы приходят в ADelive вебхуком, а статусы доставки возвращаются обратно. Никаких выгрузок в Excel и двойного ввода."
         bullets={["0 ₽ за подключение", "3 рабочих дня", "Двусторонний вебхук", "JSON и form-urlencoded"]}
       />
 
@@ -120,7 +120,7 @@ export default function Page() {
             Формат намеренно простой: обязательны только адрес и идентификатор заказа.
           </Desc>
           <div className="codebox">
-{`POST https://event-wave.ru/api/webhooks/custom
+{`POST https://adelive.ru/api/webhooks/custom
 Content-Type: application/json
 
 {
@@ -135,7 +135,7 @@ Content-Type: application/json
           </div>
           <Prose>
             <p>
-              В ответ Event Wave присылает свой идентификатор заказа. Дальше платформа сама шлёт вам
+              В ответ ADelive присылает свой идентификатор заказа. Дальше платформа сама шлёт вам
               обратные вебхуки при смене статуса: <strong>назначен → в пути → доставлен</strong> (или возврат,
               отмена), с указанием курьера, времени и итоговой стоимости доставки.
             </p>
@@ -154,7 +154,7 @@ Content-Type: application/json
           <H2>Данные в обе стороны</H2>
           <div className="tbl-wrap" style={{ marginTop: "1rem" }}>
             <Table
-              head={["Данные", "CRM → Event Wave", "Event Wave → CRM"]}
+              head={["Данные", "CRM → ADelive", "ADelive → CRM"]}
               rows={[
                 ["Заказ и состав", <strong key="1">Да</strong>, "—"],
                 ["Адрес и координаты", <strong key="2">Да</strong>, "Исправленный адрес"],

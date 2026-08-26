@@ -4,12 +4,12 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { LandingPage } from "@/components/landing/LandingPage";
 
-const SITE_URL = "https://event-wave.ru";
+const SITE_URL = "https://adelive.ru";
 
 // Метаданные переехали сюда из старого src/app/about/page.tsx.
 // Отличие одно: canonical теперь "/" — главная стала канонической страницей сайта.
 export const metadata: Metadata = {
-  title: "Event Wave — Система диспетчеризации курьеров для любого бизнеса",
+  title: "ADelive — Система диспетчеризации курьеров для любого бизнеса",
   description:
     "Профессиональная система управления курьерами и заказами. До 1000 заказов в день, интеграция с любой CRM через Webhook, PWA для курьеров на iOS и Android, Push-уведомления без SMS.",
   keywords: [
@@ -26,12 +26,12 @@ export const metadata: Metadata = {
   ],
   alternates: { canonical: "/" },
   openGraph: {
-    title: "Event Wave — Диспетчеризация курьеров. До 1000 заказов/день",
+    title: "ADelive — Диспетчеризация курьеров. До 1000 заказов/день",
     description:
       "Система управления курьерами для любого доставочного бизнеса. Умные маршруты, контроль в реальном времени, PWA-приложение для курьеров.",
     url: SITE_URL,
-    siteName: "Event Wave",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Event Wave — Система диспетчеризации" }],
+    siteName: "ADelive",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "ADelive — Система диспетчеризации" }],
     locale: "ru_RU",
     type: "website",
   },

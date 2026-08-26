@@ -11,7 +11,7 @@ const PATH = "/keysy/bunch";
 export const metadata: Metadata = {
   title: "Кейс «Банч»: 700 заказов в день и 100 курьеров на 8 марта",
   description:
-    "Как цветочный магазин «Банч» перевёл доставку из чатов и таблиц в Event Wave: RetailCRM → диспетчерский экран → Консоль.Про. 700 заказов в день, около 100 курьеров в пик, ноль SMS.",
+    "Как цветочный магазин «Банч» перевёл доставку из чатов и таблиц в ADelive: RetailCRM → диспетчерский экран → Консоль.Про. 700 заказов в день, около 100 курьеров в пик, ноль SMS.",
   keywords: [
     "автоматизация доставки цветов",
     "кейс внедрения системы доставки",
@@ -22,10 +22,10 @@ export const metadata: Metadata = {
   alternates: { canonical: PATH },
   openGraph: {
     title: "Кейс «Банч»: 700 заказов в день, 100 курьеров, 0 SMS",
-    description: "Пиковая доставка цветов на Event Wave: RetailCRM, AI-маршруты и автоматические выплаты.",
+    description: "Пиковая доставка цветов на ADelive: RetailCRM, AI-маршруты и автоматические выплаты.",
     url: `${SITE_URL}${PATH}`,
-    siteName: "Event Wave",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Кейс «Банч» — Event Wave" }],
+    siteName: "ADelive",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Кейс «Банч» — ADelive" }],
     locale: "ru_RU",
     type: "article",
   },
@@ -66,9 +66,9 @@ export default function Page() {
           "@type": "Article",
           headline: "Кейс «Банч»: 700 заказов в день и около 100 курьеров на 8 марта",
           description:
-            "Как цветочный магазин перевёл доставку из чатов и таблиц в Event Wave: RetailCRM, AI-маршрутизация, PWA для курьеров и автоматические выплаты через Консоль.Про.",
-          author: { "@type": "Organization", name: "Event Wave", url: SITE_URL },
-          publisher: { "@type": "Organization", name: "Event Wave", url: SITE_URL },
+            "Как цветочный магазин перевёл доставку из чатов и таблиц в ADelive: RetailCRM, AI-маршрутизация, PWA для курьеров и автоматические выплаты через Консоль.Про.",
+          author: { "@type": "Organization", name: "ADelive", url: SITE_URL },
+          publisher: { "@type": "Organization", name: "ADelive", url: SITE_URL },
           mainEntityOfPage: `${SITE_URL}${PATH}`,
           image: `${SITE_URL}/og-image.png`,
           inLanguage: "ru-RU",
@@ -98,7 +98,7 @@ export default function Page() {
           />
           <Prose>
             <p>
-              Полная автоматизация цепочки <strong>RetailCRM → Event Wave → Консоль.Про</strong>. Push-уведомления
+              Полная автоматизация цепочки <strong>RetailCRM → ADelive → Консоль.Про</strong>. Push-уведомления
               заменили SMS, операторы и диспетчеры работают параллельно без конфликтов, расчёт выплат и
               подписание актов идут без участия бухгалтера.
             </p>

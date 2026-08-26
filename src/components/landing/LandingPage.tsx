@@ -3,14 +3,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { RequestForm } from "@/components/RequestForm";
 
-const SITE_URL = "https://event-wave.ru";
+const SITE_URL = "https://adelive.ru";
 
 const jsonLd = {
   "@context": "https://schema.org",
   "@graph": [
     {
   "@type": "SoftwareApplication",
-  name: "Event Wave",
+  name: "ADelive",
   applicationCategory: "BusinessApplication",
       operatingSystem: "Web, iOS, Android",
       url: SITE_URL,
@@ -24,22 +24,22 @@ const jsonLd = {
         "Встроенный чат диспетчер–курьер",
       ],
       offers: { "@type": "Offer", priceCurrency: "RUB" },
-      provider: { "@type": "Organization", name: "Event Wave", url: SITE_URL },
+      provider: { "@type": "Organization", name: "ADelive", url: SITE_URL },
     },
     {
       "@type": "FAQPage",
       mainEntity: [
         {
           "@type": "Question",
-          name: "Для какого бизнеса подходит Event Wave?",
+          name: "Для какого бизнеса подходит ADelive?",
           acceptedAnswer: {
             "@type": "Answer",
-            text: "Event Wave подходит для любого бизнеса с курьерской доставкой: цветочные магазины, продукты питания, аптеки, экспресс-доставка, интернет-магазины.",
+            text: "ADelive подходит для любого бизнеса с курьерской доставкой: цветочные магазины, продукты питания, аптеки, экспресс-доставка, интернет-магазины.",
           },
         },
         {
           "@type": "Question",
-          name: "Как стать курьером в Event Wave?",
+          name: "Как стать курьером в ADelive?",
           acceptedAnswer: {
             "@type": "Answer",
             text: "Нажмите стать курьером. Привяжите профиль СЗ из консоль. После регистрации вы получите ссылку на вход — код придёт на email, пароль не нужен. Приложение устанавливается на любой смартфон за 30 секунд.",
@@ -50,7 +50,7 @@ const jsonLd = {
           name: "Сколько заказов в день может обработать система?",
           acceptedAnswer: {
             "@type": "Answer",
-            text: "Event Wave протестирован на реальных нагрузках до 1000 заказов в день. Система масштабируется горизонтально.",
+            text: "ADelive протестирован на реальных нагрузках до 1000 заказов в день. Система масштабируется горизонтально.",
           },
         },
       ],
@@ -272,8 +272,8 @@ export function LandingPage() {
         <header className="ew-hdr">
           <div className="wrap">
             <div className="inner">
-              <Link href="/" className="ew-logo" aria-label="Event Wave">
-                <Image src="/web-app-manifest-192x192.png" alt="Event Wave" width={32} height={32} style={{ borderRadius: 8 }} />
+              <Link href="/" className="ew-logo" aria-label="ADelive">
+                <Image src="/web-app-manifest-192x192.png" alt="ADelive" width={32} height={32} style={{ borderRadius: 8 }} />
                 <span className="ew-logo-txt">Event<span>Wave</span></span>
               </Link>
               <nav aria-label="Навигация">
@@ -348,7 +348,7 @@ export function LandingPage() {
                 <div>
                 <Image
                     src="/og-image.png"
-                    alt="Event Wave — интерфейс системы диспетчеризации курьеров"
+                    alt="ADelive — интерфейс системы диспетчеризации курьеров"
                     width={1200} height={630}
                     style={{ width: "100%", height: "auto", display: "block" }}
                     priority
@@ -562,7 +562,7 @@ export function LandingPage() {
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.7rem" }}>
                   {[
-                    { n: "01", t: "Заказ создаётся в CRM", d: "RetailCRM или любая система присылает Webhook в Event Wave — статус, адрес, слот, курьер." },
+                    { n: "01", t: "Заказ создаётся в CRM", d: "RetailCRM или любая система присылает Webhook в ADelive — статус, адрес, слот, курьер." },
                     { n: "02", t: "Автоматическое геокодирование", d: "Координаты через Яндекс API. Проблемные адреса подсвечиваются, AI исправляет за один клик." },
                     { n: "03", t: "Диспетчер собирает маршруты", d: "Назначение курьеров и группировка заказов. Ссылка на маршрут — автоматически." },
                     { n: "04", t: "Курьер получает Push", d: "При назначении маршрута — мгновенное Push-уведомление в PWA без SMS." },
@@ -742,7 +742,7 @@ export function LandingPage() {
                   {
                     t: "🌸 Цветочный магазин «Банч»",
                     m: [{ v: "700", l: "Заказов/день" }, { v: "100 ", l: "Курьеров/8 марта " }, { v: "0", l: "SMS" }],
-                    d: "Полная автоматизация: RetailCRM → Event Wave → Консоль.Про. Все Push-уведомления заменили SMS. Операторы и диспетчеры работают параллельно без конфликтов. Расчёт ЗП и подписание актов — без бухгалтера.",
+                    d: "Полная автоматизация: RetailCRM → ADelive → Консоль.Про. Все Push-уведомления заменили SMS. Операторы и диспетчеры работают параллельно без конфликтов. Расчёт ЗП и подписание актов — без бухгалтера.",
                   },
                   {
                     t: "📦 Интернет-магазин",
@@ -832,13 +832,13 @@ export function LandingPage() {
                 </div>
                 <div>
                   {[
-                    { q: "Для какого бизнеса подходит Event Wave?", a: "Для любого бизнеса с курьерской доставкой: цветочные магазины, еда, аптеки, интернет-магазины, курьерские службы. Если есть курьеры и заказы — система подойдёт." },
+                    { q: "Для какого бизнеса подходит ADelive?", a: "Для любого бизнеса с курьерской доставкой: цветочные магазины, еда, аптеки, интернет-магазины, курьерские службы. Если есть курьеры и заказы — система подойдёт." },
                     { q: "Что такое работа в белую через СЗ?", a: "Курьер оформляется как самозанятый. Мы через Консоль.Про автоматически создаём задание, рассчитываем сумму по заказам, формируем акт, подписываем его и отправляем выплату на карту. Налоговый чек выписывается автоматически." },
                     { q: "Как стать курьером?", a: "Зарегистрируйтесь на платформе или напишите нам в Telegram. После регистрации придёт ссылка и код на email — пароль не нужен. Приложение устанавливается на любой смартфон за 30 секунд." },
                     { q: "Работает ли с RetailCRM?", a: "Да. Двусторонняя синхронизация через Webhook — статусы, курьеры, комментарии обновляются в обе стороны за доли секунды." },
                     { q: "Что такое Консоль.Про?", a: "Сервис для работы с самозанятыми и фрилансерами. Мы интегрируем его для автоматического создания заданий, формирования актов и выплат на карты СЗ-курьеров." },
                     { q: "Сколько времени занимает внедрение?", a: "Базовая настройка с RetailCRM — 1–3 дня. Курьер начинает работать через 5 минут после регистрации." },
-                    { q: "Можно ли подключить другую CRM?", a: "Да. Event Wave принимает Webhook в JSON или form-urlencoded от любой системы. Поможем с настройкой." },
+                    { q: "Можно ли подключить другую CRM?", a: "Да. ADelive принимает Webhook в JSON или form-urlencoded от любой системы. Поможем с настройкой." },
                   ].map((f) => (
                     <div key={f.q} className="faq-item">
                       <p className="faq-q">{f.q}</p>
@@ -885,7 +885,7 @@ export function LandingPage() {
         <footer style={{ borderTop: `1px solid ${C.border}`, padding: "2rem 0" }}>
           <div className="wrap" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "0.7rem" }}>
-              <Image src="/web-app-manifest-192x192.png" alt="Event Wave" width={24} height={24} style={{ borderRadius: 6 }} />
+              <Image src="/web-app-manifest-192x192.png" alt="ADelive" width={24} height={24} style={{ borderRadius: 6 }} />
               <span style={{ fontWeight: 700, fontSize: "0.88rem", color: C.text }}>Event<span style={{ color: C.accent }}>Wave</span></span>
             </div>
             <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap" }}>
@@ -901,7 +901,7 @@ export function LandingPage() {
                 </a>
               ))}
             </div>
-            <p style={{ fontSize: "0.75rem", color: C.muted }}>© 2026 Event Wave</p>
+            <p style={{ fontSize: "0.75rem", color: C.muted }}>© 2026 ADelive</p>
             <p style={{ fontSize: "0.75rem", color: C.muted, lineHeight: 2, marginTop: "1rem" }}>
             Сделано и размещено на <a href="https://relaxdev.ru" target="_blank" rel="noopener noreferrer" style={{ color: C.accent }}>relaxdev.ru</a>
           </p>

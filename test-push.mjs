@@ -1,6 +1,6 @@
 // // test-webhook.js
 // // 🔥 Вставь сюда свой НОВЫЙ ДОМЕН (например, https://flowers.vm.relaxdev.ru)
-// const DOMAIN = "https://event-wave.ru"; 
+// const DOMAIN = "https://adelive.ru"; 
 
 // // ID заказа из CRM, который реально там существует (возьмем из прошлых логов)
 // const TEST_ORDER_ID = "20172"; 

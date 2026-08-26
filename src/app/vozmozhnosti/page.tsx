@@ -10,9 +10,9 @@ import {
 const PATH = "/vozmozhnosti";
 
 export const metadata: Metadata = {
-  title: "Возможности платформы диспетчеризации Event Wave",
+  title: "Возможности платформы диспетчеризации ADelive",
   description:
-    "Заказы, курьеры, маршруты, карты, выплаты и три рабочих места в одной системе. Разбор возможностей платформы Event Wave по разделам.",
+    "Заказы, курьеры, маршруты, карты, выплаты и три рабочих места в одной системе. Разбор возможностей платформы ADelive по разделам.",
   keywords: [
     "возможности системы доставки",
     "функционал программы для логистики",
@@ -21,11 +21,11 @@ export const metadata: Metadata = {
   ],
   alternates: { canonical: PATH },
   openGraph: {
-    title: "Возможности Event Wave",
+    title: "Возможности ADelive",
     description: "Заказы, курьеры, маршруты, карты, выплаты и три рабочих места.",
     url: `${SITE_URL}${PATH}`,
-    siteName: "Event Wave",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Возможности Event Wave" }],
+    siteName: "ADelive",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Возможности ADelive" }],
     locale: "ru_RU",
     type: "website",
   },
@@ -64,7 +64,7 @@ export default function Page() {
         crumbs={crumbs}
         label="Возможности"
         h1={<>Всё, что нужно<br /><span>для доставки</span></>}
-        sub="Event Wave закрывает путь заказа целиком: от вебхука из вашей CRM до подписанного акта и выплаты курьеру. Ниже — разбор по разделам, каждый с отдельной страницей."
+        sub="ADelive закрывает путь заказа целиком: от вебхука из вашей CRM до подписанного акта и выплаты курьеру. Ниже — разбор по разделам, каждый с отдельной страницей."
         bullets={["До 1000 заказов в день", "Любая CRM за 3 дня", "PWA для курьеров", "Работа в белую"]}
       />
 

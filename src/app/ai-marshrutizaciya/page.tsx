@@ -11,7 +11,7 @@ const PATH = "/ai-marshrutizaciya";
 export const metadata: Metadata = {
   title: "AI-маршрутизация: автоматическое распределение заказов и курьеров",
   description:
-    "AI-агент Event Wave распределяет заказы по курьерам и собирает маршруты с учётом зон, слотов и загрузки. Маршрут на день — за минуту вместо 40. Исправление кривых адресов.",
+    "AI-агент ADelive распределяет заказы по курьерам и собирает маршруты с учётом зон, слотов и загрузки. Маршрут на день — за минуту вместо 40. Исправление кривых адресов.",
   keywords: [
     "автоматическая маршрутизация курьеров",
     "ai распределение заказов",
@@ -22,11 +22,11 @@ export const metadata: Metadata = {
   ],
   alternates: { canonical: PATH },
   openGraph: {
-    title: "AI-маршрутизация заказов и курьеров — Event Wave",
+    title: "AI-маршрутизация заказов и курьеров — ADelive",
     description: "Маршруты на день собираются за минуту: зоны, слоты, загрузка, тип передвижения.",
     url: `${SITE_URL}${PATH}`,
-    siteName: "Event Wave",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "AI-маршрутизация Event Wave" }],
+    siteName: "ADelive",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "AI-маршрутизация ADelive" }],
     locale: "ru_RU",
     type: "website",
   },
