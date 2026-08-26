@@ -445,7 +445,7 @@ export function SeoShell({ children, jsonLd }: { children: React.ReactNode; json
             <div className="inner">
               <Link href="/" className="ew-logo" aria-label="ADelivo — главная">
                 <Image src="/web-app-manifest-192x192.png" alt="" width={32} height={32} style={{ borderRadius: 8 }} />
-                <span className="ew-logo-txt">A<span>Delivo</span></span>
+                <span className="ew-logo-txt">Agent<span>Delivo</span></span>
               </Link>
               <nav aria-label="Основная навигация">
                 <ul className="ew-nav">
@@ -472,7 +472,7 @@ export function SeoShell({ children, jsonLd }: { children: React.ReactNode; json
             <div className="ftr-grid">
               <div>
                 <div className="ew-logo" style={{ marginBottom: "0.9rem" }}>
-                  <span className="ew-logo-txt">A<span>Delivo</span></span>
+                  <span className="ew-logo-txt">Agent<span>Delivo</span></span>
                 </div>
                 <p style={{ fontSize: "0.82rem", color: C.muted, lineHeight: 1.75, maxWidth: 300 }}>
                   Универсальная платформа диспетчеризации для любой доставки: заказы, маршруты,

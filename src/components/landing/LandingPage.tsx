@@ -317,7 +317,7 @@ export function LandingPage() {
                     letterSpacing: "0.06em", lineHeight: 0.95,
                     color: C.text, marginBottom: "1.5rem",
                   }}>
-                    A<br /><span style={{ color: C.accent }}>Delivo</span>
+                    Agent<br /><span style={{ color: C.accent }}>Delivo</span>
                   </h1>
                   <p style={{ color: C.sub, fontSize: "clamp(0.9rem,1.5vw,1.05rem)", lineHeight: 1.8, marginBottom: "2rem", maxWidth: 460 }}>
                     Единая платформа для управления курьерами и заказами.
