@@ -1,7 +1,7 @@
 // src/app/sitemap.ts
 import type { MetadataRoute } from "next";
 
-const SITE_URL = "https://adelive.ru";
+const SITE_URL = "https://adelivo.ru";
 
 type Entry = {
   path: string;

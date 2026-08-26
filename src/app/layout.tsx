@@ -17,19 +17,19 @@ export const viewport: Viewport = {
   userScalable: false,
 };
 
-const SITE_URL = "https://adelive.ru";
+const SITE_URL = "https://adelivo.ru";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   alternates: { canonical: "./" },
 
   title: {
-    default: "ADelive — Система диспетчеризации и управления курьерами",
-    template: "%s | ADelive",
+    default: "ADelivo — Система диспетчеризации и управления курьерами",
+    template: "%s | ADelivo",
   },
 
   description:
-    "ADelive — профессиональная система диспетчеризации и логистики для любого курьерного бизнеса. Умная маршрутизация, контроль заказов в реальном времени, PWA для курьеров, интеграция с любой CRM через Webhook. До 1000 заказов в день.",
+    "ADelivo — профессиональная система диспетчеризации и логистики для любого курьерного бизнеса. Умная маршрутизация, контроль заказов в реальном времени, PWA для курьеров, интеграция с любой CRM через Webhook. До 1000 заказов в день.",
   
   keywords: [
     "система диспетчеризации курьеров",
@@ -46,24 +46,24 @@ export const metadata: Metadata = {
     yandex: "34ef7d504acdd967",
   },
 
-  applicationName: "ADelive",
-  authors: [{ name: "ADelive", url: SITE_URL }],
-  creator: "ADelive",
-  publisher: "ADelive",
+  applicationName: "ADelivo",
+  authors: [{ name: "ADelivo", url: SITE_URL }],
+  creator: "ADelivo",
+  publisher: "ADelivo",
 
 
   openGraph: {
-    title: "ADelive — Диспетчеризация и управление курьерами",
+    title: "ADelivo — Диспетчеризация и управление курьерами",
     description:
       "Контролируйте курьеров, маршруты и заказы в одной системе. Интеграция с любой CRM, PWA для курьеров, Push-уведомления. До 1000 заказов в день.",
     url: SITE_URL,
-    siteName: "ADelive",
+    siteName: "ADelivo",
     images: [
       {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "ADelive — Система диспетчеризации и логистики",
+        alt: "ADelivo — Система диспетчеризации и логистики",
       },
     ],
     locale: "ru_RU",
@@ -72,7 +72,7 @@ export const metadata: Metadata = {
 
   twitter: {
     card: "summary_large_image",
-    title: "ADelive — Диспетчеризация курьеров",
+    title: "ADelivo — Диспетчеризация курьеров",
     description:
       "Система управления курьерами и доставкой в реальном времени. Интеграция с любой CRM.",
     images: ["/og-image.png"],
@@ -95,7 +95,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "ADelive",
+    title: "ADelivo",
   },
 
   formatDetection: {
@@ -153,12 +153,12 @@ export default function RootLayout({
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "SoftwareApplication",
-              name: "ADelive",
+              name: "ADelivo",
               applicationCategory: "BusinessApplication",
               operatingSystem: "Web, iOS, Android",
               url: SITE_URL,
               description: "Профессиональная система диспетчеризации и управления курьерами. До 1000 заказов в день, интеграция с любой CRM.",
-              provider: { "@type": "Organization", name: "ADelive", url: SITE_URL },
+              provider: { "@type": "Organization", name: "ADelivo", url: SITE_URL },
               offers: { "@type": "Offer", price: "0", priceCurrency: "RUB" },
             }),
           }}

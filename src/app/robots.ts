@@ -1,7 +1,7 @@
 // src/app/robots.ts
 import type { MetadataRoute } from "next";
 
-const SITE_URL = "https://adelive.ru";
+const SITE_URL = "https://adelivo.ru";
 
 // Приватные разделы: рабочие интерфейсы и API.
 // Их индексация бесполезна (за логином) и тратит краулинговый бюджет.

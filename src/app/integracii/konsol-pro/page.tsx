@@ -21,11 +21,11 @@ export const metadata: Metadata = {
   ],
   alternates: { canonical: PATH },
   openGraph: {
-    title: "Выплаты курьерам-самозанятым — ADelive + Консоль.Про",
+    title: "Выплаты курьерам-самозанятым — ADelivo + Консоль.Про",
     description: "Расчёт, акт, подписание и перевод на карту — без ручной работы бухгалтера.",
     url: `${SITE_URL}${PATH}`,
-    siteName: "ADelive",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "ADelive и Консоль.Про" }],
+    siteName: "ADelivo",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "ADelivo и Консоль.Про" }],
     locale: "ru_RU",
     type: "website",
   },
@@ -39,7 +39,7 @@ const crumbs: Crumb[] = [
 const faq: Faq[] = [
   {
     q: "Кто платит комиссию сервиса?",
-    a: "Условия по комиссии Консоль.Про определяются вашим договором с сервисом. ADelive не берёт отдельную плату за модуль выплат — он входит в платформу.",
+    a: "Условия по комиссии Консоль.Про определяются вашим договором с сервисом. ADelivo не берёт отдельную плату за модуль выплат — он входит в платформу.",
   },
   {
     q: "Мы работаем с курьерами по ГПХ и с ИП. Подойдёт?",

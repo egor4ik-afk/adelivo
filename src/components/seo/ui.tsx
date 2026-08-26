@@ -1,5 +1,5 @@
 // src/components/seo/ui.tsx
-// Общий каркас для всех SEO-посадочных страниц ADelive.
+// Общий каркас для всех SEO-посадочных страниц ADelivo.
 // Дизайн 1:1 с лендингом на "/" — та же палитра, типографика, сетка.
 // Серверный компонент: никакого "use client" (важно для индексации — весь текст в HTML).
 
@@ -7,7 +7,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { RequestForm } from "@/components/RequestForm";
 
-export const SITE_URL = "https://adelive.ru";
+export const SITE_URL = "https://adelivo.ru";
 
 /* ─── Палитра (совпадает с лендингом) ──────────────────────── */
 export const C = {
@@ -443,7 +443,7 @@ export function SeoShell({ children, jsonLd }: { children: React.ReactNode; json
         <header className="ew-hdr">
           <div className="wrap">
             <div className="inner">
-              <Link href="/" className="ew-logo" aria-label="ADelive — главная">
+              <Link href="/" className="ew-logo" aria-label="ADelivo — главная">
                 <Image src="/web-app-manifest-192x192.png" alt="" width={32} height={32} style={{ borderRadius: 8 }} />
                 <span className="ew-logo-txt">Event<span>Wave</span></span>
               </Link>
@@ -507,7 +507,7 @@ export function SeoShell({ children, jsonLd }: { children: React.ReactNode; json
               </div>
             </div>
             <div className="ftr-bottom">
-              <span>© {new Date().getFullYear()} ADelive — платформа диспетчеризации и логистики</span>
+              <span>© {new Date().getFullYear()} ADelivo — платформа диспетчеризации и логистики</span>
               <span>Работаем с СЗ, ИП и ГПХ через Консоль.Про</span>
             </div>
           </div>

@@ -99,7 +99,7 @@ export async function sendRequestAlert(text: string) {
   await transporter.sendMail({
     from: FROM,
     to: TO, // Письмо уйдет на адрес из переменной RECIPIENT_EMAIL
-    subject: "🆕 Новая заявка с сайта ADelive",
+    subject: "🆕 Новая заявка с сайта ADelivo",
     text: text,
   });
 }

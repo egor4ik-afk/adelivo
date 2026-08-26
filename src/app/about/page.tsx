@@ -13,23 +13,23 @@ import {
 const PATH = "/about";
 
 export const metadata: Metadata = {
-  title: "О компании ADelive — кто стоит за платформой",
+  title: "О компании ADelivo — кто стоит за платформой",
   description:
-    "ADelive вырос из реальной цветочной доставки с пиками до 700 заказов в день. Рассказываем, как устроена команда, как мы внедряем и почему не берём денег за подключение.",
+    "ADelivo вырос из реальной цветочной доставки с пиками до 700 заказов в день. Рассказываем, как устроена команда, как мы внедряем и почему не берём денег за подключение.",
   keywords: [
-    "ADelive компания",
-    "о компании ADelive",
+    "ADelivo компания",
+    "о компании ADelivo",
     "разработчик системы диспетчеризации",
-    "команда ADelive",
+    "команда ADelivo",
   ],
   alternates: { canonical: PATH },
   openGraph: {
-    title: "О компании ADelive",
+    title: "О компании ADelivo",
     description:
       "Продукт, выросший из работающей доставки: как мы устроены, как внедряем и на чём зарабатываем.",
     url: `${SITE_URL}${PATH}`,
-    siteName: "ADelive",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "О компании ADelive" }],
+    siteName: "ADelivo",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "О компании ADelivo" }],
     locale: "ru_RU",
     type: "website",
   },
@@ -69,7 +69,7 @@ export default function Page() {
         {
           "@context": "https://schema.org",
           "@type": "Organization",
-          name: "ADelive",
+          name: "ADelivo",
           url: SITE_URL,
           logo: `${SITE_URL}/web-app-manifest-192x192.png`,
           description:
@@ -89,7 +89,7 @@ export default function Page() {
         crumbs={crumbs}
         label="О компании"
         h1={<>Мы выросли<br />из <span>реальной доставки</span></>}
-        sub="ADelive — не стартап, придуманный на бумаге. Платформа появилась внутри работающего цветочного бизнеса, где нужно было разложить 700 заказов в день по сотне курьеров и рассчитаться с ними без бухгалтера. Сначала мы решили эту задачу для себя, потом сделали из неё продукт."
+        sub="ADelivo — не стартап, придуманный на бумаге. Платформа появилась внутри работающего цветочного бизнеса, где нужно было разложить 700 заказов в день по сотне курьеров и рассчитаться с ними без бухгалтера. Сначала мы решили эту задачу для себя, потом сделали из неё продукт."
         bullets={["Россия", "С 2024 года", "До 1000 заказов в день", "Telegram: @weareventwave"]}
       />
 
