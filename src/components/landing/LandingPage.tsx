@@ -291,7 +291,8 @@ export function LandingPage() {
                 </ul>
               </nav>
               <div className="ew-hbtns">
-                <a href="https://t.me/weareventwave" target="_blank" rel="noopener noreferrer" className="btn-hdr-ghost">Telegram</a>
+                <a href="tel:+79959199869" className="btn-hdr-ghost">+79959199869</a>
+                <a href="https://t.me/adelivo" target="_blank" rel="noopener noreferrer" className="btn-hdr-ghost">Telegram</a>
                 <Link href="/login" className="btn-hdr-pri">Войти →</Link>
               </div>
             </div>
@@ -326,7 +327,7 @@ export function LandingPage() {
                   </p>
                   <div style={{ display: "flex", gap: "0.8rem", flexWrap: "wrap", marginBottom: "3rem" }}>
                     <a href="#request" className="btn-pri">Оставить заявку →</a>
-                    <a href="https://t.me/weareventwave" target="_blank" rel="noopener noreferrer" className="btn-ghost">Написать в Telegram</a>
+                    <a href="https://t.me/adelivo" target="_blank" rel="noopener noreferrer" className="btn-ghost">Написать в Telegram</a>
                   </div>
                   <div className="stat-row">
                     {[
@@ -873,7 +874,7 @@ export function LandingPage() {
                 </p>
                 <div style={{ display: "flex", gap: "1rem", justifyContent: "center", flexWrap: "wrap" }}>
                   <a href="#request" className="btn-pri">Оставить заявку →</a>
-                  <a href="https://t.me/weareventwave" target="_blank" rel="noopener noreferrer" className="btn-ghost">Написать в Telegram</a>
+                  <a href="https://t.me/adelivo" target="_blank" rel="noopener noreferrer" className="btn-ghost">Написать в Telegram</a>
                 </div>
               </div>
             </div>
@@ -890,7 +891,8 @@ export function LandingPage() {
             </div>
             <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap" }}>
               {[
-                { h: "https://t.me/weareventwave", l: "Telegram" },
+                { h: "tel:+79959199869", l: "+79959199869" },
+                { h: "https://t.me/adelivo", l: "Telegram" },
                 { h: "#features", l: "Возможности" },
                 { h: "#accounting", l: "Бухгалтерия" },
                 { h: "#pricing", l: "Тарифы" },

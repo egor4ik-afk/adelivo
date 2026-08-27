@@ -56,7 +56,7 @@ const faq: Faq[] = [
   },
   {
     q: "Как с вами связаться?",
-    a: "Быстрее всего — в Telegram: @weareventwave. Либо оставьте заявку на сайте, менеджер отвечает в течение часа в рабочее время.",
+    a: "Быстрее всего — в Telegram: @weareventwave или по телефону +79959199869. Либо оставьте заявку на сайте, менеджер отвечает в течение часа в рабочее время.",
   },
 ];
 
@@ -75,11 +75,12 @@ export default function Page() {
           description:
             "Российская платформа диспетчеризации и управления курьерской доставкой: заказы, маршруты, курьеры, выплаты и интеграция с любой CRM.",
           areaServed: { "@type": "Country", name: "Россия" },
-          sameAs: ["https://t.me/weareventwave"],
+          sameAs: ["https://t.me/adelivo"],
           contactPoint: {
             "@type": "ContactPoint",
             contactType: "sales",
-            url: "https://t.me/weareventwave",
+            telephone: "+79959199869",
+            url: "https://t.me/adelivo",
             availableLanguage: ["ru"],
           },
         },
@@ -90,7 +91,7 @@ export default function Page() {
         label="О компании"
         h1={<>Мы выросли<br />из <span>реальной доставки</span></>}
         sub="ADelivo — не стартап, придуманный на бумаге. Платформа появилась внутри работающего цветочного бизнеса, где нужно было разложить 700 заказов в день по сотне курьеров и рассчитаться с ними без бухгалтера. Сначала мы решили эту задачу для себя, потом сделали из неё продукт."
-        bullets={["Россия", "С 2024 года", "До 1000 заказов в день", "Telegram: @weareventwave"]}
+        bullets={["Россия", "С 2024 года", "До 1000 заказов в день", "Telegram: @weareventwave", "Телефон: +79959199869"]}
       />
 
       <div className="divider" />
@@ -120,6 +121,24 @@ export default function Page() {
           </Prose>
         </div>
       </section>
+
+      <div className="divider" />
+        <section className="sec">
+            <div className="wrap">
+                <Label t="Реквизиты" />
+                <H2>Индивидуальный предприниматель</H2>
+                <Prose>
+                    <p>Черепанов Евгений Николаевич</p>
+                    <p>Гражданство: РФ</p>
+                    <p>Пол: мужской</p>
+                    <p>ОГРНИП: 326508100425100 от 22 июля 2026 г.</p>
+                    <p>ИНН: 026829885609</p>
+                    <p>Дата регистрации: 22.07.2026</p>
+                    <p>Адрес: Московская область, город Одинцово</p>
+                    <p>Фактический адрес: Москва Малый Гнездниковский пер., 9, стр. 2, Москва</p>
+                </Prose>
+            </div>
+        </section>
 
       <div className="divider" />
       <section className="sec">

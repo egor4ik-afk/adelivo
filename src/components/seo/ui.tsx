@@ -416,7 +416,7 @@ export function Hero({
           )}
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.8rem", marginTop: "2rem" }}>
             <a href="#request" className="btn-pri">Оставить заявку →</a>
-            <a href="https://t.me/weareventwave" target="_blank" rel="noopener noreferrer" className="btn-ghost">Написать в Telegram</a>
+            <a href="https://t.me/adelivo" target="_blank" rel="noopener noreferrer" className="btn-ghost">Написать в Telegram</a>
           </div>
         </div>
       </div>
@@ -458,7 +458,8 @@ export function SeoShell({ children, jsonLd }: { children: React.ReactNode; json
                 </ul>
               </nav>
               <div className="ew-hbtns">
-                <a href="https://t.me/weareventwave" target="_blank" rel="noopener noreferrer" className="btn-hdr-ghost">Telegram</a>
+                <a href="tel:+79959199869" className="btn-hdr-ghost">+79959199869</a>
+                <a href="https://t.me/adelivo" target="_blank" rel="noopener noreferrer" className="btn-hdr-ghost">Telegram</a>
                 <Link href="/login" className="btn-hdr-pri">Войти →</Link>
               </div>
             </div>
@@ -503,7 +504,8 @@ export function SeoShell({ children, jsonLd }: { children: React.ReactNode; json
                 <Link className="ftr-l" href="/keysy">Кейсы</Link>
                 <Link className="ftr-l" href="/keysy/bunch">Кейс: «Банч»</Link>
                 <Link className="ftr-l" href="/#pricing">Тарифы</Link>
-                <a className="ftr-l" href="https://t.me/weareventwave" target="_blank" rel="noopener noreferrer">Telegram</a>
+                <a className="ftr-l" href="https://t.me/adelivo" target="_blank" rel="noopener noreferrer">Telegram</a>
+				<a href="tel:+79959199869" className="ftr-l">+79959199869</a>
               </div>
             </div>
             <div className="ftr-bottom">
