@@ -97,7 +97,7 @@ const css = `
   .ew-nav{display:flex;gap:1.6rem;list-style:none}
   .ew-nav a{color:${C.muted};font-size:0.83rem;font-weight:500;transition:color 0.2s}
   .ew-nav a:hover{color:${C.text}}
-  .ew-hbtns{display:flex;gap:0.6rem;flex-shrink:0}
+  .ew-hbtns{display:flex;gap:0.6rem;flex-shrink:0; align-items: center;}
 
   /* buttons */
   .btn-pri{display:inline-flex;align-items:center;gap:0.5rem;padding:0.85rem 2rem;border-radius:10px;font-weight:700;font-size:0.9rem;letter-spacing:0.03em;background:${C.accent};color:#080C14;transition:opacity 0.2s;white-space:nowrap}
@@ -109,6 +109,8 @@ const css = `
   .btn-hdr-pri{padding:0.45rem 1.1rem;border-radius:7px;background:${C.accent};color:#080C14;font-weight:700;font-size:0.8rem}
   .btn-hdr-ghost{padding:0.45rem 1.1rem;border-radius:7px;border:1px solid ${C.border};color:${C.muted};font-weight:600;font-size:0.8rem;transition:color 0.2s}
   .btn-hdr-ghost:hover{color:${C.text}}
+  .btn-hdr-icon{display:inline-flex;align-items:center;justify-content:center;padding:0.45rem;border-radius:7px;border:1px solid ${C.border};color:${C.muted};transition:color 0.2s,border-color 0.2s}
+  .btn-hdr-icon:hover{color:${C.text};border-color:${C.accent}}
 
   /* stats */
   .stat-row{display:flex;gap:2rem;flex-wrap:wrap}
@@ -234,9 +236,11 @@ const css = `
   .b-err{background:rgba(239,68,68,0.12);color:#EF4444;padding:2px 6px;border-radius:4px;font-weight:700;font-size:0.66rem}
 
   /* responsive */
+  @media(max-width:1100px){
+    .ew-nav{display:none}
+  }
   @media(max-width:900px){
     .ew .g2,.ew .g3,.ew .g4,.ew .g2r{grid-template-columns:1fr}
-    .ew-nav{display:none}
     .phone{width:180px}
     .ew .sec,.ew .sec-alt{padding:3.5rem 0}
     .form-grid{grid-template-columns:1fr}
@@ -246,6 +250,7 @@ const css = `
     .btn-hdr-ghost{display:none}
     .ew .g2r{gap:2rem}
   }
+
 `;
 
 function Label({ t }: { t: string }) {
@@ -281,18 +286,18 @@ export function LandingPage() {
                   <li><a href="#features">Возможности</a></li>
                   <li><a href="#accounting">Бухгалтерия</a></li>
                   <li><a href="#pricing">Тарифы</a></li>
-                  <li><a href="#integrations">Интеграции</a></li>
-                  <li><a href="#request">Оставить заявку</a></li>
-                  <li><a href="#faq">FAQ</a></li>
-				  <li><Link href="/sistema-upravleniya-kurerami">Платформа</Link></li>
-				  <li><Link href="/integracii">Интеграции</Link></li>
-				  <li><Link href="/keysy">Кейсы</Link></li>
-				  <li><Link href="/about">О компании</Link></li>
+                  <li><Link href="/integracii">Интеграции</Link></li>
+                  <li><Link href="/keysy">Кейсы</Link></li>
+                  <li><Link href="/about">О компании</Link></li>
                 </ul>
               </nav>
               <div className="ew-hbtns">
-                <a href="tel:+79959199869" className="btn-hdr-ghost">+79959199869</a>
-                <a href="https://t.me/adelivo" target="_blank" rel="noopener noreferrer" className="btn-hdr-ghost">Telegram</a>
+                 <a href="tel:+79959199869" className="btn-hdr-icon" aria-label="Позвонить">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                </a>
+                <a href="https://t.me/adelivo" target="_blank" rel="noopener noreferrer" className="btn-hdr-icon" aria-label="Telegram">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13L2 9L22 2Z"></path><path d="M22 2L15 22L11 13L2 9L22 2Z"></path></svg>
+                </a>
                 <Link href="/login" className="btn-hdr-pri">Войти →</Link>
               </div>
             </div>

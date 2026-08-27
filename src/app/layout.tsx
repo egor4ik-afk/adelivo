@@ -6,6 +6,7 @@ import "./globals.css";
 import "@/lib/cron";
 import { GlobalChatWrapper } from "@/components/GlobalChatWrapper";
 import OfflineIndicator from "@/components/OfflineIndicator";
+import ScrollToTop from "@/components/ScrollToTop";
 
 const inter = Inter({ subsets: ["latin", "cyrillic"] });
 
@@ -111,6 +112,7 @@ export default function RootLayout({
   return (
     <html lang="ru">
       <body className={inter.className}>
+        <ScrollToTop />
         <OfflineIndicator />
         {children}
         <GlobalChatWrapper />
