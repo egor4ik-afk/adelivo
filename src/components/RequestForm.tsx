@@ -289,7 +289,7 @@ export function RequestForm() {
       </button>
       <p style={{ fontSize: "0.72rem", color: C.muted, textAlign: "center", marginTop: "0.8rem", lineHeight: 1.6 }}>
         Ответим в течение 1 часа в рабочее время. Или напишите напрямую:{" "}
-        <a href="https://t.me/adelivo" target="_blank" rel="noopener noreferrer" style={{ color: C.accent }}>@weareventwave</a>
+        <a href="https://t.me/adelivo" target="_blank" rel="noopener noreferrer" style={{ color: C.accent }}>@adelivo</a>
       </p>
       <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }` }} />
     </form>
