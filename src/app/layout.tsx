@@ -10,7 +10,6 @@ import ScrollToTop from "@/components/ScrollToTop";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { AppFooter } from "@/components/layout/AppFooter";
 import { headers } from "next/headers";
-import { use } from "react";
 
 const inter = Inter({ subsets: ["latin", "cyrillic"] });
 
@@ -108,12 +107,13 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const pathname = use(headers()).get("next-url") || "";
+  const heads = await headers();
+  const pathname = heads.get("next-url") || "";
 
   const isPublicPage = ![
     "/admin",
