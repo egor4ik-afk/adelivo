@@ -2,6 +2,52 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+// Импортируем отправку почты (если у вас для курьеров другая функция, просто переименуйте)
+import { sendRequestAlert } from "@/lib/mailer";
+
+const tgToken = process.env.TELEGRAM_BOT_TOKEN;
+const tgChat  = process.env.TELEGRAM_CHAT_ID;
+
+// Фоновая функция для ТГ (3 попытки, таймаут 4 секунды на каждую)
+async function sendTelegramBackground(text: string) {
+  if (!tgToken || !tgChat) return;
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: tgChat,
+          text,
+          parse_mode: "Markdown",
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        console.log(`[LinkCourier] Telegram success (attempt ${attempt})`);
+        return; // Успешно отправлено — выходим
+      } else {
+        const err = await res.text();
+        console.error(`[LinkCourier] Telegram error (attempt ${attempt}):`, err);
+      }
+    } catch (e: any) {
+      clearTimeout(timeoutId);
+      console.error(`[LinkCourier] Telegram fetch failed (attempt ${attempt}):`, e.message);
+    }
+
+    // Ждем 2 секунды перед следующей попыткой
+    if (attempt < 3) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -97,26 +143,41 @@ export async function POST(request: Request) {
       console.log(`[LinkCourier] Новый профиль создан: ${standardFullName} (ID ${courier.id})`);
     }
 
-    // Telegram уведомление
-    const tgToken = process.env.TELEGRAM_BOT_TOKEN;
-    const tgChat  = process.env.TELEGRAM_CHAT_ID;
+    const eventType = profileFound ? "Курьер авторизовался" : "Новый курьер зарегистрировался";
+    const dateStr = new Date().toLocaleString("ru", { timeZone: "Europe/Moscow" });
+
+    // 1. Отправляем дубль на почту (синхронно, без Markdown)
+    try {
+      const emailText = [
+        `[СОБЫТИЕ] ${eventType}`,
+        `Имя: ${standardFullName}`,
+        `Телефон: ${phone}`,
+        `Email: ${user.email ?? "—"}`,
+        `ID: ${courier.id}`,
+        `Профиль: ${profileFound ? "найден в базе" : "создан новый"}`,
+        `Дата: ${dateStr}`
+      ].join("\n");
+      
+      await sendRequestAlert(emailText);
+    } catch (e) {
+      console.error("[LinkCourier] Email error:", e);
+    }
+
+    // 2. Telegram уведомление (В ФОНЕ)
     if (tgToken && tgChat) {
       const msg = [
-        `🚴 *${profileFound ? "Курьер авторизовался" : "Новый курьер зарегистрировался"}*`,
+        `🚴 *${eventType}*`,
         ``,
         `👤 *Имя:* ${standardFullName}`,
         `📞 *Телефон:* ${phone}`,
         `📧 *Email:* ${user.email ?? "—"}`,
         `🆔 *ID:* ${courier.id}`,
         `🔍 *Профиль:* ${profileFound ? "найден в базе" : "создан новый"}`,
-        `📅 *Дата:* ${new Date().toLocaleString("ru", { timeZone: "Europe/Moscow" })}`,
+        `📅 *Дата:* ${dateStr}`,
       ].join("\n");
 
-      fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: tgChat, text: msg, parse_mode: "Markdown" }),
-      }).catch(e => console.error("[TG] Ошибка уведомления:", e));
+      // Запускаем без await, чтобы не тормозить ответ клиенту
+      sendTelegramBackground(msg).catch(console.error);
     }
 
     return NextResponse.json({
