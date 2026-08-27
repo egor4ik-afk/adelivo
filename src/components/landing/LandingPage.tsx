@@ -88,17 +88,6 @@ const css = `
   .ew .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem}
   .ew .g2r{display:grid;grid-template-columns:1fr 1.1fr;gap:3.5rem;align-items:center}
 
-  /* header */
-  .ew-hdr{position:sticky;top:0;z-index:100;background:rgba(8,12,20,0.92);backdrop-filter:blur(16px);border-bottom:1px solid ${C.border}}
-  .ew-hdr .inner{height:64px;display:flex;align-items:center;justify-content:space-between;gap:1rem}
-  .ew-logo{display:flex;align-items:center;gap:10px;text-decoration:none;flex-shrink:0}
-  .ew-logo-txt{font-weight:800;font-size:1.1rem;color:${C.text};letter-spacing:0.05em}
-  .ew-logo-txt span{color:${C.accent}}
-  .ew-nav{display:flex;gap:1.6rem;list-style:none}
-  .ew-nav a{color:${C.muted};font-size:0.83rem;font-weight:500;transition:color 0.2s}
-  .ew-nav a:hover{color:${C.text}}
-  .ew-hbtns{display:flex;gap:0.6rem;flex-shrink:0; align-items: center;}
-
   /* buttons */
   .btn-pri{display:inline-flex;align-items:center;gap:0.5rem;padding:0.85rem 2rem;border-radius:10px;font-weight:700;font-size:0.9rem;letter-spacing:0.03em;background:${C.accent};color:#080C14;transition:opacity 0.2s;white-space:nowrap}
   .btn-pri:hover{opacity:0.88}
@@ -106,11 +95,6 @@ const css = `
   .btn-ghost:hover{border-color:${C.accent}}
   .btn-big{display:inline-flex;align-items:center;justify-content:center;gap:0.6rem;width:100%;padding:0.9rem 1.5rem;border-radius:12px;font-weight:700;font-size:0.88rem;background:${C.green};color:#fff;transition:opacity 0.2s}
   .btn-big:hover{opacity:0.88}
-  .btn-hdr-pri{padding:0.45rem 1.1rem;border-radius:7px;background:${C.accent};color:#080C14;font-weight:700;font-size:0.8rem}
-  .btn-hdr-ghost{padding:0.45rem 1.1rem;border-radius:7px;border:1px solid ${C.border};color:${C.muted};font-weight:600;font-size:0.8rem;transition:color 0.2s}
-  .btn-hdr-ghost:hover{color:${C.text}}
-  .btn-hdr-icon{display:inline-flex;align-items:center;justify-content:center;padding:0.45rem;border-radius:7px;border:1px solid ${C.border};color:${C.muted};transition:color 0.2s,border-color 0.2s}
-  .btn-hdr-icon:hover{color:${C.text};border-color:${C.accent}}
 
   /* stats */
   .stat-row{display:flex;gap:2rem;flex-wrap:wrap}
@@ -155,10 +139,6 @@ const css = `
   /* int pill */
   .ipill{display:flex;align-items:center;gap:0.6rem;padding:0.6rem 1.2rem;background:${C.card};border:1px solid ${C.border};border-radius:8px;font-size:0.82rem;font-weight:600;color:${C.text}}
   .ipill .note{color:${C.muted};font-size:0.74rem;font-weight:400}
-
-  /* footer */
-  .footer-link{font-size:0.8rem;color:${C.muted};transition:color 0.2s}
-  .footer-link:hover{color:${C.text}}
 
   /* section headings */
   .label{font-size:0.7rem;letter-spacing:0.2em;text-transform:uppercase;color:${C.accent};margin-bottom:0.6rem;font-weight:700}
@@ -235,10 +215,6 @@ const css = `
   .b-done{background:rgba(100,116,139,0.15);color:${C.muted};padding:2px 6px;border-radius:4px;font-weight:700;font-size:0.66rem}
   .b-err{background:rgba(239,68,68,0.12);color:#EF4444;padding:2px 6px;border-radius:4px;font-weight:700;font-size:0.66rem}
 
-  /* responsive */
-  @media(max-width:1100px){
-    .ew-nav{display:none}
-  }
   @media(max-width:900px){
     .ew .g2,.ew .g3,.ew .g4,.ew .g2r{grid-template-columns:1fr}
     .phone{width:180px}
@@ -247,7 +223,6 @@ const css = `
   }
   @media(max-width:500px){
     .stat-row{flex-direction:column}
-    .btn-hdr-ghost{display:none}
     .ew .g2r{gap:2rem}
   }
 
@@ -272,38 +247,6 @@ export function LandingPage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
       <div className="ew">
-
-        {/* ── HEADER ── */}
-        <header className="ew-hdr">
-          <div className="wrap">
-            <div className="inner">
-              <Link href="/" className="ew-logo" aria-label="ADelivo">
-                <Image src="/web-app-manifest-192x192.png" alt="ADelivo" width={32} height={32} style={{ borderRadius: 8 }} />
-                <span className="ew-logo-txt">A<span>Delivo</span></span>
-              </Link>
-              <nav aria-label="Навигация">
-                <ul className="ew-nav">
-                  <li><a href="#features">Возможности</a></li>
-                  <li><a href="#accounting">Бухгалтерия</a></li>
-                  <li><a href="#pricing">Тарифы</a></li>
-                  <li><Link href="/integracii">Интеграции</Link></li>
-                  <li><Link href="/keysy">Кейсы</Link></li>
-                  <li><Link href="/about">О компании</Link></li>
-                </ul>
-              </nav>
-              <div className="ew-hbtns">
-                 <a href="tel:+79959199869" className="btn-hdr-icon" aria-label="Позвонить">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-                </a>
-                <a href="https://t.me/adelivo" target="_blank" rel="noopener noreferrer" className="btn-hdr-icon" aria-label="Telegram">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13L2 9L22 2Z"></path><path d="M22 2L15 22L11 13L2 9L22 2Z"></path></svg>
-                </a>
-                <Link href="/login" className="btn-hdr-pri">Войти →</Link>
-              </div>
-            </div>
-          </div>
-        </header>
-
         <main>
 
           {/* ── HERO ── */}
@@ -886,35 +829,6 @@ export function LandingPage() {
           </section>
 
         </main>
-
-        {/* ── FOOTER ── */}
-        <footer style={{ borderTop: `1px solid ${C.border}`, padding: "2rem 0" }}>
-          <div className="wrap" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.7rem" }}>
-              <Image src="/web-app-manifest-192x192.png" alt="ADelivo" width={24} height={24} style={{ borderRadius: 6 }} />
-              <span style={{ fontWeight: 700, fontSize: "0.88rem", color: C.text }}>Event<span style={{ color: C.accent }}>Wave</span></span>
-            </div>
-            <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap" }}>
-              {[
-                { h: "tel:+79959199869", l: "+79959199869" },
-                { h: "https://t.me/adelivo", l: "Telegram" },
-                { h: "#features", l: "Возможности" },
-                { h: "#accounting", l: "Бухгалтерия" },
-                { h: "#pricing", l: "Тарифы" },
-                { h: "/login", l: "Войти" },
-              ].map((l) => (
-                <a key={l.l} href={l.h} className="footer-link">
-                  {l.l}
-                </a>
-              ))}
-            </div>
-            <p style={{ fontSize: "0.75rem", color: C.muted }}>© 2026 ADelivo</p>
-            <p style={{ fontSize: "0.75rem", color: C.muted, lineHeight: 2, marginTop: "1rem" }}>
-            Сделано и размещено на <a href="https://relaxdev.ru" target="_blank" rel="noopener noreferrer" style={{ color: C.accent }}>relaxdev.ru</a>
-          </p>
-          </div>
-        </footer>
-
       </div>
     </>
   );

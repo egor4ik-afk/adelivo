@@ -1,60 +1,111 @@
+# Blueprint: ADelivo - Платформа управления доставкой
 
-# Blueprint
+## 1. Обзор проекта
 
-## Overview
+**ADelivo** — это комплексная веб-платформа, разработанная на Next.js, для управления курьерскими службами и процессами доставки. Система предназначена для автоматизации и оптимизации полного цикла работы — от получения заказа до его выполнения и расчёта с курьерами.
 
-This document outlines the plan for creating a Next.js application with user authentication, a dashboard, and push notifications. The application will be built using the App Router and will include features for user login, profile management, and order viewing.
+### Ключевые возможности:
+- **Диспетчеризация и Логистика**: Централизованное управление заказами, курьерами и маршрутами.
+- **Интерфейсы для разных ролей**: Раздельные дашборды для администраторов, менеджеров и курьеров.
+- **PWA для курьеров**: Мобильное веб-приложение (Progressive Web App) для курьеров, позволяющее им управлять заказами, отслеживать маршруты и обновлять статусы.
+- **Интеграция со сторонними сервисами**:
+    - **CRM-системы**: Двусторонняя синхронизация с RetailCRM через Webhook.
+    - **Платёжные сервисы**: Автоматизация выплат самозанятым, ИП и ГПХ через "Консоль.Про".
+    - **Картографические сервисы**: Геокодинг и построение маршрутов с помощью Яндекс.Карт.
+- **Финансовый учёт**: Автоматический расчёт заработной платы, бонусов и себестоимости доставки.
+- **Уведомления**: Отправка Web Push-уведомлений и интеграция с Telegram для оперативного информирования.
+- **AI-маршрутизация**: Оптимизация маршрутов с использованием алгоритмов для сокращения времени и затрат на доставку.
 
-## Project Structure
+---
 
-*   `/app`: Main application directory.
-    *   `/api`: API routes.
-        *   `/auth`: Authentication-related APIs.
-            *   `/send-code`: API for sending authentication codes.
-            *   `/verify`: API for verifying authentication codes.
-        *   `/orders`: API for managing orders.
-            *   `/[id]`: Dynamic API route for specific orders.
-        *   `/profile`: API for user profiles.
-        *   `/push`: API for push notifications.
-            *   `/subscribe`: API for subscribing to push notifications.
-        *   `/webhooks`: Webhook endpoints.
-            *   `/retailcrm`: Webhook for RetailCRM integration.
-        *   `/cron`: Cron job endpoints.
-            *   `/sync`: Cron job for data synchronization.
-    *   `/dashboard`: Dashboard page.
-    *   `/login`: Login page.
-*   `/components`: Reusable React components.
-*   `/lib`: Utility functions and libraries.
+## 2. Архитектура и Дизайн
 
-## Features
+Проект построен на современных технологиях с фокусом на производительность, масштабируемость и удобство разработки.
 
-*   **User Authentication:**
-    *   Login page for users to authenticate.
-    *   API routes for sending and verifying authentication codes.
-*   **Dashboard:**
-    *   Protected route accessible only to authenticated users.
-    *   Displays user-specific information.
-*   **Profile Management:**
-    *   Component for users to view and edit their profiles.
-    *   API for updating user profiles.
-*   **Order Viewing:**
-    *   API for fetching order details.
-*   **Push Notifications:**
-    *   Service for handling push notifications.
-    *   API for subscribing to push notifications.
-*   **Integrations:**
-    *   Webhook for integrating with RetailCRM.
-*   **Scheduled Tasks:**
-    *   Cron job for periodic data synchronization.
+### 2.1. Технологический стек
 
-## Design and Styling
+- **Фреймворк**: Next.js (App Router)
+- **Язык**: TypeScript
+- **База данных**: PostgreSQL с Prisma ORM
+- **Стилизация**: CSS-in-JS (внедрение стилей через тег `<style>` в компонентах), без использования отдельных CSS-файлов для компонентов.
+- **Аутентификация**: На основе JWT (JSON Web Tokens).
+- **Развёртывание**: Vercel/Firebase (предположительно, исходя из конфигурации).
 
-*   **Component Library:** Tailwind CSS will be used for styling.
-*   **Layout:** A consistent layout will be used across the application.
-*   **Responsiveness:** The application will be responsive and work on different screen sizes.
+### 2.2. Структура проекта
+- **/src/app/**: Основная директория с использованием App Router.
+    - **/api/**: Маршруты API для всех серверных операций.
+    - **/admin/**, **/dashboard/**, **/courier/**: Защищённые маршруты для разных ролей пользователей.
+    - **(public)/** (концептуально): Группа публичных и SEO-страниц (`/about`, `/integracii` и т.д.).
+    - **layout.tsx**: Корневой макет приложения.
+    - **page.tsx**: Главная страница (лендинг).
+- **/src/components/**: Коллекция переиспользуемых React-компонентов.
+    - **/layout/**: Компоненты макета (`AppHeader`, `AppFooter`).
+    - **/landing/**: Компоненты, специфичные для главной страницы.
+    - **/seo/**: Компоненты для построения SEO-страниц.
+- **/src/lib/**: Вспомогательные функции, утилиты и интеграции со сторонними API.
+- **/prisma/**: Схема базы данных и миграции.
 
-## Current Task
+### 2.3. Дизайн и Стили
 
-*   Set up the basic project structure.
-*   Create placeholder files for all routes and components.
-*   Create the `blueprint.md` file.
+- **Визуальный стиль**: Современный тёмный интерфейс (Dark Mode) с яркими акцентами.
+- **Основная палитра**:
+    - **Фон**: `C.bg: "#080C14"`
+    - **Поверхности**: `C.surface: "#0D1420"`
+    - **Карточки**: `C.card: "#0F1825"`
+    - **Акцентный цвет**: `C.accent: "#38BDF8"` (голубой)
+    - **Текст**: `C.text: "#E2EBF8"` (светло-серый)
+    - **Второстепенный текст**: `C.muted: "#64748B"`
+- **Типографика**:
+    - **Заголовки**: 'Bebas Neue'
+    - **Основной текст**: 'Golos Text'
+- **Компоненты**:
+    - **Кнопки**: Чётко определённые стили для основных (`.btn-pri`), второстепенных (`.btn-ghost`) и других кнопок.
+    - **Карточки**: Единообразные карточки с закруглёнными углами и тенью (`.card`).
+    - **Иконки**: Встроенные SVG.
+
+---
+
+## 3. План выполнения последнего запроса
+
+**Задача**: Исключить отображение шапки (`AppHeader`) и подвала (`AppFooter`) на страницах, требующих авторизации (дашборд, страница курьера), оставив их только на публичных страницах.
+
+### План действий:
+
+1.  **Анализ проблемы**: `AppHeader` и `AppFooter` были добавлены в корневой макет `src/app/layout.tsx`, что привело к их отображению на всех без исключения страницах приложения, включая приватные разделы.
+
+2.  **Выработка решения**: Вместо сложного и ошибочного варианта с созданием файловых групп маршрутов (`(public)`), было принято решение использовать условный рендеринг компонентов непосредственно в корневом макете.
+
+3.  **Реализация**:
+    - **Модификация `src/app/layout.tsx`**:
+        - Импортировать `headers` из `next/headers` для получения доступа к информации о текущем запросе на сервере.
+        - Получить текущий URL (`pathname`) с помощью `headers().get("next-url")`.
+        - Создать массив `isPublicPage` с префиксами URL, которые соответствуют приватным разделам (`/admin`, `/courier`, `/dashboard`, `/manager`, `/login`).
+        - Обернуть компоненты `<AppHeader />` и `<AppFooter />` в условный рендеринг, который срабатывает только если `isPublicPage` равно `true`.
+
+    ```jsx
+    // src/app/layout.tsx
+
+    import { headers } from "next/headers";
+    // ... другие импорты
+
+    export default function RootLayout({ children }) {
+      const heads = headers();
+      const pathname = heads.get("next-url") || "";
+
+      // Проверяем, не начинается ли путь с одного из приватных префиксов
+      const isPublicPage = !["/admin", "/courier", "/dashboard", "/manager", "/login"].some(path => pathname.startsWith(path));
+
+      return (
+        <html lang="ru">
+          <body>
+            {isPublicPage && <AppHeader />}
+            {children}
+            {isPublicPage && <AppFooter />}
+            {/* ... остальные компоненты */}
+          </body>
+        </html>
+      );
+    }
+    ```
+
+4.  **Результат**: `AppHeader` и `AppFooter` теперь корректно отображаются только на публичных страницах, не затрагивая интерфейсы авторизованных пользователей. Проблема решена эффективно и без усложнения структуры проекта.

@@ -7,6 +7,10 @@ import "@/lib/cron";
 import { GlobalChatWrapper } from "@/components/GlobalChatWrapper";
 import OfflineIndicator from "@/components/OfflineIndicator";
 import ScrollToTop from "@/components/ScrollToTop";
+import { AppHeader } from "@/components/layout/AppHeader";
+import { AppFooter } from "@/components/layout/AppFooter";
+import { headers } from "next/headers";
+import { use } from "react";
 
 const inter = Inter({ subsets: ["latin", "cyrillic"] });
 
@@ -109,12 +113,26 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = use(headers()).get("next-url") || "";
+
+  const isPublicPage = ![
+    "/admin",
+    "/courier",
+    "/dashboard",
+    "/manager",
+    "/login",
+  ].some(path => pathname.startsWith(path));
+
   return (
     <html lang="ru">
       <body className={inter.className}>
         <ScrollToTop />
         <OfflineIndicator />
+
+        {isPublicPage && <AppHeader />}
         {children}
+        {isPublicPage && <AppFooter />}
+
         <GlobalChatWrapper />
 
         {/* Яндекс Метрика */}

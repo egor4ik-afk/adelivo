@@ -41,26 +41,11 @@ const css = `
   .ew .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem}
   .ew .g2r{display:grid;grid-template-columns:1fr 1.1fr;gap:3.5rem;align-items:center}
 
-  /* header */
-  .ew-hdr{position:sticky;top:0;z-index:100;background:rgba(8,12,20,0.92);backdrop-filter:blur(16px);border-bottom:1px solid ${C.border}}
-  .ew-hdr .inner{height:64px;display:flex;align-items:center;justify-content:space-between;gap:1rem}
-  .ew-logo{display:flex;align-items:center;gap:10px;flex-shrink:0}
-  .ew-logo-txt{font-weight:800;font-size:1.1rem;color:${C.text};letter-spacing:0.05em}
-  .ew-logo-txt span{color:${C.accent}}
-  .ew-nav{display:flex;gap:1.5rem}
-  .ew-nav a{color:${C.muted};font-size:0.83rem;font-weight:500;transition:color .2s}
-  .ew-nav a:hover{color:${C.text}}
-  .ew-hbtns{display:flex;gap:0.6rem;flex-shrink:0;align-items:center;}
-
   /* buttons */
   .btn-pri{display:inline-flex;align-items:center;gap:0.5rem;padding:0.85rem 2rem;border-radius:10px;font-weight:700;font-size:0.9rem;letter-spacing:0.03em;background:${C.accent};color:#080C14;transition:opacity .2s;white-space:nowrap}
   .btn-pri:hover{opacity:0.88}
   .btn-ghost{display:inline-flex;align-items:center;gap:0.5rem;padding:0.85rem 2rem;border-radius:10px;font-weight:600;font-size:0.9rem;border:1px solid ${C.border};color:${C.text};transition:border-color .2s;white-space:nowrap}
   .btn-ghost:hover{border-color:${C.accent}}
-  .btn-hdr-pri{padding:0.5rem 1.1rem;border-radius:8px;background:${C.accent};color:#080C14;font-size:0.82rem;font-weight:700}
-  .btn-hdr-ghost{padding:0.5rem 1.1rem;border-radius:8px;border:1px solid ${C.border};font-size:0.82rem;font-weight:600;color:${C.text}}
-  .btn-hdr-icon{display:inline-flex;align-items:center;justify-content:center;padding:0.45rem;border-radius:7px;border:1px solid ${C.border};color:${C.muted};transition:color .2s,border-color .2s}
-  .btn-hdr-icon:hover{color:${C.text};border-color:${C.accent}}
 
   /* заголовки секций */
   .label{font-size:0.7rem;letter-spacing:0.2em;text-transform:uppercase;color:${C.accent};margin-bottom:0.6rem;font-weight:700}
@@ -138,27 +123,14 @@ const css = `
   .codebox{background:#0A1628;border:1px solid ${C.border};border-radius:12px;padding:1.1rem 1.3rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.78rem;color:${C.sub};line-height:1.75;overflow-x:auto;white-space:pre;margin-top:1.2rem}
   .codebox .k{color:${C.accent}}
 
-  /* футер */
-  .ftr{border-top:1px solid ${C.border};background:${C.bg};padding:3.5rem 0 2.5rem}
-  .ftr-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:2rem}
-  .ftr-h{font-size:0.72rem;text-transform:uppercase;letter-spacing:0.14em;color:${C.accent};font-weight:700;margin-bottom:0.9rem}
-  .ftr-l{display:block;font-size:0.82rem;color:${C.muted};margin-bottom:0.55rem;transition:color .2s}
-  .ftr-l:hover{color:${C.text}}
-  .ftr-bottom{margin-top:2.5rem;padding-top:1.5rem;border-top:1px solid ${C.border};display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;font-size:0.76rem;color:${C.muted}}
-
-  @media(max-width:1100px){
-    .ew-nav{display:none}
-  }
   @media(max-width:900px){
     .ew .g2,.ew .g3,.ew .g4,.ew .g2r{grid-template-columns:1fr}
     .ew .sec,.ew .sec-alt{padding:3.5rem 0}
     .metrics{grid-template-columns:repeat(2,1fr)}
     .rel{grid-template-columns:1fr}
-    .ftr-grid{grid-template-columns:1fr 1fr}
     .form-wrap{padding:1.2rem}
   }
   @media(max-width:500px){
-    .btn-hdr-ghost{display:none}
     .metrics{grid-template-columns:1fr 1fr}
   }
   @media(prefers-reduced-motion:reduce){.ew *{transition:none!important;animation:none!important}}
@@ -444,84 +416,7 @@ export function SeoShell({ children, jsonLd }: { children: React.ReactNode; json
       ))}
 
       <div className="ew">
-        <header className="ew-hdr">
-          <div className="wrap">
-            <div className="inner">
-              <Link href="/" className="ew-logo" aria-label="ADelivo — главная">
-                <Image src="/web-app-manifest-192x192.png" alt="" width={32} height={32} style={{ borderRadius: 8 }} />
-                <span className="ew-logo-txt">Agent<span>Delivo</span></span>
-              </Link>
-              <nav aria-label="Основная навигация">
-                <ul className="ew-nav">
-                  <li><Link href="/sistema-upravleniya-kurerami">Платформа</Link></li>
-                  <li><Link href="/vozmozhnosti/interfeysy">3 экрана</Link></li>
-                  <li><Link href="/ai-marshrutizaciya">AI-маршруты</Link></li>
-                  <li><Link href="/integracii">Интеграции</Link></li>
-                  <li><Link href="/keysy">Кейсы</Link></li>
-                  <li><Link href="/#pricing">Тарифы</Link></li>
-                </ul>
-              </nav>
-              <div className="ew-hbtns">
-                 <a href="tel:+79959199869" className="btn-hdr-icon" aria-label="Позвонить">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-                </a>
-                <a href="https://t.me/adelivo" target="_blank" rel="noopener noreferrer" className="btn-hdr-icon" aria-label="Telegram">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13L2 9L22 2Z"></path><path d="M22 2L15 22L11 13L2 9L22 2Z"></path></svg>
-                </a>
-                <Link href="/login" className="btn-hdr-pri">Войти →</Link>
-              </div>
-            </div>
-          </div>
-        </header>
-
         <main>{children}</main>
-
-        <footer className="ftr">
-          <div className="wrap">
-            <div className="ftr-grid">
-              <div>
-                <div className="ew-logo" style={{ marginBottom: "0.9rem" }}>
-                  <span className="ew-logo-txt">Agent<span>Delivo</span></span>
-                </div>
-                <p style={{ fontSize: "0.82rem", color: C.muted, lineHeight: 1.75, maxWidth: 300 }}>
-                  Универсальная платформа диспетчеризации для любой доставки: заказы, маршруты,
-                  курьеры, выплаты и бухгалтерия в одном окне. Подключение к любой CRM — бесплатно за 3 дня.
-                </p>
-              </div>
-              <div>
-                <p className="ftr-h">Платформа</p>
-                <Link className="ftr-l" href="/sistema-upravleniya-kurerami">Система управления курьерами</Link>
-                <Link className="ftr-l" href="/vozmozhnosti/zakazy">Заказы и диспетчеризация</Link>
-                <Link className="ftr-l" href="/vozmozhnosti/kurery">Курьеры, выплаты, график</Link>
-                <Link className="ftr-l" href="/vozmozhnosti/interfeysy">Три интерфейса</Link>
-                <Link className="ftr-l" href="/ai-marshrutizaciya">AI-маршрутизация</Link>
-              </div>
-              <div>
-                <p className="ftr-h">Интеграции</p>
-                <Link className="ftr-l" href="/integracii">Все интеграции</Link>
-                <Link className="ftr-l" href="/integracii/bitrix24">Битрикс24</Link>
-                <Link className="ftr-l" href="/integracii/retailcrm">RetailCRM</Link>
-                <Link className="ftr-l" href="/integracii/telegram">Telegram</Link>
-                <Link className="ftr-l" href="/integracii/yandex-karty">Яндекс Карты</Link>
-                <Link className="ftr-l" href="/integracii/konsol-pro">Консоль.Про</Link>
-              </div>
-              <div>
-                <p className="ftr-h">Компания</p>
-                <Link className="ftr-l" href="/about">О компании</Link>
-                <Link className="ftr-l" href="/pochemu-my">Почему мы</Link>
-                <Link className="ftr-l" href="/keysy">Кейсы</Link>
-                <Link className="ftr-l" href="/keysy/bunch">Кейс: «Банч»</Link>
-                <Link className="ftr-l" href="/#pricing">Тарифы</Link>
-                <a className="ftr-l" href="https://t.me/adelivo" target="_blank" rel="noopener noreferrer">Telegram</a>
-				<a href="tel:+79959199869" className="ftr-l">+79959199869</a>
-              </div>
-            </div>
-            <div className="ftr-bottom">
-              <span>© {new Date().getFullYear()} ADelivo — платформа диспетчеризации и логистики</span>
-              <span>Работаем с СЗ, ИП и ГПХ через Консоль.Про</span>
-            </div>
-          </div>
-        </footer>
       </div>
     </>
   );
