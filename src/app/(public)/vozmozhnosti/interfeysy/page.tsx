@@ -5,6 +5,7 @@ import {
   Prose, FaqSection, RequestSection, Related,
   breadcrumbJsonLd, faqJsonLd, type Faq, type Crumb,
 } from "@/components/seo/ui";
+import Link from "next/link";
 
 const PATH = "/vozmozhnosti/interfeysy";
 
@@ -122,7 +123,11 @@ export default function Page() {
               <H2>Курьер: приложение<br />в кармане</H2>
               <Desc>
                 PWA устанавливается на iPhone и Android за 30 секунд без App Store. Вход по коду с email —
-                пароль не нужен, а значит некому его забыть при текучке. <a href=\"/design\">Посмотрите мокап</a>, чтобы оценить, как выглядит экран курьера с заказами и маршрутами.
+                пароль не нужен, а значит некому его забыть при текучке.{'( '}
+                <Link href="/design" style={{ textDecoration: 'underline' }}>
+                  Посмотрите мокап
+                </Link>
+                , чтобы оценить, как выглядит экран курьера с заказами и маршрутами.
               </Desc>
               <CheckList
                 items={[
