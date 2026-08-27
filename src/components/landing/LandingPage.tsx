@@ -539,7 +539,14 @@ export function LandingPage() {
                 <div>
                   <Label t="Для курьеров" />
                   <H2>Приложение прямо<br />в кармане</H2>
-                  <Desc>PWA устанавливается на iPhone и Android за 30 секунд без App Store. Вход по коду из email — пароль не нужен.</Desc>
+                  <Desc>
+                    PWA устанавливается на iPhone и Android за 30 секунд без App Store. Вход по коду из email —
+                    пароль не нужен.{'( '}
+                    <Link href="/design" style={{ textDecoration: 'underline', color: C.accent }}>
+                      Посмотрите мокап
+                    </Link>
+                    , чтобы оценить, как выглядит экран курьера с заказами и маршрутами.
+                  </Desc>
                   <div style={{ marginTop: "1.8rem" }}>
                     {[
                       { i: "📋", t: "Только свои заказы", d: "Маршруты этого курьера, отсортированные по слотам." },

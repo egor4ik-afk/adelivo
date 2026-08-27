@@ -15,6 +15,7 @@ type Entry = {
 const pages: Entry[] = [
   { path: "/", priority: 1.0, changeFrequency: "weekly" },      // лендинг
   { path: "/about", priority: 0.6, changeFrequency: "monthly" }, // о компании
+  { path: "/design", priority: 0.5, changeFrequency: "monthly" }, // мокап
 
   // Пилларные посадочные
   { path: "/sistema-upravleniya-kurerami", priority: 0.9, changeFrequency: "weekly" },
