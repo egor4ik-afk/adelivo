@@ -1,16 +1,8 @@
 "use client";
 // src/components/RequestForm.tsx
 import { useState } from "react";
+import { C } from "@/components/theme/theme";
 
-const C = {
-  accent:  "#38BDF8",
-  green:   "#10B981",
-  border:  "rgba(56,189,248,0.12)",
-  text:    "#E2EBF8",
-  muted:   "#64748B",
-  red:     "#EF4444",
-  bg:      "#080C14",
-};
 
 function formatPhone(raw: string): string {
   // Оставляем только цифры
@@ -70,7 +62,7 @@ export function RequestForm() {
   };
 
   const inp: React.CSSProperties = {
-    background: "rgba(255,255,255,0.04)",
+    background: "var(--ew-tint)",
     border: `1px solid ${C.border}`,
     borderRadius: 10, padding: "0.7rem 1rem",
     color: C.text, fontSize: "0.88rem",
@@ -136,7 +128,7 @@ export function RequestForm() {
             style={{
               display: "inline-flex", alignItems: "center", gap: "0.5rem",
               padding: "0.8rem 1.5rem",
-              background: "rgba(255,255,255,0.04)",
+              background: "var(--ew-tint)",
               border: `1px solid ${C.border}`,
               color: C.muted, borderRadius: 10, fontWeight: 600,
               fontSize: "0.88rem", cursor: "pointer", fontFamily: "inherit",
@@ -191,11 +183,11 @@ export function RequestForm() {
           <label style={lbl} htmlFor="req-orders">Заказов в день</label>
           <select id="req-orders" style={selStyle} value={form.orders} onChange={set("orders")}
             onFocus={focusBorder} onBlur={blurBorder}>
-            <option value="" style={{ background: "#0D1420", color: C.text }}>Выберите...</option>
-            <option style={{ background: "#0D1420", color: C.text }}>До 50</option>
-            <option style={{ background: "#0D1420", color: C.text }}>50–200</option>
-            <option style={{ background: "#0D1420", color: C.text }}>200–500</option>
-            <option style={{ background: "#0D1420", color: C.text }}>Более 500</option>
+            <option value="" style={{ background: "var(--ew-surface)", color: C.text }}>Выберите...</option>
+            <option style={{ background: "var(--ew-surface)", color: C.text }}>До 50</option>
+            <option style={{ background: "var(--ew-surface)", color: C.text }}>50–200</option>
+            <option style={{ background: "var(--ew-surface)", color: C.text }}>200–500</option>
+            <option style={{ background: "var(--ew-surface)", color: C.text }}>Более 500</option>
           </select>
         </div>
         {/* Время */}
@@ -239,7 +231,7 @@ export function RequestForm() {
                 style={{
                   display: "flex", alignItems: "flex-start", gap: "0.7rem",
                   padding: "0.8rem 1rem",
-                  background: isSelected ? "rgba(56,189,248,0.06)" : "rgba(255,255,255,0.02)",
+                  background: isSelected ? "rgba(var(--ew-accent-rgb),0.06)" : "var(--ew-tint-2)",
                   border: `1px solid ${isSelected ? C.accent : C.border}`,
                   borderRadius: 10, cursor: "pointer", transition: "all 0.2s",
                 }}
@@ -261,7 +253,7 @@ export function RequestForm() {
       </div>
 
       {error && (
-        <div style={{ marginTop: "1rem", padding: "0.8rem 1rem", background: "rgba(239,68,68,0.08)", border: `1px solid rgba(239,68,68,0.2)`, borderRadius: 10, fontSize: "0.83rem", color: C.red }}>
+        <div style={{ marginTop: "1rem", padding: "0.8rem 1rem", background: "rgba(var(--ew-red-rgb),0.08)", border: `1px solid rgba(var(--ew-red-rgb),0.2)`, borderRadius: 10, fontSize: "0.83rem", color: C.red }}>
           ❌ {error}
         </div>
       )}
@@ -271,7 +263,7 @@ export function RequestForm() {
         disabled={loading || !form.name || !form.phone}
         style={{
           width: "100%", padding: "0.9rem", borderRadius: 12, border: "none",
-          background: loading ? "#1e3a5f" : `linear-gradient(135deg, ${C.accent}, #0EA5E9)`,
+          background: loading ? "var(--ew-muted)" : `linear-gradient(135deg, ${C.accent}, var(--ew-accent-2))`,
           color: C.bg, fontWeight: 800, fontSize: "0.95rem",
           cursor: loading || !form.name || !form.phone ? "not-allowed" : "pointer",
           fontFamily: "inherit", marginTop: "1.5rem",
@@ -282,7 +274,7 @@ export function RequestForm() {
       >
         {loading ? (
           <>
-            <span style={{ width: 16, height: 16, border: "2px solid rgba(8,12,20,0.3)", borderTopColor: C.bg, borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />
+            <span style={{ width: 16, height: 16, border: "2px solid rgba(var(--ew-muted-rgb),0.35)", borderTopColor: "var(--ew-accent-contrast)", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite" }} />
             Отправка...
           </>
         ) : "🤖 Отправить заявку →"}

@@ -1,13 +1,7 @@
 // src/components/layout/AppFooter.tsx
 import Link from "next/link";
+import { C } from "@/components/theme/theme";
 
-const C = {
-  bg: "#080C14",
-  border:  "rgba(56,189,248,0.12)",
-  accent:  "#38BDF8",
-  text:    "#E2EBF8",
-  muted:   "#64748B",
-};
 
 const css = `
   .ftr{border-top:1px solid ${C.border};background:${C.bg};padding:3.5rem 0 2.5rem}

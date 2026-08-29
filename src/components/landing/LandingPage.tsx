@@ -2,6 +2,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { RequestForm } from "@/components/RequestForm";
+import { C } from "@/components/theme/theme";
 
 const SITE_URL = "https://adelivo.ru";
 
@@ -59,20 +60,6 @@ const jsonLd = {
 };
 
 // ─── Palette ────────────────────────────────────────────────
-const C = {
-  bg:      "#080C14",
-  surface: "#0D1420",
-  card:    "#0F1825",
-  border:  "rgba(56,189,248,0.12)",
-  accent:  "#38BDF8",
-  green:   "#10B981",
-  amber:   "#F59E0B",
-  red:     "#EF4444",
-  purple:  "#A78BFA",
-  text:    "#E2EBF8",
-  muted:   "#64748B",
-  sub:     "#94A3B8",
-};
 
 const css = `
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -89,7 +76,7 @@ const css = `
   .ew .g2r{display:grid;grid-template-columns:1fr 1.1fr;gap:3.5rem;align-items:center}
 
   /* buttons */
-  .btn-pri{display:inline-flex;align-items:center;gap:0.5rem;padding:0.85rem 2rem;border-radius:10px;font-weight:700;font-size:0.9rem;letter-spacing:0.03em;background:${C.accent};color:#080C14;transition:opacity 0.2s;white-space:nowrap}
+  .btn-pri{display:inline-flex;align-items:center;gap:0.5rem;padding:0.85rem 2rem;border-radius:10px;font-weight:700;font-size:0.9rem;letter-spacing:0.03em;background:${C.accent};color:var(--ew-accent-contrast);transition:opacity 0.2s;white-space:nowrap}
   .btn-pri:hover{opacity:0.88}
   .btn-ghost{display:inline-flex;align-items:center;gap:0.5rem;padding:0.85rem 2rem;border-radius:10px;font-weight:600;font-size:0.9rem;border:1px solid ${C.border};color:${C.text};transition:border-color 0.2s;white-space:nowrap}
   .btn-ghost:hover{border-color:${C.accent}}
@@ -104,14 +91,14 @@ const css = `
 
   /* feat pills */
   .fpill{display:flex;align-items:flex-start;gap:0.8rem;padding:1rem;background:${C.card};border:1px solid ${C.border};border-radius:12px;margin-bottom:0.6rem;transition:border-color 0.2s}
-  .fpill:hover{border-color:rgba(56,189,248,0.3)}
-  .fpill-icon{width:32px;height:32px;border-radius:8px;background:rgba(56,189,248,0.1);display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0}
+  .fpill:hover{border-color:rgba(var(--ew-accent-rgb),0.3)}
+  .fpill-icon{width:32px;height:32px;border-radius:8px;background:rgba(var(--ew-accent-rgb),0.1);display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0}
   .fpill-t{font-weight:700;font-size:0.88rem;color:${C.text};margin-bottom:0.2rem}
   .fpill-d{font-size:0.78rem;color:${C.muted};line-height:1.6}
 
   /* feature card */
   .feat-card{background:${C.card};border:1px solid ${C.border};border-radius:16px;padding:1.4rem;display:flex;flex-direction:column;gap:0.7rem;transition:border-color 0.2s}
-  .feat-card:hover{border-color:rgba(56,189,248,0.25)}
+  .feat-card:hover{border-color:rgba(var(--ew-accent-rgb),0.25)}
   .feat-icon{font-size:1.6rem}
   .feat-t{font-weight:700;font-size:0.9rem;color:${C.text};margin-bottom:0.25rem}
   .feat-d{font-size:0.79rem;color:${C.muted};line-height:1.65}
@@ -119,7 +106,7 @@ const css = `
   /* case card */
   .case-card{background:${C.surface};border:1px solid ${C.border};border-radius:18px;padding:1.8rem;display:flex;flex-direction:column;gap:1rem}
   .case-metrics{display:flex;gap:0.7rem;flex-wrap:wrap}
-  .case-m{background:rgba(56,189,248,0.08);border-radius:10px;padding:0.5rem 1rem;text-align:center}
+  .case-m{background:rgba(var(--ew-accent-rgb),0.08);border-radius:10px;padding:0.5rem 1rem;text-align:center}
   .case-mv{font-family:'Bebas Neue',sans-serif;font-size:1.5rem;color:${C.accent};line-height:1}
   .case-ml{font-size:0.64rem;color:${C.muted};text-transform:uppercase;letter-spacing:0.07em;margin-top:0.1rem}
   .case-t{font-weight:700;font-size:0.95rem;color:${C.text}}
@@ -127,7 +114,7 @@ const css = `
 
   /* step */
   .step{display:flex;gap:1rem;align-items:flex-start;padding:1.1rem 1.4rem;background:${C.card};border:1px solid ${C.border};border-radius:14px}
-  .step-n{width:32px;height:32px;border-radius:50%;flex-shrink:0;background:rgba(56,189,248,0.1);color:${C.accent};font-weight:800;font-size:0.78rem;display:flex;align-items:center;justify-content:center}
+  .step-n{width:32px;height:32px;border-radius:50%;flex-shrink:0;background:rgba(var(--ew-accent-rgb),0.1);color:${C.accent};font-weight:800;font-size:0.78rem;display:flex;align-items:center;justify-content:center}
   .step-t{font-weight:700;font-size:0.87rem;color:${C.text};margin-bottom:0.2rem}
   .step-d{font-size:0.79rem;color:${C.muted};line-height:1.65}
 
@@ -146,10 +133,10 @@ const css = `
   .desc{color:${C.muted};font-size:0.95rem;line-height:1.8;max-width:580px}
 
   /* hero img */
-  .hero-img-wrap{border-radius:16px;overflow:hidden;border:1px solid rgba(56,189,248,0.15);box-shadow:0 32px 80px rgba(0,0,0,0.6)}
+  .hero-img-wrap{border-radius:16px;overflow:hidden;border:1px solid rgba(var(--ew-accent-rgb),0.15);box-shadow:var(--ew-shadow)}
 
   /* courier CTA box */
-  .courier-cta{background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.22);border-radius:16px;padding:1.5rem}
+  .courier-cta{background:rgba(var(--ew-green-rgb),0.07);border:1px solid rgba(var(--ew-green-rgb),0.22);border-radius:16px;padding:1.5rem}
   .courier-cta-t{font-weight:700;font-size:0.95rem;color:${C.text};margin-bottom:0.4rem}
   .courier-cta-d{font-size:0.82rem;color:${C.muted};margin-bottom:1rem;line-height:1.65}
 
@@ -165,9 +152,9 @@ const css = `
 
   /* pricing */
   .price-card{background:${C.card};border:1px solid ${C.border};border-radius:20px;padding:2rem 1.5rem;display:flex;flex-direction:column;gap:1rem;position:relative;overflow:hidden;transition:border-color 0.2s,transform 0.2s}
-  .price-card:hover{border-color:rgba(56,189,248,0.3);transform:translateY(-2px)}
-  .price-card.featured{border-color:rgba(56,189,248,0.4);background:linear-gradient(135deg,${C.card},rgba(56,189,248,0.04))}
-  .price-card.featured::before{content:'Популярный';position:absolute;top:12px;right:12px;background:${C.accent};color:#080C14;font-size:0.65rem;font-weight:800;padding:0.2rem 0.6rem;border-radius:20px;letter-spacing:0.08em;text-transform:uppercase}
+  .price-card:hover{border-color:rgba(var(--ew-accent-rgb),0.3);transform:translateY(-2px)}
+  .price-card.featured{border-color:rgba(var(--ew-accent-rgb),0.4);background:linear-gradient(135deg,${C.card},rgba(var(--ew-accent-rgb),0.04))}
+  .price-card.featured::before{content:'Популярный';position:absolute;top:12px;right:12px;background:${C.accent};color:var(--ew-accent-contrast);font-size:0.65rem;font-weight:800;padding:0.2rem 0.6rem;border-radius:20px;letter-spacing:0.08em;text-transform:uppercase}
   .price-name{font-weight:800;font-size:0.85rem;color:${C.muted};text-transform:uppercase;letter-spacing:0.1em}
   .price-amount{font-family:'Bebas Neue',sans-serif;font-size:3rem;color:${C.text};line-height:1;letter-spacing:0.02em}
   .price-unit{font-size:0.78rem;color:${C.muted};margin-top:0.2rem}
@@ -183,37 +170,37 @@ const css = `
   .form-group{display:flex;flex-direction:column;gap:0.4rem}
   .form-group.full{grid-column:1/-1}
   .form-label{font-size:0.75rem;font-weight:600;color:${C.muted};text-transform:uppercase;letter-spacing:0.08em}
-  .form-input{background:rgba(255,255,255,0.04);border:1px solid ${C.border};border-radius:10px;padding:0.7rem 1rem;color:${C.text};font-size:0.88rem;font-family:inherit;outline:none;transition:border-color 0.2s;width:100%}
+  .form-input{background:var(--ew-tint);border:1px solid ${C.border};border-radius:10px;padding:0.7rem 1rem;color:${C.text};font-size:0.88rem;font-family:inherit;outline:none;transition:border-color 0.2s;width:100%}
   .form-input:focus{border-color:${C.accent}}
   .form-input::placeholder{color:${C.muted};opacity:0.6}
-  .form-select{background:rgba(255,255,255,0.04);border:1px solid ${C.border};border-radius:10px;padding:0.7rem 1rem;color:${C.text};font-size:0.88rem;font-family:inherit;outline:none;transition:border-color 0.2s;width:100%;cursor:pointer;appearance:none}
+  .form-select{background:var(--ew-tint);border:1px solid ${C.border};border-radius:10px;padding:0.7rem 1rem;color:${C.text};font-size:0.88rem;font-family:inherit;outline:none;transition:border-color 0.2s;width:100%;cursor:pointer;appearance:none}
   .form-select:focus{border-color:${C.accent}}
-  .form-select option{background:#0D1420;color:${C.text}}
+  .form-select option{background:var(--ew-surface);color:${C.text}}
   .cb-group{display:flex;flex-direction:column;gap:0.6rem;margin-top:0.2rem}
-  .cb-item{display:flex;align-items:flex-start;gap:0.7rem;padding:0.8rem 1rem;background:rgba(255,255,255,0.02);border:1px solid ${C.border};border-radius:10px;cursor:pointer;transition:border-color 0.2s}
-  .cb-item:hover{border-color:rgba(56,189,248,0.3)}
+  .cb-item{display:flex;align-items:flex-start;gap:0.7rem;padding:0.8rem 1rem;background:var(--ew-tint-2);border:1px solid ${C.border};border-radius:10px;cursor:pointer;transition:border-color 0.2s}
+  .cb-item:hover{border-color:rgba(var(--ew-accent-rgb),0.3)}
   .cb-item input[type=radio]{accent-color:${C.accent};margin-top:0.15rem;flex-shrink:0}
   .cb-item-label{font-size:0.83rem;color:${C.text};font-weight:600;margin-bottom:0.15rem}
   .cb-item-desc{font-size:0.75rem;color:${C.muted}}
-  .form-btn{width:100%;padding:0.9rem;border-radius:12px;border:none;background:linear-gradient(135deg,${C.accent},#0EA5E9);color:#080C14;font-weight:800;font-size:0.95rem;cursor:pointer;font-family:inherit;transition:opacity 0.2s;display:flex;align-items:center;justify-content:center;gap:0.5rem;margin-top:1rem}
+  .form-btn{width:100%;padding:0.9rem;border-radius:12px;border:none;background:linear-gradient(135deg,${C.accent},var(--ew-accent-2));color:var(--ew-accent-contrast);font-weight:800;font-size:0.95rem;cursor:pointer;font-family:inherit;transition:opacity 0.2s;display:flex;align-items:center;justify-content:center;gap:0.5rem;margin-top:1rem}
   .form-btn:hover{opacity:0.88}
   .form-note{font-size:0.72rem;color:${C.muted};text-align:center;margin-top:0.8rem;line-height:1.6}
 
   /* phone mockup */
-  .phone{width:210px;border-radius:32px;background:#0A1628;border:2px solid rgba(56,189,248,0.2);box-shadow:0 32px 80px rgba(0,0,0,0.6),0 0 0 1px rgba(56,189,248,0.06);padding:0.7rem;position:relative}
+  .phone{width:210px;border-radius:32px;background:var(--ew-code-bg);border:2px solid rgba(var(--ew-accent-rgb),0.2);box-shadow:var(--ew-shadow),0 0 0 1px rgba(var(--ew-accent-rgb),0.06);padding:0.7rem;position:relative}
   .phone-notch{width:80px;height:22px;background:#080C14;border-radius:12px;margin:0 auto 0.7rem;display:flex;align-items:center;justify-content:center}
   .phone-body{background:#fff;border-radius:22px;padding:1rem;min-height:380px;max-width:580px}
 
   /* ew-tbl mockup */
-  .ew-tbl{background:#0A1628;border-radius:12px;padding:1rem;border:1px solid rgba(56,189,248,0.1);font-size:0.72rem}
-  .ew-tbl-bar{display:flex;align-items:center;gap:6px;margin-bottom:0.8rem;padding-bottom:0.6rem;border-bottom:1px solid rgba(56,189,248,0.08)}
+  .ew-tbl{background:var(--ew-code-bg);border-radius:12px;padding:1rem;border:1px solid rgba(var(--ew-accent-rgb),0.1);font-size:0.72rem}
+  .ew-tbl-bar{display:flex;align-items:center;gap:6px;margin-bottom:0.8rem;padding-bottom:0.6rem;border-bottom:1px solid rgba(var(--ew-accent-rgb),0.08)}
   .dot{width:10px;height:10px;border-radius:50%}
   .ew-tbl-row{display:grid;grid-template-columns:80px 1fr 70px 60px;gap:0.4rem;padding:0.4rem 0.5rem;border-radius:6px;align-items:center}
-  .ew-tbl-row:hover{background:rgba(56,189,248,0.04)}
-  .b-new{background:rgba(56,189,248,0.12);color:${C.accent};padding:2px 6px;border-radius:4px;font-weight:700;font-size:0.66rem}
-  .b-go{background:rgba(16,185,129,0.12);color:#10B981;padding:2px 6px;border-radius:4px;font-weight:700;font-size:0.66rem}
-  .b-done{background:rgba(100,116,139,0.15);color:${C.muted};padding:2px 6px;border-radius:4px;font-weight:700;font-size:0.66rem}
-  .b-err{background:rgba(239,68,68,0.12);color:#EF4444;padding:2px 6px;border-radius:4px;font-weight:700;font-size:0.66rem}
+  .ew-tbl-row:hover{background:rgba(var(--ew-accent-rgb),0.04)}
+  .b-new{background:var(--ew-border);color:${C.accent};padding:2px 6px;border-radius:4px;font-weight:700;font-size:0.66rem}
+  .b-go{background:rgba(var(--ew-green-rgb),0.12);color:var(--ew-green);padding:2px 6px;border-radius:4px;font-weight:700;font-size:0.66rem}
+  .b-done{background:rgba(var(--ew-muted-rgb),0.15);color:${C.muted};padding:2px 6px;border-radius:4px;font-weight:700;font-size:0.66rem}
+  .b-err{background:rgba(var(--ew-red-rgb),0.12);color:var(--ew-red);padding:2px 6px;border-radius:4px;font-weight:700;font-size:0.66rem}
 
   @media(max-width:900px){
     .ew .g2,.ew .g3,.ew .g4,.ew .g2r{grid-template-columns:1fr}
@@ -253,7 +240,7 @@ export function LandingPage() {
           <section className="sec" style={{ position: "relative", overflow: "hidden" }}>
             <div style={{
               position: "absolute", width: 800, height: 500, borderRadius: "50%",
-              background: "radial-gradient(ellipse,rgba(56,189,248,0.07) 0%,transparent 70%)",
+              background: "radial-gradient(ellipse,rgba(var(--ew-accent-rgb),0.07) 0%,transparent 70%)",
               top: -180, left: "50%", transform: "translateX(-50%)", pointerEvents: "none",
             }} />
             <div className="wrap" style={{ position: "relative" }}>
@@ -304,9 +291,9 @@ export function LandingPage() {
                   />
                   <div className="ew-tbl">
                     <div className="ew-tbl-bar">
-                      <div className="dot" style={{ background: "#EF4444" }} />
-                      <div className="dot" style={{ background: "#F59E0B" }} />
-                      <div className="dot" style={{ background: "#10B981" }} />
+                      <div className="dot" style={{ background: "var(--ew-red)" }} />
+                      <div className="dot" style={{ background: "var(--ew-amber)" }} />
+                      <div className="dot" style={{ background: "var(--ew-green)" }} />
                       <span style={{ fontSize: "0.68rem", color: C.muted, marginLeft: "0.5rem" }}>Дашборд — 24 заказа сегодня</span>
                     </div>
                     {[
@@ -323,7 +310,7 @@ export function LandingPage() {
                         <span style={{ color: C.muted }}>{r.c}</span>
                       </div>
                     ))}
-                    <div style={{ marginTop: "1.2rem", padding: "0.8rem", background: "rgba(56,189,248,0.05)", borderRadius: 8, border: `1px solid ${C.border}` }}>
+                    <div style={{ marginTop: "1.2rem", padding: "0.8rem", background: "rgba(var(--ew-accent-rgb),0.05)", borderRadius: 8, border: `1px solid ${C.border}` }}>
                       <div style={{ fontSize: "0.68rem", color: C.accent, fontWeight: 700, marginBottom: "0.4rem" }}>💰 Расчёт ЗП — Неделя</div>
                       <div style={{ display: "flex", gap: "1rem", fontSize: "0.7rem", color: C.muted }}>
                         <span>Антон · 12 заказов · <strong style={{ color: C.text }}>6 360 ₽</strong></span>
@@ -394,9 +381,9 @@ export function LandingPage() {
                 </div>
                 <div className="ew-tbl">
                   <div className="ew-tbl-bar">
-                    <div className="dot" style={{ background: "#EF4444" }} />
-                    <div className="dot" style={{ background: "#F59E0B" }} />
-                    <div className="dot" style={{ background: "#10B981" }} />
+                    <div className="dot" style={{ background: "var(--ew-red)" }} />
+                    <div className="dot" style={{ background: "var(--ew-amber)" }} />
+                    <div className="dot" style={{ background: "var(--ew-green)" }} />
                     <span style={{ fontSize: "0.68rem", color: C.muted, marginLeft: "0.5rem" }}>Маршруты — Антон · 29.03</span>
                   </div>
                   {[
@@ -406,13 +393,13 @@ export function LandingPage() {
                     { n: 4, a: "б-р Строителей, 8/2", s: "⏳ Назначен", p: "1 300 ₽" },
                   ].map((r) => (
                     <div key={r.n} style={{ display: "grid", gridTemplateColumns: "24px 1fr 70px 60px", gap: "0.5rem", padding: "0.5rem", borderRadius: 6, alignItems: "center", marginBottom: 2 }}>
-                      <span style={{ width: 20, height: 20, borderRadius: "50%", background: C.accent, color: "#080C14", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.65rem", fontWeight: 800 }}>{r.n}</span>
+                      <span style={{ width: 20, height: 20, borderRadius: "50%", background: C.accent, color: "var(--ew-accent-contrast)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.65rem", fontWeight: 800 }}>{r.n}</span>
                       <span style={{ color: C.sub, fontSize: "0.72rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.a}</span>
                       <span style={{ fontSize: "0.66rem", color: C.muted }}>{r.s}</span>
                       <span style={{ fontSize: "0.72rem", color: C.green, fontWeight: 700 }}>{r.p}</span>
                     </div>
                   ))}
-                  <div style={{ marginTop: "0.8rem", padding: "0.7rem", background: "rgba(16,185,129,0.07)", borderRadius: 8, border: "1px solid rgba(16,185,129,0.2)", fontSize: "0.72rem", color: C.muted }}>
+                  <div style={{ marginTop: "0.8rem", padding: "0.7rem", background: "rgba(var(--ew-green-rgb),0.07)", borderRadius: 8, border: "1px solid rgba(var(--ew-green-rgb),0.2)", fontSize: "0.72rem", color: C.muted }}>
                     Итого: 4 заказа · <strong style={{ color: C.green }}>3 390 ₽</strong> · x1.06 = <strong style={{ color: C.accent }}>3 593 ₽</strong>
                   </div>
                 </div>
@@ -431,7 +418,7 @@ export function LandingPage() {
               <div className="g3" style={{ marginTop: "3rem" }}>
                 {/* СЗ */}
                 <div className="acc-card">
-                  <div className="acc-badge" style={{ background: "rgba(56,189,248,0.1)", color: C.accent }}>⭐ Рекомендуем</div>
+                  <div className="acc-badge" style={{ background: "rgba(var(--ew-accent-rgb),0.1)", color: C.accent }}>⭐ Рекомендуем</div>
                   <div className="acc-title">Самозанятые (СЗ)</div>
                   <div className="acc-desc">Наиболее удобный формат. Курьер регистрируется как самозанятый — мы берём на себя всё: задания, акты, выплаты через Консоль.Про.</div>
                   <ul className="acc-list">
@@ -446,7 +433,7 @@ export function LandingPage() {
 
                 {/* ИП */}
                 <div className="acc-card">
-                  <div className="acc-badge" style={{ background: "rgba(167,139,250,0.1)", color: C.purple }}>ИП</div>
+                  <div className="acc-badge" style={{ background: "rgba(var(--ew-purple-rgb),0.1)", color: C.purple }}>ИП</div>
                   <div className="acc-title">Индивидуальные предприниматели</div>
                   <div className="acc-desc">Для курьеров с ИП — договор ГПХ через Консоль.Про или напрямую. Гибкие условия оплаты.</div>
                   <ul className="acc-list">
@@ -459,7 +446,7 @@ export function LandingPage() {
 
                 {/* ГПХ */}
                 <div className="acc-card">
-                  <div className="acc-badge" style={{ background: "rgba(16,185,129,0.1)", color: C.green }}>ГПХ</div>
+                  <div className="acc-badge" style={{ background: "rgba(var(--ew-green-rgb),0.1)", color: C.green }}>ГПХ</div>
                   <div className="acc-title">Договор ГПХ</div>
                   <div className="acc-desc">Для физических лиц без статуса СЗ или ИП — договор гражданско-правового характера. Мы ведём учёт и расчёты.</div>
                   <ul className="acc-list">
@@ -586,8 +573,8 @@ export function LandingPage() {
                       </div>
                       {[
                         { s: "🚀 В пути", a: "ул. Ленина, 42", m: "#8821 · 09:00–12:00", c: "#4A7AFF" },
-                        { s: "⏳ Назначен", a: "пр. Мира, 15", m: "#8819 · 12:00–14:00", c: "#F59E0B" },
-                        { s: "⏳ Назначен", a: "Садовая, 3", m: "#8815 · 14:00–16:00", c: "#F59E0B" },
+                        { s: "⏳ Назначен", a: "пр. Мира, 15", m: "#8819 · 12:00–14:00", c: "var(--ew-amber)" },
+                        { s: "⏳ Назначен", a: "Садовая, 3", m: "#8815 · 14:00–16:00", c: "var(--ew-amber)" },
                       ].map((o, i) => (
                         <div key={i} style={{ marginBottom: "0.5rem", padding: "0.5rem 0.6rem", background: "#F8F7F4", borderRadius: 8 }}>
                           <div style={{ fontSize: "0.62rem", fontWeight: 700, color: o.c, marginBottom: "0.15rem" }}>{o.s}</div>
@@ -811,13 +798,13 @@ export function LandingPage() {
             <div className="wrap">
               <div style={{
                 maxWidth: 720, margin: "0 auto",
-                background: C.card, border: "1px solid rgba(56,189,248,0.2)",
+                background: C.card, border: "1px solid rgba(var(--ew-accent-rgb),0.2)",
                 borderRadius: 24, padding: "4rem 2.5rem",
                 textAlign: "center", position: "relative", overflow: "hidden",
               }}>
                 <div style={{
                   position: "absolute", width: 500, height: 400, borderRadius: "50%",
-                  background: "radial-gradient(ellipse,rgba(56,189,248,0.06) 0%,transparent 70%)",
+                  background: "radial-gradient(ellipse,rgba(var(--ew-accent-rgb),0.06) 0%,transparent 70%)",
                   top: -150, left: "50%", transform: "translateX(-50%)", pointerEvents: "none",
                 }} />
                 <Label t="Старт" />

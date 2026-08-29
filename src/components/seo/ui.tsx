@@ -6,24 +6,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import { RequestForm } from "@/components/RequestForm";
+import { C } from "@/components/theme/theme";
 
 export const SITE_URL = "https://adelivo.ru";
 
-/* ─── Палитра (совпадает с лендингом) ──────────────────────── */
-export const C = {
-  bg: "#080C14",
-  surface: "#0D1420",
-  card: "#0F1825",
-  border: "rgba(56,189,248,0.12)",
-  accent: "#38BDF8",
-  green: "#10B981",
-  amber: "#F59E0B",
-  red: "#EF4444",
-  purple: "#A78BFA",
-  text: "#E2EBF8",
-  muted: "#64748B",
-  sub: "#94A3B8",
-};
+/* ─── Палитра: единый источник — components/theme/theme.ts ─── */
+export { C };
 
 /* ─── CSS ──────────────────────────────────────────────────── */
 const css = `
@@ -42,7 +30,7 @@ const css = `
   .ew .g2r{display:grid;grid-template-columns:1fr 1.1fr;gap:3.5rem;align-items:center}
 
   /* buttons */
-  .btn-pri{display:inline-flex;align-items:center;gap:0.5rem;padding:0.85rem 2rem;border-radius:10px;font-weight:700;font-size:0.9rem;letter-spacing:0.03em;background:${C.accent};color:#080C14;transition:opacity .2s;white-space:nowrap}
+  .btn-pri{display:inline-flex;align-items:center;gap:0.5rem;padding:0.85rem 2rem;border-radius:10px;font-weight:700;font-size:0.9rem;letter-spacing:0.03em;background:${C.accent};color:var(--ew-accent-contrast);transition:opacity .2s;white-space:nowrap}
   .btn-pri:hover{opacity:0.88}
   .btn-ghost{display:inline-flex;align-items:center;gap:0.5rem;padding:0.85rem 2rem;border-radius:10px;font-weight:600;font-size:0.9rem;border:1px solid ${C.border};color:${C.text};transition:border-color .2s;white-space:nowrap}
   .btn-ghost:hover{border-color:${C.accent}}
@@ -58,7 +46,7 @@ const css = `
   .prose{color:${C.sub};font-size:0.92rem;line-height:1.85;max-width:760px}
   .prose p{margin-bottom:1rem}
   .prose strong{color:${C.text}}
-  .prose a{color:${C.accent};border-bottom:1px solid rgba(56,189,248,0.35)}
+  .prose a{color:${C.accent};border-bottom:1px solid rgba(var(--ew-accent-rgb),0.35)}
 
   /* хлебные крошки */
   .crumbs{display:flex;flex-wrap:wrap;gap:0.45rem;align-items:center;font-size:0.74rem;color:${C.muted};padding:1.1rem 0 0}
@@ -78,7 +66,7 @@ const css = `
 
   /* шаги */
   .step{display:flex;gap:1rem;align-items:flex-start;padding:1.1rem 1.4rem;background:${C.card};border:1px solid ${C.border};border-radius:14px;margin-bottom:0.7rem}
-  .step-n{width:32px;height:32px;border-radius:50%;flex-shrink:0;background:rgba(56,189,248,0.1);color:${C.accent};font-weight:800;font-size:0.78rem;display:flex;align-items:center;justify-content:center}
+  .step-n{width:32px;height:32px;border-radius:50%;flex-shrink:0;background:rgba(var(--ew-accent-rgb),0.1);color:${C.accent};font-weight:800;font-size:0.78rem;display:flex;align-items:center;justify-content:center}
   .step-t{font-weight:700;font-size:0.88rem;color:${C.text};margin-bottom:0.2rem}
   .step-d{font-size:0.8rem;color:${C.muted};line-height:1.68}
 
@@ -90,7 +78,7 @@ const css = `
 
   /* таблица */
   .tbl{width:100%;border-collapse:collapse;font-size:0.85rem;margin-top:1.6rem;overflow:hidden;border-radius:14px;border:1px solid ${C.border}}
-  .tbl th{text-align:left;padding:0.85rem 1rem;background:rgba(56,189,248,0.06);color:${C.text};font-weight:700;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.06em}
+  .tbl th{text-align:left;padding:0.85rem 1rem;background:rgba(var(--ew-accent-rgb),0.06);color:${C.text};font-weight:700;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.06em}
   .tbl td{padding:0.85rem 1rem;border-top:1px solid ${C.border};color:${C.sub};line-height:1.6;vertical-align:top}
   .tbl td strong{color:${C.text}}
   .tbl-wrap{overflow-x:auto}
@@ -112,6 +100,8 @@ const css = `
   /* блок формы */
   .form-wrap{max-width:760px;margin:0 auto;background:${C.card};border:1px solid ${C.border};border-radius:22px;padding:2rem}
 
+  .form-lead{color:${C.muted};font-size:0.95rem;line-height:1.8;max-width:600px;margin:0 auto}
+
   /* связанные страницы */
   .rel{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-top:2rem}
   .rel-card{background:${C.card};border:1px solid ${C.border};border-radius:14px;padding:1.15rem 1.3rem;transition:border-color .2s}
@@ -120,7 +110,7 @@ const css = `
   .rel-d{font-size:0.77rem;color:${C.muted};line-height:1.6}
 
   /* код */
-  .codebox{background:#0A1628;border:1px solid ${C.border};border-radius:12px;padding:1.1rem 1.3rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.78rem;color:${C.sub};line-height:1.75;overflow-x:auto;white-space:pre;margin-top:1.2rem}
+  .codebox{background:var(--ew-code-bg);border:1px solid ${C.border};border-radius:12px;padding:1.1rem 1.3rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.78rem;color:${C.sub};line-height:1.75;overflow-x:auto;white-space:pre;margin-top:1.2rem}
   .codebox .k{color:${C.accent}}
 
   @media(max-width:900px){
@@ -374,7 +364,7 @@ export function Hero({
     <section className="sec" style={{ position: "relative", overflow: "hidden", paddingTop: "1rem" }}>
       <div style={{
         position: "absolute", width: 900, height: 520, borderRadius: "50%",
-        background: "radial-gradient(ellipse,rgba(56,189,248,0.07) 0%,transparent 70%)",
+        background: "radial-gradient(ellipse,rgba(var(--ew-accent-rgb),0.07) 0%,transparent 70%)",
         top: -200, left: "50%", transform: "translateX(-50%)", pointerEvents: "none",
       }} />
       <div className="wrap" style={{ position: "relative" }}>

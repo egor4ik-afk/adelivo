@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ProfilePanel } from '@/components/ProfilePanel';
+import Link from 'next/link';
 
 type ChangeType = 'TIME_CHANGED' | 'ORDERS_CHANGED' | 'ROUTE_REASSIGNED' | 'COURIER_CHANGED' | 'OP_COMMENT_ADDED' | 'ITEMS_CHANGED' | string;
 interface Notification {
@@ -316,6 +317,18 @@ export default function ManagerDashboard() {
           <img src="/favicon.svg" alt="Logo" className="w-8 h-8" />
           <h1 className="text-xl font-bold text-gray-900 tracking-tight">Кабинет менеджера</h1>
         </div>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Link
+            href="/manager/orders/new"
+            className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg bg-[#4a7aff] text-white text-[12px] sm:text-sm font-bold shadow-sm hover:bg-[#3d66e8] transition-colors shrink-0"
+            title="Создать заказ вручную"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            <span className="hidden sm:inline">Заказ</span>
+          </Link>
+
         <div className="relative">
           <button onClick={() => setIsProfileOpen(!isProfileOpen)} className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center hover:opacity-90 transition-opacity shrink-0" title="Профиль">
             {headerProfile?.avatarUrl ? (
@@ -329,6 +342,7 @@ export default function ManagerDashboard() {
             )}
           </button>
           {isProfileOpen && <div className="absolute right-0 top-14 z-50"><ProfilePanel onClose={() => setIsProfileOpen(false)} /></div>}
+        </div>
         </div>
       </header>
 
@@ -660,7 +674,21 @@ export default function ManagerDashboard() {
 
                                       <div className="flex flex-wrap items-center justify-between gap-1 mb-2">
                                         <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${isMeura ? 'bg-pink-50 text-pink-600 border-pink-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>{isMeura ? "🌸 Meura" : "📦 Bunch"}</span>
-                                        {order.crmCreatedAt && <span className="text-[9px] text-[#a8a49c] font-medium">Создан: {new Date(order.crmCreatedAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>}
+                                        <div className="flex items-center gap-1.5 ml-auto">
+                                          {order.crmCreatedAt && <span className="text-[9px] text-[#a8a49c] font-medium">Создан: {new Date(order.crmCreatedAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>}
+                                          <Link
+                                            href={`/manager/orders/${order.id}/edit`}
+                                            onClick={(e) => e.stopPropagation()}
+                                            title="Редактировать заказ"
+                                            aria-label="Редактировать заказ"
+                                            className="w-6 h-6 rounded-md border border-[#e8e6df] flex items-center justify-center text-[#a8a49c] hover:text-[#4a7aff] hover:border-[#4a7aff] hover:bg-[#f0f4ff] transition-colors shrink-0"
+                                          >
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                              <path d="M12 20h9" />
+                                              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                            </svg>
+                                          </Link>
+                                        </div>
                                       </div>
 
                                       <div className="flex flex-wrap gap-1 mb-2">
