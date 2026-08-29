@@ -30,9 +30,9 @@ interface RouteOrder {
 }
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
-  ASSIGNED: { label: "Назначен", color: "var(--color-accent)", bg: "var(--color-accent-soft)" },
-  ASSEMBLING: { label: "В сборке", color: "#d97706", bg: "#fffbeb" },
-  IN_DELIVERY: { label: "🚀 В пути", color: "var(--color-green)", bg: "#ecfdf5" },
+  ASSIGNED: { label: "Назначен", color: "var(--color-accent-fg)", bg: "var(--color-accent-soft)" },
+  ASSEMBLING: { label: "В сборке", color: "#d97706", bg: "var(--color-warn-bg)" },
+  IN_DELIVERY: { label: "🚀 В пути", color: "var(--color-green)", bg: "var(--color-ok-bg)" },
   DELIVERED: { label: "✅ Доставлен", color: "var(--color-text-2)", bg: "var(--color-bg)" },
 };
 
@@ -350,7 +350,7 @@ const syncPendingStatuses = async () => {
                   <div style={{ fontWeight: 800, color: "var(--color-text)", fontSize: 16 }}>
                     🆕 Новый маршрут
                   </div>
-                  <div style={{ fontSize: 12, fontWeight: 700, background: "var(--color-accent-soft)", color: "var(--color-accent)", padding: "4px 8px", borderRadius: 6 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, background: "var(--color-accent-soft)", color: "var(--color-accent-fg)", padding: "4px 8px", borderRadius: 6 }}>
                     {routePoints.length} точек
                   </div>
                 </div>
@@ -436,7 +436,7 @@ const syncPendingStatuses = async () => {
                     {(() => {
                       if (pickedUpTimeStr) {
                         return (
-                          <div style={{ marginTop: 8, padding: "4px 8px", background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: 6, display: "inline-flex", gap: 6, alignItems: "center" }}>
+                          <div style={{ marginTop: 8, padding: "4px 8px", background: "var(--color-ok-bg)", border: "1px solid #a7f3d0", borderRadius: 6, display: "inline-flex", gap: 6, alignItems: "center" }}>
                             <span style={{ fontSize: 12 }}>✅</span>
                             <div style={{ fontSize: 11, color: "#065f46", fontWeight: 700 }}>Забрал с базы в {pickedUpTimeStr}</div>
                           </div>
@@ -469,7 +469,7 @@ const syncPendingStatuses = async () => {
 
                       if (advice) {
                         return (
-                          <div style={{ marginTop: 8, padding: "4px 8px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 6, display: "inline-flex", gap: 6, alignItems: "center" }}>
+                          <div style={{ marginTop: 8, padding: "4px 8px", background: "var(--color-warn-bg)", border: "1px solid #fde68a", borderRadius: 6, display: "inline-flex", gap: 6, alignItems: "center" }}>
                             <span style={{ fontSize: 12 }}>⏰</span>
                             <div style={{ fontSize: 11, color: "#78350f", fontWeight: 700 }}>{advice}</div>
                           </div>
@@ -658,12 +658,12 @@ const syncPendingStatuses = async () => {
                             </div>
 
                             {(o.name || phone !== "—") && (
-                              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-accent)", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 2 }}>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-accent-fg)", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 2 }}>
                                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                                   {o.name && <span>👤 {o.name}</span>}
                                   {o.name && phone !== "—" && <span style={{ color: "var(--color-text-3)" }}>·</span>}
                                   {phone !== "—" && (
-                                    <a href={`tel:${phone}`} onClick={e => e.stopPropagation()} style={{ color: "var(--color-accent)", textDecoration: "none" }}>
+                                    <a href={`tel:${phone}`} onClick={e => e.stopPropagation()} style={{ color: "var(--color-accent-fg)", textDecoration: "none" }}>
                                       📞 {phone}
                                     </a>
                                   )}
@@ -704,7 +704,7 @@ const syncPendingStatuses = async () => {
                                 {(isDelivered && actualTime) ? `✅ Доставлен в ${actualTime}` : (o.slotRaw ?? "Время не указано")}
                               </span>
                               {o.eta && !isDelivered && (
-                                <span style={{ background: "var(--color-accent-soft)", color: "var(--color-accent)", padding: "2px 6px", borderRadius: 4, fontWeight: 700, fontSize: 10 }}>
+                                <span style={{ background: "var(--color-accent-soft)", color: "var(--color-accent-fg)", padding: "2px 6px", borderRadius: 4, fontWeight: 700, fontSize: 10 }}>
                                   ~{o.eta}
                                 </span>
                               )}
@@ -772,7 +772,7 @@ const syncPendingStatuses = async () => {
                                 <a
                                   href={`https://yandex.ru/maps/?mode=routes&rtext=${prevAddressStr}~${currentAddressStr}`}
                                   target="_blank"
-                                  style={{ fontSize: 11, background: "var(--color-accent-soft)", color: "var(--color-accent)", padding: "4px 10px", borderRadius: 6, textDecoration: "none", fontWeight: 700, display: "inline-flex", alignItems: "center" }}
+                                  style={{ fontSize: 11, background: "var(--color-accent-soft)", color: "var(--color-accent-fg)", padding: "4px 10px", borderRadius: 6, textDecoration: "none", fontWeight: 700, display: "inline-flex", alignItems: "center" }}
                                 >
                                   📍 От {isFirst ? "базы" : "пред. точки"} сюда
                                 </a>
@@ -890,7 +890,7 @@ const syncPendingStatuses = async () => {
 
                             {opComment && (
                               <div style={{
-                                background: "#fffbeb", borderRadius: 8, padding: 10,
+                                background: "var(--color-warn-bg)", borderRadius: 8, padding: 10,
                                 border: "1px solid #fde68a",
                               }}>
                                 <div style={{ fontSize: 11, color: "#92400e", textTransform: "uppercase", marginBottom: 2, fontWeight: 600 }}>
@@ -967,10 +967,10 @@ const syncPendingStatuses = async () => {
                         </div>
                         <div style={{ fontSize: 13, color: "var(--color-text)", marginBottom: 4 }}>{o.address}</div>
                         {phone !== "—" && (
-                          <a href={`tel:${phone}`} style={{ fontSize: 12, color: "var(--color-accent)", textDecoration: "none" }}>📞 {phone}</a>
+                          <a href={`tel:${phone}`} style={{ fontSize: 12, color: "var(--color-accent-fg)", textDecoration: "none" }}>📞 {phone}</a>
                         )}
                         {opComment && (
-                          <div style={{ fontSize: 11, color: "#78350f", background: "#fffbeb", padding: "4px 8px", borderRadius: 6, marginTop: 6 }}>
+                          <div style={{ fontSize: 11, color: "#78350f", background: "var(--color-warn-bg)", padding: "4px 8px", borderRadius: 6, marginTop: 6 }}>
                             📋 {opComment}
                           </div>
                         )}

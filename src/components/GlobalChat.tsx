@@ -681,7 +681,7 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
                               ))}
                             </div>
                           )}
-                          <div style={{ background: isMe ? "var(--color-text)" : "#fff", color: isMe ? "#fff" : "var(--color-text)", padding: "8px 12px", borderRadius: 14, borderBottomRightRadius: isMe ? 4 : 14, borderBottomLeftRadius: isMe ? 14 : 4, border: isMe ? "none" : "1px solid var(--color-border)", boxShadow: "0 2px 4px rgba(0,0,0,0.04)" }}>
+                          <div style={{ background: isMe ? "var(--color-text)" : "var(--color-card)", color: isMe ? "#fff" : "var(--color-text)", padding: "8px 12px", borderRadius: 14, borderBottomRightRadius: isMe ? 4 : 14, borderBottomLeftRadius: isMe ? 14 : 4, border: isMe ? "none" : "1px solid var(--color-border)", boxShadow: "0 2px 4px rgba(0,0,0,0.04)" }}>
                             {/* 🔥 Фото с кнопкой скачать */}
                             {m.mediaType === "image" && m.mediaUrl && (
                               <div style={{ position: "relative", marginBottom: m.text ? 6 : 0 }}>

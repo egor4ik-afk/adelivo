@@ -670,7 +670,7 @@ export function DashboardClient({ user }: { user: User }) {
       '<div style="display:inline-flex;flex-direction:column;align-items:center;cursor:pointer; min-width: 90px; max-width: 120px;">' +
       '<div style="background:{{ properties.pinColor }};color:#fff;padding:4px 10px;border-radius:12px;font-size:10px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.28);border:1.5px solid rgba(255,255,255,0.35); text-align:center;line-height:1.4;">{{ properties.slotLabel }}</div>' +
       '<div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid {{ properties.pinColor }};margin-top:-1px;"></div>' +
-      '{% if properties.showLabel %}<div style="margin-top:3px;font-size:9px;font-weight:700;color:var(--color-text);white-space:nowrap;background:rgba(255,255,255,0.96);padding:2px 6px;border-radius:4px;box-shadow:0 1px 5px rgba(0,0,0,0.15);line-height:1.4;">{{ properties.labelText }}</div>{% endif %}' +
+      '{% if properties.showLabel %}<div style="margin-top:3px;font-size:9px;font-weight:700;color:var(--color-text);white-space:nowrap;background:var(--color-card);border:1px solid var(--color-border);padding:2px 6px;border-radius:4px;box-shadow:0 1px 5px rgba(0,0,0,0.25);line-height:1.4;">{{ properties.labelText }}</div>{% endif %}' +
       '</div>'
     );
 
@@ -1262,9 +1262,9 @@ export function DashboardClient({ user }: { user: User }) {
 
   const ROUTE_STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
     NEW: { label: "Новый", color: "#d94040", bg: "#fef2f2" },
-    ASSIGNED: { label: "Назначен", color: "var(--color-accent)", bg: "var(--color-accent-soft)" },
-    ASSEMBLING: { label: "В сборке", color: "#d97706", bg: "#fffbeb" }, // 🔥 Цвет для отображения
-    IN_DELIVERY: { label: "🚀 В пути", color: "var(--color-green)", bg: "#ecfdf5" },
+    ASSIGNED: { label: "Назначен", color: "var(--color-accent-fg)", bg: "var(--color-accent-soft)" },
+    ASSEMBLING: { label: "В сборке", color: "#d97706", bg: "var(--color-warn-bg)" }, // 🔥 Цвет для отображения
+    IN_DELIVERY: { label: "🚀 В пути", color: "var(--color-green)", bg: "var(--color-ok-bg)" },
     DELIVERED: { label: "✅ Доставлен", color: "var(--color-text-2)", bg: "var(--color-bg)" },
     RETURNED: { label: "↩️ Возврат", color: "#d94040", bg: "#fef2f2" },
     CANCELLED: { label: "❌ Отменен", color: "var(--color-text-3)", bg: "var(--color-bg)" }
@@ -1423,11 +1423,11 @@ export function DashboardClient({ user }: { user: User }) {
                       {/* СТАТУС ПРИНЯТИЯ */}
                       {!isDraft && (
                         r.isAccepted ? (
-                          <span style={{ background: "#ecfdf5", color: "var(--color-green)", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #a7f3d0", display: "flex", alignItems: "center", gap: 4 }}>
+                          <span style={{ background: "var(--color-ok-bg)", color: "var(--color-green)", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #a7f3d0", display: "flex", alignItems: "center", gap: 4 }}>
                             ✅ Принят
                           </span>
                         ) : (
-                          <span style={{ background: "#fffbeb", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #fde68a", display: "flex", alignItems: "center", gap: 4 }}>
+                          <span style={{ background: "var(--color-warn-bg)", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #fde68a", display: "flex", alignItems: "center", gap: 4 }}>
                             ❓ Ожидает
                           </span>
                         )
@@ -1435,7 +1435,7 @@ export function DashboardClient({ user }: { user: User }) {
 
                       {/* 🔥 ДОБАВЛЕНО: Время выезда + ориентир на 1-й заказ */}
                       {r.plannedDepartureTime && (
-                        <span style={{ background: "var(--color-accent-soft)", color: "var(--color-accent)", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #bfdbfe" }}>
+                        <span style={{ background: "var(--color-accent-soft)", color: "var(--color-accent-fg)", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #bfdbfe" }}>
                           ⏱ Выезд: {r.plannedDepartureTime} {r.orders[0]?.slotFrom ? `(1-й к ${r.orders[0].slotFrom})` : ''}
                         </span>
                       )}
@@ -1456,19 +1456,19 @@ export function DashboardClient({ user }: { user: User }) {
                       <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
 
                         {actualDepartureMs && (
-                          <span style={{ fontSize: 11, background: "#fffbeb", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #fde68a" }}>
+                          <span style={{ fontSize: 11, background: "var(--color-warn-bg)", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #fde68a" }}>
                             📦 Выехал: {new Date(actualDepartureMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         )}
 
                         {r.baseArrivalTime && (
-                          <span style={{ fontSize: 11, background: "var(--color-accent-soft)", color: "var(--color-accent)", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #bfdbfe" }}>
+                          <span style={{ fontSize: 11, background: "var(--color-accent-soft)", color: "var(--color-accent-fg)", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #bfdbfe" }}>
                             🏠 На базе: {r.baseArrivalTime}
                           </span>
                         )}
 
                         {finishedMs && (
-                          <span style={{ fontSize: 11, background: "#ecfdf5", color: "var(--color-green)", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #a7f3d0" }}>
+                          <span style={{ fontSize: 11, background: "var(--color-ok-bg)", color: "var(--color-green)", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #a7f3d0" }}>
                             ✅ Завершил: {new Date(finishedMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         )}
@@ -1493,7 +1493,7 @@ export function DashboardClient({ user }: { user: User }) {
         <>
           {editingRouteId && (
             <div style={{ marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-accent)" }}>Редактирование маршрута</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-accent-fg)" }}>Редактирование маршрута</span>
               <div style={{ display: "flex", gap: 12 }}>
                 <button onClick={handleDeleteRoute} disabled={bulkSaving} style={{ background: "none", border: "none", color: "#d94040", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>🗑 Удалить</button>
                 <button onClick={() => { setEditingRouteId(null); setBulkSelectedIds([]); setRouteTabMode("current"); }} style={{ background: "none", border: "none", color: "var(--color-text-2)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Отменить</button>
@@ -1522,7 +1522,7 @@ export function DashboardClient({ user }: { user: User }) {
                 <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 5 }}>
 
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 12, color: "var(--color-accent)", fontWeight: 700 }}>💡 Выезд:</span>
+                    <span style={{ fontSize: 12, color: "var(--color-accent-fg)", fontWeight: 700 }}>💡 Выезд:</span>
 
 
                     <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
@@ -1546,9 +1546,9 @@ export function DashboardClient({ user }: { user: User }) {
                           }}
                           style={{
                             padding: "4px 24px 4px 6px", // Место под кастомную стрелочку
-                            borderRadius: 6, border: "1px solid var(--color-accent)",
+                            borderRadius: 6, border: "1px solid var(--color-accent-fg)",
                             outline: "none", fontWeight: 700, fontFamily: "monospace",
-                            fontSize: 13, color: "var(--color-accent)", background: "var(--color-card)",
+                            fontSize: 13, color: "var(--color-accent-fg)", background: "var(--color-card)",
                             width: "100%"
                           }}
                         />
@@ -1559,7 +1559,7 @@ export function DashboardClient({ user }: { user: User }) {
                           style={{
                             position: "absolute", right: 0, top: 0, bottom: 0, width: 24,
                             display: "flex", alignItems: "center", justifyContent: "center",
-                            cursor: "pointer", color: "var(--color-accent)", fontSize: 10
+                            cursor: "pointer", color: "var(--color-accent-fg)", fontSize: 10
                           }}
                         >
                           ▼
@@ -1576,7 +1576,7 @@ export function DashboardClient({ user }: { user: User }) {
 
                             <div style={{
                               position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4,
-                              background: "var(--color-card)", border: "1px solid var(--color-accent)", borderRadius: 6,
+                              background: "var(--color-card)", border: "1px solid var(--color-accent-fg)", borderRadius: 6,
                               zIndex: 100, maxHeight: 180, overflowY: "auto",
                               boxShadow: "0 4px 12px rgba(0,0,0,0.15)"
                             }}>
@@ -1665,7 +1665,7 @@ export function DashboardClient({ user }: { user: User }) {
                           title="Принять расчётное время"
                           style={{
                             background: "#f0f5ff", border: "1px dashed #93b4ff",
-                            color: "var(--color-accent)", padding: "3px 9px", borderRadius: 20,
+                            color: "var(--color-accent-fg)", padding: "3px 9px", borderRadius: 20,
                             fontSize: 11, fontWeight: 700, cursor: "pointer",
                             transition: "all 0.15s"
                           }}
@@ -1697,7 +1697,7 @@ export function DashboardClient({ user }: { user: User }) {
           {/* 🔥 НОВЫЙ БЛОК: ФОЛБЭК РУЧНОГО ВВОДА */}
           {/* Показывается, если выбраны точки, но routeTotals от Яндекса так и не пришел */}
           {bulkSelectedIds.length > 0 && !routeTotals && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, background: "#fff8f8", padding: "10px 14px", borderRadius: 8, border: "1px dashed #fecaca" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, background: "var(--color-danger-bg)", padding: "10px 14px", borderRadius: 8, border: "1px dashed #fecaca" }}>
               <span style={{ fontSize: 12, color: "#d94040", fontWeight: 700 }}>
                 {isCalculatingRoute ? "⏳ Ждем Яндекс..." : "⚠️ Яндекс недоступен."} Укажите выезд:
               </span>
@@ -1724,7 +1724,7 @@ export function DashboardClient({ user }: { user: User }) {
           )}
 
           <div style={{ display: "flex", gap: 10, marginBottom: 20, flexDirection: "column" }}>
-            <button onClick={optimizeRoute} style={{ ...s.actionBtn, background: "#f4f7ff", color: "var(--color-accent)", border: "1px solid #c9d8ff" }}>✨ Умная оптимизация (Время + Расстояние)</button>
+            <button onClick={optimizeRoute} style={{ ...s.actionBtn, background: "#f4f7ff", color: "var(--color-accent-fg)", border: "1px solid #c9d8ff" }}>✨ Умная оптимизация (Время + Расстояние)</button>
             {selectedRouteOrders.length > 0 && (
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={() => handleOpenRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border)" }}>🗺️ Открыть в Яндексе</button>
@@ -1793,7 +1793,7 @@ export function DashboardClient({ user }: { user: User }) {
               const actualDepartureMs = pickedUpTimes.length > 0 ? Math.min(...pickedUpTimes.map((d: string) => new Date(d).getTime())) : null;
 
               const departureUI = actualDepartureMs ? (
-                <div style={{ fontSize: 13, color: "#f59e0b", fontWeight: 800, marginBottom: 8, paddingLeft: 8, display: "flex", alignItems: "center", gap: 6, background: "#fffbeb", padding: "8px 12px", borderRadius: 8, border: "1px solid #fde68a" }}>
+                <div style={{ fontSize: 13, color: "#f59e0b", fontWeight: 800, marginBottom: 8, paddingLeft: 8, display: "flex", alignItems: "center", gap: 6, background: "var(--color-warn-bg)", padding: "8px 12px", borderRadius: 8, border: "1px solid #fde68a" }}>
                   📦 Забрал в {new Date(actualDepartureMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
                 </div>
               ) : null;
@@ -1804,7 +1804,7 @@ export function DashboardClient({ user }: { user: User }) {
                   {selectedRouteOrders.map((o: any, index: number) => {
                     const color = slotColor(o);
                     const st = ROUTE_STATUS_MAP[o.status] || ROUTE_STATUS_MAP.NEW;
-                    const etaInfo = calculatedEtas[o.id] || { type: "NEW", timeStr: "—", color: "var(--color-accent)" };
+                    const etaInfo = calculatedEtas[o.id] || { type: "NEW", timeStr: "—", color: "var(--color-accent-fg)" };
 
                     const isLateCalc = o.slotTo && etaInfo.timeStr !== "—" && parseTime(etaInfo.timeStr) > parseTime(o.slotTo);
                     const displayColor = isLateCalc ? "#d94040" : etaInfo.color;
@@ -1824,7 +1824,7 @@ export function DashboardClient({ user }: { user: User }) {
                         )}
 
                         {/* 🔥 2. ПРИМЕНЯЕМ ФОН ТОЛЬКО ДЛЯ АДМИНА */}
-                        <div style={{ padding: "10px 12px 10px 16px", background: o.status === "IN_DELIVERY" ? "#fffbeb" : (showRedBg ? "#fff8f8" : "#fff"), border: showRedBg ? "1px solid #fecaca" : "1px solid var(--color-border)", borderRadius: 8, display: "flex", gap: 12, alignItems: "center", position: "relative", overflow: "hidden" }}>
+                        <div style={{ padding: "10px 12px 10px 16px", background: o.status === "IN_DELIVERY" ? "var(--color-warn-bg)" : (showRedBg ? "var(--color-danger-bg)" : "var(--color-card)"), border: showRedBg ? "1px solid #fecaca" : "1px solid var(--color-border)", borderRadius: 8, display: "flex", gap: 12, alignItems: "center", position: "relative", overflow: "hidden" }}>
                           <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: 4, background: color }} />
 
                           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -1973,7 +1973,7 @@ export function DashboardClient({ user }: { user: User }) {
             <div style={{ position: "relative" }}>
               <button
                 onClick={() => setIsStatusMenuOpen(!isStatusMenuOpen)}
-                style={{ ...topbarBtnStyle, background: selectedStatuses.length > 0 ? "var(--color-accent-soft)" : "#fff", borderColor: selectedStatuses.length > 0 ? "var(--color-accent)" : "var(--color-border)" }}
+                style={{ ...topbarBtnStyle, background: selectedStatuses.length > 0 ? "var(--color-accent-soft)" : "var(--color-card)", borderColor: selectedStatuses.length > 0 ? "var(--color-accent)" : "var(--color-border)" }}
               >
                 <span style={{ color: selectedStatuses.length > 0 ? "var(--color-accent)" : "inherit" }}>
                   Статусы: {selectedStatuses.length === 0 ? "Все" : `(${selectedStatuses.length})`}
@@ -2008,7 +2008,7 @@ export function DashboardClient({ user }: { user: User }) {
             <div style={{ position: "relative" }}>
               <button
                 onClick={() => setIsCourierMenuOpen(!isCourierMenuOpen)}
-                style={{ ...topbarBtnStyle, background: selectedCouriers.length > 0 ? "var(--color-accent-soft)" : "#fff", borderColor: selectedCouriers.length > 0 ? "var(--color-accent)" : "var(--color-border)" }}
+                style={{ ...topbarBtnStyle, background: selectedCouriers.length > 0 ? "var(--color-accent-soft)" : "var(--color-card)", borderColor: selectedCouriers.length > 0 ? "var(--color-accent)" : "var(--color-border)" }}
               >
                 <span style={{ color: selectedCouriers.length > 0 ? "var(--color-accent)" : "inherit" }}>
                   Курьеры: {selectedCouriers.length === 0 ? "Все" : `(${selectedCouriers.length})`}
@@ -2040,7 +2040,7 @@ export function DashboardClient({ user }: { user: User }) {
               )}
             </div>
 
-            <button onClick={() => { setIsBulkMode(!isBulkMode); setRouteTab("map"); setBulkSelectedIds([]); setSelectedId(null); setIsDetailVisible(false); setRouteTabMode("new"); setEditingRouteId(null); setBulkCourier(""); setRouteType("mt"); }} style={{ ...topbarBtnStyle, background: isBulkMode ? "var(--color-text)" : "#fff", color: isBulkMode ? "#fff" : "var(--color-text)", borderColor: isBulkMode ? "var(--color-text)" : "var(--color-border)" }}>
+            <button onClick={() => { setIsBulkMode(!isBulkMode); setRouteTab("map"); setBulkSelectedIds([]); setSelectedId(null); setIsDetailVisible(false); setRouteTabMode("new"); setEditingRouteId(null); setBulkCourier(""); setRouteType("mt"); }} style={{ ...topbarBtnStyle, background: isBulkMode ? "var(--color-text)" : "var(--color-card)", color: isBulkMode ? "#fff" : "var(--color-text)", borderColor: isBulkMode ? "var(--color-text)" : "var(--color-border)" }}>
               {isBulkMode ? "✕ Маршруты" : "📍 Маршруты"}
             </button>
 
@@ -2059,7 +2059,7 @@ export function DashboardClient({ user }: { user: User }) {
         <div style={{ position: "relative", flexShrink: 0 }}>
           <button
             onClick={() => setShowMapSettings(!showMapSettings)}
-            style={{ ...topbarBtnStyle, background: showMapSettings ? "var(--color-accent-soft)" : "#fff", borderColor: showMapSettings ? "var(--color-accent)" : "var(--color-border)", color: showMapSettings ? "var(--color-accent)" : "var(--color-text)" }}
+            style={{ ...topbarBtnStyle, background: showMapSettings ? "var(--color-accent-soft)" : "var(--color-card)", borderColor: showMapSettings ? "var(--color-accent)" : "var(--color-border)", color: showMapSettings ? "var(--color-accent)" : "var(--color-text)" }}
             title="Настройки карты"
           >
             🗺️ <span style={{ fontSize: 10 }}>▼</span>
@@ -2160,7 +2160,7 @@ export function DashboardClient({ user }: { user: User }) {
 
             <div style={{ position: "relative", flexShrink: 0 }}>
               <button onClick={() => setIsStatusMenuOpen(!isStatusMenuOpen)}
-                style={{ ...topbarBtnStyle, height: 30, fontSize: 12, background: selectedStatuses.length > 0 ? "var(--color-accent-soft)" : "#fff", borderColor: selectedStatuses.length > 0 ? "var(--color-accent)" : "var(--color-border)" }}>
+                style={{ ...topbarBtnStyle, height: 30, fontSize: 12, background: selectedStatuses.length > 0 ? "var(--color-accent-soft)" : "var(--color-card)", borderColor: selectedStatuses.length > 0 ? "var(--color-accent)" : "var(--color-border)" }}>
                 <span style={{ color: selectedStatuses.length > 0 ? "var(--color-accent)" : "inherit" }}>Статусы: {selectedStatuses.length === 0 ? "Все" : `(${selectedStatuses.length})`}</span>
                 <span style={{ fontSize: 10 }}>▼</span>
               </button>
@@ -2190,7 +2190,7 @@ export function DashboardClient({ user }: { user: User }) {
 
             <div style={{ position: "relative", flexShrink: 0 }}>
               <button onClick={() => setIsCourierMenuOpen(!isCourierMenuOpen)}
-                style={{ ...topbarBtnStyle, height: 30, fontSize: 12, background: selectedCouriers.length > 0 ? "var(--color-accent-soft)" : "#fff", borderColor: selectedCouriers.length > 0 ? "var(--color-accent)" : "var(--color-border)" }}>
+                style={{ ...topbarBtnStyle, height: 30, fontSize: 12, background: selectedCouriers.length > 0 ? "var(--color-accent-soft)" : "var(--color-card)", borderColor: selectedCouriers.length > 0 ? "var(--color-accent)" : "var(--color-border)" }}>
                 <span style={{ color: selectedCouriers.length > 0 ? "var(--color-accent)" : "inherit" }}>Курьеры: {selectedCouriers.length === 0 ? "Все" : `(${selectedCouriers.length})`}</span>
                 <span style={{ fontSize: 10 }}>▼</span>
               </button>
@@ -2219,7 +2219,7 @@ export function DashboardClient({ user }: { user: User }) {
               )}
             </div>
 
-            <button onClick={() => { setIsBulkMode(!isBulkMode); setRouteTab("map"); setBulkSelectedIds([]); setSelectedId(null); setIsDetailVisible(false); setRouteTabMode("new"); setEditingRouteId(null); setBulkCourier(""); setRouteType("mt"); }} style={{ ...topbarBtnStyle, height: 30, fontSize: 12, flexShrink: 0, background: isBulkMode ? "var(--color-text)" : "#fff", color: isBulkMode ? "#fff" : "var(--color-text)", borderColor: isBulkMode ? "var(--color-text)" : "var(--color-border)" }}>
+            <button onClick={() => { setIsBulkMode(!isBulkMode); setRouteTab("map"); setBulkSelectedIds([]); setSelectedId(null); setIsDetailVisible(false); setRouteTabMode("new"); setEditingRouteId(null); setBulkCourier(""); setRouteType("mt"); }} style={{ ...topbarBtnStyle, height: 30, fontSize: 12, flexShrink: 0, background: isBulkMode ? "var(--color-text)" : "var(--color-card)", color: isBulkMode ? "#fff" : "var(--color-text)", borderColor: isBulkMode ? "var(--color-text)" : "var(--color-border)" }}>
               {isBulkMode ? "✕ Маршруты" : "📍 Маршруты"}
             </button>
 
@@ -2239,8 +2239,8 @@ export function DashboardClient({ user }: { user: User }) {
             </div>
           ) : (
             <div style={{ display: "flex", padding: "8px 10px", background: "var(--color-card)", gap: 8, flexShrink: 0, borderBottom: "1px solid var(--color-border)", zIndex: 10 }}>
-              <button onClick={() => setRouteTab("map")} style={{ ...s.routeTabBtn, flex: 1, background: routeTab === "map" ? "var(--color-accent-soft)" : "#fff", color: routeTab === "map" ? "var(--color-accent)" : "var(--color-text-2)" }}>📍 Точки на карте</button>
-              <button onClick={() => setRouteTab("list")} style={{ ...s.routeTabBtn, flex: 1, background: routeTab === "list" ? "var(--color-accent-soft)" : "#fff", color: routeTab === "list" ? "var(--color-accent)" : "var(--color-text-2)" }}>📋 Управление</button>
+              <button onClick={() => setRouteTab("map")} style={{ ...s.routeTabBtn, flex: 1, background: routeTab === "map" ? "var(--color-accent-soft)" : "var(--color-card)", color: routeTab === "map" ? "var(--color-accent)" : "var(--color-text-2)" }}>📍 Точки на карте</button>
+              <button onClick={() => setRouteTab("list")} style={{ ...s.routeTabBtn, flex: 1, background: routeTab === "list" ? "var(--color-accent-soft)" : "var(--color-card)", color: routeTab === "list" ? "var(--color-accent)" : "var(--color-text-2)" }}>📋 Управление</button>
             </div>
           )}
         </>
@@ -2368,7 +2368,7 @@ export function DashboardClient({ user }: { user: User }) {
                     const color = slotColor(o as any);
                     const late = isOrderLate(o);
                     return (
-                      <tr id={`row-${o.id}`} key={o.id} style={{ background: selectedId === o.id ? "var(--color-accent-soft)" : i % 2 === 0 ? "#fff" : "var(--color-surface)", cursor: "pointer" }} onClick={() => { setSelectedId(o.id); setIsListVisible(true); setIsDetailVisible(true); }}>
+                      <tr id={`row-${o.id}`} key={o.id} style={{ background: selectedId === o.id ? "var(--color-accent-soft)" : i % 2 === 0 ? "var(--color-card)" : "var(--color-surface)", cursor: "pointer" }} onClick={() => { setSelectedId(o.id); setIsListVisible(true); setIsDetailVisible(true); }}>
                         <td style={{ ...s.td, whiteSpace: "nowrap" }}><span style={{ ...s.statusDot, background: late ? "#d94040" : color }} /><span style={{ fontFamily: "monospace", fontSize: 10, color: "var(--color-text-3)" }}>{o.externalId ?? o.crmId}</span></td>
                         <td style={{ ...s.td, whiteSpace: "nowrap", color: late ? "#d94040" : color }}>{late ? "⏰ " : ""}{o.slotRaw ?? "—"}</td>
                         <td style={{ ...s.td, whiteSpace: "nowrap" }}>
@@ -2391,7 +2391,7 @@ export function DashboardClient({ user }: { user: User }) {
                         <td style={{ ...s.td, whiteSpace: "nowrap", color: o.wrongPrice ? "#d94040" : "inherit", fontWeight: o.wrongPrice ? 700 : 500 }}>{o.price ? `${o.price} ₽` : "—"}</td>
                         <td style={{ ...s.td, whiteSpace: "nowrap" }}><span style={{ padding: "2px 7px", borderRadius: 10, fontSize: 10, fontWeight: 500, background: `${color}18`, color }}>{STATUS_LABELS[o.status] ?? o.status}</span></td>
                         <td style={{ ...s.td, minWidth: 140, maxWidth: 200, color: "var(--color-text-2)" }}>{o.comment ?? "—"}</td>
-                        <td style={{ ...s.td, minWidth: 120, maxWidth: 180, color: "var(--color-accent)" }}>{o.opComment ?? "—"}</td>
+                        <td style={{ ...s.td, minWidth: 120, maxWidth: 180, color: "var(--color-accent-fg)" }}>{o.opComment ?? "—"}</td>
                         <td style={{ ...s.td, minWidth: 140, maxWidth: 220, color: "var(--color-text-2)" }}>{o.items ?? "—"}</td>
                         <td style={{ ...s.td, whiteSpace: "nowrap", color: "var(--color-text-3)", fontSize: 10 }}>{o.crmCreatedAt ? new Date(o.crmCreatedAt).toLocaleString("ru", { timeZone: "Europe/Moscow", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
                         <td style={{ ...s.td, whiteSpace: "nowrap", color: o.changedAt ? "var(--color-text)" : "var(--color-text-3)", fontSize: 10 }}>{(o.changedAt || o.updatedAt) ? new Date(o.changedAt || o.updatedAt!).toLocaleString("ru", { timeZone: "Europe/Moscow", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
@@ -2429,7 +2429,7 @@ export function DashboardClient({ user }: { user: User }) {
 
 function ViewToggleBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button onClick={onClick} style={{ flex: 1, padding: "6px", borderRadius: 8, fontSize: 11, fontWeight: 600, border: "none", cursor: "pointer", background: active ? "var(--color-accent)" : "#fff", color: active ? "#fff" : "var(--color-text-2)", boxShadow: active ? "0 2px 8px rgba(74,122,255,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", transition: "all 0.15s" }}>
+    <button onClick={onClick} style={{ flex: 1, padding: "6px", borderRadius: 8, fontSize: 11, fontWeight: 600, border: "none", cursor: "pointer", background: active ? "var(--color-accent)" : "var(--color-card)", color: active ? "#fff" : "var(--color-text-2)", boxShadow: active ? "0 2px 8px rgba(74,122,255,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", transition: "all 0.15s" }}>
       {children}
     </button>
   );
@@ -2545,7 +2545,7 @@ const s: Record<string, React.CSSProperties> = {
   expandSideBtn: { background: "var(--color-card)", border: "1px solid var(--color-border)", borderLeft: "none", borderRadius: "0 8px 8px 0", padding: "10px 8px", cursor: "pointer", color: "var(--color-text-2)", fontSize: 13, boxShadow: "2px 2px 8px rgba(0,0,0,0.06)" },
   card: { padding: "9px 11px", borderRadius: 8, marginBottom: 4, background: "var(--color-surface)", border: "1px solid var(--color-border)", cursor: "pointer", transition: "all .12s" },
   cardSelected: { background: "var(--color-accent-soft)", borderColor: "var(--color-accent)" },
-  cardInvalid: { borderColor: "rgba(217,64,64,0.3)", background: "#fff8f8" },
+  cardInvalid: { borderColor: "rgba(217,64,64,0.3)", background: "var(--color-danger-bg)" },
   cardRow1: { display: "flex", alignItems: "center", gap: 5, marginBottom: 4 },
   extId: { fontSize: 10, fontWeight: 600, color: "var(--color-text-3)", fontFamily: "monospace" },
   statusTag: { marginLeft: "auto", fontSize: 10, padding: "1px 6px", borderRadius: 10, fontWeight: 500 },

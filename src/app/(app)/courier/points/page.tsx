@@ -215,11 +215,11 @@ export default function CourierPointsPage() {
 
           {isCardMinimized ? (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--color-accent)" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--color-accent-fg)" }}>
                 {routeInfo ? `📍 ${routeInfo.distance} ⏱ ${routeInfo.duration}` : "⏳ Считаем..."}
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => setIsCardMinimized(false)} style={{ border: "none", background: "#f0f4ff", color: "var(--color-accent)", padding: "4px 8px", borderRadius: 6, fontSize: 12, fontWeight: 700 }}>Развернуть</button>
+                <button onClick={() => setIsCardMinimized(false)} style={{ border: "none", background: "#f0f4ff", color: "var(--color-accent-fg)", padding: "4px 8px", borderRadius: 6, fontSize: 12, fontWeight: 700 }}>Развернуть</button>
                 <button onClick={() => { setActiveOrderId(null); setRouteInfo(null); }} style={{ border: "none", background: "none", fontSize: 16, color: "var(--color-text-3)" }}>✕</button>
               </div>
             </div>
@@ -243,7 +243,7 @@ export default function CourierPointsPage() {
                 </div>
                 {routeInfo ? (
                   <div style={{ flex: 1, display: "flex", justifyContent: "flex-end", gap: 12, fontSize: 13, fontWeight: 700, color: "var(--color-text)" }}>
-                    <span>{routeInfo.distance}</span><span style={{ color: "var(--color-accent)" }}>{routeInfo.duration}</span>
+                    <span>{routeInfo.distance}</span><span style={{ color: "var(--color-accent-fg)" }}>{routeInfo.duration}</span>
                   </div>
                 ) : (
                   <div style={{ flex: 1, textAlign: "right", fontSize: 12, color: "var(--color-text-3)", fontWeight: 600 }}>{userLocation ? "Считаем..." : "Включите GPS"}</div>

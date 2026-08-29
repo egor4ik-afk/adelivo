@@ -13,6 +13,7 @@
     /* светлая тема — как было */
     --color-accent: #4a7aff;
     --color-accent-dark: #3d66e8;
+    --color-accent-fg: #4a7aff;   /* акцент как ТЕКСТ */
     --color-accent-soft: #eef3ff;
     --color-accent-soft-2: #dce6ff;
     --color-bg: #f5f4f0;
@@ -42,6 +43,11 @@
     --color-ok-text: #14532d;
     --color-ok-text-2: #15803d;
 
+    /* нижнее меню курьера */
+    --color-nav-bg: rgba(255,255,255,0.95);
+    --color-nav-active: #4a7aff;
+    --color-nav-shadow: 0 -2px 10px rgba(0,0,0,0.03);
+
     --slot-1: #1a9e5c;
     --slot-2: #4a7aff;
     --slot-3: #7c4dff;
@@ -70,6 +76,8 @@
   :root[data-ew-theme="dark"] {
     --color-accent: #5E6B7E;
     --color-accent-dark: #6E7C90;
+    --color-accent-fg: #9DB0C9;   /* акцент как ТЕКСТ: светлее заливки,
+                                    иначе на почти-чёрном читается тускло */
     --color-accent-soft: #1B2027;
     --color-accent-soft-2: #232A33;
 
@@ -98,6 +106,12 @@
     --color-ok-border: #1B3A2E;
     --color-ok-text: #6EE7B7;
     --color-ok-text-2: #34D399;
+
+    /* нижнее меню: подложка плотнее фона, активный пункт — светлый,
+       иначе стальной акцент на почти-чёрном читается тускло */
+    --color-nav-bg: rgba(18,18,20,0.94);
+    --color-nav-active: #ECECEE;
+    --color-nav-shadow: 0 -1px 0 rgba(255,255,255,0.04);
 
     --slot-1: #34D399;
     --slot-2: #8FA3BE;
@@ -176,6 +190,24 @@
 
 /* карты Яндекса заметно ярче интерфейса — приглушаем */
 :root[data-ew-theme="dark"] .ymaps-2-1-79-map, :root[data-ew-theme="dark"] .ymaps-3-map { filter: brightness(0.86) contrast(1.04); }
+
+
+/* ── Страховка от пропущенных светлых утилит ──────────────────
+   Если где-то в разметке остался bg-white или серый класс Tailwind,
+   в тёмной теме он не должен превращаться в белое пятно.            */
+:root[data-ew-theme="dark"] .bg-white { background-color: var(--color-card) !important; }
+:root[data-ew-theme="dark"] .bg-gray-50 { background-color: var(--color-surface) !important; }
+:root[data-ew-theme="dark"] .bg-gray-100 { background-color: var(--color-surface-2) !important; }
+:root[data-ew-theme="dark"] .bg-gray-200 { background-color: var(--color-border) !important; }
+:root[data-ew-theme="dark"] .border-gray-100,
+:root[data-ew-theme="dark"] .border-gray-200,
+:root[data-ew-theme="dark"] .border-gray-300 { border-color: var(--color-border) !important; }
+:root[data-ew-theme="dark"] .text-gray-900,
+:root[data-ew-theme="dark"] .text-gray-800 { color: var(--color-text) !important; }
+:root[data-ew-theme="dark"] .text-gray-700,
+:root[data-ew-theme="dark"] .text-gray-600 { color: var(--color-text-2) !important; }
+:root[data-ew-theme="dark"] .text-gray-500,
+:root[data-ew-theme="dark"] .text-gray-400 { color: var(--color-text-3) !important; }
 
 /* Скрытый горизонтальный скроллбар для топбара */
 .hide-scrollbar {

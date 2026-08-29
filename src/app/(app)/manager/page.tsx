@@ -74,7 +74,7 @@ const ContactBadge = ({ title, phone, name, isCourier }: { title?: string, phone
 
   return (
     <div className="flex flex-col gap-1.5 mt-1">
-      <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[var(--color-accent)] flex-wrap">
+      <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[var(--color-accent-fg)] flex-wrap">
         {title && <span className="text-[var(--color-text-2)] text-[10px] uppercase tracking-wider font-bold mr-1">{title}</span>}
         {name && <span className="text-[var(--color-text)]">👤 {name}</span>}
         {name && hasPhone && <span className="text-[var(--color-text-3)]">·</span>}
@@ -477,7 +477,7 @@ export default function ManagerDashboard() {
                             </div>
 
                             <div className="flex items-center shrink-0">
-                              <span className="bg-[var(--color-accent-soft)] text-[var(--color-accent)] px-2 py-0.5 rounded-md text-[11px] font-bold border border-[var(--color-accent-soft-2)] whitespace-nowrap">
+                              <span className="bg-[var(--color-accent-soft)] text-[var(--color-accent-fg)] px-2 py-0.5 rounded-md text-[11px] font-bold border border-[var(--color-accent-soft-2)] whitespace-nowrap">
                                 {route.orders?.length || 0} точ.
                               </span>
                             </div>
@@ -561,7 +561,7 @@ export default function ManagerDashboard() {
                   <div className="flex items-center gap-2 sm:gap-3">
                     <input type="checkbox" className="w-4 h-4 sm:w-5 sm:h-5 accent-[var(--color-text)] rounded cursor-pointer shrink-0" checked={isAllGlobalSelected} onChange={toggleAllGlobalOrders} />
                     <span className="font-bold text-[var(--color-text)] text-[13px] sm:text-[15px]">Выбрать все {searchQuery ? 'найденные' : ''}</span>
-                    {selectedOrders.size > 0 && <span className="bg-[var(--color-accent-soft)] text-[var(--color-accent)] px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md sm:rounded-lg text-[11px] sm:text-sm font-bold border border-[var(--color-accent-soft-2)] ml-1 sm:ml-2 shadow-sm">Выбрано: {selectedOrders.size}</span>}
+                    {selectedOrders.size > 0 && <span className="bg-[var(--color-accent-soft)] text-[var(--color-accent-fg)] px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md sm:rounded-lg text-[11px] sm:text-sm font-bold border border-[var(--color-accent-soft-2)] ml-1 sm:ml-2 shadow-sm">Выбрано: {selectedOrders.size}</span>}
                   </div>
                   <div className="flex items-center gap-2 w-full sm:w-auto">
                     <button onClick={massUpdateToAssembling} disabled={selectedOrders.size === 0 || isMassUpdating} className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all shadow-sm flex items-center justify-center gap-2 ${selectedOrders.size > 0 ? 'bg-[var(--color-warn-bg)] text-[var(--color-warn-text)] border border-[var(--color-warn-border)] hover:bg-[var(--color-warn-bg-2)]' : 'bg-[var(--color-bg)] text-[var(--color-text-3)] cursor-not-allowed border border-[var(--color-border)]'}`}>
@@ -624,7 +624,7 @@ export default function ManagerDashboard() {
 
                             {courierPhone !== "—" && (
                               <div className="flex items-center gap-1.5 ml-1">
-                                <a href={`tel:${courierPhone}`} onClick={e => e.stopPropagation()} className="text-[var(--color-accent)] font-semibold text-[11px] sm:text-[13px] hover:underline whitespace-nowrap">
+                                <a href={`tel:${courierPhone}`} onClick={e => e.stopPropagation()} className="text-[var(--color-accent-fg)] font-semibold text-[11px] sm:text-[13px] hover:underline whitespace-nowrap">
                                   📞 {courierPhone}
                                 </a>
                                 {cleanPhoneForTg && (
@@ -681,7 +681,7 @@ export default function ManagerDashboard() {
                                             onClick={(e) => e.stopPropagation()}
                                             title="Редактировать заказ"
                                             aria-label="Редактировать заказ"
-                                            className="w-6 h-6 rounded-md border border-[var(--color-border)] flex items-center justify-center text-[var(--color-text-3)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)] transition-colors shrink-0"
+                                            className="w-6 h-6 rounded-md border border-[var(--color-border)] flex items-center justify-center text-[var(--color-text-3)] hover:text-[var(--color-accent-fg)] hover:border-[var(--color-accent)] transition-colors shrink-0"
                                           >
                                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                               <path d="M12 20h9" />

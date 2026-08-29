@@ -44,9 +44,9 @@ const STATUSES = [
 /* ── мелкие примитивы в стиле кабинета ─────────────────────── */
 const label = "block text-[11px] font-bold uppercase tracking-wider text-[var(--color-text-2)] mb-1.5";
 const input =
-  "w-full px-3 py-2.5 rounded-lg border border-[var(--color-border)] bg-white text-[13px] text-[var(--color-text)] " +
-  "outline-none transition-colors focus:border-[var(--color-accent)] placeholder:text-[#c4c0b8]";
-const card = "bg-white rounded-2xl border border-[var(--color-border)] p-4 sm:p-5 shadow-sm";
+  "w-full px-3 py-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] text-[13px] text-[var(--color-text)] " +
+  "outline-none transition-colors focus:border-[var(--color-accent)] placeholder:text-[var(--color-text-3)]";
+const card = "bg-[var(--color-card)] rounded-2xl border border-[var(--color-border)] p-4 sm:p-5 shadow-sm";
 
 function Field({
   id, title, children, hint, wide,
@@ -111,7 +111,7 @@ export function OrderForm({
   return (
     <div className="min-h-screen bg-[var(--color-bg)]">
       {/* Шапка */}
-      <header className="bg-white shadow-sm border-b border-gray-200 px-4 sm:px-6 py-4 flex justify-between items-center sticky top-0 z-20">
+      <header className="bg-[var(--color-card)] shadow-sm border-b border-[var(--color-border)] px-4 sm:px-6 py-4 flex justify-between items-center sticky top-0 z-20">
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => router.back()}
@@ -121,7 +121,7 @@ export function OrderForm({
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
           </button>
-          <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight truncate">
+          <h1 className="text-lg sm:text-xl font-bold text-[var(--color-text)] tracking-tight truncate">
             {mode === "create" ? "Новый заказ" : `Заказ ${v.externalId || ""}`}
           </h1>
         </div>
@@ -129,7 +129,7 @@ export function OrderForm({
           onClick={submit}
           disabled={saving}
           className={`px-4 sm:px-5 py-2 rounded-lg text-sm font-bold shadow-sm transition-all ${
-            saving ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-dark)]"
+            saving ? "bg-[var(--color-border)] text-[var(--color-text-3)] cursor-not-allowed" : "bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-dark)]"
           }`}
         >
           {saving ? "Сохраняем…" : mode === "create" ? "Создать заказ" : "Сохранить"}
@@ -138,7 +138,7 @@ export function OrderForm({
 
       <main className="max-w-[900px] mx-auto p-3 sm:p-6 flex flex-col gap-4 sm:gap-5">
         {error && (
-          <div className="rounded-xl border border-red-200 bg-red-50 text-red-700 px-4 py-3 text-[13px] font-medium">
+          <div className="rounded-xl border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] text-[var(--color-danger-text)] px-4 py-3 text-[13px] font-medium">
             {error}
           </div>
         )}
@@ -224,7 +224,7 @@ export function OrderForm({
             onClick={submit}
             disabled={saving}
             className={`flex-1 py-3 rounded-xl text-sm font-bold shadow-sm transition-all ${
-              saving ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-dark)]"
+              saving ? "bg-[var(--color-border)] text-[var(--color-text-3)] cursor-not-allowed" : "bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-dark)]"
             }`}
           >
             {saving ? "Сохраняем…" : mode === "create" ? "Создать заказ" : "Сохранить изменения"}

@@ -4,8 +4,8 @@ import { useState, useEffect } from "react";
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
   NEW: { label: "Новый", color: "#d94040", bg: "#fef2f2" },
-  ASSIGNED: { label: "Назначен", color: "var(--color-accent)", bg: "var(--color-accent-soft)" },
-  IN_DELIVERY: { label: "🚀 В пути", color: "var(--color-green)", bg: "#ecfdf5" },
+  ASSIGNED: { label: "Назначен", color: "var(--color-accent-fg)", bg: "var(--color-accent-soft)" },
+  IN_DELIVERY: { label: "🚀 В пути", color: "var(--color-green)", bg: "var(--color-ok-bg)" },
   DELIVERED: { label: "✅ Доставлен", color: "var(--color-text-2)", bg: "var(--color-bg)" },
   RETURNED: { label: "↩️ Возврат", color: "#d94040", bg: "#fef2f2" },
   CANCELLED: { label: "❌ Отменен", color: "var(--color-text-3)", bg: "var(--color-bg)" }
@@ -107,13 +107,13 @@ export function RouteEditor({
   const availableToADD = globalFreeOrders.filter((free: any) => !orders.find(lo => lo.id === free.id));
 
   return (
-    <div style={{ border: hasChanges ? "2px solid var(--color-accent)" : "1px solid #f0efe9", borderRadius: 12, padding: isMobile ? 12 : 16, background: hasChanges ? "#f4f7ff" : "#fff", transition: "all 0.3s", position: "relative" }}>
+    <div style={{ border: hasChanges ? "2px solid var(--color-accent)" : "1px solid #f0efe9", borderRadius: 12, padding: isMobile ? 12 : 16, background: hasChanges ? "#f4f7ff" : "var(--color-card)", transition: "all 0.3s", position: "relative" }}>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
 
         <div>
           <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>
-            Маршрут {routeName} {hasChanges && <span style={{ color: "var(--color-accent)", fontSize: 12, marginLeft: 8 }}>*не сохранено</span>}
+            Маршрут {routeName} {hasChanges && <span style={{ color: "var(--color-accent-fg)", fontSize: 12, marginLeft: 8 }}>*не сохранено</span>}
           </h4>
 
           {/* 🔥 Время выезда */}
@@ -122,7 +122,7 @@ export function RouteEditor({
               // Курьер выехал — показываем факт
               <span style={{
                 display: "inline-flex", alignItems: "center", gap: 6,
-                padding: "4px 10px", borderRadius: 6, background: "#fffbeb",
+                padding: "4px 10px", borderRadius: 6, background: "var(--color-warn-bg)",
                 border: "1px solid #fde68a", fontSize: 13, fontWeight: 700,
                 color: "#d97706", fontFamily: "monospace"
               }}>
@@ -131,7 +131,7 @@ export function RouteEditor({
             ) : (
               // Не выехал — редактируемый инпут с дропдауном
               <>
-                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-accent)" }}>💡 Выезд:</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-accent-fg)" }}>💡 Выезд:</span>
                 <div style={{ position: "relative", width: 86, flexShrink: 0 }}>
                   <input
                     type="text"
@@ -147,14 +147,14 @@ export function RouteEditor({
                     }}
                     onBlur={() => savePlannedTime(plannedTime)}
                     style={{
-                      padding: "4px 24px 4px 6px", borderRadius: 6, border: "1px solid var(--color-accent)",
+                      padding: "4px 24px 4px 6px", borderRadius: 6, border: "1px solid var(--color-accent-fg)",
                       outline: "none", fontWeight: 700, fontFamily: "monospace",
-                      fontSize: 13, color: "var(--color-accent)", background: "var(--color-card)", width: "100%"
+                      fontSize: 13, color: "var(--color-accent-fg)", background: "var(--color-card)", width: "100%"
                     }}
                   />
                   <div
                     onClick={() => setShowTimeDropdown(!showTimeDropdown)}
-                    style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 24, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--color-accent)", fontSize: 10 }}
+                    style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 24, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--color-accent-fg)", fontSize: 10 }}
                   >
                     ▼
                   </div>
@@ -162,7 +162,7 @@ export function RouteEditor({
                   {showTimeDropdown && (
                     <>
                       <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 99 }} onClick={() => setShowTimeDropdown(false)} />
-                      <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: "var(--color-card)", border: "1px solid var(--color-accent)", borderRadius: 6, zIndex: 100, maxHeight: 180, overflowY: "auto", boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>
+                      <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: "var(--color-card)", border: "1px solid var(--color-accent-fg)", borderRadius: 6, zIndex: 100, maxHeight: 180, overflowY: "auto", boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>
                         {(() => {
                           const times: string[] = [];
                           for (let h = 8; h <= 23; h++) {
@@ -281,7 +281,7 @@ export function RouteEditor({
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                   <div style={{ fontSize: 11, color: "var(--color-text-3)", textTransform: "uppercase" }}>Получатель</div>
                   <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text)" }}>
-                    {phone !== "—" ? <a href={`tel:${phone}`} style={{ color: "var(--color-accent)", textDecoration: "none" }}>{phone}</a> : "—"}
+                    {phone !== "—" ? <a href={`tel:${phone}`} style={{ color: "var(--color-accent-fg)", textDecoration: "none" }}>{phone}</a> : "—"}
                   </div>
                 </div>
                 {o.items && <div style={{ fontSize: 11, color: "var(--color-text-2)", borderTop: "1px solid #f0efe9", paddingTop: 6 }}>{o.items}</div>}
@@ -298,7 +298,7 @@ export function RouteEditor({
 
       {availableToADD.length > 0 && (
         <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--color-border)" }}>
-          <select value="" onChange={(e) => add(e.target.value)} style={{ width: "100%", maxWidth: isMobile ? "100%" : 450, background: "rgba(74, 122, 255, 0.08)", color: "var(--color-accent)", border: "none", padding: "10px 14px", borderRadius: 8, fontSize: 13, fontWeight: 700, outline: "none", cursor: "pointer", textOverflow: "ellipsis" }}>
+          <select value="" onChange={(e) => add(e.target.value)} style={{ width: "100%", maxWidth: isMobile ? "100%" : 450, background: "rgba(74, 122, 255, 0.08)", color: "var(--color-accent-fg)", border: "none", padding: "10px 14px", borderRadius: 8, fontSize: 13, fontWeight: 700, outline: "none", cursor: "pointer", textOverflow: "ellipsis" }}>
             <option value="" disabled>➕ Добавить свободную точку в маршрут...</option>
             {availableToADD.map((free: any) => {
               const belongsToOther = free.courierId && free.courierId !== courierId;

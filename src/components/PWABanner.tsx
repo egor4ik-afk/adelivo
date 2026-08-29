@@ -40,7 +40,7 @@ export function PWABanner() {
       <div style={{ background: "var(--color-accent)", color: "#fff", padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10000 }}>
         <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.3 }}>Установите приложение для быстрой работы</div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <button onClick={async () => { deferredPrompt.prompt(); await deferredPrompt.userChoice; setDeferredPrompt(null); }} style={{ background: "var(--color-card)", color: "var(--color-accent)", border: "none", padding: "6px 12px", borderRadius: 8, fontWeight: 700, fontSize: 12 }}>Установить</button>
+          <button onClick={async () => { deferredPrompt.prompt(); await deferredPrompt.userChoice; setDeferredPrompt(null); }} style={{ background: "var(--color-card)", color: "var(--color-accent-fg)", border: "none", padding: "6px 12px", borderRadius: 8, fontWeight: 700, fontSize: 12 }}>Установить</button>
           <button onClick={() => setClosed(true)} style={{ background: "none", border: "none", color: "#fff", fontSize: 20, padding: 0 }}>✕</button>
         </div>
       </div>

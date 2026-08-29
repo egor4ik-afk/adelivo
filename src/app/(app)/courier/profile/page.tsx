@@ -5,6 +5,7 @@ import { usePushNotifications } from "@/components/usePushNotifications";
 import { IMaskInput } from "react-imask";
 import imageCompression from "browser-image-compression";
 import { performLogout } from '@/lib/logout'; // 🔥 Импортируем
+import { AppThemeRow } from "@/components/theme/AppThemeRow";
 
 interface Profile {
   id: string; 
@@ -89,7 +90,7 @@ function AddressSuggestInput({ value, onChange, active }: { value: string, onCha
       value={value} 
       onChange={e => onChangeRef.current(e.target.value)} 
       placeholder="Москва, ул. Пушкина, д. 1" 
-      style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--color-accent)", outline: "none", fontSize: 15, boxSizing: "border-box", display: "block" }} 
+      style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--color-accent-fg)", outline: "none", fontSize: 15, boxSizing: "border-box", display: "block" }} 
     />
   );
 }
@@ -417,6 +418,11 @@ export default function CourierProfilePage() {
           </div>
         </div>
 
+        {/* Тема оформления */}
+        <div style={{ background: "var(--color-card)", borderRadius: 12, border: "1px solid var(--color-border)", padding: 16, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
+          <AppThemeRow rowStyle={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }} />
+        </div>
+
         {stats && (
           <div style={{ background: "var(--color-card)", padding: 16, borderRadius: 12, marginBottom: 16, border: "1px solid var(--color-border)", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
             <h2 style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text)", margin: "0 0 12px 0", textTransform: "uppercase" }}>Статистика (СЗ +6%)</h2>
@@ -579,7 +585,7 @@ export default function CourierProfilePage() {
                         <div style={{ fontSize: 13, fontWeight: 700, color: "var(--color-text)" }}>{dateFormatted}</div>
                         <div style={{ fontSize: 11, color: "var(--color-text-3)", marginTop: 2 }}>{s.ordersCount} заказов доставлено</div>
                       </div>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: "var(--color-green)", background: "#ecfdf5", padding: "4px 10px", borderRadius: 6 }}>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: "var(--color-green)", background: "var(--color-ok-bg)", padding: "4px 10px", borderRadius: 6 }}>
                         +{s.earned} ₽
                       </div>
                     </div>
@@ -634,15 +640,15 @@ export default function CourierProfilePage() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
                   <div style={{ width: "100%" }}>
                     <div style={{ fontSize: 12, color: "var(--color-text-3)", marginBottom: 4 }}>Имя</div>
-                    <input value={newFirstName} onChange={e => setNewFirstName(e.target.value)} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--color-accent)", outline: "none", fontSize: 15, boxSizing: "border-box", display: "block" }} />
+                    <input value={newFirstName} onChange={e => setNewFirstName(e.target.value)} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--color-accent-fg)", outline: "none", fontSize: 15, boxSizing: "border-box", display: "block" }} />
                   </div>
                   <div style={{ width: "100%" }}>
                     <div style={{ fontSize: 12, color: "var(--color-text-3)", marginBottom: 4 }}>Фамилия</div>
-                    <input value={newLastName} onChange={e => setNewLastName(e.target.value)} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--color-accent)", outline: "none", fontSize: 15, boxSizing: "border-box", display: "block" }} />
+                    <input value={newLastName} onChange={e => setNewLastName(e.target.value)} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--color-accent-fg)", outline: "none", fontSize: 15, boxSizing: "border-box", display: "block" }} />
                   </div>
                   <div style={{ width: "100%" }}>
                     <div style={{ fontSize: 12, color: "var(--color-text-3)", marginBottom: 4 }}>Телефон</div>
-                    <IMaskInput mask="+7 (000) 000-00-00" value={newPhone} onAccept={(value: string) => setNewPhone(value)} placeholder="+7 (___) ___-__-__" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--color-accent)", outline: "none", fontSize: 15, boxSizing: "border-box", display: "block" }} />
+                    <IMaskInput mask="+7 (000) 000-00-00" value={newPhone} onAccept={(value: string) => setNewPhone(value)} placeholder="+7 (___) ___-__-__" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--color-accent-fg)", outline: "none", fontSize: 15, boxSizing: "border-box", display: "block" }} />
                   </div>
                   <div style={{ width: "100%" }}>
                     <div style={{ fontSize: 12, color: "var(--color-text-3)", marginBottom: 4 }}>Домашний адрес (Город, Улица, Дом)</div>
@@ -653,7 +659,7 @@ export default function CourierProfilePage() {
             </div>
             
             {!editingProfile ? (
-              <button onClick={() => setEditingProfile(true)} style={{ background: "none", border: "none", color: "var(--color-accent)", fontSize: 14, fontWeight: 700, padding: "10px 0", cursor: "pointer", marginLeft: "auto", marginTop: 8 }}>Изменить</button>
+              <button onClick={() => setEditingProfile(true)} style={{ background: "none", border: "none", color: "var(--color-accent-fg)", fontSize: 14, fontWeight: 700, padding: "10px 0", cursor: "pointer", marginLeft: "auto", marginTop: 8 }}>Изменить</button>
             ) : (
               <div style={{ width: "100%", display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
                 <button onClick={handleSaveProfile} disabled={saving} style={{ background: "var(--color-accent)", border: "none", color: "#fff", padding: "12px 20px", borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: "pointer" }}>
@@ -686,7 +692,7 @@ export default function CourierProfilePage() {
           <div style={{ background: "var(--color-card)", padding: 24, borderRadius: 20, width: "90%", maxWidth: 350 }}>
             <h3 style={{ margin: "0 0 8px 0", fontSize: 18, color: "var(--color-text)" }}>Привязка Консоль.Про</h3>
             <p style={{ fontSize: 13, color: "var(--color-text-2)", margin: "0 0 16px 0", lineHeight: 1.4 }}>Введите номер телефона, на который оформлен ваш статус самозанятого.</p>
-            <IMaskInput mask="+7 (000) 000-00-00" value={inputKonsolPhone} onAccept={(val) => setInputKonsolPhone(val as string)} placeholder="+7 (___) ___-__-__" style={{ width: "100%", padding: "12px", borderRadius: 8, border: "1px solid var(--color-accent)", outline: "none", fontSize: 16, boxSizing: "border-box", display: "block", marginBottom: 20 }} />
+            <IMaskInput mask="+7 (000) 000-00-00" value={inputKonsolPhone} onAccept={(val) => setInputKonsolPhone(val as string)} placeholder="+7 (___) ___-__-__" style={{ width: "100%", padding: "12px", borderRadius: 8, border: "1px solid var(--color-accent-fg)", outline: "none", fontSize: 16, boxSizing: "border-box", display: "block", marginBottom: 20 }} />
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={() => setKonsolModalOpen(false)} style={{ flex: 1, padding: 12, background: "var(--color-bg)", color: "var(--color-text)", border: "none", borderRadius: 8, fontWeight: 600 }}>Отмена</button>
               <button onClick={() => handleKonsolAction("link")} disabled={konsolLoading} style={{ flex: 1, padding: 12, background: "var(--color-accent)", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600 }}>{konsolLoading ? "Проверка..." : "Привязать"}</button>

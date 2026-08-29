@@ -75,13 +75,13 @@ export function CourierNav({ currentUserId }: { currentUserId: string }) {
         left: 0,
         right: 0,
         display: "flex",
-        background: "rgba(255, 255, 255, 0.95)",
+        background: "var(--color-nav-bg)",
         backdropFilter: "blur(10px)",
         borderTop: "1px solid var(--color-border)",
         height: `calc(${NAV_HEIGHT}px + env(safe-area-inset-bottom))`,
         paddingBottom: "env(safe-area-inset-bottom)",
         zIndex: 1000,
-        boxShadow: "0 -2px 10px rgba(0,0,0,0.03)",
+        boxShadow: "var(--color-nav-shadow)",
         alignItems: "flex-start", 
       }}>
         {navItems.map(item => {
@@ -95,7 +95,7 @@ export function CourierNav({ currentUserId }: { currentUserId: string }) {
               alignItems: "center",
               justifyContent: "center",
               textDecoration: "none",
-              color: isActive ? "var(--color-accent)" : "var(--color-text-3)",
+              color: isActive ? "var(--color-nav-active)" : "var(--color-text-3)",
               gap: 2,
             }}>
               <div style={{

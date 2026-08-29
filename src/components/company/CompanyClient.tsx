@@ -240,7 +240,7 @@ export function CompanyClient({ siteUrl }: { siteUrl: string }) {
           </div>
           <p className="text-[11px] text-[var(--color-text-3)] mt-2 leading-relaxed">
             Кто зарегистрируется по этой ссылке — попадёт в вашу компанию. Роль по умолчанию — курьер,
-            поменять можно в <Link href="/admin" className="text-[var(--color-accent)]">управлении доступом</Link>.
+            поменять можно в <Link href="/admin" className="text-[var(--color-accent-fg)]">управлении доступом</Link>.
           </p>
         </div>
       </section>
