@@ -77,7 +77,7 @@ export function CourierNav({ currentUserId }: { currentUserId: string }) {
         display: "flex",
         background: "rgba(255, 255, 255, 0.95)",
         backdropFilter: "blur(10px)",
-        borderTop: "1px solid #e8e6df",
+        borderTop: "1px solid var(--color-border)",
         height: `calc(${NAV_HEIGHT}px + env(safe-area-inset-bottom))`,
         paddingBottom: "env(safe-area-inset-bottom)",
         zIndex: 1000,

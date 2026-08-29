@@ -46,7 +46,7 @@ function CourierSelect({ value, onChange, couriers }: {
         onClick={() => { setOpen(v => !v); setSearch(""); }}
         style={{
           width: "100%", padding: "7px 9px", borderRadius: 7,
-          border: "1px solid #e8e6df", fontSize: 12, background: "var(--color-surface)",
+          border: "1px solid var(--color-border)", fontSize: 12, background: "var(--color-surface)",
           cursor: "pointer", textAlign: "left", display: "flex",
           justifyContent: "space-between", alignItems: "center",
         }}
@@ -60,7 +60,7 @@ function CourierSelect({ value, onChange, couriers }: {
       {open && (
         <div style={{
           position: "absolute", top: "calc(100% + 2px)", left: 0, right: 0,
-          background: "#fff", border: "1px solid #e8e6df", borderRadius: 8,
+          background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 8,
           boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 500,
           maxHeight: 220, display: "flex", flexDirection: "column",
         }}>
@@ -70,13 +70,13 @@ function CourierSelect({ value, onChange, couriers }: {
               placeholder="Поиск курьера..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 11, outline: "none" }}
+              style={{ width: "100%", padding: "5px 8px", borderRadius: 6, border: "1px solid var(--color-border)", fontSize: 11, outline: "none" }}
             />
           </div>
           <div style={{ overflowY: "auto", flex: 1 }}>
             <div
               onMouseDown={() => { onChange(""); setOpen(false); }}
-              style={{ padding: "7px 10px", fontSize: 12, cursor: "pointer", color: !value ? "var(--color-accent)" : "var(--color-text-3)", background: !value ? "#f4f7ff" : "transparent", borderBottom: "1px solid #f5f4f0" }}
+              style={{ padding: "7px 10px", fontSize: 12, cursor: "pointer", color: !value ? "var(--color-accent)" : "var(--color-text-3)", background: !value ? "#f4f7ff" : "transparent", borderBottom: "1px solid var(--color-bg)" }}
             >
               — Не назначен —
             </div>
@@ -84,7 +84,7 @@ function CourierSelect({ value, onChange, couriers }: {
               <div
                 key={c.value}
                 onMouseDown={() => { onChange(c.value); setOpen(false); }}
-                style={{ padding: "7px 10px", fontSize: 12, cursor: "pointer", color: c.value === value ? "var(--color-accent)" : "var(--color-text)", background: c.value === value ? "#f4f7ff" : "transparent", borderBottom: "1px solid #f5f4f0", fontWeight: c.value === value ? 600 : 400 }}
+                style={{ padding: "7px 10px", fontSize: 12, cursor: "pointer", color: c.value === value ? "var(--color-accent)" : "var(--color-text)", background: c.value === value ? "#f4f7ff" : "transparent", borderBottom: "1px solid var(--color-bg)", fontWeight: c.value === value ? 600 : 400 }}
               >
                 {c.label}
               </div>
@@ -310,7 +310,7 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
               onChange={e => setEditPrice(e.target.value)}
               style={{ 
                 width: "100%", padding: "4px 8px", borderRadius: 4, 
-                border: "1px solid #e8e6df", fontSize: 12, background: "#fff", 
+                border: "1px solid var(--color-border)", fontSize: 12, background: "var(--color-card)", 
                 outline: "none", fontWeight: 600
               }}
               placeholder="0"
@@ -385,8 +385,8 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
 
 const lbl: React.CSSProperties = { fontSize: 10, color: "var(--color-text-3)", textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 4 };
 const card: React.CSSProperties = { background: "var(--color-bg)", borderRadius: 7, padding: "7px 9px" };
-const ta: React.CSSProperties = { width: "100%", padding: "7px 9px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 12, resize: "none", background: "var(--color-surface)", outline: "none", display: "block", fontFamily: "Manrope, system-ui, sans-serif", boxSizing: "border-box" as const };
-const sel: React.CSSProperties = { width: "100%", padding: "7px 9px", borderRadius: 7, border: "1px solid #e8e6df", fontSize: 12, background: "var(--color-surface)", outline: "none", cursor: "pointer" };
-const inputPhone: React.CSSProperties = { width: "100%", padding: "7px 9px", borderRadius: 7, border: "1px solid #e8e6df", fontSize: 12, background: "var(--color-surface)", outline: "none", fontWeight: 600, color: "var(--color-text)" };
-const geoBtn: React.CSSProperties = { flex: 1, padding: 7, borderRadius: 6, border: "1px solid #e8e6df", background: "#fff", fontSize: 11, cursor: "pointer", fontWeight: 600 };
+const ta: React.CSSProperties = { width: "100%", padding: "7px 9px", borderRadius: 6, border: "1px solid var(--color-border)", fontSize: 12, resize: "none", background: "var(--color-surface)", outline: "none", display: "block", fontFamily: "Manrope, system-ui, sans-serif", boxSizing: "border-box" as const };
+const sel: React.CSSProperties = { width: "100%", padding: "7px 9px", borderRadius: 7, border: "1px solid var(--color-border)", fontSize: 12, background: "var(--color-surface)", outline: "none", cursor: "pointer" };
+const inputPhone: React.CSSProperties = { width: "100%", padding: "7px 9px", borderRadius: 7, border: "1px solid var(--color-border)", fontSize: 12, background: "var(--color-surface)", outline: "none", fontWeight: 600, color: "var(--color-text)" };
+const geoBtn: React.CSSProperties = { flex: 1, padding: 7, borderRadius: 6, border: "1px solid var(--color-border)", background: "var(--color-card)", fontSize: 11, cursor: "pointer", fontWeight: 600 };
 const aiBtn: React.CSSProperties = { flex: 1, padding: 7, borderRadius: 6, border: "none", background: "#7c4dff", color: "#fff", fontSize: 11, cursor: "pointer", fontWeight: 600 };

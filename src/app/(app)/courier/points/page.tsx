@@ -16,11 +16,11 @@ function hasCoords(o: CourierOrder): o is CourierOrder & { lat: number; lng: num
 }
 
 const FILTERS = [
-  { id: 'IN_DELIVERY', label: 'В пути', color: '#10b981' },
-  { id: 'ASSIGNED', label: 'Назначен', color: '#4a7aff' },
+  { id: 'IN_DELIVERY', label: 'В пути', color: 'var(--color-green)' },
+  { id: 'ASSIGNED', label: 'Назначен', color: 'var(--color-accent)' },
   { id: 'ASSEMBLING', label: 'В сборке', color: '#d97706' }, // 🔥 Добавлен цвет
-  { id: 'DELIVERED', label: 'Доставлен', color: '#a8a49c' },
-  { id: 'ALL', label: 'Все', color: '#1a1a18' },
+  { id: 'DELIVERED', label: 'Доставлен', color: 'var(--color-text-3)' },
+  { id: 'ALL', label: 'Все', color: 'var(--color-text)' },
 ];
 
 export default function CourierPointsPage() {
@@ -200,18 +200,18 @@ export default function CourierPointsPage() {
   return (
     <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: `calc(var(--nav-height, ${NAV_HEIGHT}px) + env(safe-area-inset-bottom))`, display: "flex", flexDirection: "column", background: "var(--color-bg)" }}>
 
-      <div style={{ padding: "8px 12px", background: "#fff", borderBottom: "1px solid #e8e6df", zIndex: 100, display: "flex", gap: 6, overflowX: "auto", flexShrink: 0, alignItems: "center" }}>
-        <input type="date" value={filterDate} onChange={(e) => { setFilterDate(e.target.value); setActiveOrderId(null); boundsInitialized.current = false; }} style={{ padding: "5px 10px", borderRadius: 20, border: "1px solid #e8e6df", fontSize: 12, fontWeight: 600, color: "var(--color-text)", outline: "none", background: "var(--color-surface)" }} />
+      <div style={{ padding: "8px 12px", background: "var(--color-card)", borderBottom: "1px solid var(--color-border)", zIndex: 100, display: "flex", gap: 6, overflowX: "auto", flexShrink: 0, alignItems: "center" }}>
+        <input type="date" value={filterDate} onChange={(e) => { setFilterDate(e.target.value); setActiveOrderId(null); boundsInitialized.current = false; }} style={{ padding: "5px 10px", borderRadius: 20, border: "1px solid var(--color-border)", fontSize: 12, fontWeight: 600, color: "var(--color-text)", outline: "none", background: "var(--color-surface)" }} />
         <div style={{ width: 1, height: 20, background: "var(--color-border)", flexShrink: 0, margin: "0 4px" }} />
         {FILTERS.map(f => (
-          <button key={f.id} onClick={() => { setFilterStatus(f.id as any); setActiveOrderId(null); boundsInitialized.current = false; setRouteInfo(null); }} style={{ padding: "6px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600, border: "1px solid #e8e6df", whiteSpace: "nowrap", cursor: "pointer", background: filterStatus === f.id ? f.color : "var(--color-surface)", color: filterStatus === f.id ? "#fff" : "var(--color-text-2)", transition: "all 0.2s" }}>
+          <button key={f.id} onClick={() => { setFilterStatus(f.id as any); setActiveOrderId(null); boundsInitialized.current = false; setRouteInfo(null); }} style={{ padding: "6px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600, border: "1px solid var(--color-border)", whiteSpace: "nowrap", cursor: "pointer", background: filterStatus === f.id ? f.color : "var(--color-surface)", color: filterStatus === f.id ? "#fff" : "var(--color-text-2)", transition: "all 0.2s" }}>
             {f.label}
           </button>
         ))}
       </div>
 
       {activeOrder && (
-        <div style={{ position: "absolute", top: 56, left: 12, right: 12, zIndex: 110, background: "#fff", padding: isCardMinimized ? "8px 12px" : "12px", borderRadius: 12, border: "1px solid #e8e6df", boxShadow: "0 4px 15px rgba(0,0,0,0.1)", display: "flex", flexDirection: "column", gap: isCardMinimized ? 0 : 10, transition: "all 0.3s" }}>
+        <div style={{ position: "absolute", top: 56, left: 12, right: 12, zIndex: 110, background: "var(--color-card)", padding: isCardMinimized ? "8px 12px" : "12px", borderRadius: 12, border: "1px solid var(--color-border)", boxShadow: "0 4px 15px rgba(0,0,0,0.1)", display: "flex", flexDirection: "column", gap: isCardMinimized ? 0 : 10, transition: "all 0.3s" }}>
 
           {isCardMinimized ? (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -238,8 +238,8 @@ export default function CourierPointsPage() {
 
               <div style={{ display: "flex", gap: 8, alignItems: "center", background: "var(--color-bg)", padding: "6px 8px", borderRadius: 8 }}>
                 <div style={{ display: "flex", background: "var(--color-border)", borderRadius: 6, padding: 2 }}>
-                  <button onClick={() => setRouteType("auto")} style={{ padding: "4px 8px", borderRadius: 4, border: "none", fontSize: 12, fontWeight: 600, background: routeType === "auto" ? "#fff" : "transparent", color: routeType === "auto" ? "var(--color-text)" : "var(--color-text-2)" }}>🚗</button>
-                  <button onClick={() => setRouteType("mt")} style={{ padding: "4px 8px", borderRadius: 4, border: "none", fontSize: 12, fontWeight: 600, background: routeType === "mt" ? "#fff" : "transparent", color: routeType === "mt" ? "var(--color-text)" : "var(--color-text-2)" }}>🚌</button>
+                  <button onClick={() => setRouteType("auto")} style={{ padding: "4px 8px", borderRadius: 4, border: "none", fontSize: 12, fontWeight: 600, background: routeType === "auto" ? "var(--color-card)" : "transparent", color: routeType === "auto" ? "var(--color-text)" : "var(--color-text-2)" }}>🚗</button>
+                  <button onClick={() => setRouteType("mt")} style={{ padding: "4px 8px", borderRadius: 4, border: "none", fontSize: 12, fontWeight: 600, background: routeType === "mt" ? "var(--color-card)" : "transparent", color: routeType === "mt" ? "var(--color-text)" : "var(--color-text-2)" }}>🚌</button>
                 </div>
                 {routeInfo ? (
                   <div style={{ flex: 1, display: "flex", justifyContent: "flex-end", gap: 12, fontSize: 13, fontWeight: 700, color: "var(--color-text)" }}>
@@ -253,7 +253,7 @@ export default function CourierPointsPage() {
               <div style={{ display: "flex", gap: 8 }}>
                 <a href={yandexMapsUrl} target="_blank" rel="noopener noreferrer" style={{ flex: 1, padding: "8px", borderRadius: 8, background: "#facc15", color: "var(--color-text)", textDecoration: "none", textAlign: "center", fontSize: 12, fontWeight: 700 }}>🗺 В навигатор</a>
                 {(activeOrder.status === "ASSIGNED" || activeOrder.status === "ASSEMBLING") && (
-                  <button onClick={async () => { await fetch(`/api/orders/${activeOrder.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "IN_DELIVERY" }) }); fetchOrders(); }} style={{ flex: 1, padding: "8px", borderRadius: 8, background: "#10b981", color: "#fff", border: "none", fontSize: 12, fontWeight: 700 }}>🚀 Поехал</button>
+                  <button onClick={async () => { await fetch(`/api/orders/${activeOrder.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "IN_DELIVERY" }) }); fetchOrders(); }} style={{ flex: 1, padding: "8px", borderRadius: 8, background: "var(--color-green)", color: "#fff", border: "none", fontSize: 12, fontWeight: 700 }}>🚀 Поехал</button>
                 )}
                 {activeOrder.status === "IN_DELIVERY" && (
                   <button onClick={async () => { await fetch(`/api/orders/${activeOrder.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "DELIVERED" }) }); setActiveOrderId(null); fetchOrders(); }} style={{ flex: 1, padding: "8px", borderRadius: 8, background: "var(--color-accent)", color: "#fff", border: "none", fontSize: 12, fontWeight: 700 }}>✅ Доставил</button>

@@ -32,7 +32,7 @@ interface RouteOrder {
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
   ASSIGNED: { label: "Назначен", color: "var(--color-accent)", bg: "var(--color-accent-soft)" },
   ASSEMBLING: { label: "В сборке", color: "#d97706", bg: "#fffbeb" },
-  IN_DELIVERY: { label: "🚀 В пути", color: "#10b981", bg: "#ecfdf5" },
+  IN_DELIVERY: { label: "🚀 В пути", color: "var(--color-green)", bg: "#ecfdf5" },
   DELIVERED: { label: "✅ Доставлен", color: "var(--color-text-2)", bg: "var(--color-bg)" },
 };
 
@@ -323,7 +323,7 @@ const syncPendingStatuses = async () => {
     }}>
 
       {/* Шапка */}
-      <div style={{ padding: "16px", background: "#fff", borderBottom: "1px solid #e8e6df", position: "sticky", top: 0, zIndex: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div style={{ padding: "16px", background: "var(--color-card)", borderBottom: "1px solid var(--color-border)", position: "sticky", top: 0, zIndex: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 18, color: "var(--color-text)" }}>Мои маршруты</h1>
           <div style={{ fontSize: 12, color: "var(--color-text-3)", marginTop: 4 }}>
@@ -345,7 +345,7 @@ const syncPendingStatuses = async () => {
             const routeObj = routePoints[0]?.route;
 
             return (
-              <div key={`banner-${rId}`} style={{ background: "#fff", border: "2px solid #4a7aff", borderRadius: 12, padding: 16, boxShadow: "0 4px 12px rgba(74, 122, 255, 0.15)" }}>
+              <div key={`banner-${rId}`} style={{ background: "var(--color-card)", border: "2px solid var(--color-accent)", borderRadius: 12, padding: 16, boxShadow: "0 4px 12px rgba(74, 122, 255, 0.15)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                   <div style={{ fontWeight: 800, color: "var(--color-text)", fontSize: 16 }}>
                     🆕 Новый маршрут
@@ -420,9 +420,9 @@ const syncPendingStatuses = async () => {
             : (routeObj?.departureAdvice ?? null);
 
           return (
-            <div key={rId} style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
+            <div key={rId} style={{ background: "var(--color-card)", borderRadius: 12, border: "1px solid var(--color-border)", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
 
-              <div style={{ padding: "14px 16px", background: "var(--color-surface)", borderBottom: isExpanded ? "1px solid #e8e6df" : "none" }}>
+              <div style={{ padding: "14px 16px", background: "var(--color-surface)", borderBottom: isExpanded ? "1px solid var(--color-border)" : "none" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "stretch", cursor: "pointer", marginBottom: isExpanded ? 12 : 0 }} onClick={onRouteHeaderClick}>
 
                   <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
@@ -527,7 +527,7 @@ const syncPendingStatuses = async () => {
 
                 </div>
                 {isExpanded && isRouteAccepted && !hasStarted && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px dashed #e8e6df", paddingTop: 12 }} onClick={e => e.stopPropagation()}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px dashed var(--color-border)", paddingTop: 12 }} onClick={e => e.stopPropagation()}>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
                         <span style={{ fontSize: 11, color: "var(--color-text-3)", fontWeight: 600 }}>На базе в:</span>
@@ -535,8 +535,8 @@ const syncPendingStatuses = async () => {
                           value={routeObj?.baseArrivalTime || ""}
                           onChange={(e) => handleBaseTimeChange(rId, e.target.value)}
                           style={{
-                            border: "1px solid #e8e6df", borderRadius: 6, padding: "4px 8px",
-                            fontSize: 13, fontWeight: 600, color: "var(--color-text)", background: "#fff",
+                            border: "1px solid var(--color-border)", borderRadius: 6, padding: "4px 8px",
+                            fontSize: 13, fontWeight: 600, color: "var(--color-text)", background: "var(--color-card)",
                             outline: "none", cursor: "pointer", minWidth: "90px"
                           }}
                         >
@@ -613,16 +613,16 @@ const syncPendingStatuses = async () => {
                       isTooEarly = (baseTime.getTime() - moscowTime.getTime()) > 60 * 60 * 1000;
                     }
 
-                    const borderColor = o.status === "DELIVERED" ? "#10b981" : (o.status === "IN_DELIVERY" ? "#f59e0b" : "var(--color-accent)");
+                    const borderColor = o.status === "DELIVERED" ? "var(--color-green)" : (o.status === "IN_DELIVERY" ? "#f59e0b" : "var(--color-accent)");
 
                     return (
                       <div
                         key={o.id}
                         style={{
                           margin: "8px 0",
-                          background: "#fff",
+                          background: "var(--color-card)",
                           borderRadius: 12,
-                          border: "1px solid #e8e6df",
+                          border: "1px solid var(--color-border)",
                           borderLeft: `6px solid ${borderColor}`,
                           overflow: "hidden",
                           boxShadow: isCollapsed ? "0 1px 4px rgba(0,0,0,0.06)" : "0 4px 14px rgba(0,0,0,0.08)",
@@ -638,7 +638,7 @@ const syncPendingStatuses = async () => {
                             display: "flex",
                             alignItems: "flex-start",
                             gap: 10,
-                            background: isCollapsed ? "#fff" : "var(--color-surface)"
+                            background: isCollapsed ? "var(--color-card)" : "var(--color-surface)"
                           }}
                         >
                           {o.routeOrder && (
@@ -700,7 +700,7 @@ const syncPendingStatuses = async () => {
                             )}
 
                             <div style={{ fontSize: 12, color: "var(--color-text-3)", marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
-                              <span style={{ color: (isDelivered && actualTime) ? "#10b981" : "inherit", fontWeight: 500 }}>
+                              <span style={{ color: (isDelivered && actualTime) ? "var(--color-green)" : "inherit", fontWeight: 500 }}>
                                 {(isDelivered && actualTime) ? `✅ Доставлен в ${actualTime}` : (o.slotRaw ?? "Время не указано")}
                               </span>
                               {o.eta && !isDelivered && (
@@ -794,7 +794,7 @@ const syncPendingStatuses = async () => {
                             </div>
 
                             {o.items && o.items.trim() && (
-                              <div style={{ marginBottom: 10, background: "var(--color-surface)", borderRadius: 8, padding: 10, border: "1px solid #e8e6df" }}>
+                              <div style={{ marginBottom: 10, background: "var(--color-surface)", borderRadius: 8, padding: 10, border: "1px solid var(--color-border)" }}>
                                 {(() => {
                                   const lines = o.items!.split('\n').map(l => l.trim()).filter(Boolean);
                                   const isMany = lines.length >= 3;
@@ -823,7 +823,7 @@ const syncPendingStatuses = async () => {
                                         <div style={{ fontSize: 12, color: "var(--color-text-3)" }}>{isItemExpanded ? "▲" : "▼"}</div>
                                       </div>
                                       {isItemExpanded && (
-                                        <div style={{ marginTop: 8, borderTop: "1px dashed #e8e6df", paddingTop: 8, fontSize: 12, color: "var(--color-text)", lineHeight: 1.4 }}>
+                                        <div style={{ marginTop: 8, borderTop: "1px dashed var(--color-border)", paddingTop: 8, fontSize: 12, color: "var(--color-text)", lineHeight: 1.4 }}>
                                           {lines.map((l, i) => <div key={i}>• {l}</div>)}
                                         </div>
                                       )}
@@ -841,11 +841,11 @@ const syncPendingStatuses = async () => {
                               ) : (
                                 <div style={{ display: "flex", gap: 8 }}>
                                   <label style={{
-                                    flex: 1, background: o.photoUrl ? "#ecfdf5" : "#fff",
-                                    border: `1px solid ${o.photoUrl ? "#10b981" : "var(--color-border)"}`,
+                                    flex: 1, background: o.photoUrl ? "var(--color-ok-bg)" : "var(--color-card)",
+                                    border: `1px solid ${o.photoUrl ? "var(--color-green)" : "var(--color-border)"}`,
                                     padding: "10px", borderRadius: 8, cursor: "pointer",
                                     textAlign: "center", fontWeight: 700, fontSize: 13,
-                                    color: o.photoUrl ? "#10b981" : "var(--color-text)"
+                                    color: o.photoUrl ? "var(--color-green)" : "var(--color-text)"
                                   }}>
                                     <input
                                       type="file" accept="image/*" capture="environment" style={{ display: "none" }}
@@ -855,7 +855,7 @@ const syncPendingStatuses = async () => {
                                   </label>
 
                                   <label style={{
-                                    flex: 1, background: "#fff", border: "1px solid #e8e6df",
+                                    flex: 1, background: "var(--color-card)", border: "1px solid var(--color-border)",
                                     padding: "10px", borderRadius: 8, cursor: "pointer",
                                     textAlign: "center", fontWeight: 700, fontSize: 13, color: "var(--color-text)"
                                   }}>
@@ -873,7 +873,7 @@ const syncPendingStatuses = async () => {
                                   <a href={o.photoUrl} target="_blank" rel="noopener noreferrer">
                                     <img
                                       src={o.photoUrl} alt="Фото заказа"
-                                      style={{ width: "100%", maxHeight: 180, objectFit: "cover", borderRadius: 8, border: "1px solid #e8e6df", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }}
+                                      style={{ width: "100%", maxHeight: 180, objectFit: "cover", borderRadius: 8, border: "1px solid var(--color-border)", boxShadow: "0 2px 4px rgba(0,0,0,0.05)" }}
                                     />
                                   </a>
                                 </div>
@@ -925,7 +925,7 @@ const syncPendingStatuses = async () => {
 
         {/* ПРОШЛЫЕ ЗАКАЗЫ */}
         {pastOrders.length > 0 && (
-          <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "hidden" }}>
+          <div style={{ background: "var(--color-card)", borderRadius: 12, border: "1px solid var(--color-border)", overflow: "hidden" }}>
             <div
               onClick={() => setShowPast(!showPast)}
               style={{ padding: "14px 16px", background: "var(--color-surface)", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
@@ -956,7 +956,7 @@ const syncPendingStatuses = async () => {
                           <div>
                             <div style={{ fontSize: 10, color: "var(--color-text-3)", fontFamily: "monospace" }}>{o.externalId ?? o.crmId}</div>
                             <div style={{
-                              fontSize: 12, fontWeight: 600, color: (isDelivered && actualTime) ? "#10b981" : "var(--color-text)"
+                              fontSize: 12, fontWeight: 600, color: (isDelivered && actualTime) ? "var(--color-green)" : "var(--color-text)"
                             }}>
                               {(isDelivered && actualTime) ? `Доставлен в ${actualTime}` : (o.slotRaw ?? "Время не указано")}
                             </div>

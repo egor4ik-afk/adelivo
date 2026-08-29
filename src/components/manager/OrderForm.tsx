@@ -42,11 +42,11 @@ const STATUSES = [
 ];
 
 /* ── мелкие примитивы в стиле кабинета ─────────────────────── */
-const label = "block text-[11px] font-bold uppercase tracking-wider text-[#8c8880] mb-1.5";
+const label = "block text-[11px] font-bold uppercase tracking-wider text-[var(--color-text-2)] mb-1.5";
 const input =
-  "w-full px-3 py-2.5 rounded-lg border border-[#e8e6df] bg-white text-[13px] text-[#1a1a18] " +
-  "outline-none transition-colors focus:border-[#4a7aff] placeholder:text-[#c4c0b8]";
-const card = "bg-white rounded-2xl border border-[#e8e6df] p-4 sm:p-5 shadow-sm";
+  "w-full px-3 py-2.5 rounded-lg border border-[var(--color-border)] bg-white text-[13px] text-[var(--color-text)] " +
+  "outline-none transition-colors focus:border-[var(--color-accent)] placeholder:text-[#c4c0b8]";
+const card = "bg-white rounded-2xl border border-[var(--color-border)] p-4 sm:p-5 shadow-sm";
 
 function Field({
   id, title, children, hint, wide,
@@ -55,7 +55,7 @@ function Field({
     <div className={wide ? "sm:col-span-2" : ""}>
       <label htmlFor={id} className={label}>{title}</label>
       {children}
-      {hint && <p className="text-[10px] text-[#a8a49c] mt-1">{hint}</p>}
+      {hint && <p className="text-[10px] text-[var(--color-text-3)] mt-1">{hint}</p>}
     </div>
   );
 }
@@ -109,13 +109,13 @@ export function OrderForm({
   };
 
   return (
-    <div className="min-h-screen bg-[#f5f4f0]">
+    <div className="min-h-screen bg-[var(--color-bg)]">
       {/* Шапка */}
       <header className="bg-white shadow-sm border-b border-gray-200 px-4 sm:px-6 py-4 flex justify-between items-center sticky top-0 z-20">
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => router.back()}
-            className="w-9 h-9 rounded-lg border border-[#e8e6df] flex items-center justify-center text-[#8c8880] hover:text-[#1a1a18] hover:border-[#4a7aff] transition-colors shrink-0"
+            className="w-9 h-9 rounded-lg border border-[var(--color-border)] flex items-center justify-center text-[var(--color-text-2)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)] transition-colors shrink-0"
             title="Назад"
             aria-label="Назад"
           >
@@ -129,7 +129,7 @@ export function OrderForm({
           onClick={submit}
           disabled={saving}
           className={`px-4 sm:px-5 py-2 rounded-lg text-sm font-bold shadow-sm transition-all ${
-            saving ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-[#4a7aff] text-white hover:bg-[#3d66e8]"
+            saving ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-dark)]"
           }`}
         >
           {saving ? "Сохраняем…" : mode === "create" ? "Создать заказ" : "Сохранить"}
@@ -145,7 +145,7 @@ export function OrderForm({
 
         {/* Доставка */}
         <section className={card}>
-          <h2 className="text-[13px] font-bold text-[#1a1a18] mb-3">Доставка</h2>
+          <h2 className="text-[13px] font-bold text-[var(--color-text)] mb-3">Доставка</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <Field id="address" title="Адрес" wide hint="После сохранения адрес автоматически геокодируется и попадёт в маршрут">
               <input id="address" className={input} value={v.address} onChange={set("address")} placeholder="Москва, ул. Ленина, 42, кв. 7" />
@@ -178,7 +178,7 @@ export function OrderForm({
 
         {/* Люди */}
         <section className={card}>
-          <h2 className="text-[13px] font-bold text-[#1a1a18] mb-3">Заказчик и получатель</h2>
+          <h2 className="text-[13px] font-bold text-[var(--color-text)] mb-3">Заказчик и получатель</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <Field id="customerName" title="Заказчик">
               <input id="customerName" className={input} value={v.customerName} onChange={set("customerName")} placeholder="Имя" />
@@ -197,7 +197,7 @@ export function OrderForm({
 
         {/* Состав и комментарии */}
         <section className={card}>
-          <h2 className="text-[13px] font-bold text-[#1a1a18] mb-3">Состав и комментарии</h2>
+          <h2 className="text-[13px] font-bold text-[var(--color-text)] mb-3">Состав и комментарии</h2>
           <div className="grid grid-cols-1 gap-3 sm:gap-4">
             <Field id="items" title="Состав заказа">
               <textarea id="items" rows={2} className={input} value={v.items} onChange={set("items")} placeholder="Букет «Весна» × 1, открытка" />
@@ -224,14 +224,14 @@ export function OrderForm({
             onClick={submit}
             disabled={saving}
             className={`flex-1 py-3 rounded-xl text-sm font-bold shadow-sm transition-all ${
-              saving ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-[#4a7aff] text-white hover:bg-[#3d66e8]"
+              saving ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-dark)]"
             }`}
           >
             {saving ? "Сохраняем…" : mode === "create" ? "Создать заказ" : "Сохранить изменения"}
           </button>
           <button
             onClick={() => router.back()}
-            className="px-5 py-3 rounded-xl text-sm font-bold border border-[#e8e6df] text-[#8c8880] hover:text-[#1a1a18] transition-colors"
+            className="px-5 py-3 rounded-xl text-sm font-bold border border-[var(--color-border)] text-[var(--color-text-2)] hover:text-[var(--color-text)] transition-colors"
           >
             Отмена
           </button>

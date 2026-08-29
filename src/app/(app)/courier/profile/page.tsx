@@ -5,7 +5,6 @@ import { usePushNotifications } from "@/components/usePushNotifications";
 import { IMaskInput } from "react-imask";
 import imageCompression from "browser-image-compression";
 import { performLogout } from '@/lib/logout'; // 🔥 Импортируем
-import { AppThemeRow } from "@/components/theme/AppThemeRow";
 
 interface Profile {
   id: string; 
@@ -90,7 +89,7 @@ function AddressSuggestInput({ value, onChange, active }: { value: string, onCha
       value={value} 
       onChange={e => onChangeRef.current(e.target.value)} 
       placeholder="Москва, ул. Пушкина, д. 1" 
-      style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #4a7aff", outline: "none", fontSize: 15, boxSizing: "border-box", display: "block" }} 
+      style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--color-accent)", outline: "none", fontSize: 15, boxSizing: "border-box", display: "block" }} 
     />
   );
 }
@@ -367,20 +366,20 @@ export default function CourierProfilePage() {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--color-bg)", overflowY: "auto", paddingBottom: 80 }}>
 
-      <div style={{ padding: "24px 16px", background: "#fff", display: "flex", alignItems: "center", gap: 16, borderBottom: "1px solid #e8e6df" }}>
+      <div style={{ padding: "24px 16px", background: "var(--color-card)", display: "flex", alignItems: "center", gap: 16, borderBottom: "1px solid var(--color-border)" }}>
         
         {/* БЛОК АВАТАРКИ */}
         <div style={{ position: "relative", cursor: "pointer" }} onClick={() => fileInputRef.current?.click()}>
           {uploadingAvatar ? (
             <div style={{ width: 56, height: 56, borderRadius: "50%", background: "var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center" }}>⏳</div>
           ) : profile.avatarUrl ? (
-            <img src={profile.avatarUrl} alt="Avatar" style={{ width: 56, height: 56, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "1px solid #e8e6df" }} />
+            <img src={profile.avatarUrl} alt="Avatar" style={{ width: 56, height: 56, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "1px solid var(--color-border)" }} />
           ) : (
             <div style={{ width: 56, height: 56, borderRadius: "50%", background: "var(--color-accent)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 700, flexShrink: 0 }}>
               {(profile.firstName?.[0] || "") + (profile.lastName?.[0] || "")}
             </div>
           )}
-          <div style={{ position: "absolute", bottom: -2, right: -4, background: "#fff", borderRadius: "50%", padding: 4, boxShadow: "0 2px 5px rgba(0,0,0,0.2)", fontSize: 12, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ position: "absolute", bottom: -2, right: -4, background: "var(--color-card)", borderRadius: "50%", padding: 4, boxShadow: "0 2px 5px rgba(0,0,0,0.2)", fontSize: 12, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
             📷
           </div>
         </div>
@@ -403,33 +402,28 @@ export default function CourierProfilePage() {
 
       <div style={{ padding: 16 }}>
 
-        <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
+        <div style={{ background: "var(--color-card)", borderRadius: 12, border: "1px solid var(--color-border)", padding: 16, marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text)" }}>Тип курьера</div>
             <div style={{ fontSize: 12, color: "var(--color-text-2)", marginTop: 2 }}>{isAuto ? "Автомобиль (+100₽ к доставке)" : "Пеший / Авто"}</div>
           </div>
           <div style={{ display: "flex", alignItems: "center", background: "var(--color-bg)", borderRadius: 8, padding: 4 }}>
-            <button onClick={toggleAutoStatus} style={{ padding: "6px 12px", borderRadius: 6, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: !isAuto ? "#fff" : "transparent", color: !isAuto ? "var(--color-text)" : "var(--color-text-3)", boxShadow: !isAuto ? "0 1px 3px rgba(0,0,0,0.1)" : "none", transition: "all 0.2s" }}>
+            <button onClick={toggleAutoStatus} style={{ padding: "6px 12px", borderRadius: 6, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: !isAuto ? "var(--color-card)" : "transparent", color: !isAuto ? "var(--color-text)" : "var(--color-text-3)", boxShadow: !isAuto ? "0 1px 3px rgba(0,0,0,0.1)" : "none", transition: "all 0.2s" }}>
               🚶 Пеший
             </button>
-            <button onClick={toggleAutoStatus} style={{ padding: "6px 12px", borderRadius: 6, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: isAuto ? "#10b981" : "transparent", color: isAuto ? "#fff" : "var(--color-text-3)", boxShadow: isAuto ? "0 1px 3px rgba(0,0,0,0.1)" : "none", transition: "all 0.2s" }}>
+            <button onClick={toggleAutoStatus} style={{ padding: "6px 12px", borderRadius: 6, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: isAuto ? "var(--color-green)" : "transparent", color: isAuto ? "#fff" : "var(--color-text-3)", boxShadow: isAuto ? "0 1px 3px rgba(0,0,0,0.1)" : "none", transition: "all 0.2s" }}>
               🚗 Авто
             </button>
           </div>
         </div>
 
-        {/* Тема оформления */}
-        <div style={{ background: "var(--color-card)", borderRadius: 12, border: "1px solid var(--color-border)", padding: 16, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
-          <AppThemeRow rowStyle={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }} />
-        </div>
-
         {stats && (
-          <div style={{ background: "#fff", padding: 16, borderRadius: 12, marginBottom: 16, border: "1px solid #e8e6df", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
+          <div style={{ background: "var(--color-card)", padding: 16, borderRadius: 12, marginBottom: 16, border: "1px solid var(--color-border)", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
             <h2 style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text)", margin: "0 0 12px 0", textTransform: "uppercase" }}>Статистика (СЗ +6%)</h2>
             
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
               <div style={{ background: "var(--color-ok-bg)", padding: 12, borderRadius: 10 }}>
-                <div style={{ fontSize: 11, color: "#10b981", textTransform: "uppercase", fontWeight: 700 }}>Эта неделя</div>
+                <div style={{ fontSize: 11, color: "var(--color-green)", textTransform: "uppercase", fontWeight: 700 }}>Эта неделя</div>
                 <div style={{ fontSize: 20, fontWeight: 800, color: "var(--color-text)", marginTop: 4 }}>{stats.weekTotal} ₽</div>
                 <div style={{ fontSize: 12, color: "var(--color-text-2)" }}>{stats.weekCount} заказов</div>
               </div>
@@ -449,7 +443,7 @@ export default function CourierProfilePage() {
                   {stats.isLinked ? `Выплаты на: ${stats.konsolPhone}` : "Налоги +6% не начисляются"}
                 </div>
               </div>
-              <button onClick={() => stats.isLinked ? handleKonsolAction("unlink") : setKonsolModalOpen(true)} style={{ background: stats.isLinked ? "transparent" : "var(--color-text)", border: stats.isLinked ? "1px solid #4a7aff" : "none", color: stats.isLinked ? "var(--color-accent)" : "#fff", padding: "6px 12px", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+              <button onClick={() => stats.isLinked ? handleKonsolAction("unlink") : setKonsolModalOpen(true)} style={{ background: stats.isLinked ? "transparent" : "var(--color-text)", border: stats.isLinked ? "1px solid var(--color-accent)" : "none", color: stats.isLinked ? "var(--color-accent)" : "#fff", padding: "6px 12px", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                 {stats.isLinked ? "Отвязать" : "Привязать"}
               </button>
             </div>
@@ -457,7 +451,7 @@ export default function CourierProfilePage() {
         )}
 
         {/* 🔥 ГРАФИК РАБОТЫ (ДРОПДАУН, ВЕРХНИЙ БЛОК) */}
-        <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
+        <div style={{ background: "var(--color-card)", borderRadius: 12, border: "1px solid var(--color-border)", padding: 16, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
           <div onClick={toggleSchedule} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: isScheduleOpen ? 12 : 0 }}>
             <h2 style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text)", margin: 0, textTransform: "uppercase" }}>📅 График работы</h2>
             <div style={{ fontSize: 16, color: "var(--color-text-3)", transform: isScheduleOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</div>
@@ -472,7 +466,7 @@ export default function CourierProfilePage() {
                     style={{
                       flex: 1, border: "none", padding: "8px", borderRadius: 8, fontSize: 12,
                       fontWeight: activeWeekTab === tab ? 700 : 500,
-                      background: activeWeekTab === tab ? "#fff" : "transparent",
+                      background: activeWeekTab === tab ? "var(--color-card)" : "transparent",
                       color: activeWeekTab === tab ? "var(--color-text)" : "var(--color-text-3)",
                       cursor: "pointer", transition: "all 0.15s",
                       boxShadow: activeWeekTab === tab ? "0 1px 3px rgba(0,0,0,0.05)" : "none"
@@ -491,12 +485,12 @@ export default function CourierProfilePage() {
                   const pastStats = stats?.pastShifts?.find(s => s.date === day.dateStr);
 
                   return (
-                    <div key={day.dateStr} style={{ background: isWorking ? "var(--color-ok-bg)" : "var(--color-surface)", padding: "14px 16px", borderRadius: 12, border: isWorking ? "1px solid #a7f3d0" : "1px solid #e8e6df", transition: "all 0.2s" }}>
+                    <div key={day.dateStr} style={{ background: isWorking ? "var(--color-ok-bg)" : "var(--color-surface)", padding: "14px 16px", borderRadius: 12, border: isWorking ? "1px solid #a7f3d0" : "1px solid var(--color-border)", transition: "all 0.2s" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           <div style={{
                             width: 32, height: 32, borderRadius: 8,
-                            background: day.isToday ? "var(--color-accent)" : (isWorking ? "#fff" : "var(--color-border)"),
+                            background: day.isToday ? "var(--color-accent)" : (isWorking ? "var(--color-card)" : "var(--color-border)"),
                             color: day.isToday ? "#fff" : (isWorking ? "var(--color-accent)" : "var(--color-text-2)"),
                             display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700
                           }}>
@@ -508,15 +502,15 @@ export default function CourierProfilePage() {
                         </div>
                         
                         {isPast ? (
-                          <span style={{ fontSize: 13, fontWeight: 600, color: isWorking ? "#10b981" : "var(--color-text-3)" }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: isWorking ? "var(--color-green)" : "var(--color-text-3)" }}>
                             {isWorking ? "Отработал" : "Выходной"}
                           </span>
                         ) : (
                           <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: isWorking ? "#10b981" : "var(--color-text-3)" }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: isWorking ? "var(--color-green)" : "var(--color-text-3)" }}>
                               {isWorking ? "На смене" : "Выходной"}
                             </span>
-                            <input type="checkbox" checked={isWorking} onChange={(e) => updateShift(day.dateStr, { isWorking: e.target.checked, startTime: shift?.startTime || "10:00", endTime: shift?.endTime || "22:00" })} style={{ width: 20, height: 20, accentColor: "#10b981" }} />
+                            <input type="checkbox" checked={isWorking} onChange={(e) => updateShift(day.dateStr, { isWorking: e.target.checked, startTime: shift?.startTime || "10:00", endTime: shift?.endTime || "22:00" })} style={{ width: 20, height: 20, accentColor: "var(--color-green)" }} />
                           </label>
                         )}
                       </div>
@@ -548,11 +542,11 @@ export default function CourierProfilePage() {
                         <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 14, paddingTop: 14, borderTop: "1px solid #d1fae5", flexWrap: "wrap" }}>
                           <span style={{ fontSize: 13, color: "#059669", fontWeight: 600, flex: 1 }}>Часы работы:</span>
                           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                            <select value={shift.startTime || "10:00"} onChange={(e) => updateShift(day.dateStr, { isWorking: true, startTime: e.target.value, endTime: shift.endTime })} style={{ width: "80px", padding: "6px 4px", borderRadius: 8, border: "1px solid #a7f3d0", outline: "none", fontSize: 16, background: "#fff", color: "#065f46", fontWeight: 700, textAlign: "center" }}>
+                            <select value={shift.startTime || "10:00"} onChange={(e) => updateShift(day.dateStr, { isWorking: true, startTime: e.target.value, endTime: shift.endTime })} style={{ width: "80px", padding: "6px 4px", borderRadius: 8, border: "1px solid #a7f3d0", outline: "none", fontSize: 16, background: "var(--color-card)", color: "#065f46", fontWeight: 700, textAlign: "center" }}>
                               {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                             <span style={{ color: "#059669", fontWeight: 700 }}>-</span>
-                            <select value={shift.endTime || "22:00"} onChange={(e) => updateShift(day.dateStr, { isWorking: true, startTime: shift.startTime, endTime: e.target.value })} style={{ width: "80px", padding: "6px 4px", borderRadius: 8, border: "1px solid #a7f3d0", outline: "none", fontSize: 16, background: "#fff", color: "#065f46", fontWeight: 700, textAlign: "center" }}>
+                            <select value={shift.endTime || "22:00"} onChange={(e) => updateShift(day.dateStr, { isWorking: true, startTime: shift.startTime, endTime: e.target.value })} style={{ width: "80px", padding: "6px 4px", borderRadius: 8, border: "1px solid #a7f3d0", outline: "none", fontSize: 16, background: "var(--color-card)", color: "#065f46", fontWeight: 700, textAlign: "center" }}>
                               {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                           </div>
@@ -567,7 +561,7 @@ export default function CourierProfilePage() {
         </div>
 
         {/* 🔥 ИСТОРИЯ ДОХОДА (ДРОПДАУН, СНИЗУ, ЗАКРЫТ ПО УМОЛЧАНИЮ) */}
-        <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+        <div style={{ background: "var(--color-card)", borderRadius: 14, border: "1px solid var(--color-border)", padding: 16, marginBottom: 16, boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
           <div onClick={toggleEarnings} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: isEarningsOpen ? 12 : 0 }}>
             <h2 style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text)", margin: 0, textTransform: "uppercase" }}>💰 Доход за все смены</h2>
             <div style={{ fontSize: 16, color: "var(--color-text-3)", transform: isEarningsOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▼</div>
@@ -580,12 +574,12 @@ export default function CourierProfilePage() {
                   const shiftDate = new Date(s.date);
                   const dateFormatted = shiftDate.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
                   return (
-                    <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", borderRadius: 10, background: "var(--color-surface)", border: "1px solid #e8e6df" }}>
+                    <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px", borderRadius: 10, background: "var(--color-surface)", border: "1px solid var(--color-border)" }}>
                       <div>
                         <div style={{ fontSize: 13, fontWeight: 700, color: "var(--color-text)" }}>{dateFormatted}</div>
                         <div style={{ fontSize: 11, color: "var(--color-text-3)", marginTop: 2 }}>{s.ordersCount} заказов доставлено</div>
                       </div>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: "#10b981", background: "#ecfdf5", padding: "4px 10px", borderRadius: 6 }}>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: "var(--color-green)", background: "#ecfdf5", padding: "4px 10px", borderRadius: 6 }}>
                         +{s.earned} ₽
                       </div>
                     </div>
@@ -603,20 +597,20 @@ export default function CourierProfilePage() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0" }}>
           <div>
             <div style={{ fontSize: 13, color: "var(--color-text-3)" }}>Push-уведомления</div>
-            <div style={{ fontSize: 13, color: isSubscribed ? "#10b981" : "#d94040", marginTop: 4, fontWeight: 600 }}>
+            <div style={{ fontSize: 13, color: isSubscribed ? "var(--color-green)" : "#d94040", marginTop: 4, fontWeight: 600 }}>
               {pushState === "loading" ? "..." : pushState === "unsupported" ? "Не поддерживается" : isSubscribed ? "Включены" : "Выключены"}
             </div>
           </div>
           {pushState !== "unsupported" && pushState !== "loading" && (
             <label style={{ position: "relative", display: "inline-block", width: 44, height: 24, cursor: "pointer", touchAction: "manipulation" }}>
               <input type="checkbox" checked={isSubscribed} onChange={isSubscribed ? unsubscribe : handleSubscribe} style={{ opacity: 0, width: 0, height: 0, position: "absolute" }} />
-              <span style={{ position: "absolute", inset: 0, borderRadius: 24, background: isSubscribed ? "#10b981" : "#d1d5db", transition: "background 0.2s" }} />
-              <span style={{ position: "absolute", top: 3, left: isSubscribed ? 23 : 3, width: 18, height: 18, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.2)", transition: "left 0.2s" }} />
+              <span style={{ position: "absolute", inset: 0, borderRadius: 24, background: isSubscribed ? "var(--color-green)" : "#d1d5db", transition: "background 0.2s" }} />
+              <span style={{ position: "absolute", top: 3, left: isSubscribed ? 23 : 3, width: 18, height: 18, borderRadius: "50%", background: "var(--color-card)", boxShadow: "0 1px 4px rgba(0,0,0,0.2)", transition: "left 0.2s" }} />
             </label>
           )}
         </div>
 
-        <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: 16, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
+        <div style={{ background: "var(--color-card)", borderRadius: 12, border: "1px solid var(--color-border)", padding: 16, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
           <h2 style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text)", margin: "0 0 12px 0", textTransform: "uppercase" }}>Настройки</h2>
 
           <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-start", padding: "12px 0" }}>
@@ -640,15 +634,15 @@ export default function CourierProfilePage() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
                   <div style={{ width: "100%" }}>
                     <div style={{ fontSize: 12, color: "var(--color-text-3)", marginBottom: 4 }}>Имя</div>
-                    <input value={newFirstName} onChange={e => setNewFirstName(e.target.value)} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #4a7aff", outline: "none", fontSize: 15, boxSizing: "border-box", display: "block" }} />
+                    <input value={newFirstName} onChange={e => setNewFirstName(e.target.value)} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--color-accent)", outline: "none", fontSize: 15, boxSizing: "border-box", display: "block" }} />
                   </div>
                   <div style={{ width: "100%" }}>
                     <div style={{ fontSize: 12, color: "var(--color-text-3)", marginBottom: 4 }}>Фамилия</div>
-                    <input value={newLastName} onChange={e => setNewLastName(e.target.value)} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #4a7aff", outline: "none", fontSize: 15, boxSizing: "border-box", display: "block" }} />
+                    <input value={newLastName} onChange={e => setNewLastName(e.target.value)} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--color-accent)", outline: "none", fontSize: 15, boxSizing: "border-box", display: "block" }} />
                   </div>
                   <div style={{ width: "100%" }}>
                     <div style={{ fontSize: 12, color: "var(--color-text-3)", marginBottom: 4 }}>Телефон</div>
-                    <IMaskInput mask="+7 (000) 000-00-00" value={newPhone} onAccept={(value: string) => setNewPhone(value)} placeholder="+7 (___) ___-__-__" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #4a7aff", outline: "none", fontSize: 15, boxSizing: "border-box", display: "block" }} />
+                    <IMaskInput mask="+7 (000) 000-00-00" value={newPhone} onAccept={(value: string) => setNewPhone(value)} placeholder="+7 (___) ___-__-__" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--color-accent)", outline: "none", fontSize: 15, boxSizing: "border-box", display: "block" }} />
                   </div>
                   <div style={{ width: "100%" }}>
                     <div style={{ fontSize: 12, color: "var(--color-text-3)", marginBottom: 4 }}>Домашний адрес (Город, Улица, Дом)</div>
@@ -671,7 +665,7 @@ export default function CourierProfilePage() {
         </div>
 
         {!isStandalone && (
-          <div onClick={installPWA} style={{ margin: "0 0 16px 0", padding: "14px 16px", background: "linear-gradient(135deg, #38bdf8 0%, #4a7aff 100%)", borderRadius: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, WebkitTapHighlightColor: "transparent", boxShadow: "0 4px 12px rgba(74,122,255,0.2)" }}>
+          <div onClick={installPWA} style={{ margin: "0 0 16px 0", padding: "14px 16px", background: "linear-gradient(135deg, #38bdf8 0%, var(--color-accent) 100%)", borderRadius: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, WebkitTapHighlightColor: "transparent", boxShadow: "0 4px 12px rgba(74,122,255,0.2)" }}>
             <span style={{ fontSize: 24, filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.1))" }}>📱</span>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>Установить приложение</div>
@@ -689,10 +683,10 @@ export default function CourierProfilePage() {
 
       {konsolModalOpen && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
-          <div style={{ background: "#fff", padding: 24, borderRadius: 20, width: "90%", maxWidth: 350 }}>
+          <div style={{ background: "var(--color-card)", padding: 24, borderRadius: 20, width: "90%", maxWidth: 350 }}>
             <h3 style={{ margin: "0 0 8px 0", fontSize: 18, color: "var(--color-text)" }}>Привязка Консоль.Про</h3>
             <p style={{ fontSize: 13, color: "var(--color-text-2)", margin: "0 0 16px 0", lineHeight: 1.4 }}>Введите номер телефона, на который оформлен ваш статус самозанятого.</p>
-            <IMaskInput mask="+7 (000) 000-00-00" value={inputKonsolPhone} onAccept={(val) => setInputKonsolPhone(val as string)} placeholder="+7 (___) ___-__-__" style={{ width: "100%", padding: "12px", borderRadius: 8, border: "1px solid #4a7aff", outline: "none", fontSize: 16, boxSizing: "border-box", display: "block", marginBottom: 20 }} />
+            <IMaskInput mask="+7 (000) 000-00-00" value={inputKonsolPhone} onAccept={(val) => setInputKonsolPhone(val as string)} placeholder="+7 (___) ___-__-__" style={{ width: "100%", padding: "12px", borderRadius: 8, border: "1px solid var(--color-accent)", outline: "none", fontSize: 16, boxSizing: "border-box", display: "block", marginBottom: 20 }} />
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={() => setKonsolModalOpen(false)} style={{ flex: 1, padding: 12, background: "var(--color-bg)", color: "var(--color-text)", border: "none", borderRadius: 8, fontWeight: 600 }}>Отмена</button>
               <button onClick={() => handleKonsolAction("link")} disabled={konsolLoading} style={{ flex: 1, padding: 12, background: "var(--color-accent)", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600 }}>{konsolLoading ? "Проверка..." : "Привязать"}</button>

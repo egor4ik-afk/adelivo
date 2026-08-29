@@ -31,8 +31,8 @@ const CustomDateInput = React.forwardRef(({ value, onClick }: any, ref: any) => 
     height: 34,
     padding: "0 12px",
     borderRadius: 8,
-    border: "1px solid #e8e6df",
-    background: "#fff",
+    border: "1px solid var(--color-border)",
+    background: "var(--color-card)",
     fontSize: 13,
     fontWeight: 600,
     color: "var(--color-text)",
@@ -670,7 +670,7 @@ export function DashboardClient({ user }: { user: User }) {
       '<div style="display:inline-flex;flex-direction:column;align-items:center;cursor:pointer; min-width: 90px; max-width: 120px;">' +
       '<div style="background:{{ properties.pinColor }};color:#fff;padding:4px 10px;border-radius:12px;font-size:10px;font-weight:700;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,0.28);border:1.5px solid rgba(255,255,255,0.35); text-align:center;line-height:1.4;">{{ properties.slotLabel }}</div>' +
       '<div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid {{ properties.pinColor }};margin-top:-1px;"></div>' +
-      '{% if properties.showLabel %}<div style="margin-top:3px;font-size:9px;font-weight:700;color:#1a1a18;white-space:nowrap;background:rgba(255,255,255,0.96);padding:2px 6px;border-radius:4px;box-shadow:0 1px 5px rgba(0,0,0,0.15);line-height:1.4;">{{ properties.labelText }}</div>{% endif %}' +
+      '{% if properties.showLabel %}<div style="margin-top:3px;font-size:9px;font-weight:700;color:var(--color-text);white-space:nowrap;background:rgba(255,255,255,0.96);padding:2px 6px;border-radius:4px;box-shadow:0 1px 5px rgba(0,0,0,0.15);line-height:1.4;">{{ properties.labelText }}</div>{% endif %}' +
       '</div>'
     );
 
@@ -698,7 +698,7 @@ export function DashboardClient({ user }: { user: User }) {
       const btnText = (isBulkMode && routeTabMode === "new")
         ? (isBulkSelected ? '❌ Убрать из маршрута' : '➕ Добавить в маршрут')
         : 'Открыть карточку';
-      const btnColor = (isBulkMode && routeTabMode === "new" && isBulkSelected) ? '#d94040' : '#4a7aff';
+      const btnColor = (isBulkMode && routeTabMode === "new" && isBulkSelected) ? '#d94040' : 'var(--color-accent)';
 
       const balloonBody = `
         <div style="padding: 4px 0;">
@@ -715,7 +715,7 @@ export function DashboardClient({ user }: { user: User }) {
       `;
 
       let pm;
-      const basePointColor = isOtherSlot ? '#1a1a18' : color;
+      const basePointColor = isOtherSlot ? 'var(--color-text)' : color;
 
       if (displayTime) {
         let pinColor = basePointColor;
@@ -856,7 +856,7 @@ export function DashboardClient({ user }: { user: User }) {
 
           // Настройки внешнего вида самой линии
           routeActiveStrokeWidth: 5,
-          routeActiveStrokeColor: '#4a7aff', // Синий цвет линии
+          routeActiveStrokeColor: 'var(--color-accent)', // Синий цвет линии
           routeStrokeStyle: 'solid',
           routeActivePedestrianSegmentStrokeStyle: 'solid'
         });
@@ -1155,7 +1155,7 @@ export function DashboardClient({ user }: { user: User }) {
         etas[o.id] = {
           type: 'DELIVERED',
           timeStr: t ? new Date(t).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }) : "—",
-          color: "#10b981"
+          color: "var(--color-green)"
         };
       } else if (o.status === "CANCELLED" || o.status === "RETURNED") {
         etas[o.id] = { type: 'SKIPPED', timeStr: "—", color: "var(--color-text-3)" };
@@ -1264,7 +1264,7 @@ export function DashboardClient({ user }: { user: User }) {
     NEW: { label: "Новый", color: "#d94040", bg: "#fef2f2" },
     ASSIGNED: { label: "Назначен", color: "var(--color-accent)", bg: "var(--color-accent-soft)" },
     ASSEMBLING: { label: "В сборке", color: "#d97706", bg: "#fffbeb" }, // 🔥 Цвет для отображения
-    IN_DELIVERY: { label: "🚀 В пути", color: "#10b981", bg: "#ecfdf5" },
+    IN_DELIVERY: { label: "🚀 В пути", color: "var(--color-green)", bg: "#ecfdf5" },
     DELIVERED: { label: "✅ Доставлен", color: "var(--color-text-2)", bg: "var(--color-bg)" },
     RETURNED: { label: "↩️ Возврат", color: "#d94040", bg: "#fef2f2" },
     CANCELLED: { label: "❌ Отменен", color: "var(--color-text-3)", bg: "var(--color-bg)" }
@@ -1316,7 +1316,7 @@ export function DashboardClient({ user }: { user: User }) {
   };
 
   const renderRouteListPanel = () => (
-    <div style={{ maxWidth: 600, margin: isMobile ? 0 : "0 auto", background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: isMobile ? 16 : 20 }}>
+    <div style={{ maxWidth: 600, margin: isMobile ? 0 : "0 auto", background: "var(--color-card)", borderRadius: 12, border: "1px solid var(--color-border)", padding: isMobile ? 16 : 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 18, color: "var(--color-text)" }}>Работа с маршрутами</h2>
         {!isMobile && <button onClick={() => { setIsBulkMode(false); setRouteTab("map"); }} style={{ background: "none", border: "none", fontSize: 24, cursor: "pointer", color: "var(--color-text-3)", padding: "0 8px" }}>×</button>}
@@ -1329,13 +1329,13 @@ export function DashboardClient({ user }: { user: User }) {
             setRouteType("mt");
             setManualDepartureTime(""); setIsDepartureEdited(false);
           }}
-          style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", background: routeTabMode === "new" ? "#fff" : "transparent", color: routeTabMode === "new" ? "var(--color-text)" : "var(--color-text-3)", boxShadow: routeTabMode === "new" ? "0 2px 8px rgba(0,0,0,0.05)" : "none", transition: "all 0.2s" }}
+          style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", background: routeTabMode === "new" ? "var(--color-card)" : "transparent", color: routeTabMode === "new" ? "var(--color-text)" : "var(--color-text-3)", boxShadow: routeTabMode === "new" ? "0 2px 8px rgba(0,0,0,0.05)" : "none", transition: "all 0.2s" }}
         >
           {editingRouteId ? "✏️ Редактирование" : "Новый маршрут"}
         </button>
         <button
           onClick={() => { setRouteTabMode("current"); setEditingRouteId(null); }}
-          style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", background: routeTabMode === "current" ? "#fff" : "transparent", color: routeTabMode === "current" ? "var(--color-text)" : "var(--color-text-3)", boxShadow: routeTabMode === "current" ? "0 2px 8px rgba(0,0,0,0.05)" : "none", transition: "all 0.2s" }}
+          style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", background: routeTabMode === "current" ? "var(--color-card)" : "transparent", color: routeTabMode === "current" ? "var(--color-text)" : "var(--color-text-3)", boxShadow: routeTabMode === "current" ? "0 2px 8px rgba(0,0,0,0.05)" : "none", transition: "all 0.2s" }}
         >
           Текущие ({existingRoutes.length})
         </button>
@@ -1345,7 +1345,7 @@ export function DashboardClient({ user }: { user: User }) {
         <button
           onClick={handleAutoGenerateRoutes}
           disabled={bulkSaving}
-          style={{ width: "100%", background: "linear-gradient(135deg, #4a7aff 0%, #7c4dff 100%)", color: "#fff", border: "none", padding: "10px 14px", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: bulkSaving ? "default" : "pointer", boxShadow: "0 4px 12px rgba(124, 77, 255, 0.3)", display: "flex", justifyContent: "center", alignItems: "center", gap: 8, opacity: bulkSaving ? 0.7 : 1 }}
+          style={{ width: "100%", background: "linear-gradient(135deg, var(--color-accent) 0%, #7c4dff 100%)", color: "#fff", border: "none", padding: "10px 14px", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: bulkSaving ? "default" : "pointer", boxShadow: "0 4px 12px rgba(124, 77, 255, 0.3)", display: "flex", justifyContent: "center", alignItems: "center", gap: 8, opacity: bulkSaving ? 0.7 : 1 }}
         >
           {bulkSaving ? "⏳ Сборка маршрутов..." : "✨ AI Авто-сборка черновиков"}
         </button>
@@ -1406,7 +1406,7 @@ export function DashboardClient({ user }: { user: User }) {
                   setManualDepartureTime(r.plannedDepartureTime || "");
                   setIsDepartureEdited(!!r.plannedDepartureTime);
                 }}
-                style={{ background: "var(--color-surface)", border: "1px solid #e8e6df", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}
+                style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}
               >
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
                   {/* Иконка Drag & Drop */}
@@ -1423,7 +1423,7 @@ export function DashboardClient({ user }: { user: User }) {
                       {/* СТАТУС ПРИНЯТИЯ */}
                       {!isDraft && (
                         r.isAccepted ? (
-                          <span style={{ background: "#ecfdf5", color: "#10b981", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #a7f3d0", display: "flex", alignItems: "center", gap: 4 }}>
+                          <span style={{ background: "#ecfdf5", color: "var(--color-green)", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #a7f3d0", display: "flex", alignItems: "center", gap: 4 }}>
                             ✅ Принят
                           </span>
                         ) : (
@@ -1468,13 +1468,13 @@ export function DashboardClient({ user }: { user: User }) {
                         )}
 
                         {finishedMs && (
-                          <span style={{ fontSize: 11, background: "#ecfdf5", color: "#10b981", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #a7f3d0" }}>
+                          <span style={{ fontSize: 11, background: "#ecfdf5", color: "var(--color-green)", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #a7f3d0" }}>
                             ✅ Завершил: {new Date(finishedMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         )}
 
                         {estimatedBaseReturn && (
-                          <span style={{ fontSize: 11, background: "var(--color-bg)", color: "var(--color-text-3)", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #e8e6df" }}>
+                          <span style={{ fontSize: 11, background: "var(--color-bg)", color: "var(--color-text-3)", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid var(--color-border)" }}>
                             🏠 Возврат: {estimatedBaseReturn}</span>
                         )}
 
@@ -1503,8 +1503,8 @@ export function DashboardClient({ user }: { user: User }) {
 
           <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 12, marginBottom: 16, background: "var(--color-bg)", padding: "6px 8px", borderRadius: 8, alignItems: isMobile ? "stretch" : "center" }}>
             <div style={{ display: "flex", gap: 4, flex: 1 }}>
-              <button onClick={() => setRouteType("auto")} style={{ ...s.actionBtn, flex: 1, background: routeType === "auto" ? "#fff" : "transparent", color: routeType === "auto" ? "var(--color-text)" : "var(--color-text-3)", boxShadow: routeType === "auto" ? "0 1px 3px rgba(0,0,0,0.1)" : "none", padding: "6px 14px", borderRadius: 6 }}>🚗 На авто</button>
-              <button onClick={() => setRouteType("mt")} style={{ ...s.actionBtn, flex: 1, background: routeType === "mt" ? "#fff" : "transparent", color: routeType === "mt" ? "var(--color-text)" : "var(--color-text-3)", boxShadow: routeType === "mt" ? "0 1px 3px rgba(0,0,0,0.1)" : "none", padding: "6px 14px", borderRadius: 6 }}>🚌 Транспорт</button>
+              <button onClick={() => setRouteType("auto")} style={{ ...s.actionBtn, flex: 1, background: routeType === "auto" ? "var(--color-card)" : "transparent", color: routeType === "auto" ? "var(--color-text)" : "var(--color-text-3)", boxShadow: routeType === "auto" ? "0 1px 3px rgba(0,0,0,0.1)" : "none", padding: "6px 14px", borderRadius: 6 }}>🚗 На авто</button>
+              <button onClick={() => setRouteType("mt")} style={{ ...s.actionBtn, flex: 1, background: routeType === "mt" ? "var(--color-card)" : "transparent", color: routeType === "mt" ? "var(--color-text)" : "var(--color-text-3)", boxShadow: routeType === "mt" ? "0 1px 3px rgba(0,0,0,0.1)" : "none", padding: "6px 14px", borderRadius: 6 }}>🚌 Транспорт</button>
             </div>
             <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", color: "var(--color-text)", fontWeight: 600, padding: isMobile ? "4px 6px" : 0 }}>
               <input type="checkbox" checked={returnToBase} onChange={e => setReturnToBase(e.target.checked)} style={{ accentColor: "var(--color-accent)", width: 16, height: 16 }} />
@@ -1546,9 +1546,9 @@ export function DashboardClient({ user }: { user: User }) {
                           }}
                           style={{
                             padding: "4px 24px 4px 6px", // Место под кастомную стрелочку
-                            borderRadius: 6, border: "1px solid #4a7aff",
+                            borderRadius: 6, border: "1px solid var(--color-accent)",
                             outline: "none", fontWeight: 700, fontFamily: "monospace",
-                            fontSize: 13, color: "var(--color-accent)", background: "#fff",
+                            fontSize: 13, color: "var(--color-accent)", background: "var(--color-card)",
                             width: "100%"
                           }}
                         />
@@ -1576,7 +1576,7 @@ export function DashboardClient({ user }: { user: User }) {
 
                             <div style={{
                               position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4,
-                              background: "#fff", border: "1px solid #4a7aff", borderRadius: 6,
+                              background: "var(--color-card)", border: "1px solid var(--color-accent)", borderRadius: 6,
                               zIndex: 100, maxHeight: 180, overflowY: "auto",
                               boxShadow: "0 4px 12px rgba(0,0,0,0.15)"
                             }}>
@@ -1717,7 +1717,7 @@ export function DashboardClient({ user }: { user: User }) {
                 style={{
                   padding: "4px 8px", borderRadius: 6, border: "1px solid #f87171",
                   outline: "none", fontWeight: 700, fontFamily: "monospace",
-                  fontSize: 13, color: "#b91c1c", width: 60, background: "#fff"
+                  fontSize: 13, color: "#b91c1c", width: 60, background: "var(--color-card)"
                 }}
               />
             </div>
@@ -1727,8 +1727,8 @@ export function DashboardClient({ user }: { user: User }) {
             <button onClick={optimizeRoute} style={{ ...s.actionBtn, background: "#f4f7ff", color: "var(--color-accent)", border: "1px solid #c9d8ff" }}>✨ Умная оптимизация (Время + Расстояние)</button>
             {selectedRouteOrders.length > 0 && (
               <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => handleOpenRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "#fff", color: "var(--color-text)", border: "1px solid #e8e6df" }}>🗺️ Открыть в Яндексе</button>
-                <button onClick={() => handleShareRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "#fff", color: "var(--color-text)", border: "1px solid #e8e6df" }}>🔗 Скопировать ссылку</button>
+                <button onClick={() => handleOpenRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border)" }}>🗺️ Открыть в Яндексе</button>
+                <button onClick={() => handleShareRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "var(--color-card)", color: "var(--color-text)", border: "1px solid var(--color-border)" }}>🔗 Скопировать ссылку</button>
               </div>
             )}
           </div>
@@ -1757,8 +1757,8 @@ export function DashboardClient({ user }: { user: User }) {
                 style={{
                   ...s.actionBtn,
                   flex: isMobile ? "1 1 100%" : "1 1 auto",
-                  background: bulkCourier && bulkSelectedIds.length > 0 ? '#e8e6df' : '#f5f4f0',
-                  color: bulkCourier && bulkSelectedIds.length > 0 ? '#1a1a18' : '#a8a49c',
+                  background: bulkCourier && bulkSelectedIds.length > 0 ? 'var(--color-border)' : 'var(--color-bg)',
+                  color: bulkCourier && bulkSelectedIds.length > 0 ? 'var(--color-text)' : 'var(--color-text-3)',
                   whiteSpace: 'nowrap'
                 }}
                 disabled={!bulkCourier || bulkSelectedIds.length === 0 || bulkSaving}
@@ -1772,8 +1772,8 @@ export function DashboardClient({ user }: { user: User }) {
                   ...s.actionBtn,
                   flex: isMobile ? "1 1 100%" : "1 1 auto",
                   minWidth: 120,
-                  background: bulkCourier && bulkSelectedIds.length > 0 ? '#4a7aff' : '#e8e6df',
-                  color: bulkCourier && bulkSelectedIds.length > 0 ? '#fff' : '#a8a49c'
+                  background: bulkCourier && bulkSelectedIds.length > 0 ? 'var(--color-accent)' : 'var(--color-border)',
+                  color: bulkCourier && bulkSelectedIds.length > 0 ? '#fff' : 'var(--color-text-3)'
                 }}
                 disabled={!bulkCourier || bulkSelectedIds.length === 0 || bulkSaving}
                 onClick={() => handleBulkAssign(false)}
@@ -1824,7 +1824,7 @@ export function DashboardClient({ user }: { user: User }) {
                         )}
 
                         {/* 🔥 2. ПРИМЕНЯЕМ ФОН ТОЛЬКО ДЛЯ АДМИНА */}
-                        <div style={{ padding: "10px 12px 10px 16px", background: o.status === "IN_DELIVERY" ? "#fffbeb" : (showRedBg ? "#fff8f8" : "#fff"), border: showRedBg ? "1px solid #fecaca" : "1px solid #e8e6df", borderRadius: 8, display: "flex", gap: 12, alignItems: "center", position: "relative", overflow: "hidden" }}>
+                        <div style={{ padding: "10px 12px 10px 16px", background: o.status === "IN_DELIVERY" ? "#fffbeb" : (showRedBg ? "#fff8f8" : "#fff"), border: showRedBg ? "1px solid #fecaca" : "1px solid var(--color-border)", borderRadius: 8, display: "flex", gap: 12, alignItems: "center", position: "relative", overflow: "hidden" }}>
                           <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: 4, background: color }} />
 
                           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -1862,7 +1862,7 @@ export function DashboardClient({ user }: { user: User }) {
 
                               {o.status === "DELIVERED" && (
                                 <div>
-                                  <span style={{ color: "#10b981", fontWeight: 700 }}>
+                                  <span style={{ color: "var(--color-green)", fontWeight: 700 }}>
                                     ✓ Факт: {o.deliveredAt ? new Date(o.deliveredAt).toLocaleTimeString("ru", { hour: '2-digit', minute: '2-digit' }) : (o.changedAt ? new Date(o.changedAt).toLocaleTimeString("ru", { hour: '2-digit', minute: '2-digit' }) : "—")}
                                   </span>
                                 </div>
@@ -1909,8 +1909,8 @@ export function DashboardClient({ user }: { user: User }) {
     height: 34,
     padding: "0 12px",
     borderRadius: 8,
-    border: "1px solid #e8e6df",
-    background: "#fff",
+    border: "1px solid var(--color-border)",
+    background: "var(--color-card)",
     fontSize: 13,
     fontWeight: 600,
     color: "var(--color-text)",
@@ -1941,7 +1941,7 @@ export function DashboardClient({ user }: { user: User }) {
         {/* 2. Основные кнопки навигации */}
         <button onClick={() => router.push('/orders')} style={topbarBtnStyle}>
           ≡ Заказы
-          <span style={{ background: '#eef3ff', color: '#4a7aff', padding: '1px 6px', borderRadius: 10, fontSize: 11, fontWeight: 700 }}>
+          <span style={{ background: '#eef3ff', color: 'var(--color-accent)', padding: '1px 6px', borderRadius: 10, fontSize: 11, fontWeight: 700 }}>
             {filtered.length}
           </span>
         </button>
@@ -2068,13 +2068,13 @@ export function DashboardClient({ user }: { user: User }) {
           {showMapSettings && (
             <>
               <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setShowMapSettings(false)} />
-              <div style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, background: "#fff", border: "1px solid #e8e6df", borderRadius: 12, padding: "12px 14px", zIndex: 200, display: "flex", flexDirection: "column", gap: 10, minWidth: 160, boxShadow: "0 8px 24px rgba(0,0,0,0.12)" }}>
-                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showCouriers} onChange={e => setShowCouriers(e.target.checked)} style={{ accentColor: "var(--color-accent)" }} /> Курьеры на карте</label>
-                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showHomes} onChange={e => setShowHomes(e.target.checked)} style={{ accentColor: "var(--color-accent)" }} /> Дом</label>
-                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showCourierNames} onChange={e => setShowCourierNames(e.target.checked)} style={{ accentColor: "var(--color-accent)" }} /> Имена</label>
-                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showTime} onChange={e => setShowTime(e.target.checked)} style={{ accentColor: "var(--color-accent)" }} /> Время</label>
+              <div style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 12, padding: "12px 14px", zIndex: 200, display: "flex", flexDirection: "column", gap: 10, minWidth: 160, boxShadow: "0 8px 24px rgba(0,0,0,0.12)" }}>
+                <label style={{ fontSize: 12, color: 'var(--color-text)', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showCouriers} onChange={e => setShowCouriers(e.target.checked)} style={{ accentColor: "var(--color-accent)" }} /> Курьеры на карте</label>
+                <label style={{ fontSize: 12, color: 'var(--color-text)', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showHomes} onChange={e => setShowHomes(e.target.checked)} style={{ accentColor: "var(--color-accent)" }} /> Дом</label>
+                <label style={{ fontSize: 12, color: 'var(--color-text)', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showCourierNames} onChange={e => setShowCourierNames(e.target.checked)} style={{ accentColor: "var(--color-accent)" }} /> Имена</label>
+                <label style={{ fontSize: 12, color: 'var(--color-text)', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showTime} onChange={e => setShowTime(e.target.checked)} style={{ accentColor: "var(--color-accent)" }} /> Время</label>
                 <div style={{ width: "100%", height: 1, background: "#f0efe9" }} />
-                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showRouteLines} onChange={e => setShowRouteLines(e.target.checked)} style={{ accentColor: "var(--color-accent)" }} /> Линии маршрутов</label>
+                <label style={{ fontSize: 12, color: 'var(--color-text)', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showRouteLines} onChange={e => setShowRouteLines(e.target.checked)} style={{ accentColor: "var(--color-accent)" }} /> Линии маршрутов</label>
               </div>
             </>
           )}
@@ -2111,7 +2111,7 @@ export function DashboardClient({ user }: { user: User }) {
       {isMobile && (
         <>
           {/* Ряд 2: фильтры + маршруты + слоты */}
-          <div className="hide-scrollbar" style={{ display: "flex", gap: 6, padding: "6px 10px", background: "#fff", borderBottom: "1px solid #e8e6df", overflowX: "auto", flexShrink: 0, alignItems: "center" }}>
+          <div className="hide-scrollbar" style={{ display: "flex", gap: 6, padding: "6px 10px", background: "var(--color-card)", borderBottom: "1px solid var(--color-border)", overflowX: "auto", flexShrink: 0, alignItems: "center" }}>
 
             {/* 🔥 КАЛЕНДАРЬ НА МОБИЛКЕ (в режиме Portal-Dropdown) */}
             <div style={{ position: "relative", flexShrink: 0 }}>
@@ -2167,7 +2167,7 @@ export function DashboardClient({ user }: { user: User }) {
               {isStatusMenuOpen && (
                 <>
                   <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.2)" }} onClick={() => setIsStatusMenuOpen(false)} />
-                  <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#fff", borderRadius: "16px 16px 0 0", padding: "16px 16px 24px", zIndex: 1000, display: "flex", flexDirection: "column", gap: 4, maxHeight: "60vh", overflowY: "auto", boxShadow: "0 -8px 24px rgba(0,0,0,0.15)" }}>
+                  <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "var(--color-card)", borderRadius: "16px 16px 0 0", padding: "16px 16px 24px", zIndex: 1000, display: "flex", flexDirection: "column", gap: 4, maxHeight: "60vh", overflowY: "auto", boxShadow: "0 -8px 24px rgba(0,0,0,0.15)" }}>
                     <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Статусы</div>
                     {["NEW", "ASSIGNED",  "ASSEMBLING", "IN_DELIVERY", "DELIVERED"].map(st => (
                       <label key={st} style={s.dropdownItem}>
@@ -2197,7 +2197,7 @@ export function DashboardClient({ user }: { user: User }) {
               {isCourierMenuOpen && (
                 <>
                   <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.2)" }} onClick={() => setIsCourierMenuOpen(false)} />
-                  <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#fff", borderRadius: "16px 16px 0 0", padding: "16px 16px 24px", zIndex: 1000, display: "flex", flexDirection: "column", gap: 4, maxHeight: "60vh", overflowY: "auto", boxShadow: "0 -8px 24px rgba(0,0,0,0.15)" }}>
+                  <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "var(--color-card)", borderRadius: "16px 16px 0 0", padding: "16px 16px 24px", zIndex: 1000, display: "flex", flexDirection: "column", gap: 4, maxHeight: "60vh", overflowY: "auto", boxShadow: "0 -8px 24px rgba(0,0,0,0.15)" }}>
                     <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Курьеры</div>
                     {courierOptions.map(c => {
                       if (c.value === "ALL") {
@@ -2232,13 +2232,13 @@ export function DashboardClient({ user }: { user: User }) {
 
           {/* Ряд 3: переключатель вида или табы маршрутов */}
           {!isBulkMode ? (
-            <div style={{ display: "flex", padding: "6px 10px", background: "var(--color-bg)", gap: 6, flexShrink: 0, borderBottom: "1px solid #e8e6df" }}>
+            <div style={{ display: "flex", padding: "6px 10px", background: "var(--color-bg)", gap: 6, flexShrink: 0, borderBottom: "1px solid var(--color-border)" }}>
               <ViewToggleBtn active={mobileView === "map"} onClick={() => setMobileView("map")}>🗺️ Карта</ViewToggleBtn>
               <ViewToggleBtn active={mobileView === "split"} onClick={() => setMobileView("split")}>Вместе</ViewToggleBtn>
               <ViewToggleBtn active={mobileView === "panels"} onClick={() => setMobileView("panels")}>📋 Список</ViewToggleBtn>
             </div>
           ) : (
-            <div style={{ display: "flex", padding: "8px 10px", background: "#fff", gap: 8, flexShrink: 0, borderBottom: "1px solid #e8e6df", zIndex: 10 }}>
+            <div style={{ display: "flex", padding: "8px 10px", background: "var(--color-card)", gap: 8, flexShrink: 0, borderBottom: "1px solid var(--color-border)", zIndex: 10 }}>
               <button onClick={() => setRouteTab("map")} style={{ ...s.routeTabBtn, flex: 1, background: routeTab === "map" ? "var(--color-accent-soft)" : "#fff", color: routeTab === "map" ? "var(--color-accent)" : "var(--color-text-2)" }}>📍 Точки на карте</button>
               <button onClick={() => setRouteTab("list")} style={{ ...s.routeTabBtn, flex: 1, background: routeTab === "list" ? "var(--color-accent-soft)" : "#fff", color: routeTab === "list" ? "var(--color-accent)" : "var(--color-text-2)" }}>📋 Управление</button>
             </div>
@@ -2252,14 +2252,14 @@ export function DashboardClient({ user }: { user: User }) {
             {((isListVisible || isDetailVisible) && !isBulkMode) && (
               <div style={s.leftPanel}>
                 {isListVisible && (
-                  <div style={{ ...s.cardsSection, flex: (isDetailVisible && selected) ? "0 0 50%" : 1, borderBottom: (isDetailVisible && selected) ? "1px solid #e8e6df" : "none" }}>
+                  <div style={{ ...s.cardsSection, flex: (isDetailVisible && selected) ? "0 0 50%" : 1, borderBottom: (isDetailVisible && selected) ? "1px solid var(--color-border)" : "none" }}>
                     <div style={s.sectionHeader}>
                       <span style={s.sectionTitle}>Заказы</span>
                       <span style={s.countBadge}>{filtered.length}</span>
                       <div style={{ flex: 1, position: "relative", margin: "0 8px" }}>
                         <input type="text" placeholder="Поиск..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                          style={{ width: "100%", padding: "4px 20px 4px 24px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 11, outline: "none", background: "var(--color-surface)", boxSizing: "border-box", transition: "background 0.2s" }}
-                          onFocus={(e) => e.target.style.background = "#fff"} onBlur={(e) => e.target.style.background = "var(--color-surface)"} />
+                          style={{ width: "100%", padding: "4px 20px 4px 24px", borderRadius: 6, border: "1px solid var(--color-border)", fontSize: 11, outline: "none", background: "var(--color-surface)", boxSizing: "border-box", transition: "background 0.2s" }}
+                          onFocus={(e) => e.target.style.background = "var(--color-card)"} onBlur={(e) => e.target.style.background = "var(--color-surface)"} />
                         <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", fontSize: 10, color: "var(--color-text-3)", pointerEvents: "none" }}>🔍</span>
                         {searchQuery && (
                           <button onClick={() => setSearchQuery("")} style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--color-text-3)", cursor: "pointer", fontSize: 12, padding: 0, display: "flex", alignItems: "center" }}>✕</button>
@@ -2286,7 +2286,7 @@ export function DashboardClient({ user }: { user: User }) {
             )}
             <div style={{ flex: 1, position: 'relative', display: "flex", flexDirection: "row", minWidth: 0 }}>
               {isBulkMode && (
-                <div style={{ width: 600, flexShrink: 0, background: "var(--color-bg)", borderRight: "1px solid #e8e6df", zIndex: 10, display: "flex", flexDirection: "column" }}>
+                <div style={{ width: 600, flexShrink: 0, background: "var(--color-bg)", borderRight: "1px solid var(--color-border)", zIndex: 10, display: "flex", flexDirection: "column" }}>
                   <div style={{ flex: 1, overflowY: "auto", overflowX: "auto", padding: 16 }}>
                     {renderRouteListPanel()}
                   </div>
@@ -2347,7 +2347,7 @@ export function DashboardClient({ user }: { user: User }) {
             <span style={s.sectionTitle}>Все заказы ({filterDate})</span>
             <span style={s.countBadge}>{tableOrders.length}</span>
             <div style={{ flex: 1 }} />
-            <button onClick={() => setTableOpen(!tableOpen)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#4a7aff', padding: '4px 8px' }}>
+            <button onClick={() => setTableOpen(!tableOpen)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--color-accent)', padding: '4px 8px' }}>
               {tableOpen ? '▼ Свернуть' : '▲ Развернуть'}
             </button>
           </div>
@@ -2374,8 +2374,8 @@ export function DashboardClient({ user }: { user: User }) {
                         <td style={{ ...s.td, whiteSpace: "nowrap" }}>
                           {o.status === "DELIVERED" ? (
                             <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
-                              {o.eta && <span style={{ fontSize: 10, color: '#a8a49c', textDecoration: 'line-through' }}>{o.eta}</span>}
-                              <span style={{ color: late ? '#d94040' : '#10b981', fontWeight: 700 }}>{late ? "⏰ " : "✓ "}{o.deliveredAt ? new Date(o.deliveredAt).toLocaleTimeString("ru", { hour: '2-digit', minute: '2-digit' }) : "—"}</span>
+                              {o.eta && <span style={{ fontSize: 10, color: 'var(--color-text-3)', textDecoration: 'line-through' }}>{o.eta}</span>}
+                              <span style={{ color: late ? '#d94040' : 'var(--color-green)', fontWeight: 700 }}>{late ? "⏰ " : "✓ "}{o.deliveredAt ? new Date(o.deliveredAt).toLocaleTimeString("ru", { hour: '2-digit', minute: '2-digit' }) : "—"}</span>
                             </div>
                           ) : (
                             <span style={{ color: late ? "#d94040" : "var(--color-accent)", fontWeight: 700 }}>{late ? "⏰ " : ""}{o.eta ?? "—"}</span>
@@ -2456,7 +2456,7 @@ function OrderCard({ order, selected, isBulkMode, isBulkSelected, onSelect }: an
         <span style={{ ...s.slotTag, color: late ? "#d94040" : color }}>{late ? "⏰ " : ""}{order.slotFrom}–{order.slotTo ?? ""}</span>
 
         {order.status === "DELIVERED" ? (
-          <span style={{ fontSize: 10, color: late ? "#d94040" : "#10b981", fontWeight: 700, marginLeft: 6 }}>
+          <span style={{ fontSize: 10, color: late ? "#d94040" : "var(--color-green)", fontWeight: 700, marginLeft: 6 }}>
             {order.eta && <span style={{ color: "var(--color-text-3)", textDecoration: "line-through", marginRight: 4 }}>{order.eta}</span>}
             {late ? "⏰ " : "✓ "}{order.deliveredAt ? new Date(order.deliveredAt).toLocaleTimeString("ru", { hour: '2-digit', minute: '2-digit' }) : "—"}
           </span>
@@ -2487,21 +2487,21 @@ function CourierSearchSelect({ value, onChange, options }: { value: string, onCh
     <div ref={ref} style={{ position: "relative", flex: 1 }}>
       <div
         onClick={() => setOpen(!open)}
-        style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #e8e6df", background: "#fff", fontSize: 13, color: value ? "var(--color-text)" : "var(--color-text-3)", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", height: "100%", fontWeight: 600 }}
+        style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid var(--color-border)", background: "var(--color-card)", fontSize: 13, color: value ? "var(--color-text)" : "var(--color-text-3)", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", height: "100%", fontWeight: 600 }}
       >
         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedLabel}</span>
         <span style={{ fontSize: 10, color: "var(--color-text-3)", transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "rotate(0deg)" }}>▼</span>
       </div>
 
       {open && (
-        <div style={{ position: "absolute", bottom: "calc(100% + 6px)", left: 0, right: 0, background: "#fff", border: "1px solid #e8e6df", borderRadius: 10, boxShadow: "0 -4px 24px rgba(0,0,0,0.12)", zIndex: 500, maxHeight: 280, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div style={{ position: "absolute", bottom: "calc(100% + 6px)", left: 0, right: 0, background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 10, boxShadow: "0 -4px 24px rgba(0,0,0,0.12)", zIndex: 500, maxHeight: 280, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div style={{ padding: "8px", borderBottom: "1px solid #f0efe9", background: "var(--color-surface)" }}>
-            <input autoFocus placeholder="Поиск курьера..." value={search} onChange={e => setSearch(e.target.value)} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 13, outline: "none" }} />
+            <input autoFocus placeholder="Поиск курьера..." value={search} onChange={e => setSearch(e.target.value)} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--color-border)", fontSize: 13, outline: "none" }} />
           </div>
           <div style={{ overflowY: "auto", padding: "4px 0", flex: 1 }}>
             <div onClick={() => { onChange(""); setOpen(false); setSearch(""); }} style={{ padding: "10px 14px", fontSize: 13, cursor: "pointer", color: !value ? "var(--color-accent)" : "var(--color-text-3)", background: !value ? "#f4f7ff" : "transparent" }}>— Выберите курьера —</div>
             {filteredOptions.map(o => (
-              <div key={o.value} onClick={() => { onChange(String(o.value)); setOpen(false); setSearch(""); }} style={{ padding: "10px 14px", fontSize: 13, cursor: "pointer", borderBottom: "1px solid #f5f4f0", color: String(o.value) === String(value) ? "var(--color-accent)" : "var(--color-text)", background: String(o.value) === String(value) ? "#f4f7ff" : "transparent", fontWeight: String(o.value) === String(value) ? 700 : 500 }}>
+              <div key={o.value} onClick={() => { onChange(String(o.value)); setOpen(false); setSearch(""); }} style={{ padding: "10px 14px", fontSize: 13, cursor: "pointer", borderBottom: "1px solid var(--color-bg)", color: String(o.value) === String(value) ? "var(--color-accent)" : "var(--color-text)", background: String(o.value) === String(value) ? "#f4f7ff" : "transparent", fontWeight: String(o.value) === String(value) ? 700 : 500 }}>
                 {o.label}
               </div>
             ))}
@@ -2515,16 +2515,16 @@ function CourierSearchSelect({ value, onChange, options }: { value: string, onCh
 
 const s: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "var(--color-bg)", overflow: "hidden" },
-  topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 16px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 100, position: "relative", overflow: "visible", flexWrap: "nowrap" },
+  topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 16px", height: 52, background: "var(--color-card)", borderBottom: "1px solid var(--color-border)", flexShrink: 0, zIndex: 100, position: "relative", overflow: "visible", flexWrap: "nowrap" },
 
-  dropdownMenu: { position: "absolute", top: "100%", left: 0, marginTop: 6, background: "#fff", border: "1px solid #e8e6df", borderRadius: 12, padding: 8, zIndex: 100, display: "flex", flexDirection: "column", gap: 2, minWidth: 180, maxHeight: 300, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,0.12)" },
+  dropdownMenu: { position: "absolute", top: "100%", left: 0, marginTop: 6, background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 12, padding: 8, zIndex: 100, display: "flex", flexDirection: "column", gap: 2, minWidth: 180, maxHeight: 300, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,0.12)" },
   dropdownItem: { display: "flex", alignItems: "center", gap: 10, fontSize: 13, cursor: "pointer", padding: "6px 8px", borderRadius: 6, transition: "background 0.15s", whiteSpace: "nowrap" },
   logo: { fontSize: 15, fontWeight: 600, color: "var(--color-text)", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap", flexShrink: 0, minWidth: "max-content", marginRight: "auto" },
-  navBtn: { padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "var(--color-surface)", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "var(--color-text)", whiteSpace: "nowrap" },
-  datePicker: { padding: "4px 8px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 11, outline: "none", color: "var(--color-text)", background: "#fff", marginLeft: 8 },
-  nativeSelect: { height: 28, padding: "0 8px", borderRadius: 7, border: "1px solid #e0dfd7", fontSize: 11, fontWeight: 500, outline: "none", cursor: "pointer", background: "#fff", color: "var(--color-text)", maxWidth: 120 },
+  navBtn: { padding: "5px 10px", borderRadius: 6, border: "1px solid var(--color-border)", background: "var(--color-surface)", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "var(--color-text)", whiteSpace: "nowrap" },
+  datePicker: { padding: "4px 8px", borderRadius: 6, border: "1px solid var(--color-border)", fontSize: 11, outline: "none", color: "var(--color-text)", background: "var(--color-card)", marginLeft: 8 },
+  nativeSelect: { height: 28, padding: "0 8px", borderRadius: 7, border: "1px solid #e0dfd7", fontSize: 11, fontWeight: 500, outline: "none", cursor: "pointer", background: "var(--color-card)", color: "var(--color-text)", maxWidth: 120 },
   slotBar: { display: "flex", gap: 4, marginLeft: 8 },
-  slotBtn: { padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 500, border: "1px solid #e8e6df", background: "transparent", color: "var(--color-text-2)", cursor: "pointer", whiteSpace: "nowrap" },
+  slotBtn: { padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 500, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-text-2)", cursor: "pointer", whiteSpace: "nowrap" },
   syncLabel: { fontSize: 11, color: "var(--color-text-3)", whiteSpace: "nowrap", marginRight: 4 },
   alertBadge: { display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 500, background: "rgba(217,64,64,0.08)", border: "1px solid rgba(217,64,64,0.2)", color: "#d94040", cursor: "pointer", whiteSpace: "nowrap" },
   userBtn: { width: 32, height: 32, borderRadius: "50%", background: "var(--color-accent)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, color: "#fff", flexShrink: 0 },
@@ -2532,7 +2532,7 @@ const s: Record<string, React.CSSProperties> = {
   invalidBannerLink: { fontFamily: "monospace", fontWeight: 600, cursor: "pointer", textDecoration: "underline" },
   invalidBannerClose: { marginLeft: "auto", background: "none", border: "none", color: "#d94040", cursor: "pointer", fontSize: 14, flexShrink: 0, padding: 2 },
   body: { display: "flex", flex: 1, overflow: "hidden", minHeight: 0 },
-  leftPanel: { width: 300, minWidth: 260, background: "#fff", borderRight: "1px solid #e8e6df", display: "flex", flexDirection: "column", flexShrink: 0, overflow: "hidden", zIndex: 5 },
+  leftPanel: { width: 300, minWidth: 260, background: "var(--color-card)", borderRight: "1px solid var(--color-border)", display: "flex", flexDirection: "column", flexShrink: 0, overflow: "hidden", zIndex: 5 },
   cardsSection: { display: "flex", flexDirection: "column", overflow: "hidden" },
   sectionHeader: { padding: "10px 14px 8px", display: "flex", alignItems: "center", gap: 6, flexShrink: 0, borderBottom: "1px solid #f0efe9" },
   sectionTitle: { fontSize: 11, fontWeight: 600, color: "var(--color-text-3)", textTransform: "uppercase", letterSpacing: "0.5px" },
@@ -2542,8 +2542,8 @@ const s: Record<string, React.CSSProperties> = {
   detailSection: { display: "flex", flexDirection: "column", overflow: "hidden" },
   detailEmpty: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 },
   panelToggleArrow: { background: "transparent", border: "none", cursor: "pointer", color: "var(--color-text-3)", fontSize: 13, padding: "4px 8px", borderRadius: 4 },
-  expandSideBtn: { background: "#fff", border: "1px solid #e8e6df", borderLeft: "none", borderRadius: "0 8px 8px 0", padding: "10px 8px", cursor: "pointer", color: "var(--color-text-2)", fontSize: 13, boxShadow: "2px 2px 8px rgba(0,0,0,0.06)" },
-  card: { padding: "9px 11px", borderRadius: 8, marginBottom: 4, background: "var(--color-surface)", border: "1px solid #e8e6df", cursor: "pointer", transition: "all .12s" },
+  expandSideBtn: { background: "var(--color-card)", border: "1px solid var(--color-border)", borderLeft: "none", borderRadius: "0 8px 8px 0", padding: "10px 8px", cursor: "pointer", color: "var(--color-text-2)", fontSize: 13, boxShadow: "2px 2px 8px rgba(0,0,0,0.06)" },
+  card: { padding: "9px 11px", borderRadius: 8, marginBottom: 4, background: "var(--color-surface)", border: "1px solid var(--color-border)", cursor: "pointer", transition: "all .12s" },
   cardSelected: { background: "var(--color-accent-soft)", borderColor: "var(--color-accent)" },
   cardInvalid: { borderColor: "rgba(217,64,64,0.3)", background: "#fff8f8" },
   cardRow1: { display: "flex", alignItems: "center", gap: 5, marginBottom: 4 },
@@ -2553,29 +2553,29 @@ const s: Record<string, React.CSSProperties> = {
   cardMeta: { display: "flex", alignItems: "center", gap: 6 },
   slotTag: { fontSize: 10, fontWeight: 600 },
   courierTag: { fontSize: 10, color: "var(--color-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 },
-  tableSection: { flexShrink: 0, background: "#fff", borderTop: "2px solid #e8e6df", display: "flex", flexDirection: "column", overflow: "hidden" },
+  tableSection: { flexShrink: 0, background: "var(--color-card)", borderTop: "2px solid var(--color-border)", display: "flex", flexDirection: "column", overflow: "hidden" },
   tableHeader: { display: "flex", alignItems: "center", gap: 6, padding: "7px 16px", borderBottom: "1px solid #f0efe9", flexShrink: 0 },
   table: { width: "max-content", minWidth: "100%", borderCollapse: "collapse", fontSize: 12 },
-  th: { padding: "7px 12px", textAlign: "left" as const, fontSize: 10, fontWeight: 600, color: "var(--color-text-3)", textTransform: "uppercase", letterSpacing: ".4px", background: "var(--color-surface)", borderBottom: "1px solid #e8e6df", whiteSpace: "nowrap", position: "sticky", top: 0, zIndex: 1 },
+  th: { padding: "7px 12px", textAlign: "left" as const, fontSize: 10, fontWeight: 600, color: "var(--color-text-3)", textTransform: "uppercase", letterSpacing: ".4px", background: "var(--color-surface)", borderBottom: "1px solid var(--color-border)", whiteSpace: "nowrap", position: "sticky", top: 0, zIndex: 1 },
   td: { padding: "7px 12px", borderBottom: "0.5px solid #f0efe9", verticalAlign: "top", fontSize: 12, color: "var(--color-text)" },
   statusDot: { width: 6, height: 6, borderRadius: "50%", flexShrink: 0, display: "inline-block", marginRight: 4, verticalAlign: "middle" },
-  routeTabBtn: { padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid #e8e6df", cursor: "pointer", transition: "all 0.15s" },
+  routeTabBtn: { padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid var(--color-border)", cursor: "pointer", transition: "all 0.15s" },
   actionBtn: { padding: "8px 16px", border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer", borderRadius: 8 },
-  popup: { position: "fixed", top: 52, right: 8, background: "#fff", border: "1px solid #e8e6df", borderRadius: 12, padding: 16, zIndex: 200, width: 280, boxShadow: "0 4px 24px rgba(0,0,0,0.1)" },
+  popup: { position: "fixed", top: 52, right: 8, background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 12, padding: 16, zIndex: 200, width: 280, boxShadow: "0 4px 24px rgba(0,0,0,0.1)" },
   overlay: { position: "fixed", inset: 0, zIndex: 199 },
   alertTitle: { fontSize: 11, fontWeight: 700, color: "#d94040", textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 10 },
-  alertItem: { padding: "7px 0", borderBottom: "0.5px solid #f5f4f0", cursor: "pointer" },
+  alertItem: { padding: "7px 0", borderBottom: "0.5px solid var(--color-bg)", cursor: "pointer" },
   alertAddr: { fontSize: 12, color: "var(--color-text)", marginBottom: 2 },
   alertSub: { fontSize: 11, color: "#d94040", opacity: 0.8 },
 };
 
 const sm: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "var(--color-bg)", overflow: "hidden" },
-  topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 10px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 100, position: "relative", overflow: "visible", flexWrap: "nowrap" },
-  mobileSlotsWrap: { display: "flex", gap: 4, padding: "6px 10px", background: "#fff", borderBottom: "1px solid #e8e6df", overflowX: "auto", flexShrink: 0 },
+  topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 10px", height: 52, background: "var(--color-card)", borderBottom: "1px solid var(--color-border)", flexShrink: 0, zIndex: 100, position: "relative", overflow: "visible", flexWrap: "nowrap" },
+  mobileSlotsWrap: { display: "flex", gap: 4, padding: "6px 10px", background: "var(--color-card)", borderBottom: "1px solid var(--color-border)", overflowX: "auto", flexShrink: 0 },
   body: { display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", minHeight: 0 },
   map: { width: "100%", minHeight: 200 },
-  panelsWrap: { display: "flex", flexDirection: "column", background: "#fff", overflow: "hidden", flex: 1, minHeight: 0 },
+  panelsWrap: { display: "flex", flexDirection: "column", background: "var(--color-card)", overflow: "hidden", flex: 1, minHeight: 0 },
   cardsSection: { flex: 1, display: "flex", flexDirection: "column", minHeight: 0, overflow: "hidden" },
-  detailSection: { flex: "0 0 55%", display: "flex", flexDirection: "column", borderTop: "2px solid #4a7aff", background: "#fff", overflow: "hidden", boxShadow: "0 -4px 12px rgba(0,0,0,0.05)" },
+  detailSection: { flex: "0 0 55%", display: "flex", flexDirection: "column", borderTop: "2px solid var(--color-accent)", background: "var(--color-card)", overflow: "hidden", boxShadow: "0 -4px 12px rgba(0,0,0,0.05)" },
 };

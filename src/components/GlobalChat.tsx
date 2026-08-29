@@ -442,7 +442,7 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
     return [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.email || "Курьер";
   };
   const roleLabel = (r?: string) => r === "ADMIN" ? "Админ" : r === "OPERATOR" ? "Оператор" : "Курьер";
-  const roleColor = (r?: string) => r === "COURIER" ? "#10b981" : "var(--color-accent)";
+  const roleColor = (r?: string) => r === "COURIER" ? "var(--color-green)" : "var(--color-accent)";
   const interlocutor = (c: Conversation) => String(c.user1?.id) === String(currentUserId) ? c.user2 : c.user1;
 
   // 🔥 Позиция: оператор — левый угол, курьер — кнопка скрыта (она в навбаре)
@@ -492,10 +492,10 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
           width: 340,
           maxWidth: "calc(100vw - 32px)",
           height: 480,
-          background: "#fff",
+          background: "var(--color-card)",
           borderRadius: 16,
           boxShadow: "0 12px 40px rgba(0,0,0,0.2)",
-          border: "1px solid #e8e6df",
+          border: "1px solid var(--color-border)",
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
@@ -542,9 +542,9 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
                 const last = c.messages?.[0];
                 const initial = (other.firstName?.[0] ?? other.lastName?.[0] ?? other.email?.[0] ?? "?").toUpperCase();
                 return (
-                  <div key={c.id} onClick={() => openDialog(c)} style={{ padding: "10px 14px", borderBottom: "1px solid #f0ede8", cursor: "pointer", display: "flex", gap: 10, alignItems: "center", background: "#fff", transition: "background 0.15s" }} onMouseEnter={e => (e.currentTarget.style.background = "var(--color-bg)")} onMouseLeave={e => (e.currentTarget.style.background = "#fff")}>
+                  <div key={c.id} onClick={() => openDialog(c)} style={{ padding: "10px 14px", borderBottom: "1px solid #f0ede8", cursor: "pointer", display: "flex", gap: 10, alignItems: "center", background: "var(--color-card)", transition: "background 0.15s" }} onMouseEnter={e => (e.currentTarget.style.background = "var(--color-bg)")} onMouseLeave={e => (e.currentTarget.style.background = "var(--color-card)")}>
                     {other.avatarUrl ? (
-                      <img src={other.avatarUrl} alt="ava" style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "1px solid #e8e6df" }} />
+                      <img src={other.avatarUrl} alt="ava" style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "1px solid var(--color-border)" }} />
                     ) : (
                       <div style={{ width: 40, height: 40, borderRadius: "50%", background: roleColor(other.role), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 15, flexShrink: 0 }}>{initial}</div>
                     )}
@@ -572,13 +572,13 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
           {/* Поиск */}
           {view === "search" && (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-              <div style={{ padding: "10px 12px", borderBottom: "1px solid #e8e6df", flexShrink: 0 }}>
-                <input autoFocus value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Имя, телефон или email..." style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #e8e6df", background: "var(--color-bg)", outline: "none", fontSize: 13, boxSizing: "border-box" }} />
+              <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
+                <input autoFocus value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Имя, телефон или email..." style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid var(--color-border)", background: "var(--color-bg)", outline: "none", fontSize: 13, boxSizing: "border-box" }} />
               </div>
               <div style={{ flex: 1, overflowY: "auto", minHeight: 0, WebkitOverflowScrolling: "touch" }}>
                 {searchResults.length === 0 && searchQ.length > 0 && <div style={{ fontSize: 12, color: "var(--color-text-3)", textAlign: "center", marginTop: 40 }}>Никого не найдено</div>}
                 {searchResults.map(u => (
-                  <div key={u.id} onClick={() => startChat(u)} style={{ padding: "10px 14px", borderBottom: "1px solid #f0ede8", cursor: "pointer", display: "flex", gap: 10, alignItems: "center", background: "#fff", transition: "background 0.1s" }} onMouseEnter={e => (e.currentTarget.style.background = "var(--color-bg)")} onMouseLeave={e => (e.currentTarget.style.background = "#fff")}>
+                  <div key={u.id} onClick={() => startChat(u)} style={{ padding: "10px 14px", borderBottom: "1px solid #f0ede8", cursor: "pointer", display: "flex", gap: 10, alignItems: "center", background: "var(--color-card)", transition: "background 0.1s" }} onMouseEnter={e => (e.currentTarget.style.background = "var(--color-bg)")} onMouseLeave={e => (e.currentTarget.style.background = "var(--color-card)")}>
                     {u.avatarUrl ? <img src={u.avatarUrl} alt="ava" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} /> : <div style={{ width: 36, height: 36, borderRadius: "50%", background: roleColor(u.role), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 13, flexShrink: 0 }}>{(u.firstName?.[0] ?? u.lastName?.[0] ?? u.email?.[0] ?? "?").toUpperCase()}</div>}
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text)" }}>{userName(u)}</div>
@@ -607,7 +607,7 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
                 )}
                 {hasMore && !loadingMore && (
                   <div style={{ textAlign: "center" }}>
-                    <button onClick={loadMoreMessages} style={{ background: "none", border: "1px solid #e8e6df", borderRadius: 12, padding: "4px 14px", fontSize: 12, color: "var(--color-text-2)", cursor: "pointer" }}>↑ Показать раньше</button>
+                    <button onClick={loadMoreMessages} style={{ background: "none", border: "1px solid var(--color-border)", borderRadius: 12, padding: "4px 14px", fontSize: 12, color: "var(--color-text-2)", cursor: "pointer" }}>↑ Показать раньше</button>
                   </div>
                 )}
 
@@ -670,7 +670,7 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
                           {pickerMsgId === m.id && (
                             <div
                               onClick={e => e.stopPropagation()}
-                              style={{ position: "absolute", bottom: "100%", [isMe ? "right" : "left"]: 0, background: "#fff", border: "1px solid #e8e6df", borderRadius: 24, padding: "6px 10px", display: "flex", gap: 6, boxShadow: "0 4px 16px rgba(0,0,0,0.15)", zIndex: 200, marginBottom: 4, whiteSpace: "nowrap" }}>
+                              style={{ position: "absolute", bottom: "100%", [isMe ? "right" : "left"]: 0, background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 24, padding: "6px 10px", display: "flex", gap: 6, boxShadow: "0 4px 16px rgba(0,0,0,0.15)", zIndex: 200, marginBottom: 4, whiteSpace: "nowrap" }}>
                               {QUICK_EMOJIS.map(emoji => (
                                 <button key={emoji}
                                   onClick={e => { e.stopPropagation(); handleReact(m.id, emoji, isGeneral); }}
@@ -681,7 +681,7 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
                               ))}
                             </div>
                           )}
-                          <div style={{ background: isMe ? "var(--color-text)" : "#fff", color: isMe ? "#fff" : "var(--color-text)", padding: "8px 12px", borderRadius: 14, borderBottomRightRadius: isMe ? 4 : 14, borderBottomLeftRadius: isMe ? 14 : 4, border: isMe ? "none" : "1px solid #e8e6df", boxShadow: "0 2px 4px rgba(0,0,0,0.04)" }}>
+                          <div style={{ background: isMe ? "var(--color-text)" : "#fff", color: isMe ? "#fff" : "var(--color-text)", padding: "8px 12px", borderRadius: 14, borderBottomRightRadius: isMe ? 4 : 14, borderBottomLeftRadius: isMe ? 14 : 4, border: isMe ? "none" : "1px solid var(--color-border)", boxShadow: "0 2px 4px rgba(0,0,0,0.04)" }}>
                             {/* 🔥 Фото с кнопкой скачать */}
                             {m.mediaType === "image" && m.mediaUrl && (
                               <div style={{ position: "relative", marginBottom: m.text ? 6 : 0 }}>
@@ -717,7 +717,7 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
                               const iMine = users.includes(currentUserId);
                               return (
                                 <button key={emoji} onClick={() => handleReact(m.id, emoji, isGeneral)}
-                                  style={{ background: iMine ? "var(--color-accent-soft)" : "var(--color-bg)", border: iMine ? "1px solid #4a7aff" : "1px solid #e8e6df", borderRadius: 12, padding: "2px 8px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, color: "var(--color-text)" }}>
+                                  style={{ background: iMine ? "var(--color-accent-soft)" : "var(--color-bg)", border: iMine ? "1px solid var(--color-accent)" : "1px solid var(--color-border)", borderRadius: 12, padding: "2px 8px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, color: "var(--color-text)" }}>
                                   {emoji} <span style={{ fontSize: 11, fontWeight: 600 }}>{users.length}</span>
                                 </button>
                               );
@@ -732,7 +732,7 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
               </div>
 
               {/* Поле ввода */}
-              <div style={{ padding: 10, borderTop: "1px solid #e8e6df", display: "flex", gap: 8, background: "#fff", flexShrink: 0, alignItems: "flex-end" }}>
+              <div style={{ padding: 10, borderTop: "1px solid var(--color-border)", display: "flex", gap: 8, background: "var(--color-card)", flexShrink: 0, alignItems: "flex-end" }}>
                 <input type="file" ref={fileInputRef} style={{ display: "none" }} onChange={handleFileUpload} />
                 <button onClick={() => fileInputRef.current?.click()} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", padding: "6px 4px", opacity: loading || isRecording ? 0.5 : 1 }} disabled={loading || isRecording}>📎</button>
                 {isRecording ? (
@@ -744,13 +744,13 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
                   <textarea className="chat-textarea" ref={textareaRef} value={text} onChange={handleTextChange}
                     onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
                     onPaste={handlePaste} placeholder="Сообщение (Shift+Enter)..." disabled={loading} rows={1}
-                    style={{ flex: 1, padding: "10px 14px", borderRadius: 20, border: "1px solid #e8e6df", background: "var(--color-bg)", outline: "none", fontSize: 14, resize: "none", minHeight: 40, maxHeight: 120, boxSizing: "border-box", fontFamily: "inherit" }}
+                    style={{ flex: 1, padding: "10px 14px", borderRadius: 20, border: "1px solid var(--color-border)", background: "var(--color-bg)", outline: "none", fontSize: 14, resize: "none", minHeight: 40, maxHeight: 120, boxSizing: "border-box", fontFamily: "inherit" }}
                   />
                 )}
                 {text.trim() ? (
                   <button onClick={() => send()} disabled={loading} style={{ background: "var(--color-accent)", color: "#fff", border: "none", borderRadius: "50%", width: 38, height: 38, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: 15, cursor: "pointer", opacity: loading ? 0.5 : 1, flexShrink: 0, paddingLeft: 4 }}>➤</button>
                 ) : (
-                  <button onClick={toggleRecording} disabled={loading} style={{ background: isRecording ? "#ef4444" : "var(--color-bg)", color: isRecording ? "#fff" : "var(--color-text)", border: isRecording ? "none" : "1px solid #e8e6df", borderRadius: "50%", width: 38, height: 38, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: 18, cursor: "pointer", opacity: loading ? 0.5 : 1, flexShrink: 0 }}>
+                  <button onClick={toggleRecording} disabled={loading} style={{ background: isRecording ? "#ef4444" : "var(--color-bg)", color: isRecording ? "#fff" : "var(--color-text)", border: isRecording ? "none" : "1px solid var(--color-border)", borderRadius: "50%", width: 38, height: 38, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: 18, cursor: "pointer", opacity: loading ? 0.5 : 1, flexShrink: 0 }}>
                     {isRecording ? "⏹" : "🎤"}
                   </button>
                 )}
@@ -771,7 +771,7 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
         >
           {open ? "×" : "💬"}
           {!open && (totalUnread > 0 || hasNewGlobal) && (
-            <span style={{ position: "absolute", top: 4, right: 4, background: "#ef4444", color: "#fff", borderRadius: "50%", minWidth: 20, height: 20, padding: "0 5px", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid #1a1a18" }}>
+            <span style={{ position: "absolute", top: 4, right: 4, background: "#ef4444", color: "#fff", borderRadius: "50%", minWidth: 20, height: 20, padding: "0 5px", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid var(--color-text)" }}>
               {(totalUnread + (hasNewGlobal ? 1 : 0)) > 9 ? "9+" : (totalUnread + (hasNewGlobal ? 1 : 0))}
             </span>
           )}

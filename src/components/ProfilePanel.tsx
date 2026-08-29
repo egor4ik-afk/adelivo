@@ -156,7 +156,7 @@ export function ProfilePanel({ onClose }: { onClose: () => void; }) {
 
           {/* Иконка фотика показывается только в режиме редактирования */}
           {editing && !uploadingAvatar && (
-            <div style={{ position: "absolute", bottom: -2, right: -4, background: "#fff", borderRadius: "50%", padding: 4, boxShadow: "0 2px 5px rgba(0,0,0,0.2)", fontSize: 10, lineHeight: 1, display: "flex", alignItems: "center", justifyItems: "center" }}>
+            <div style={{ position: "absolute", bottom: -2, right: -4, background: "var(--color-card)", borderRadius: "50%", padding: 4, boxShadow: "0 2px 5px rgba(0,0,0,0.2)", fontSize: 10, lineHeight: 1, display: "flex", alignItems: "center", justifyItems: "center" }}>
               📷
             </div>
           )}
@@ -197,7 +197,7 @@ export function ProfilePanel({ onClose }: { onClose: () => void; }) {
           <div style={s.pushRow}>
             <div>
               <div style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text)" }}>Push-уведомления</div>
-              <div style={{ fontSize: 11, color: isSubscribed ? "#10b981" : "var(--color-text-3)", marginTop: 2 }}>
+              <div style={{ fontSize: 11, color: isSubscribed ? "var(--color-green)" : "var(--color-text-3)", marginTop: 2 }}>
                 {isSubscribed ? "Уведомления включены" : "Выключены"}
               </div>
             </div>
@@ -254,7 +254,7 @@ export function ProfilePanel({ onClose }: { onClose: () => void; }) {
 
 function InfoRow({ label, value, accent, muted }: { label: string; value: string; accent?: boolean; muted?: boolean }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "0.5px solid #e8e6df" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "0.5px solid var(--color-border)" }}>
       <span style={{ fontSize: 12, color: "var(--color-text-3)" }}>{label}</span>
       <span style={{ fontSize: 12, fontWeight: 500, color: muted ? "var(--color-text-3)" : accent ? "var(--color-accent)" : "var(--color-text)" }}>{value}</span>
     </div>
@@ -272,7 +272,7 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
 
 const s: Record<string, React.CSSProperties> = {
   panel: { 
-    background: "#fff", border: "1px solid #e8e6df", borderRadius: 12, padding: 16, width: 300, 
+    background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 12, padding: 16, width: 300, 
     boxShadow: "0 4px 24px rgba(0,0,0,0.09)", fontFamily: "Manrope, system-ui, sans-serif",
     maxHeight: "85vh", overflowY: "auto",
   },
@@ -284,12 +284,12 @@ const s: Record<string, React.CSSProperties> = {
   divider: { height: "0.5px", background: "var(--color-border)", margin: "10px 0" },
   pushRow: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", marginBottom: 4 },
   pushBtnOn: { padding: "5px 12px", borderRadius: 6, background: "var(--color-accent)", border: "none", color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
-  pushBtnOff: { padding: "5px 12px", borderRadius: 6, background: "transparent", border: "1px solid #e8e6df", color: "var(--color-text-3)", fontSize: 11, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
-  editBtn: { width: "100%", marginTop: 10, padding: 8, borderRadius: 8, background: "var(--color-bg)", border: "0.5px solid #e8e6df", color: "var(--color-text)", fontSize: 12, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
+  pushBtnOff: { padding: "5px 12px", borderRadius: 6, background: "transparent", border: "1px solid var(--color-border)", color: "var(--color-text-3)", fontSize: 11, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
+  editBtn: { width: "100%", marginTop: 10, padding: 8, borderRadius: 8, background: "var(--color-bg)", border: "0.5px solid var(--color-border)", color: "var(--color-text)", fontSize: 12, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
   logoutBtn: { width: "100%", marginTop: 6, padding: 8, borderRadius: 8, background: "rgba(217,64,64,0.07)", border: "1px solid rgba(217,64,64,0.15)", color: "#d94040", fontSize: 12, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
   sectionTitle: { fontSize: 11, fontWeight: 500, color: "var(--color-text-3)", marginBottom: 8, marginTop: 4 },
   fieldStatic: { fontSize: 12, color: "var(--color-text-3)", padding: "7px 10px", borderRadius: 7, background: "var(--color-bg)" },
-  fieldInput: { width: "100%", padding: "7px 10px", borderRadius: 7, border: "1px solid #e8e6df", background: "var(--color-surface)", color: "var(--color-text)", fontSize: 12, fontFamily: "Manrope, system-ui, sans-serif", outline: "none" },
+  fieldInput: { width: "100%", padding: "7px 10px", borderRadius: 7, border: "1px solid var(--color-border)", background: "var(--color-surface)", color: "var(--color-text)", fontSize: 12, fontFamily: "Manrope, system-ui, sans-serif", outline: "none" },
   saveBtn: { flex: 1, padding: 8, borderRadius: 7, background: "var(--color-accent)", border: "none", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
-  cancelBtn: { padding: "8px 14px", borderRadius: 7, background: "transparent", border: "1px solid #e8e6df", color: "var(--color-text-2)", fontSize: 12, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
+  cancelBtn: { padding: "8px 14px", borderRadius: 7, background: "transparent", border: "1px solid var(--color-border)", color: "var(--color-text-2)", fontSize: 12, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
 };

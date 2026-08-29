@@ -37,7 +37,7 @@ interface Order {
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
   NEW: { label: "Новый", color: "#d94040", bg: "#fef2f2" },
   ASSIGNED: { label: "Назначен", color: "var(--color-accent)", bg: "var(--color-accent-soft)" },
-  IN_DELIVERY: { label: "🚀 В пути", color: "#10b981", bg: "#ecfdf5" },
+  IN_DELIVERY: { label: "🚀 В пути", color: "var(--color-green)", bg: "#ecfdf5" },
   DELIVERED: { label: "✅ Доставлен", color: "var(--color-text-2)", bg: "var(--color-bg)" },
   RETURNED: { label: "↩️ Возврат", color: "#d94040", bg: "#fef2f2" },
   CANCELLED: { label: "❌ Отменен", color: "var(--color-text-3)", bg: "var(--color-bg)" }
@@ -563,7 +563,7 @@ export function CouriersClient({ user }: { user: any }) {
 
           <div style={s.controls}>
             {activeTab === "calc" && (
-              <button style={{ ...s.syncBtn, background: selectedPays.length > 0 ? "#10b981" : "#e5e7eb", color: selectedPays.length > 0 ? "#fff" : "#9ca3af" }} disabled={selectedPays.length === 0} onClick={handlePayLocal}>
+              <button style={{ ...s.syncBtn, background: selectedPays.length > 0 ? "var(--color-green)" : "#e5e7eb", color: selectedPays.length > 0 ? "#fff" : "#9ca3af" }} disabled={selectedPays.length === 0} onClick={handlePayLocal}>
                 ✅ Оплатить локально ({selectedPays.length})
               </button>
             )}
@@ -586,7 +586,7 @@ export function CouriersClient({ user }: { user: any }) {
         {/* --- ГРАФИК --- */}
         {activeTab === "schedule" && (
           <div style={s.tableWrap} ref={scheduleScrollRef}>
-            <div style={{ display: "flex", alignItems: "center", padding: "12px 16px", background: "#fff", borderBottom: "1px solid #e8e6df", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", padding: "12px 16px", background: "var(--color-card)", borderBottom: "1px solid var(--color-border)", gap: 12, flexWrap: "wrap" }}>
               <button style={s.arrowBtn} onClick={() => setScheduleWeekStart(d => new Date(d.getTime() - 7 * 86400000))}>◀ Неделя</button>
               <span style={{ fontWeight: 700, fontSize: 14, textTransform: "capitalize", color: "var(--color-text)" }}>
                 {scheduleWeekStart.toLocaleDateString('ru', { month: 'long', year: 'numeric' })}
@@ -652,15 +652,15 @@ export function CouriersClient({ user }: { user: any }) {
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', maxWidth: '190px' }}>
                             <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.fullName}</span>
                             <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '4px' }} onClick={(e) => { e.stopPropagation(); toggleAuto(c.id, c.isAuto || false); }}>
-                              <span style={{ fontSize: 9, color: c.isAuto ? '#10b981' : '#a8a49c', fontWeight: 800 }}>АВТО</span>
-                              <div style={{ position: 'relative', width: 28, height: 16, background: c.isAuto ? '#10b981' : '#e5e7eb', borderRadius: 20, transition: '0.2s', flexShrink: 0 }}>
-                                <div style={{ position: 'absolute', top: 2, left: c.isAuto ? 14 : 2, width: 12, height: 12, background: '#fff', borderRadius: '50%', transition: '0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }} />
+                              <span style={{ fontSize: 9, color: c.isAuto ? 'var(--color-green)' : 'var(--color-text-3)', fontWeight: 800 }}>АВТО</span>
+                              <div style={{ position: 'relative', width: 28, height: 16, background: c.isAuto ? 'var(--color-green)' : '#e5e7eb', borderRadius: 20, transition: '0.2s', flexShrink: 0 }}>
+                                <div style={{ position: 'absolute', top: 2, left: c.isAuto ? 14 : 2, width: 12, height: 12, background: 'var(--color-card)', borderRadius: '50%', transition: '0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }} />
                               </div>
                             </div>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ fontSize: 10, color: '#a8a49c', fontWeight: 500 }}>Рейтинг:</span>
-                            <select value={c.priority || 3} onChange={e => updateCourierPriority(c.id, Number(e.target.value))} style={{ fontSize: 11, padding: "2px 4px", border: "1px solid #e8e6df", borderRadius: 4, background: "var(--color-surface)", outline: "none", cursor: "pointer", color: "var(--color-text)", fontWeight: 600 }}>
+                            <span style={{ fontSize: 10, color: 'var(--color-text-3)', fontWeight: 500 }}>Рейтинг:</span>
+                            <select value={c.priority || 3} onChange={e => updateCourierPriority(c.id, Number(e.target.value))} style={{ fontSize: 11, padding: "2px 4px", border: "1px solid var(--color-border)", borderRadius: 4, background: "var(--color-surface)", outline: "none", cursor: "pointer", color: "var(--color-text)", fontWeight: 600 }}>
                               <option value="5">⭐⭐⭐⭐⭐</option><option value="4">⭐⭐⭐⭐</option><option value="3">⭐⭐⭐</option><option value="2">⭐⭐</option><option value="1">⭐</option>
                             </select>
                           </div>
@@ -680,7 +680,7 @@ export function CouriersClient({ user }: { user: any }) {
                                 {allOrdersCount > 0 && <span style={{ fontSize: 11, color: "#fff", background: "var(--color-accent)", padding: "2px 6px", borderRadius: 10, fontWeight: 700 }}>{allOrdersCount}</span>}
                               </div>
                               {isWorking && (
-                                <div style={{ display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'center', marginTop: 4, background: "#fff", padding: "4px 6px", borderRadius: 6, border: "1px solid #e8e6df" }}>
+                                <div style={{ display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'center', marginTop: 4, background: "var(--color-card)", padding: "4px 6px", borderRadius: 6, border: "1px solid var(--color-border)" }}>
                                   <select value={shift.startTime || "10:00"} onChange={e => updateShiftDetails(c.id, date, { startTime: e.target.value })} style={{ fontSize: 11, padding: "2px 0", width: 44, border: "none", outline: "none", cursor: "pointer", background: "transparent", textAlign: "center", fontWeight: 600, color: "var(--color-text)", appearance: "none" }}>
                                     {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                                   </select>
@@ -705,7 +705,7 @@ export function CouriersClient({ user }: { user: any }) {
         {/* --- РАСЧЕТ ЗП --- */}
         {activeTab === "calc" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", boxShadow: "0 2px 8px rgba(0,0,0,0.02)", flexWrap: "wrap", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "var(--color-card)", borderRadius: 12, border: "1px solid var(--color-border)", boxShadow: "0 2px 8px rgba(0,0,0,0.02)", flexWrap: "wrap", gap: 10 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                 <button style={s.arrowBtn} onClick={() => setWeekStart(d => new Date(d.getTime() - 7 * 86400000))}>◀ Неделя</button>
                 <span style={{ fontWeight: 700, fontSize: 14, textTransform: "capitalize", color: "var(--color-text)" }}>
@@ -716,14 +716,14 @@ export function CouriersClient({ user }: { user: any }) {
 
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 {konsolToast && (
-                  <span style={{ fontSize: 13, fontWeight: 600, color: konsolToast.type === "success" ? "#10b981" : "#d94040", animation: "fadeIn 0.3s" }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: konsolToast.type === "success" ? "var(--color-green)" : "#d94040", animation: "fadeIn 0.3s" }}>
                     {konsolToast.message}
                   </span>
                 )}
                 <button onClick={() => checkKonsolStatuses(false)} disabled={konsolLoading} style={{ ...s.navBtn, background: "var(--color-accent-soft)", color: "var(--color-accent)", borderColor: "var(--color-accent)" }}>
                   🔄 Статусы
                 </button>
-                <button onClick={createSelectedTask} disabled={konsolLoading || selectedPays.length === 0} style={{ background: konsolLoading || selectedPays.length === 0 ? "#e5e7eb" : "#fff", color: konsolLoading || selectedPays.length === 0 ? "#9ca3af" : "var(--color-text)", border: "1px solid #e8e6df", padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: konsolLoading || selectedPays.length === 0 ? "not-allowed" : "pointer" }}>
+                <button onClick={createSelectedTask} disabled={konsolLoading || selectedPays.length === 0} style={{ background: konsolLoading || selectedPays.length === 0 ? "#e5e7eb" : "#fff", color: konsolLoading || selectedPays.length === 0 ? "#9ca3af" : "var(--color-text)", border: "1px solid var(--color-border)", padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: konsolLoading || selectedPays.length === 0 ? "not-allowed" : "pointer" }}>
                   ➕ Создать задание
                 </button>
                 <button onClick={handleRecalculate} disabled={loading || selectedPays.length === 0} style={{ background: loading || selectedPays.length === 0 ? "#e5e7eb" : "var(--color-accent)", color: loading || selectedPays.length === 0 ? "#9ca3af" : "#fff", border: "none", padding: "10px 16px", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: loading || selectedPays.length === 0 ? "not-allowed" : "pointer", }}>
@@ -732,7 +732,7 @@ export function CouriersClient({ user }: { user: any }) {
                 <button onClick={handleFinalize} disabled={loading || selectedPays.length === 0} style={{ background: loading || selectedPays.length === 0 ? "#e5e7eb" : "#f59e0b", color: loading || selectedPays.length === 0 ? "#9ca3af" : "#fff", border: "none", padding: "10px 16px", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: loading || selectedPays.length === 0 ? "not-allowed" : "pointer", }}>
                   {loading ? "⏳ Загрузка..." : "📝Закрыть и Акт"}
                 </button>
-                <button onClick={handlePay} disabled={loading || selectedPays.length === 0} style={{ background: loading || selectedPays.length === 0 ? "#e5e7eb" : "#10b981", color: loading || selectedPays.length === 0 ? "#9ca3af" : "#fff", border: "none", padding: "10px 16px", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: loading || selectedPays.length === 0 ? "not-allowed" : "pointer", }}>
+                <button onClick={handlePay} disabled={loading || selectedPays.length === 0} style={{ background: loading || selectedPays.length === 0 ? "#e5e7eb" : "var(--color-green)", color: loading || selectedPays.length === 0 ? "#9ca3af" : "#fff", border: "none", padding: "10px 16px", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: loading || selectedPays.length === 0 ? "not-allowed" : "pointer", }}>
                   {loading ? "⏳ Загрузка..." : "💳 Оплатить"}
                 </button>
               </div>
@@ -764,7 +764,7 @@ export function CouriersClient({ user }: { user: any }) {
                       </th>
                     )
                   })}
-                  <th style={{ ...s.th, textAlign: "right", color: "#10b981", verticalAlign: "top", position: "sticky", top: 0, zIndex: 10, background: "var(--color-surface)", boxShadow: "0 2px 5px -2px rgba(0,0,0,0.1)" }}>
+                  <th style={{ ...s.th, textAlign: "right", color: "var(--color-green)", verticalAlign: "top", position: "sticky", top: 0, zIndex: 10, background: "var(--color-surface)", boxShadow: "0 2px 5px -2px rgba(0,0,0,0.1)" }}>
                     Итого
                     {(() => {
                       const grandTotal = selectedPays.reduce((acc, p) => { const [cId, d] = p.split('_'); return acc + getSum(Number(cId), d); }, 0);
@@ -803,16 +803,16 @@ export function CouriersClient({ user }: { user: any }) {
                       const isAllWeekSelected = availableWeekKeys.length > 0 && availableWeekKeys.every(k => selectedPays.includes(k));
 
                       return (
-                        <tr key={c.id} style={{ borderBottom: "1px solid #f0efe9", background: "#fff" }}>
-                          <td style={{ ...s.td, fontWeight: 600, position: "sticky", left: 0, zIndex: 5, background: "#fff", boxShadow: "2px 0 5px -2px rgba(0,0,0,0.1)" }}>
+                        <tr key={c.id} style={{ borderBottom: "1px solid #f0efe9", background: "var(--color-card)" }}>
+                          <td style={{ ...s.td, fontWeight: 600, position: "sticky", left: 0, zIndex: 5, background: "var(--color-card)", boxShadow: "2px 0 5px -2px rgba(0,0,0,0.1)" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                               <input type="checkbox" checked={isAllWeekSelected} onChange={() => toggleCourierWeek(c.id)} disabled={availableWeekKeys.length === 0} style={{ ...s.checkbox, width: 14, height: 14, flexShrink: 0 }} title="Выбрать всю неделю" />
-                              {c.konsolContractorId ? <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#10b981", display: "inline-block", flexShrink: 0 }} title="СЗ (Консоль) подключен" /> : <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#d1d5db", display: "inline-block", flexShrink: 0 }} title="Консоль не привязана" />}
+                              {c.konsolContractorId ? <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--color-green)", display: "inline-block", flexShrink: 0 }} title="СЗ (Консоль) подключен" /> : <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#d1d5db", display: "inline-block", flexShrink: 0 }} title="Консоль не привязана" />}
                               <span style={{ whiteSpace: 'nowrap' }}>{c.fullName}</span>
                               <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '4px' }} onClick={(e) => { e.stopPropagation(); toggleAuto(c.id, c.isAuto || false); }} title="Сделать авто-курьером">
-                                <span style={{ fontSize: 9, color: c.isAuto ? '#10b981' : '#a8a49c', fontWeight: 800 }}>АВТО</span>
-                                <div style={{ position: 'relative', width: 28, height: 16, background: c.isAuto ? '#10b981' : '#e5e7eb', borderRadius: 20, transition: '0.2s', flexShrink: 0 }}>
-                                  <div style={{ position: 'absolute', top: 2, left: c.isAuto ? 14 : 2, width: 12, height: 12, background: '#fff', borderRadius: '50%', transition: '0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }} />
+                                <span style={{ fontSize: 9, color: c.isAuto ? 'var(--color-green)' : 'var(--color-text-3)', fontWeight: 800 }}>АВТО</span>
+                                <div style={{ position: 'relative', width: 28, height: 16, background: c.isAuto ? 'var(--color-green)' : '#e5e7eb', borderRadius: 20, transition: '0.2s', flexShrink: 0 }}>
+                                  <div style={{ position: 'absolute', top: 2, left: c.isAuto ? 14 : 2, width: 12, height: 12, background: 'var(--color-card)', borderRadius: '50%', transition: '0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }} />
                                 </div>
                               </div>
                             </div>
@@ -831,7 +831,7 @@ export function CouriersClient({ user }: { user: any }) {
                                 {(count > 0 || sum > 0) ? (
                                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
                                     <div style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text)" }}>{count} шт</div>
-                                    {isPaid ? <div style={{ fontSize: 10, background: "#10b981", color: "#fff", padding: "2px 6px", borderRadius: 4, fontWeight: 600 }}>ОПЛАЧЕН</div>
+                                    {isPaid ? <div style={{ fontSize: 10, background: "var(--color-green)", color: "#fff", padding: "2px 6px", borderRadius: 4, fontWeight: 600 }}>ОПЛАЧЕН</div>
                                       : <input type="checkbox" checked={isSelected} onChange={() => togglePaySelect(c.id, d)} style={s.checkbox} />}
                                     <div style={{ fontSize: 11, color: "var(--color-accent)", fontWeight: 700 }}>{sum} ₽</div>
                                   </div>
@@ -846,7 +846,7 @@ export function CouriersClient({ user }: { user: any }) {
                                 <button style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: 4, opacity: 0.6 }} onClick={(e) => { e.stopPropagation(); const defaults = getCourierDefaultCounts(c.id); const overrides = countOverrides[c.id] || {}; const merged = { ...defaults }; for (const k in overrides) merged[k] = overrides[k]; [600, 1000, 1400].forEach(p => { if (merged[p] === undefined) merged[p] = 0; }); setTempCounts(merged); setEditingCountsCourier(c.id); }} title="Редактировать количество услуг для пересчета">✏️</button>
                               )}
                             </div>
-                            {weekTotal > 0 && <div style={{ fontSize: 11, color: "#10b981", marginTop: 4 }}>x 1.06 = {weekTotal106.toFixed(0)} ₽</div>}
+                            {weekTotal > 0 && <div style={{ fontSize: 11, color: "var(--color-green)", marginTop: 4 }}>x 1.06 = {weekTotal106.toFixed(0)} ₽</div>}
                             {countOverrides[c.id] && <div style={{ fontSize: 9, color: "#d94040", marginTop: 2 }}>Изменено вручную</div>}
                           </td>
                         </tr>
@@ -862,7 +862,7 @@ export function CouriersClient({ user }: { user: any }) {
         {activeTab === "routes" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             {/* Рендер маршрутов остался без изменений */}
-            <div style={{ display: "flex", alignItems: "center", gap: 16, background: "#fff", padding: isMobile ? "12px" : "12px 16px", borderRadius: 12, border: "1px solid #e8e6df", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 16, background: "var(--color-card)", padding: isMobile ? "12px" : "12px 16px", borderRadius: 12, border: "1px solid var(--color-border)", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
               <span style={{ fontWeight: 600, fontSize: 14, color: "var(--color-text)" }}>Дата маршрутов:</span>
               <input type="date" value={routesDate} onChange={e => setRoutesDate(e.target.value)} style={{ ...s.input, flex: 1, maxWidth: 200 }} />
             </div>
@@ -894,8 +894,8 @@ export function CouriersClient({ user }: { user: any }) {
                 });
 
               return (
-                <div key={c.id} style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
-                  <div onClick={() => setExpandedCouriers(prev => ({ ...prev, [c.id]: !isCExpanded }))} style={{ padding: "14px 16px", background: "var(--color-surface)", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: isCExpanded ? "1px solid #e8e6df" : "none" }}>
+                <div key={c.id} style={{ background: "var(--color-card)", borderRadius: 12, border: "1px solid var(--color-border)", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
+                  <div onClick={() => setExpandedCouriers(prev => ({ ...prev, [c.id]: !isCExpanded }))} style={{ padding: "14px 16px", background: "var(--color-surface)", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: isCExpanded ? "1px solid var(--color-border)" : "none" }}>
                     <div>
                       <div style={{ fontSize: 15, fontWeight: 700, color: "var(--color-text)" }}>{c.fullName}</div>
                       <div style={{ fontSize: 12, color: "var(--color-text-3)", marginTop: 4 }}>Активных: {cOrders.filter(o => o.status !== "DELIVERED" && o.status !== "CANCELLED").length} · Всего: {cOrders.length}</div>
@@ -922,14 +922,14 @@ export function CouriersClient({ user }: { user: any }) {
                             {courierUnassignedOrders.map(o => {
                               const st = STATUS_MAP[o.status] || STATUS_MAP.NEW;
                               return (
-                                <div key={o.id} style={{ background: "var(--color-surface)", borderRadius: 10, border: "1px dashed #a8a49c", padding: 14, display: "flex", flexDirection: "column" }}>
+                                <div key={o.id} style={{ background: "var(--color-surface)", borderRadius: 10, border: "1px dashed var(--color-text-3)", padding: 14, display: "flex", flexDirection: "column" }}>
                                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
                                     <div><div style={{ fontSize: 10, color: "var(--color-text-3)", fontFamily: "monospace" }}>{o.externalId ?? o.crmId}</div><div style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text)" }}>{o.slotRaw}</div></div>
                                     <div style={{ background: st.bg, color: st.color, padding: "4px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700 }}>{st.label}</div>
                                   </div>
                                   <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text)", marginBottom: 12, lineHeight: 1.4, flex: 1 }}>{o.address}</div>
                                   <div style={{ display: "flex", gap: 8 }}>
-                                    <button onClick={() => setSelectedOrder(o as any)} style={{ flex: 1, background: "#fff", border: "1px solid #e8e6df", padding: "6px 0", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>✏️ Открыть</button>
+                                    <button onClick={() => setSelectedOrder(o as any)} style={{ flex: 1, background: "var(--color-card)", border: "1px solid var(--color-border)", padding: "6px 0", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>✏️ Открыть</button>
                                     <button onClick={() => createRouteFromUnassigned(o.id, c.id)} style={{ flex: 2, background: "rgba(74, 122, 255, 0.08)", color: "var(--color-accent)", border: "none", padding: "6px 0", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>➕ В новый маршрут</button>
                                   </div>
                                 </div>
@@ -952,14 +952,14 @@ export function CouriersClient({ user }: { user: any }) {
         const DB_ST: Record<string, { label: string; color: string; bg: string }> = {
           DRAFT: { label: "⏳ Черновик", color: "var(--color-text-2)", bg: "var(--color-bg)" },
           CONFIRMED: { label: "🔵 Принято", color: "var(--color-accent)", bg: "var(--color-accent-soft)" },
-          ACCEPTED: { label: "🟢 Выполнено", color: "#10b981", bg: "#ecfdf5" },
+          ACCEPTED: { label: "🟢 Выполнено", color: "var(--color-green)", bg: "#ecfdf5" },
           CONFIRMED_ACT: { label: "📄 Акт готов", color: "#8b5cf6", bg: "#f5f3ff" },
-          SIGNED_BY_US: { label: "✅ Подписано", color: "#10b981", bg: "var(--color-ok-bg)" },
+          SIGNED_BY_US: { label: "✅ Подписано", color: "var(--color-green)", bg: "var(--color-ok-bg)" },
         };
         const REMOTE_ST: Record<string, { label: string; color: string }> = {
           submitted: { label: "🟡 Ожидает курьера", color: "#f59e0b" },
           confirmed: { label: "🔵 В работе", color: "var(--color-accent)" },
-          accepted: { label: "🟢 Выполнено", color: "#10b981" },
+          accepted: { label: "🟢 Выполнено", color: "var(--color-green)" },
           finalized: { label: "📝 Финализировано", color: "#8b5cf6" },
           revoked: { label: "❌ Отозвано", color: "#d94040" },
           declined: { label: "❌ Отклонено", color: "#d94040" },
@@ -984,7 +984,7 @@ export function CouriersClient({ user }: { user: any }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
 
             {/* Тулбар Заданий */}
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: "#fff", borderRadius: 10, border: "1px solid #e8e6df", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", background: "var(--color-card)", borderRadius: 10, border: "1px solid var(--color-border)", flexWrap: "wrap" }}>
               
               {/* 🔥 ДОБАВЛЕНА НАВИГАЦИЯ ПО НЕДЕЛЯМ (как в ЗП) */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginRight: 16 }}>
@@ -1006,7 +1006,7 @@ export function CouriersClient({ user }: { user: any }) {
                 Задания {konsolTasks.length > 0 && `(${konsolTasks.length})`}
               </span>
               {konsolToast && (
-                <span style={{ fontSize: 12, fontWeight: 600, color: konsolToast.type === "success" ? "#10b981" : "#d94040" }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: konsolToast.type === "success" ? "var(--color-green)" : "#d94040" }}>
                   {konsolToast.message}
                 </span>
               )}
@@ -1028,7 +1028,7 @@ export function CouriersClient({ user }: { user: any }) {
               >
                 {konsolTasksLoading ? (
                   <>
-                    <span style={{ width: 14, height: 14, border: "2px solid #e8e6df", borderTopColor: "var(--color-accent)", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite", flexShrink: 0 }} /> Загрузка...
+                    <span style={{ width: 14, height: 14, border: "2px solid var(--color-border)", borderTopColor: "var(--color-accent)", borderRadius: "50%", display: "inline-block", animation: "spin 0.7s linear infinite", flexShrink: 0 }} /> Загрузка...
                   </>
                 ) : (
                   <>🔄 Обновить статусы</>
@@ -1038,7 +1038,7 @@ export function CouriersClient({ user }: { user: any }) {
                 <span style={{ fontSize: 12, color: "var(--color-text-2)" }}>Выбрано: <b>{selectedTasks.size}</b></span>
                 <button onClick={() => handleTasksAction("recalculate")} disabled={konsolTasksLoading} style={{ ...s.navBtn, background: "#f5f3ff", color: "#8b5cf6", borderColor: "#8b5cf6" }}>🔁 Пересчитать</button>
                 {selCanFinalize > 0 && <button onClick={() => handleTasksAction("finalize")} disabled={konsolTasksLoading} style={{ ...s.navBtn, background: "var(--color-accent-soft)", color: "var(--color-accent)", borderColor: "var(--color-accent)" }}>📄 Финализ. ({selCanFinalize})</button>}
-                {selCanPay > 0 && <button onClick={() => handleTasksAction("pay")} disabled={konsolTasksLoading} style={{ background: "#10b981", color: "#fff", border: "none", padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>💳 Оплатить ({selCanPay})</button>}
+                {selCanPay > 0 && <button onClick={() => handleTasksAction("pay")} disabled={konsolTasksLoading} style={{ background: "var(--color-green)", color: "#fff", border: "none", padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>💳 Оплатить ({selCanPay})</button>}
               </>}
             </div>
 
@@ -1056,9 +1056,9 @@ export function CouriersClient({ user }: { user: any }) {
               const courierTotal = (cTasks as any[]).reduce((acc, t) => acc + t.amount, 0);
 
               return (
-                <div key={courierId} style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "hidden" }}>
+                <div key={courierId} style={{ background: "var(--color-card)", borderRadius: 12, border: "1px solid var(--color-border)", overflow: "hidden" }}>
                   {/* Шапка курьера */}
-                  <div style={{ padding: "10px 14px", background: "var(--color-surface)", borderBottom: "1px solid #e8e6df" }}>
+                  <div style={{ padding: "10px 14px", background: "var(--color-surface)", borderBottom: "1px solid var(--color-border)" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                       <input
                         type="checkbox"
@@ -1074,11 +1074,11 @@ export function CouriersClient({ user }: { user: any }) {
                         disabled={selectableIds.length === 0}
                         style={{ ...s.checkbox, width: 15, height: 15 }}
                       />
-                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: cour?.konsolContractorId ? "#10b981" : "#d1d5db", display: "inline-block" }} />
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: cour?.konsolContractorId ? "var(--color-green)" : "#d1d5db", display: "inline-block" }} />
                       <span style={{ fontWeight: 700, fontSize: 14, color: "var(--color-text)" }}>{cour?.fullName ?? `#${courierId}`}</span>
                       <span style={{ fontSize: 12, color: "var(--color-text-2)" }}>{(cTasks as any[]).length} задан. · {courierTotal.toFixed(0)} ₽</span>
                       {(cTasks as any[]).filter(t => t.status === "SIGNED_BY_US").length > 0 && (
-                        <span style={{ fontSize: 11, background: "var(--color-ok-bg)", color: "#10b981", padding: "2px 8px", borderRadius: 20, fontWeight: 700 }}>✅ В оплату: {(cTasks as any[]).filter(t => t.status === "SIGNED_BY_US").length}</span>
+                        <span style={{ fontSize: 11, background: "var(--color-ok-bg)", color: "var(--color-green)", padding: "2px 8px", borderRadius: 20, fontWeight: 700 }}>✅ В оплату: {(cTasks as any[]).filter(t => t.status === "SIGNED_BY_US").length}</span>
                       )}
                     </div>
                     {/* 🔥 ДОБАВЛЕНЫ РЕАЛЬНЫЕ СТАТУСЫ ОПЛАТЫ КАК В ЗП */}
@@ -1151,13 +1151,13 @@ export function CouriersClient({ user }: { user: any }) {
                             <span style={{ fontSize: 11, background: dbSt.bg, color: dbSt.color, padding: "2px 8px", borderRadius: 20, fontWeight: 700 }}>{dbSt.label}</span>
                           )}
                           <div style={{ flex: 1 }} />
-                          <span style={{ fontWeight: 700, fontSize: 13, color: isPaid ? "#10b981" : "var(--color-text)" }}>{task.amount.toFixed(0)} ₽</span>
+                          <span style={{ fontWeight: 700, fontSize: 13, color: isPaid ? "var(--color-green)" : "var(--color-text)" }}>{task.amount.toFixed(0)} ₽</span>
                           <div onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 4 }}>
                             {(!isPaid && !task.konsolActId) && (
                               <button
                                 onClick={async () => { setSelectedTasks(new Set([task.id])); await handleTasksAction("finalize"); }}
                                 disabled={konsolTasksLoading}
-                                style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #4a7aff", background: "var(--color-accent-soft)", color: "var(--color-accent)", fontSize: 12, cursor: "pointer" }}
+                                style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid var(--color-accent)", background: "var(--color-accent-soft)", color: "var(--color-accent)", fontSize: 12, cursor: "pointer" }}
                                 title="Финализировать"
                               >📄</button>
                             )}
@@ -1166,7 +1166,7 @@ export function CouriersClient({ user }: { user: any }) {
                               <button
                                 onClick={async () => { setSelectedTasks(new Set([task.id])); await handleTasksAction("pay"); }}
                                 disabled={konsolTasksLoading}
-                                style={{ padding: "4px 8px", borderRadius: 6, border: "none", background: "#10b981", color: "#fff", fontSize: 12, cursor: "pointer" }}
+                                style={{ padding: "4px 8px", borderRadius: 6, border: "none", background: "var(--color-green)", color: "#fff", fontSize: 12, cursor: "pointer" }}
                                 title="Оплатить"
                               >💳</button>
                             )}
@@ -1175,14 +1175,14 @@ export function CouriersClient({ user }: { user: any }) {
                         </div>
 
                         {isExpanded && (
-                          <div style={{ padding: "12px 20px 12px 48px", background: "#f8f7ff", borderBottom: "1px solid #e8e6df" }}>
+                          <div style={{ padding: "12px 20px 12px 48px", background: "#f8f7ff", borderBottom: "1px solid var(--color-border)" }}>
                             {remote === null ? (
                               <div style={{ color: "var(--color-text-3)", fontSize: 12 }}>Загрузка данных...</div>
                             ) : remote?.duties && remote.duties.length > 0 ? (
                               <table style={{ fontSize: 12, borderCollapse: "collapse", width: "100%", maxWidth: 500 }}>
                                 <thead>
                                   <tr>{["Услуга", "Кол-во", "Цена", "Итого"].map(h => (
-                                    <th key={h} style={{ padding: "4px 10px", textAlign: "left", color: "var(--color-text-3)", fontWeight: 600, borderBottom: "1px solid #e8e6df" }}>{h}</th>
+                                    <th key={h} style={{ padding: "4px 10px", textAlign: "left", color: "var(--color-text-3)", fontWeight: 600, borderBottom: "1px solid var(--color-border)" }}>{h}</th>
                                   ))}</tr>
                                 </thead>
                                 <tbody>
@@ -1197,8 +1197,8 @@ export function CouriersClient({ user }: { user: any }) {
                                 </tbody>
                                 <tfoot>
                                   <tr>
-                                    <td colSpan={3} style={{ padding: "6px 10px", textAlign: "right", fontWeight: 700, borderTop: "1px solid #e8e6df" }}>Итого:</td>
-                                    <td style={{ padding: "6px 10px", fontWeight: 700, color: "#10b981", borderTop: "1px solid #e8e6df" }}>{remote.duties.reduce((a: number, d: any) => a + d.cost, 0)} ₽</td>
+                                    <td colSpan={3} style={{ padding: "6px 10px", textAlign: "right", fontWeight: 700, borderTop: "1px solid var(--color-border)" }}>Итого:</td>
+                                    <td style={{ padding: "6px 10px", fontWeight: 700, color: "var(--color-green)", borderTop: "1px solid var(--color-border)" }}>{remote.duties.reduce((a: number, d: any) => a + d.cost, 0)} ₽</td>
                                   </tr>
                                 </tfoot>
                               </table>
@@ -1224,26 +1224,26 @@ export function CouriersClient({ user }: { user: any }) {
 
         return (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ background: '#fff', borderRadius: 12, padding: 20, width: 320, boxShadow: '0 4px 24px rgba(0,0,0,0.2)' }}>
+            <div style={{ background: 'var(--color-card)', borderRadius: 12, padding: 20, width: 320, boxShadow: '0 4px 24px rgba(0,0,0,0.2)' }}>
               <h3 style={{ margin: '0 0 4px 0', fontSize: 16 }}>Редактировать услуги</h3>
-              <p style={{ margin: '0 0 16px 0', fontSize: 12, color: '#a8a49c' }}>{label} · {courier?.fullName}</p>
+              <p style={{ margin: '0 0 16px 0', fontSize: 12, color: 'var(--color-text-3)' }}>{label} · {courier?.fullName}</p>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
                 {prices.map(price => (
                   <div key={price} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: 13 }}>{price} ₽ → <b>{Math.round(price * 1.06)} ₽</b></span>
-                    <input type="number" min="0" value={tempCounts[price] ?? 0} onChange={e => setTempCounts({ ...tempCounts, [price]: Number(e.target.value) })} style={{ width: 60, padding: '4px 8px', border: '1px solid #e8e6df', borderRadius: 6, textAlign: 'center' }} />
+                    <input type="number" min="0" value={tempCounts[price] ?? 0} onChange={e => setTempCounts({ ...tempCounts, [price]: Number(e.target.value) })} style={{ width: 60, padding: '4px 8px', border: '1px solid var(--color-border)', borderRadius: 6, textAlign: 'center' }} />
                   </div>
                 ))}
               </div>
 
-              <div style={{ marginBottom: 16, padding: '8px 12px', background: '#f5f4f0', borderRadius: 8, fontSize: 13 }}>
-                Итого: <b style={{ color: '#10b981' }}>{prices.reduce((acc, p) => acc + Math.round(p * 1.06) * (tempCounts[p] ?? 0), 0)} ₽</b>
+              <div style={{ marginBottom: 16, padding: '8px 12px', background: 'var(--color-bg)', borderRadius: 8, fontSize: 13 }}>
+                Итого: <b style={{ color: 'var(--color-green)' }}>{prices.reduce((acc, p) => acc + Math.round(p * 1.06) * (tempCounts[p] ?? 0), 0)} ₽</b>
               </div>
 
               <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => setEditingCountsCourier(null)} style={{ flex: 1, padding: '8px', border: '1px solid #e8e6df', background: '#fafaf8', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Отмена</button>
-                <button onClick={() => { setCountOverrides({ ...countOverrides, [editingCountsCourier]: tempCounts }); setEditingCountsCourier(null); }} style={{ flex: 1, padding: '8px', border: 'none', background: '#4a7aff', color: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Сохранить</button>
+                <button onClick={() => setEditingCountsCourier(null)} style={{ flex: 1, padding: '8px', border: '1px solid var(--color-border)', background: 'var(--color-surface)', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Отмена</button>
+                <button onClick={() => { setCountOverrides({ ...countOverrides, [editingCountsCourier]: tempCounts }); setEditingCountsCourier(null); }} style={{ flex: 1, padding: '8px', border: 'none', background: 'var(--color-accent)', color: '#fff', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>Сохранить</button>
               </div>
             </div>
           </div>
@@ -1252,7 +1252,7 @@ export function CouriersClient({ user }: { user: any }) {
 
       {selectedOrder && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 9999, display: "flex", justifyContent: "flex-end" }}>
-          <div style={{ width: 450, maxWidth: "100%", background: "#fff", height: "100%", display: "flex", flexDirection: "column", boxShadow: "-4px 0 24px rgba(0,0,0,0.15)" }}>
+          <div style={{ width: 450, maxWidth: "100%", background: "var(--color-card)", height: "100%", display: "flex", flexDirection: "column", boxShadow: "-4px 0 24px rgba(0,0,0,0.15)" }}>
             <OrderDetail selected={selectedOrder as any} couriers={couriers.map(c => ({ value: c.fullName, label: c.fullName }))} onClose={() => setSelectedOrder(null)} onUpdateSuccess={() => { setSelectedOrder(null); fetchAll(); }} onPreviewGeo={() => { }} fixingAI={false} setFixingAI={() => { }} />
           </div>
         </div>
@@ -1264,21 +1264,21 @@ export function CouriersClient({ user }: { user: any }) {
 
 const s: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "var(--color-bg)", overflow: "auto" },
-  topbar: { display: "flex", alignItems: "center", gap: 8, padding: "0 16px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0 },
+  topbar: { display: "flex", alignItems: "center", gap: 8, padding: "0 16px", height: 52, background: "var(--color-card)", borderBottom: "1px solid var(--color-border)", flexShrink: 0 },
   logo: { fontSize: 15, fontWeight: 600, color: "var(--color-text)", display: "flex", alignItems: "center", gap: 7, marginRight: "auto", flexShrink: 0 },
-  navBtn: { padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "var(--color-surface)", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "var(--color-text)", whiteSpace: "nowrap" },
+  navBtn: { padding: "5px 10px", borderRadius: 6, border: "1px solid var(--color-border)", background: "var(--color-surface)", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "var(--color-text)", whiteSpace: "nowrap" },
   content: { margin: "0 auto", width: "100%", display: "flex", flexDirection: "column", gap: 20, maxWidth: "100%" }, 
   headerRow: { display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 16 },
   title: { fontSize: 24, fontWeight: 700, color: "var(--color-text)", margin: "0 0 16px 0" },
   tabActive: { padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: "var(--color-accent)", color: "#fff", whiteSpace: "nowrap" },
-  tabInactive: { padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "1px solid #e8e6df", cursor: "pointer", background: "var(--color-surface)", color: "var(--color-text-2)", whiteSpace: "nowrap" },
+  tabInactive: { padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "1px solid var(--color-border)", cursor: "pointer", background: "var(--color-surface)", color: "var(--color-text-2)", whiteSpace: "nowrap" },
   controls: { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", width: "100%" },
-  input: { padding: "8px 12px", borderRadius: 8, border: "1px solid #e8e6df", outline: "none", fontSize: 13 },
+  input: { padding: "8px 12px", borderRadius: 8, border: "1px solid var(--color-border)", outline: "none", fontSize: 13 },
   syncBtn: { padding: "8px 16px", borderRadius: 8, border: "none", background: "var(--color-text)", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" },
-  arrowBtn: { padding: "6px 12px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", color: "var(--color-text-2)" },
-  tableWrap: { background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "auto", maxHeight: "calc(100vh - 160px)", boxShadow: "0 2px 8px rgba(0,0,0,0.02)", width: "100%" },
+  arrowBtn: { padding: "6px 12px", borderRadius: 6, border: "1px solid var(--color-border)", background: "var(--color-card)", fontSize: 12, fontWeight: 600, cursor: "pointer", color: "var(--color-text-2)" },
+  tableWrap: { background: "var(--color-card)", borderRadius: 12, border: "1px solid var(--color-border)", overflow: "auto", maxHeight: "calc(100vh - 160px)", boxShadow: "0 2px 8px rgba(0,0,0,0.02)", width: "100%" },
   table: { width: "100%", minWidth: 800, borderCollapse: "collapse", textAlign: "left" },
-  th: { padding: "10px 12px", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--color-text-3)", background: "var(--color-surface)", borderBottom: "1px solid #e8e6df", fontWeight: 600 },
+  th: { padding: "10px 12px", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--color-text-3)", background: "var(--color-surface)", borderBottom: "1px solid var(--color-border)", fontWeight: 600 },
   td: { padding: "12px", fontSize: 13, color: "var(--color-text)", verticalAlign: "middle" },
   checkbox: { width: 18, height: 18, cursor: "pointer", accentColor: "var(--color-accent)", margin: 0 }
 };

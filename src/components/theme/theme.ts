@@ -5,34 +5,34 @@
 
 /* ─── Тёмная тема (по умолчанию) ───────────────────────────── */
 const DARK = `
-  --ew-bg:#080C14;
-  --ew-surface:#0D1420;
-  --ew-card:#0F1825;
-  --ew-border:rgba(56,189,248,0.12);
-  --ew-border-2:rgba(56,189,248,0.24);
+  --ew-bg:#09090A;
+  --ew-surface:#0F0F11;
+  --ew-card:#141417;
+  --ew-border:rgba(255,255,255,0.09);
+  --ew-border-2:rgba(255,255,255,0.18);
   --ew-accent:#38BDF8;
   --ew-accent-2:#0EA5E9;
-  --ew-accent-contrast:#080C14;
+  --ew-accent-contrast:#09090A;
   --ew-accent-rgb:56,189,248;
-  --ew-text:#E2EBF8;
-  --ew-sub:#94A3B8;
-  --ew-muted:#64748B;
-  --ew-muted-rgb:100,116,139;
-  --ew-green:#10B981;
-  --ew-green-rgb:16,185,129;
-  --ew-amber:#F59E0B;
-  --ew-red:#EF4444;
-  --ew-red-rgb:239,68,68;
+  --ew-text:#ECECEE;
+  --ew-sub:#A0A0A8;
+  --ew-muted:#6E6E77;
+  --ew-muted-rgb:110,110,119;
+  --ew-green:#34D399;
+  --ew-green-rgb:52,211,153;
+  --ew-amber:#FBBF24;
+  --ew-red:#F87171;
+  --ew-red-rgb:248,113,113;
   --ew-purple:#A78BFA;
   --ew-purple-rgb:167,139,250;
-  --ew-hdr-bg:rgba(8,12,20,0.92);
+  --ew-hdr-bg:rgba(9,9,10,0.92);
   --ew-tint:rgba(255,255,255,0.04);
   --ew-tint-2:rgba(255,255,255,0.02);
-  --ew-code-bg:#0A1628;
-  --ew-code-fg:#94A3B8;
-  --ew-glow:rgba(56,189,248,0.07);
-  --ew-shadow:0 32px 80px rgba(0,0,0,0.6);
-  --ew-shadow-soft:0 20px 50px rgba(0,0,0,0.45);
+  --ew-code-bg:#111114;
+  --ew-code-fg:#A0A0A8;
+  --ew-glow:rgba(56,189,248,0.05);
+  --ew-shadow:0 32px 80px rgba(0,0,0,0.7);
+  --ew-shadow-soft:0 20px 50px rgba(0,0,0,0.5);
   color-scheme:dark;
 `;
 

@@ -204,11 +204,11 @@ export default function LoginPage() {
 // Стили оставляем без изменений
 const s: Record<string, React.CSSProperties> = {
   page: { minHeight: "100vh", background: "var(--color-bg)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 },
-  card: { background: "#fff", borderRadius: 20, padding: "32px 28px", width: "100%", maxWidth: 380, boxShadow: "0 4px 32px rgba(0,0,0,0.08)" },
+  card: { background: "var(--color-card)", borderRadius: 20, padding: "32px 28px", width: "100%", maxWidth: 380, boxShadow: "0 4px 32px rgba(0,0,0,0.08)" },
   logoWrap: { display: "flex", alignItems: "center", gap: 10, marginBottom: 28 },
   logoText: { fontSize: 20, fontWeight: 800, color: "var(--color-text)", letterSpacing: "-0.02em" },
   label: { fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-3)", marginBottom: 6 },
-  input: { padding: "12px 14px", borderRadius: 10, border: "1.5px solid #e8e6df", fontSize: 15, color: "var(--color-text)", background: "var(--color-surface)", marginBottom: 16, outline: "none", width: "100%", fontFamily: "inherit" },
+  input: { padding: "12px 14px", borderRadius: 10, border: "1.5px solid var(--color-border)", fontSize: 15, color: "var(--color-text)", background: "var(--color-surface)", marginBottom: 16, outline: "none", width: "100%", fontFamily: "inherit" },
   btn: { padding: "13px 0", borderRadius: 10, background: "var(--color-accent)", color: "#fff", fontWeight: 700, fontSize: 15, border: "none", cursor: "pointer", marginTop: 4, width: "100%", fontFamily: "inherit" },
   back: { marginTop: 12, background: "none", border: "none", color: "var(--color-text-3)", fontSize: 13, cursor: "pointer", textAlign: "center", fontFamily: "inherit" },
   sub: { fontSize: 13, color: "var(--color-text-2)", marginBottom: 20, lineHeight: 1.5 },

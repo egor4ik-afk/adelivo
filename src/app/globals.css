@@ -55,39 +55,52 @@
   /* ── Тёмная тема кабинетов ─────────────────────────────────
      Оттенки согласованы с публичной частью (components/theme/theme.ts),
      но фон чуть светлее: в кабинете люди сидят часами и смотрят таблицы. */
+  /* ── Тёмная тема кабинетов ─────────────────────────────────
+     Нейтральный почти-чёрный: в фоне нет синего подмеса, поверхности
+     различаются только светлотой. Акцент — приглушённая сталь: он
+     работает и как заливка кнопки под белым текстом, и как цвет ссылки
+     на тёмном фоне, и не спорит со статусными зелёным/жёлтым/красным.
+
+     Если захочется другой акцент — меняются две строки ниже.
+     Проверенные варианты (белый текст на них читается):
+       сталь    #5E6B7E / #6E7C90   ← по умолчанию
+       изумруд  #2E7D6B / #379383
+       медь     #A96A3C / #BE7A48
+       фиолет   #6E5AC8 / #7F6BD8                                      */
   :root[data-ew-theme="dark"] {
-    --color-accent: #5b87ff;
-    --color-accent-dark: #4a7aff;
-    --color-accent-soft: #16213a;
-    --color-accent-soft-2: #1d2c4d;
-    --color-bg: #0B111C;
-    --color-surface: #111927;
-    --color-surface-2: #16202F;
-    --color-card: #131C2B;
-    --color-border: #253347;
-    --color-border-2: #2F405A;
-    --color-text: #E6EDF7;
-    --color-text-2: #9FB0C6;
-    --color-text-3: #6B7C93;
+    --color-accent: #5E6B7E;
+    --color-accent-dark: #6E7C90;
+    --color-accent-soft: #1B2027;
+    --color-accent-soft-2: #232A33;
+
+    --color-bg: #0A0A0B;
+    --color-surface: #121214;
+    --color-surface-2: #17171A;
+    --color-card: #141417;
+    --color-border: #26262B;
+    --color-border-2: #34343B;
+    --color-text: #ECECEE;
+    --color-text-2: #A0A0A8;
+    --color-text-3: #6E6E77;
     --color-green: #34D399;
     --color-red: #F87171;
     --color-amber: #FBBF24;
 
-    --color-warn-bg: #2A2210;
-    --color-warn-bg-2: #352B14;
-    --color-warn-border: #574526;
+    --color-warn-bg: #241D0E;
+    --color-warn-bg-2: #2D2412;
+    --color-warn-border: #4A3B1F;
     --color-warn-text: #FBBF24;
-    --color-danger-bg: #2C1518;
-    --color-danger-border: #4A2126;
+    --color-danger-bg: #271518;
+    --color-danger-border: #422025;
     --color-danger-text: #FCA5A5;
     --color-danger-text-2: #F87171;
-    --color-ok-bg: #10261C;
-    --color-ok-border: #1D4032;
+    --color-ok-bg: #0F231B;
+    --color-ok-border: #1B3A2E;
     --color-ok-text: #6EE7B7;
     --color-ok-text-2: #34D399;
 
     --slot-1: #34D399;
-    --slot-2: #5b87ff;
+    --slot-2: #8FA3BE;
     --slot-3: #A78BFA;
     --slot-4: #FB923C;
     --slot-5: #C08457;
@@ -121,8 +134,8 @@
    Переписывать 80+ вхождений в разметке смысла нет — вместо этого
    переопределяем сами утилиты внутри тёмной темы.                     */
 /* фоны -50 / -100 → полупрозрачная заливка вместо белёсой */
-:root[data-ew-theme="dark"] .bg-red-50, :root[data-ew-theme="dark"] .bg-red-100 { background-color: rgba(248,113,113,0.14) !important; }
-:root[data-ew-theme="dark"] .bg-rose-50, :root[data-ew-theme="dark"] .bg-rose-100 { background-color: rgba(251,113,133,0.14) !important; }
+:root[data-ew-theme="dark"] .bg-red-50, :root[data-ew-theme="dark"] .bg-red-100 { background-color: rgba(248,113,113,0.13) !important; }
+:root[data-ew-theme="dark"] .bg-rose-50, :root[data-ew-theme="dark"] .bg-rose-100 { background-color: rgba(251,113,133,0.13) !important; }
 :root[data-ew-theme="dark"] .bg-orange-50, :root[data-ew-theme="dark"] .bg-orange-100 { background-color: rgba(251,146,60,0.14)  !important; }
 :root[data-ew-theme="dark"] .bg-amber-50, :root[data-ew-theme="dark"] .bg-amber-100 { background-color: rgba(251,191,36,0.14)  !important; }
 :root[data-ew-theme="dark"] .bg-yellow-50, :root[data-ew-theme="dark"] .bg-yellow-100 { background-color: rgba(250,204,21,0.14)  !important; }
@@ -130,8 +143,8 @@
 :root[data-ew-theme="dark"] .bg-emerald-50, :root[data-ew-theme="dark"] .bg-emerald-100 { background-color: rgba(52,211,153,0.14)  !important; }
 :root[data-ew-theme="dark"] .bg-teal-50, :root[data-ew-theme="dark"] .bg-teal-100 { background-color: rgba(45,212,191,0.14)  !important; }
 :root[data-ew-theme="dark"] .bg-blue-50, :root[data-ew-theme="dark"] .bg-blue-100 { background-color: rgba(96,165,250,0.14)  !important; }
-:root[data-ew-theme="dark"] .bg-purple-50, :root[data-ew-theme="dark"] .bg-purple-100 { background-color: rgba(167,139,250,0.14) !important; }
-:root[data-ew-theme="dark"] .bg-pink-50, :root[data-ew-theme="dark"] .bg-pink-100 { background-color: rgba(244,114,182,0.14) !important; }
+:root[data-ew-theme="dark"] .bg-purple-50, :root[data-ew-theme="dark"] .bg-purple-100 { background-color: rgba(167,139,250,0.13) !important; }
+:root[data-ew-theme="dark"] .bg-pink-50, :root[data-ew-theme="dark"] .bg-pink-100 { background-color: rgba(244,114,182,0.13) !important; }
 
 /* рамки -100 / -200 */
 :root[data-ew-theme="dark"] .border-red-200 { border-color: rgba(248,113,113,0.35) !important; }
