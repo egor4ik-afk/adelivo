@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { usePushNotifications } from "./usePushNotifications";
 import imageCompression from "browser-image-compression"; // 🔥 Для сжатия фото перед загрузкой
 import { performLogout } from '@/lib/logout'; // 🔥 Импортируем
+import { AppThemeRow } from '@/components/theme/AppThemeRow';
 
 interface Profile {
   id: string; email: string; role: string;
@@ -133,7 +134,7 @@ export function ProfilePanel({ onClose }: { onClose: () => void; }) {
 
   const fullName = profile ? [profile.firstName, profile.lastName].filter(Boolean).join(" ") || "—" : "—";
 
-  if (!profile) return <div style={s.panel}><div style={{ color: "#a8a49c", padding: 16, fontSize: 12 }}>Загрузка...</div></div>;
+  if (!profile) return <div style={s.panel}><div style={{ color: "var(--color-text-3)", padding: 16, fontSize: 12 }}>Загрузка...</div></div>;
 
   return (
     <div style={s.panel} onClick={e => e.stopPropagation()}>
@@ -146,7 +147,7 @@ export function ProfilePanel({ onClose }: { onClose: () => void; }) {
           title={editing ? "Изменить фото" : ""}
         >
           {uploadingAvatar ? (
-            <div style={{ ...s.avatarLg, background: "#e8e6df" }}>⏳</div>
+            <div style={{ ...s.avatarLg, background: "var(--color-border)" }}>⏳</div>
           ) : profile.avatarUrl ? (
             <img src={profile.avatarUrl} alt="Avatar" style={{ ...s.avatarLg, objectFit: "cover" }} />
           ) : (
@@ -187,11 +188,16 @@ export function ProfilePanel({ onClose }: { onClose: () => void; }) {
 
           <div style={s.divider} />
 
+          {/* Тема оформления */}
+          <AppThemeRow rowStyle={s.pushRow} />
+
+          <div style={s.divider} />
+
           {/* Push уведомления */}
           <div style={s.pushRow}>
             <div>
-              <div style={{ fontSize: 12, fontWeight: 500, color: "#1a1a18" }}>Push-уведомления</div>
-              <div style={{ fontSize: 11, color: isSubscribed ? "#10b981" : "#a8a49c", marginTop: 2 }}>
+              <div style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text)" }}>Push-уведомления</div>
+              <div style={{ fontSize: 11, color: isSubscribed ? "#10b981" : "var(--color-text-3)", marginTop: 2 }}>
                 {isSubscribed ? "Уведомления включены" : "Выключены"}
               </div>
             </div>
@@ -203,15 +209,15 @@ export function ProfilePanel({ onClose }: { onClose: () => void; }) {
           </div>
 
           {isSubscribed && (
-            <div style={{ background: "#fafaf8", padding: 12, borderRadius: 8, display: "flex", flexDirection: "column", gap: 10, marginTop: 8, marginBottom: 8 }}>
+            <div style={{ background: "var(--color-surface)", padding: 12, borderRadius: 8, display: "flex", flexDirection: "column", gap: 10, marginTop: 8, marginBottom: 8 }}>
               {SETTINGS.map(set => (
                 <label key={set.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
-                  <span style={{ fontSize: 12, color: "#6b6860" }}>{set.label}</span>
+                  <span style={{ fontSize: 12, color: "var(--color-text-2)" }}>{set.label}</span>
                   <input 
                     type="checkbox" 
                     checked={(profile[set.key as keyof Profile] as boolean) ?? true} 
                     onChange={() => togglePref(set.key as keyof Profile)} 
-                    style={{ accentColor: "#4a7aff", width: 16, height: 16, cursor: "pointer", margin: 0 }}
+                    style={{ accentColor: "var(--color-accent)", width: 16, height: 16, cursor: "pointer", margin: 0 }}
                   />
                 </label>
               ))}
@@ -249,8 +255,8 @@ export function ProfilePanel({ onClose }: { onClose: () => void; }) {
 function InfoRow({ label, value, accent, muted }: { label: string; value: string; accent?: boolean; muted?: boolean }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "0.5px solid #e8e6df" }}>
-      <span style={{ fontSize: 12, color: "#a8a49c" }}>{label}</span>
-      <span style={{ fontSize: 12, fontWeight: 500, color: muted ? "#a8a49c" : accent ? "#4a7aff" : "#1a1a18" }}>{value}</span>
+      <span style={{ fontSize: 12, color: "var(--color-text-3)" }}>{label}</span>
+      <span style={{ fontSize: 12, fontWeight: 500, color: muted ? "var(--color-text-3)" : accent ? "var(--color-accent)" : "var(--color-text)" }}>{value}</span>
     </div>
   );
 }
@@ -258,7 +264,7 @@ function InfoRow({ label, value, accent, muted }: { label: string; value: string
 function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
     <div>
-      <div style={{ fontSize: 10, fontWeight: 500, color: "#a8a49c", textTransform: "uppercase" as const, letterSpacing: ".4px", marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 10, fontWeight: 500, color: "var(--color-text-3)", textTransform: "uppercase" as const, letterSpacing: ".4px", marginBottom: 4 }}>{label}</div>
       <input style={s.fieldInput} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder ?? ""} />
     </div>
   );
@@ -271,19 +277,19 @@ const s: Record<string, React.CSSProperties> = {
     maxHeight: "85vh", overflowY: "auto",
   },
   header: { display: "flex", alignItems: "center", gap: 12, marginBottom: 12, position: "relative" },
-  avatarLg: { width: 44, height: 44, borderRadius: "50%", background: "#4a7aff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 600, color: "#fff", flexShrink: 0 },
-  name: { fontSize: 14, fontWeight: 500, color: "#1a1a18" },
+  avatarLg: { width: 44, height: 44, borderRadius: "50%", background: "var(--color-accent)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 600, color: "#fff", flexShrink: 0 },
+  name: { fontSize: 14, fontWeight: 500, color: "var(--color-text)" },
   roleBadge: { display: "inline-block", padding: "2px 8px", borderRadius: 20, fontSize: 10, fontWeight: 500, background: "#E6F1FB", color: "#0C447C" },
-  closeBtn: { position: "absolute", right: 0, top: 0, background: "none", border: "none", color: "#a8a49c", fontSize: 14, cursor: "pointer", padding: 2 },
-  divider: { height: "0.5px", background: "#e8e6df", margin: "10px 0" },
+  closeBtn: { position: "absolute", right: 0, top: 0, background: "none", border: "none", color: "var(--color-text-3)", fontSize: 14, cursor: "pointer", padding: 2 },
+  divider: { height: "0.5px", background: "var(--color-border)", margin: "10px 0" },
   pushRow: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", marginBottom: 4 },
-  pushBtnOn: { padding: "5px 12px", borderRadius: 6, background: "#4a7aff", border: "none", color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
-  pushBtnOff: { padding: "5px 12px", borderRadius: 6, background: "transparent", border: "1px solid #e8e6df", color: "#a8a49c", fontSize: 11, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
-  editBtn: { width: "100%", marginTop: 10, padding: 8, borderRadius: 8, background: "#f5f4f0", border: "0.5px solid #e8e6df", color: "#1a1a18", fontSize: 12, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
+  pushBtnOn: { padding: "5px 12px", borderRadius: 6, background: "var(--color-accent)", border: "none", color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
+  pushBtnOff: { padding: "5px 12px", borderRadius: 6, background: "transparent", border: "1px solid #e8e6df", color: "var(--color-text-3)", fontSize: 11, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
+  editBtn: { width: "100%", marginTop: 10, padding: 8, borderRadius: 8, background: "var(--color-bg)", border: "0.5px solid #e8e6df", color: "var(--color-text)", fontSize: 12, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
   logoutBtn: { width: "100%", marginTop: 6, padding: 8, borderRadius: 8, background: "rgba(217,64,64,0.07)", border: "1px solid rgba(217,64,64,0.15)", color: "#d94040", fontSize: 12, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
-  sectionTitle: { fontSize: 11, fontWeight: 500, color: "#a8a49c", marginBottom: 8, marginTop: 4 },
-  fieldStatic: { fontSize: 12, color: "#a8a49c", padding: "7px 10px", borderRadius: 7, background: "#f5f4f0" },
-  fieldInput: { width: "100%", padding: "7px 10px", borderRadius: 7, border: "1px solid #e8e6df", background: "#fafaf8", color: "#1a1a18", fontSize: 12, fontFamily: "Manrope, system-ui, sans-serif", outline: "none" },
-  saveBtn: { flex: 1, padding: 8, borderRadius: 7, background: "#4a7aff", border: "none", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
-  cancelBtn: { padding: "8px 14px", borderRadius: 7, background: "transparent", border: "1px solid #e8e6df", color: "#6b6860", fontSize: 12, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
+  sectionTitle: { fontSize: 11, fontWeight: 500, color: "var(--color-text-3)", marginBottom: 8, marginTop: 4 },
+  fieldStatic: { fontSize: 12, color: "var(--color-text-3)", padding: "7px 10px", borderRadius: 7, background: "var(--color-bg)" },
+  fieldInput: { width: "100%", padding: "7px 10px", borderRadius: 7, border: "1px solid #e8e6df", background: "var(--color-surface)", color: "var(--color-text)", fontSize: 12, fontFamily: "Manrope, system-ui, sans-serif", outline: "none" },
+  saveBtn: { flex: 1, padding: 8, borderRadius: 7, background: "var(--color-accent)", border: "none", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
+  cancelBtn: { padding: "8px 14px", borderRadius: 7, background: "transparent", border: "1px solid #e8e6df", color: "var(--color-text-2)", fontSize: 12, cursor: "pointer", touchAction: "manipulation", WebkitTapHighlightColor: "transparent", position: "relative", zIndex: 10 },
 };

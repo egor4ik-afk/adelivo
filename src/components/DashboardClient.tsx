@@ -35,7 +35,7 @@ const CustomDateInput = React.forwardRef(({ value, onClick }: any, ref: any) => 
     background: "#fff",
     fontSize: 13,
     fontWeight: 600,
-    color: "#1a1a18",
+    color: "var(--color-text)",
     cursor: "pointer",
     display: "flex",
     alignItems: "center",
@@ -1158,7 +1158,7 @@ export function DashboardClient({ user }: { user: User }) {
           color: "#10b981"
         };
       } else if (o.status === "CANCELLED" || o.status === "RETURNED") {
-        etas[o.id] = { type: 'SKIPPED', timeStr: "—", color: "#a8a49c" };
+        etas[o.id] = { type: 'SKIPPED', timeStr: "—", color: "var(--color-text-3)" };
       } else {
         currentRunningMs += (!foundFirstActive ? legMs : (5 * 60 * 1000) + legMs);
         foundFirstActive = true;
@@ -1174,7 +1174,7 @@ export function DashboardClient({ user }: { user: User }) {
         }
 
         const timeStr = new Date(currentRunningMs).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
-        etas[o.id] = { type: o.status, timeStr, color: o.status === "IN_DELIVERY" ? "#f59e0b" : "#4a7aff" };
+        etas[o.id] = { type: o.status, timeStr, color: o.status === "IN_DELIVERY" ? "#f59e0b" : "var(--color-accent)" };
       }
 
       if (index === selectedRouteOrders.length - 1 && routeLegs[selectedRouteOrders.length]) {
@@ -1262,12 +1262,12 @@ export function DashboardClient({ user }: { user: User }) {
 
   const ROUTE_STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
     NEW: { label: "Новый", color: "#d94040", bg: "#fef2f2" },
-    ASSIGNED: { label: "Назначен", color: "#4a7aff", bg: "#eef3ff" },
+    ASSIGNED: { label: "Назначен", color: "var(--color-accent)", bg: "var(--color-accent-soft)" },
     ASSEMBLING: { label: "В сборке", color: "#d97706", bg: "#fffbeb" }, // 🔥 Цвет для отображения
     IN_DELIVERY: { label: "🚀 В пути", color: "#10b981", bg: "#ecfdf5" },
-    DELIVERED: { label: "✅ Доставлен", color: "#6b6860", bg: "#f5f4f0" },
+    DELIVERED: { label: "✅ Доставлен", color: "var(--color-text-2)", bg: "var(--color-bg)" },
     RETURNED: { label: "↩️ Возврат", color: "#d94040", bg: "#fef2f2" },
-    CANCELLED: { label: "❌ Отменен", color: "#a8a49c", bg: "#f5f4f0" }
+    CANCELLED: { label: "❌ Отменен", color: "var(--color-text-3)", bg: "var(--color-bg)" }
   };
 
   async function handleBulkAssign(isDraft = false) {
@@ -1318,24 +1318,24 @@ export function DashboardClient({ user }: { user: User }) {
   const renderRouteListPanel = () => (
     <div style={{ maxWidth: 600, margin: isMobile ? 0 : "0 auto", background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", padding: isMobile ? 16 : 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 18, color: "#1a1a18" }}>Работа с маршрутами</h2>
-        {!isMobile && <button onClick={() => { setIsBulkMode(false); setRouteTab("map"); }} style={{ background: "none", border: "none", fontSize: 24, cursor: "pointer", color: "#a8a49c", padding: "0 8px" }}>×</button>}
+        <h2 style={{ margin: 0, fontSize: isMobile ? 16 : 18, color: "var(--color-text)" }}>Работа с маршрутами</h2>
+        {!isMobile && <button onClick={() => { setIsBulkMode(false); setRouteTab("map"); }} style={{ background: "none", border: "none", fontSize: 24, cursor: "pointer", color: "var(--color-text-3)", padding: "0 8px" }}>×</button>}
       </div>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, background: "#f5f4f0", padding: 4, borderRadius: 10 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, background: "var(--color-bg)", padding: 4, borderRadius: 10 }}>
         <button
           onClick={() => {
             setRouteTabMode("new"); setEditingRouteId(null); setBulkSelectedIds([]); setBulkCourier("");
             setRouteType("mt");
             setManualDepartureTime(""); setIsDepartureEdited(false);
           }}
-          style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", background: routeTabMode === "new" ? "#fff" : "transparent", color: routeTabMode === "new" ? "#1a1a18" : "#a8a49c", boxShadow: routeTabMode === "new" ? "0 2px 8px rgba(0,0,0,0.05)" : "none", transition: "all 0.2s" }}
+          style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", background: routeTabMode === "new" ? "#fff" : "transparent", color: routeTabMode === "new" ? "var(--color-text)" : "var(--color-text-3)", boxShadow: routeTabMode === "new" ? "0 2px 8px rgba(0,0,0,0.05)" : "none", transition: "all 0.2s" }}
         >
           {editingRouteId ? "✏️ Редактирование" : "Новый маршрут"}
         </button>
         <button
           onClick={() => { setRouteTabMode("current"); setEditingRouteId(null); }}
-          style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", background: routeTabMode === "current" ? "#fff" : "transparent", color: routeTabMode === "current" ? "#1a1a18" : "#a8a49c", boxShadow: routeTabMode === "current" ? "0 2px 8px rgba(0,0,0,0.05)" : "none", transition: "all 0.2s" }}
+          style={{ flex: 1, padding: "8px", borderRadius: 8, border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", background: routeTabMode === "current" ? "#fff" : "transparent", color: routeTabMode === "current" ? "var(--color-text)" : "var(--color-text-3)", boxShadow: routeTabMode === "current" ? "0 2px 8px rgba(0,0,0,0.05)" : "none", transition: "all 0.2s" }}
         >
           Текущие ({existingRoutes.length})
         </button>
@@ -1353,7 +1353,7 @@ export function DashboardClient({ user }: { user: User }) {
 
       {routeTabMode === "current" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {existingRoutes.length === 0 && <div style={{ textAlign: "center", color: "#a8a49c", padding: 20 }}>Нет маршрутов на {filterDate}</div>}
+          {existingRoutes.length === 0 && <div style={{ textAlign: "center", color: "var(--color-text-3)", padding: 20 }}>Нет маршрутов на {filterDate}</div>}
           {existingRoutes.map((r: any) => {
             const isDraft = r.isDraft;
             const rCourier = dbCouriers.find(c => String(c.id) === String(r.courierId));
@@ -1406,7 +1406,7 @@ export function DashboardClient({ user }: { user: User }) {
                   setManualDepartureTime(r.plannedDepartureTime || "");
                   setIsDepartureEdited(!!r.plannedDepartureTime);
                 }}
-                style={{ background: "#fafaf8", border: "1px solid #e8e6df", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}
+                style={{ background: "var(--color-surface)", border: "1px solid #e8e6df", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}
               >
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
                   {/* Иконка Drag & Drop */}
@@ -1415,7 +1415,7 @@ export function DashboardClient({ user }: { user: User }) {
                   </div>
 
                   <div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "var(--color-text)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       {typeIcon} {r.name}
 
                       {isDraft && <span style={{ background: "#fef3c7", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>Черновик</span>}
@@ -1435,7 +1435,7 @@ export function DashboardClient({ user }: { user: User }) {
 
                       {/* 🔥 ДОБАВЛЕНО: Время выезда + ориентир на 1-й заказ */}
                       {r.plannedDepartureTime && (
-                        <span style={{ background: "#eef3ff", color: "#4a7aff", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #bfdbfe" }}>
+                        <span style={{ background: "var(--color-accent-soft)", color: "var(--color-accent)", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #bfdbfe" }}>
                           ⏱ Выезд: {r.plannedDepartureTime} {r.orders[0]?.slotFrom ? `(1-й к ${r.orders[0].slotFrom})` : ''}
                         </span>
                       )}
@@ -1446,9 +1446,9 @@ export function DashboardClient({ user }: { user: User }) {
                         </span>
                       )}
 
-                      <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 500 }}>изм. {new Date(r.updatedAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</span>
+                      <span style={{ fontSize: 11, color: "var(--color-text-3)", fontWeight: 500 }}>изм. {new Date(r.updatedAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
-                    <div style={{ fontSize: 12, color: "#6b6860", marginTop: 4 }}>
+                    <div style={{ fontSize: 12, color: "var(--color-text-2)", marginTop: 4 }}>
                       Курьер: {courierName} · {deliveredCount}/{r.orders.length} точек
                     </div>
 
@@ -1462,7 +1462,7 @@ export function DashboardClient({ user }: { user: User }) {
                         )}
 
                         {r.baseArrivalTime && (
-                          <span style={{ fontSize: 11, background: "#eef3ff", color: "#4a7aff", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #bfdbfe" }}>
+                          <span style={{ fontSize: 11, background: "var(--color-accent-soft)", color: "var(--color-accent)", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #bfdbfe" }}>
                             🏠 На базе: {r.baseArrivalTime}
                           </span>
                         )}
@@ -1474,7 +1474,7 @@ export function DashboardClient({ user }: { user: User }) {
                         )}
 
                         {estimatedBaseReturn && (
-                          <span style={{ fontSize: 11, background: "#f5f4f0", color: "#a8a49c", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #e8e6df" }}>
+                          <span style={{ fontSize: 11, background: "var(--color-bg)", color: "var(--color-text-3)", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #e8e6df" }}>
                             🏠 Возврат: {estimatedBaseReturn}</span>
                         )}
 
@@ -1482,7 +1482,7 @@ export function DashboardClient({ user }: { user: User }) {
                     )}
                   </div>
                 </div>
-                <div style={{ fontSize: 20, color: "#a8a49c" }}>✏️</div>
+                <div style={{ fontSize: 20, color: "var(--color-text-3)" }}>✏️</div>
               </div>
             )
           })}
@@ -1493,27 +1493,27 @@ export function DashboardClient({ user }: { user: User }) {
         <>
           {editingRouteId && (
             <div style={{ marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "#4a7aff" }}>Редактирование маршрута</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-accent)" }}>Редактирование маршрута</span>
               <div style={{ display: "flex", gap: 12 }}>
                 <button onClick={handleDeleteRoute} disabled={bulkSaving} style={{ background: "none", border: "none", color: "#d94040", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>🗑 Удалить</button>
-                <button onClick={() => { setEditingRouteId(null); setBulkSelectedIds([]); setRouteTabMode("current"); }} style={{ background: "none", border: "none", color: "#6b6860", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Отменить</button>
+                <button onClick={() => { setEditingRouteId(null); setBulkSelectedIds([]); setRouteTabMode("current"); }} style={{ background: "none", border: "none", color: "var(--color-text-2)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Отменить</button>
               </div>
             </div>
           )}
 
-          <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 12, marginBottom: 16, background: "#f5f4f0", padding: "6px 8px", borderRadius: 8, alignItems: isMobile ? "stretch" : "center" }}>
+          <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 12, marginBottom: 16, background: "var(--color-bg)", padding: "6px 8px", borderRadius: 8, alignItems: isMobile ? "stretch" : "center" }}>
             <div style={{ display: "flex", gap: 4, flex: 1 }}>
-              <button onClick={() => setRouteType("auto")} style={{ ...s.actionBtn, flex: 1, background: routeType === "auto" ? "#fff" : "transparent", color: routeType === "auto" ? "#1a1a18" : "#a8a49c", boxShadow: routeType === "auto" ? "0 1px 3px rgba(0,0,0,0.1)" : "none", padding: "6px 14px", borderRadius: 6 }}>🚗 На авто</button>
-              <button onClick={() => setRouteType("mt")} style={{ ...s.actionBtn, flex: 1, background: routeType === "mt" ? "#fff" : "transparent", color: routeType === "mt" ? "#1a1a18" : "#a8a49c", boxShadow: routeType === "mt" ? "0 1px 3px rgba(0,0,0,0.1)" : "none", padding: "6px 14px", borderRadius: 6 }}>🚌 Транспорт</button>
+              <button onClick={() => setRouteType("auto")} style={{ ...s.actionBtn, flex: 1, background: routeType === "auto" ? "#fff" : "transparent", color: routeType === "auto" ? "var(--color-text)" : "var(--color-text-3)", boxShadow: routeType === "auto" ? "0 1px 3px rgba(0,0,0,0.1)" : "none", padding: "6px 14px", borderRadius: 6 }}>🚗 На авто</button>
+              <button onClick={() => setRouteType("mt")} style={{ ...s.actionBtn, flex: 1, background: routeType === "mt" ? "#fff" : "transparent", color: routeType === "mt" ? "var(--color-text)" : "var(--color-text-3)", boxShadow: routeType === "mt" ? "0 1px 3px rgba(0,0,0,0.1)" : "none", padding: "6px 14px", borderRadius: 6 }}>🚌 Транспорт</button>
             </div>
-            <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", color: "#1a1a18", fontWeight: 600, padding: isMobile ? "4px 6px" : 0 }}>
-              <input type="checkbox" checked={returnToBase} onChange={e => setReturnToBase(e.target.checked)} style={{ accentColor: "#4a7aff", width: 16, height: 16 }} />
+            <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", color: "var(--color-text)", fontWeight: 600, padding: isMobile ? "4px 6px" : 0 }}>
+              <input type="checkbox" checked={returnToBase} onChange={e => setReturnToBase(e.target.checked)} style={{ accentColor: "var(--color-accent)", width: 16, height: 16 }} />
               Вернуться на базу
             </label>
           </div>
 
           {routeTotals && (
-            <div style={{ fontSize: 13, color: "#1a1a18", background: "#eef3ff", padding: "12px 14px", borderRadius: 8, marginBottom: 16, fontWeight: 600 }}>
+            <div style={{ fontSize: 13, color: "var(--color-text)", background: "var(--color-accent-soft)", padding: "12px 14px", borderRadius: 8, marginBottom: 16, fontWeight: 600 }}>
               {isCalculatingRoute
                 ? "⏳ Считаем время в пути..."
                 : `🏁 Итого: ~${routeTotals.time} (${routeTotals.dist})`}
@@ -1522,7 +1522,7 @@ export function DashboardClient({ user }: { user: User }) {
                 <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 5 }}>
 
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 12, color: "#4a7aff", fontWeight: 700 }}>💡 Выезд:</span>
+                    <span style={{ fontSize: 12, color: "var(--color-accent)", fontWeight: 700 }}>💡 Выезд:</span>
 
 
                     <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
@@ -1548,7 +1548,7 @@ export function DashboardClient({ user }: { user: User }) {
                             padding: "4px 24px 4px 6px", // Место под кастомную стрелочку
                             borderRadius: 6, border: "1px solid #4a7aff",
                             outline: "none", fontWeight: 700, fontFamily: "monospace",
-                            fontSize: 13, color: "#4a7aff", background: "#fff",
+                            fontSize: 13, color: "var(--color-accent)", background: "#fff",
                             width: "100%"
                           }}
                         />
@@ -1559,7 +1559,7 @@ export function DashboardClient({ user }: { user: User }) {
                           style={{
                             position: "absolute", right: 0, top: 0, bottom: 0, width: 24,
                             display: "flex", alignItems: "center", justifyContent: "center",
-                            cursor: "pointer", color: "#4a7aff", fontSize: 10
+                            cursor: "pointer", color: "var(--color-accent)", fontSize: 10
                           }}
                         >
                           ▼
@@ -1615,7 +1615,7 @@ export function DashboardClient({ user }: { user: User }) {
                                     onClick={() => { setManualDepartureTime(t); setShowTimeDropdown(false); }}
                                     style={{
                                       padding: "6px 10px", cursor: "pointer", fontSize: 13,
-                                      fontWeight: 700, color: t === manualDepartureTime ? "#4a7aff" : "#1a1a18",
+                                      fontWeight: 700, color: t === manualDepartureTime ? "var(--color-accent)" : "var(--color-text)",
                                       background: t === manualDepartureTime ? "#f0f5ff" : "transparent",
                                       borderBottom: "1px solid #f0f0f0", transition: "background 0.1s"
                                     }}
@@ -1642,7 +1642,7 @@ export function DashboardClient({ user }: { user: User }) {
                             onClick={() => setManualDepartureTime(dbTime)}
                             title={dbTime ? `Вернуть: ${dbTime}` : "Очистить"}
                             style={{
-                              background: "none", border: "none", color: "#a8a49c",
+                              background: "none", border: "none", color: "var(--color-text-3)",
                               cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1,
                               opacity: 0.7, transition: "opacity 0.15s", flexShrink: 0
                             }}
@@ -1665,7 +1665,7 @@ export function DashboardClient({ user }: { user: User }) {
                           title="Принять расчётное время"
                           style={{
                             background: "#f0f5ff", border: "1px dashed #93b4ff",
-                            color: "#4a7aff", padding: "3px 9px", borderRadius: 20,
+                            color: "var(--color-accent)", padding: "3px 9px", borderRadius: 20,
                             fontSize: 11, fontWeight: 700, cursor: "pointer",
                             transition: "all 0.15s"
                           }}
@@ -1679,7 +1679,7 @@ export function DashboardClient({ user }: { user: User }) {
                   </div>
 
                   {/* Описание — без времени, приглушённо */}
-                  <span style={{ fontSize: 11, color: "#6b6860", paddingLeft: 2 }}>
+                  <span style={{ fontSize: 11, color: "var(--color-text-2)", paddingLeft: 2 }}>
                     {departureAdvice.replace(/Выехать до \d{2}:\d{2}/, "").replace(/^[\s—–]+/, "").trim()}
                   </span>
 
@@ -1687,7 +1687,7 @@ export function DashboardClient({ user }: { user: User }) {
               )}
 
               {!isCalculatingRoute && returnToBase && calculatedEtasData.baseReturnTime !== "—" && (
-                <div style={{ marginTop: 6, fontSize: 11, color: "#a8a49c", fontWeight: 600 }}>
+                <div style={{ marginTop: 6, fontSize: 11, color: "var(--color-text-3)", fontWeight: 600 }}>
                   🏠 Расчётное время на базе: {calculatedEtasData.baseReturnTime}
                 </div>
               )}
@@ -1724,17 +1724,17 @@ export function DashboardClient({ user }: { user: User }) {
           )}
 
           <div style={{ display: "flex", gap: 10, marginBottom: 20, flexDirection: "column" }}>
-            <button onClick={optimizeRoute} style={{ ...s.actionBtn, background: "#f4f7ff", color: "#4a7aff", border: "1px solid #c9d8ff" }}>✨ Умная оптимизация (Время + Расстояние)</button>
+            <button onClick={optimizeRoute} style={{ ...s.actionBtn, background: "#f4f7ff", color: "var(--color-accent)", border: "1px solid #c9d8ff" }}>✨ Умная оптимизация (Время + Расстояние)</button>
             {selectedRouteOrders.length > 0 && (
               <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => handleOpenRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "#fff", color: "#1a1a18", border: "1px solid #e8e6df" }}>🗺️ Открыть в Яндексе</button>
-                <button onClick={() => handleShareRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "#fff", color: "#1a1a18", border: "1px solid #e8e6df" }}>🔗 Скопировать ссылку</button>
+                <button onClick={() => handleOpenRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "#fff", color: "var(--color-text)", border: "1px solid #e8e6df" }}>🗺️ Открыть в Яндексе</button>
+                <button onClick={() => handleShareRoute(selectedRouteOrders)} style={{ ...s.actionBtn, flex: 1, background: "#fff", color: "var(--color-text)", border: "1px solid #e8e6df" }}>🔗 Скопировать ссылку</button>
               </div>
             )}
           </div>
 
-          <div style={{ background: "#fafaf8", padding: 16, borderRadius: 8, marginBottom: 20 }}>
-            <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Курьер</div>
+          <div style={{ background: "var(--color-surface)", padding: 16, borderRadius: 8, marginBottom: 20 }}>
+            <div style={{ fontSize: 11, color: "var(--color-text-3)", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>Курьер</div>
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "stretch" }}>
               <div style={{ flex: "1 1 200px", minWidth: 0 }}>
@@ -1783,7 +1783,7 @@ export function DashboardClient({ user }: { user: User }) {
             </div>
           </div>
 
-          <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>
+          <div style={{ fontSize: 11, color: "var(--color-text-3)", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>
             Очередь доставки ({selectedRouteOrders.filter((o: any) => o.status === "DELIVERED").length}/{bulkSelectedIds.length})
           </div>
 
@@ -1804,7 +1804,7 @@ export function DashboardClient({ user }: { user: User }) {
                   {selectedRouteOrders.map((o: any, index: number) => {
                     const color = slotColor(o);
                     const st = ROUTE_STATUS_MAP[o.status] || ROUTE_STATUS_MAP.NEW;
-                    const etaInfo = calculatedEtas[o.id] || { type: "NEW", timeStr: "—", color: "#4a7aff" };
+                    const etaInfo = calculatedEtas[o.id] || { type: "NEW", timeStr: "—", color: "var(--color-accent)" };
 
                     const isLateCalc = o.slotTo && etaInfo.timeStr !== "—" && parseTime(etaInfo.timeStr) > parseTime(o.slotTo);
                     const displayColor = isLateCalc ? "#d94040" : etaInfo.color;
@@ -1828,8 +1828,8 @@ export function DashboardClient({ user }: { user: User }) {
                           <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: 4, background: color }} />
 
                           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                            <button disabled={index === 0} onClick={() => moveBulkItem(index, 'up')} style={{ background: "none", border: "none", cursor: index === 0 ? "default" : "pointer", opacity: index === 0 ? 0.3 : 1, fontSize: 11, padding: 2, color: "#6b6860" }}>▲</button>
-                            <button disabled={index === selectedRouteOrders.length - 1} onClick={() => moveBulkItem(index, 'down')} style={{ background: "none", border: "none", cursor: index === selectedRouteOrders.length - 1 ? "default" : "pointer", opacity: index === selectedRouteOrders.length - 1 ? 0.3 : 1, fontSize: 11, padding: 2, color: "#6b6860" }}>▼</button>
+                            <button disabled={index === 0} onClick={() => moveBulkItem(index, 'up')} style={{ background: "none", border: "none", cursor: index === 0 ? "default" : "pointer", opacity: index === 0 ? 0.3 : 1, fontSize: 11, padding: 2, color: "var(--color-text-2)" }}>▲</button>
+                            <button disabled={index === selectedRouteOrders.length - 1} onClick={() => moveBulkItem(index, 'down')} style={{ background: "none", border: "none", cursor: index === selectedRouteOrders.length - 1 ? "default" : "pointer", opacity: index === selectedRouteOrders.length - 1 ? 0.3 : 1, fontSize: 11, padding: 2, color: "var(--color-text-2)" }}>▼</button>
                           </div>
 
                           <div style={{ width: 24, height: 24, borderRadius: "50%", background: color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{index + 1}</div>
@@ -1837,7 +1837,7 @@ export function DashboardClient({ user }: { user: User }) {
                           <div style={{ flex: 1, overflow: "hidden" }}>
 
                             {/* 🔥 3. АДРЕС И УВЕДОМЛЕНИЕ ДЛЯ ОПЕРАТОРА И АДМИНА */}
-                            <div style={{ fontSize: 13, fontWeight: 600, color: showRedBg ? "#d94040" : "#1a1a18", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: showRedBg ? "#d94040" : "var(--color-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                               {showWarning && "⚠️ "} {o.address}
                             </div>
 
@@ -1847,14 +1847,14 @@ export function DashboardClient({ user }: { user: User }) {
                               </div>
                             )}
 
-                            <div style={{ fontSize: 11, color: "#a8a49c", marginTop: 4, display: "flex", flexDirection: "column", gap: 3 }}>
+                            <div style={{ fontSize: 11, color: "var(--color-text-3)", marginTop: 4, display: "flex", flexDirection: "column", gap: 3 }}>
                               <div>
                                 Слот: <span style={{ color, fontWeight: 700 }}>{o.slotRaw}</span> · {o.externalId ?? o.crmId}
                               </div>
 
                               {o.eta && (
                                 <div>
-                                  <span style={{ color: o.status === "DELIVERED" ? "#a8a49c" : (isLateCalc ? "#d94040" : "#4a7aff"), fontWeight: 700 }}>
+                                  <span style={{ color: o.status === "DELIVERED" ? "var(--color-text-3)" : (isLateCalc ? "#d94040" : "var(--color-accent)"), fontWeight: 700 }}>
                                     {isLateCalc ? "⏰ " : "⏱ "}План: {o.eta}
                                   </span>
                                 </div>
@@ -1894,11 +1894,11 @@ export function DashboardClient({ user }: { user: User }) {
             })()}
 
             {routeLegs[selectedRouteOrders.length] && (
-              <div style={{ fontSize: 11, color: "#a8a49c", paddingLeft: 46, paddingTop: 4 }}>
+              <div style={{ fontSize: 11, color: "var(--color-text-3)", paddingLeft: 46, paddingTop: 4 }}>
                 ↓ {routeLegs[selectedRouteOrders.length]} возврат на базу (Прибытие: {calculatedEtasData.baseReturnTime})
               </div>
             )}
-            {selectedRouteOrders.length === 0 && <div style={{ fontSize: 13, color: "#a8a49c", textAlign: "center", padding: 20 }}>Отметьте точки на карте</div>}
+            {selectedRouteOrders.length === 0 && <div style={{ fontSize: 13, color: "var(--color-text-3)", textAlign: "center", padding: 20 }}>Отметьте точки на карте</div>}
           </div>
         </>
       )}
@@ -1913,7 +1913,7 @@ export function DashboardClient({ user }: { user: User }) {
     background: "#fff",
     fontSize: 13,
     fontWeight: 600,
-    color: "#1a1a18",
+    color: "var(--color-text)",
     cursor: "pointer",
     display: "flex",
     alignItems: "center",
@@ -1973,12 +1973,12 @@ export function DashboardClient({ user }: { user: User }) {
             <div style={{ position: "relative" }}>
               <button
                 onClick={() => setIsStatusMenuOpen(!isStatusMenuOpen)}
-                style={{ ...topbarBtnStyle, background: selectedStatuses.length > 0 ? "#eef3ff" : "#fff", borderColor: selectedStatuses.length > 0 ? "#4a7aff" : "#e8e6df" }}
+                style={{ ...topbarBtnStyle, background: selectedStatuses.length > 0 ? "var(--color-accent-soft)" : "#fff", borderColor: selectedStatuses.length > 0 ? "var(--color-accent)" : "var(--color-border)" }}
               >
-                <span style={{ color: selectedStatuses.length > 0 ? "#4a7aff" : "inherit" }}>
+                <span style={{ color: selectedStatuses.length > 0 ? "var(--color-accent)" : "inherit" }}>
                   Статусы: {selectedStatuses.length === 0 ? "Все" : `(${selectedStatuses.length})`}
                 </span>
-                <span style={{ fontSize: 10, color: selectedStatuses.length > 0 ? "#4a7aff" : "#a8a49c" }}>▼</span>
+                <span style={{ fontSize: 10, color: selectedStatuses.length > 0 ? "var(--color-accent)" : "var(--color-text-3)" }}>▼</span>
               </button>
 
               {isStatusMenuOpen && (
@@ -1994,7 +1994,7 @@ export function DashboardClient({ user }: { user: User }) {
                             if (e.target.checked) setSelectedStatuses([...selectedStatuses, st]);
                             else setSelectedStatuses(selectedStatuses.filter(item => item !== st));
                           }}
-                          style={{ accentColor: "#4a7aff", width: 16, height: 16 }}
+                          style={{ accentColor: "var(--color-accent)", width: 16, height: 16 }}
                         />
                         {st === "NEW" ? "Новые" :  st === "ASSIGNED" ? "Назначены" : st === "ASSEMBLING" ? "В сборке" : st === "IN_DELIVERY" ? "В пути" : "Доставлены"}
                       </label>
@@ -2008,12 +2008,12 @@ export function DashboardClient({ user }: { user: User }) {
             <div style={{ position: "relative" }}>
               <button
                 onClick={() => setIsCourierMenuOpen(!isCourierMenuOpen)}
-                style={{ ...topbarBtnStyle, background: selectedCouriers.length > 0 ? "#eef3ff" : "#fff", borderColor: selectedCouriers.length > 0 ? "#4a7aff" : "#e8e6df" }}
+                style={{ ...topbarBtnStyle, background: selectedCouriers.length > 0 ? "var(--color-accent-soft)" : "#fff", borderColor: selectedCouriers.length > 0 ? "var(--color-accent)" : "var(--color-border)" }}
               >
-                <span style={{ color: selectedCouriers.length > 0 ? "#4a7aff" : "inherit" }}>
+                <span style={{ color: selectedCouriers.length > 0 ? "var(--color-accent)" : "inherit" }}>
                   Курьеры: {selectedCouriers.length === 0 ? "Все" : `(${selectedCouriers.length})`}
                 </span>
-                <span style={{ fontSize: 10, color: selectedCouriers.length > 0 ? "#4a7aff" : "#a8a49c" }}>▼</span>
+                <span style={{ fontSize: 10, color: selectedCouriers.length > 0 ? "var(--color-accent)" : "var(--color-text-3)" }}>▼</span>
               </button>
 
               {isCourierMenuOpen && (
@@ -2024,13 +2024,13 @@ export function DashboardClient({ user }: { user: User }) {
                       if (c.value === "ALL") {
                         return (
                           <label key="ALL" style={{ ...s.dropdownItem, fontWeight: 700, borderBottom: "1px solid #f0efe9", paddingBottom: 8, marginBottom: 4 }} onClick={() => setSelectedCouriers([])}>
-                            <input type="checkbox" checked={selectedCouriers.length === 0} readOnly style={{ accentColor: "#4a7aff", width: 16, height: 16 }} /> Все курьеры
+                            <input type="checkbox" checked={selectedCouriers.length === 0} readOnly style={{ accentColor: "var(--color-accent)", width: 16, height: 16 }} /> Все курьеры
                           </label>
                         );
                       }
                       return (
                         <label key={c.value} style={s.dropdownItem}>
-                          <input type="checkbox" checked={selectedCouriers.includes(String(c.value))} onChange={(e) => { const val = String(c.value); if (e.target.checked) setSelectedCouriers([...selectedCouriers, val]); else setSelectedCouriers(selectedCouriers.filter(id => id !== val)); }} style={{ accentColor: "#4a7aff", width: 16, height: 16, flexShrink: 0 }} />
+                          <input type="checkbox" checked={selectedCouriers.includes(String(c.value))} onChange={(e) => { const val = String(c.value); if (e.target.checked) setSelectedCouriers([...selectedCouriers, val]); else setSelectedCouriers(selectedCouriers.filter(id => id !== val)); }} style={{ accentColor: "var(--color-accent)", width: 16, height: 16, flexShrink: 0 }} />
                           <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{c.label}</span>
                         </label>
                       );
@@ -2040,14 +2040,14 @@ export function DashboardClient({ user }: { user: User }) {
               )}
             </div>
 
-            <button onClick={() => { setIsBulkMode(!isBulkMode); setRouteTab("map"); setBulkSelectedIds([]); setSelectedId(null); setIsDetailVisible(false); setRouteTabMode("new"); setEditingRouteId(null); setBulkCourier(""); setRouteType("mt"); }} style={{ ...topbarBtnStyle, background: isBulkMode ? "#1a1a18" : "#fff", color: isBulkMode ? "#fff" : "#1a1a18", borderColor: isBulkMode ? "#1a1a18" : "#e8e6df" }}>
+            <button onClick={() => { setIsBulkMode(!isBulkMode); setRouteTab("map"); setBulkSelectedIds([]); setSelectedId(null); setIsDetailVisible(false); setRouteTabMode("new"); setEditingRouteId(null); setBulkCourier(""); setRouteType("mt"); }} style={{ ...topbarBtnStyle, background: isBulkMode ? "var(--color-text)" : "#fff", color: isBulkMode ? "#fff" : "var(--color-text)", borderColor: isBulkMode ? "var(--color-text)" : "var(--color-border)" }}>
               {isBulkMode ? "✕ Маршруты" : "📍 Маршруты"}
             </button>
 
             <div style={{ ...s.slotBar, marginLeft: 0 }}>
-              <SlotBtn label="Все" active={selectedSlots.length === 0} color="#4a7aff" onClick={() => toggleSlot("all")} />
+              <SlotBtn label="Все" active={selectedSlots.length === 0} color="var(--color-accent)" onClick={() => toggleSlot("all")} />
               {SLOTS.map(sl => <SlotBtn key={sl.label} label={sl.label} active={selectedSlots.includes(sl.label)} color={sl.color} onClick={() => toggleSlot(sl.label)} />)}
-              <SlotBtn label="Другие" active={selectedSlots.includes("Другие")} color="#6b6860" onClick={() => toggleSlot("Другие")} />
+              <SlotBtn label="Другие" active={selectedSlots.includes("Другие")} color="var(--color-text-2)" onClick={() => toggleSlot("Другие")} />
             </div>
           </>
         )}
@@ -2059,7 +2059,7 @@ export function DashboardClient({ user }: { user: User }) {
         <div style={{ position: "relative", flexShrink: 0 }}>
           <button
             onClick={() => setShowMapSettings(!showMapSettings)}
-            style={{ ...topbarBtnStyle, background: showMapSettings ? "#eef3ff" : "#fff", borderColor: showMapSettings ? "#4a7aff" : "#e8e6df", color: showMapSettings ? "#4a7aff" : "#1a1a18" }}
+            style={{ ...topbarBtnStyle, background: showMapSettings ? "var(--color-accent-soft)" : "#fff", borderColor: showMapSettings ? "var(--color-accent)" : "var(--color-border)", color: showMapSettings ? "var(--color-accent)" : "var(--color-text)" }}
             title="Настройки карты"
           >
             🗺️ <span style={{ fontSize: 10 }}>▼</span>
@@ -2069,12 +2069,12 @@ export function DashboardClient({ user }: { user: User }) {
             <>
               <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setShowMapSettings(false)} />
               <div style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, background: "#fff", border: "1px solid #e8e6df", borderRadius: 12, padding: "12px 14px", zIndex: 200, display: "flex", flexDirection: "column", gap: 10, minWidth: 160, boxShadow: "0 8px 24px rgba(0,0,0,0.12)" }}>
-                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showCouriers} onChange={e => setShowCouriers(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Курьеры на карте</label>
-                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showHomes} onChange={e => setShowHomes(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Дом</label>
-                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showCourierNames} onChange={e => setShowCourierNames(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Имена</label>
-                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showTime} onChange={e => setShowTime(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Время</label>
+                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showCouriers} onChange={e => setShowCouriers(e.target.checked)} style={{ accentColor: "var(--color-accent)" }} /> Курьеры на карте</label>
+                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showHomes} onChange={e => setShowHomes(e.target.checked)} style={{ accentColor: "var(--color-accent)" }} /> Дом</label>
+                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showCourierNames} onChange={e => setShowCourierNames(e.target.checked)} style={{ accentColor: "var(--color-accent)" }} /> Имена</label>
+                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showTime} onChange={e => setShowTime(e.target.checked)} style={{ accentColor: "var(--color-accent)" }} /> Время</label>
                 <div style={{ width: "100%", height: 1, background: "#f0efe9" }} />
-                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showRouteLines} onChange={e => setShowRouteLines(e.target.checked)} style={{ accentColor: "#4a7aff" }} /> Линии маршрутов</label>
+                <label style={{ fontSize: 12, color: '#1a1a18', display: 'flex', gap: 8, cursor: 'pointer', alignItems: 'center' }}><input type="checkbox" checked={showRouteLines} onChange={e => setShowRouteLines(e.target.checked)} style={{ accentColor: "var(--color-accent)" }} /> Линии маршрутов</label>
               </div>
             </>
           )}
@@ -2160,8 +2160,8 @@ export function DashboardClient({ user }: { user: User }) {
 
             <div style={{ position: "relative", flexShrink: 0 }}>
               <button onClick={() => setIsStatusMenuOpen(!isStatusMenuOpen)}
-                style={{ ...topbarBtnStyle, height: 30, fontSize: 12, background: selectedStatuses.length > 0 ? "#eef3ff" : "#fff", borderColor: selectedStatuses.length > 0 ? "#4a7aff" : "#e8e6df" }}>
-                <span style={{ color: selectedStatuses.length > 0 ? "#4a7aff" : "inherit" }}>Статусы: {selectedStatuses.length === 0 ? "Все" : `(${selectedStatuses.length})`}</span>
+                style={{ ...topbarBtnStyle, height: 30, fontSize: 12, background: selectedStatuses.length > 0 ? "var(--color-accent-soft)" : "#fff", borderColor: selectedStatuses.length > 0 ? "var(--color-accent)" : "var(--color-border)" }}>
+                <span style={{ color: selectedStatuses.length > 0 ? "var(--color-accent)" : "inherit" }}>Статусы: {selectedStatuses.length === 0 ? "Все" : `(${selectedStatuses.length})`}</span>
                 <span style={{ fontSize: 10 }}>▼</span>
               </button>
               {isStatusMenuOpen && (
@@ -2178,7 +2178,7 @@ export function DashboardClient({ user }: { user: User }) {
                             if (e.target.checked) setSelectedStatuses([...selectedStatuses, st]);
                             else setSelectedStatuses(selectedStatuses.filter(item => item !== st));
                           }}
-                          style={{ accentColor: "#4a7aff", width: 16, height: 16 }}
+                          style={{ accentColor: "var(--color-accent)", width: 16, height: 16 }}
                         />
                         {st === "NEW" ? "Новые" : st === "ASSIGNED" ? "Назначены" : st === "ASSEMBLING" ? "В сборке" :  st === "IN_DELIVERY" ? "В пути" : "Доставлены"}
                       </label>
@@ -2190,8 +2190,8 @@ export function DashboardClient({ user }: { user: User }) {
 
             <div style={{ position: "relative", flexShrink: 0 }}>
               <button onClick={() => setIsCourierMenuOpen(!isCourierMenuOpen)}
-                style={{ ...topbarBtnStyle, height: 30, fontSize: 12, background: selectedCouriers.length > 0 ? "#eef3ff" : "#fff", borderColor: selectedCouriers.length > 0 ? "#4a7aff" : "#e8e6df" }}>
-                <span style={{ color: selectedCouriers.length > 0 ? "#4a7aff" : "inherit" }}>Курьеры: {selectedCouriers.length === 0 ? "Все" : `(${selectedCouriers.length})`}</span>
+                style={{ ...topbarBtnStyle, height: 30, fontSize: 12, background: selectedCouriers.length > 0 ? "var(--color-accent-soft)" : "#fff", borderColor: selectedCouriers.length > 0 ? "var(--color-accent)" : "var(--color-border)" }}>
+                <span style={{ color: selectedCouriers.length > 0 ? "var(--color-accent)" : "inherit" }}>Курьеры: {selectedCouriers.length === 0 ? "Все" : `(${selectedCouriers.length})`}</span>
                 <span style={{ fontSize: 10 }}>▼</span>
               </button>
               {isCourierMenuOpen && (
@@ -2203,13 +2203,13 @@ export function DashboardClient({ user }: { user: User }) {
                       if (c.value === "ALL") {
                         return (
                           <label key="ALL" style={{ ...s.dropdownItem, fontWeight: 700, borderBottom: "1px solid #f0efe9", paddingBottom: 8, marginBottom: 4 }} onClick={() => setSelectedCouriers([])}>
-                            <input type="checkbox" checked={selectedCouriers.length === 0} readOnly style={{ accentColor: "#4a7aff", width: 16, height: 16 }} /> Все курьеры
+                            <input type="checkbox" checked={selectedCouriers.length === 0} readOnly style={{ accentColor: "var(--color-accent)", width: 16, height: 16 }} /> Все курьеры
                           </label>
                         );
                       }
                       return (
                         <label key={c.value} style={s.dropdownItem}>
-                          <input type="checkbox" checked={selectedCouriers.includes(String(c.value))} onChange={(e) => { const val = String(c.value); if (e.target.checked) setSelectedCouriers([...selectedCouriers, val]); else setSelectedCouriers(selectedCouriers.filter(id => id !== val)); }} style={{ accentColor: "#4a7aff", width: 16, height: 16, flexShrink: 0 }} />
+                          <input type="checkbox" checked={selectedCouriers.includes(String(c.value))} onChange={(e) => { const val = String(c.value); if (e.target.checked) setSelectedCouriers([...selectedCouriers, val]); else setSelectedCouriers(selectedCouriers.filter(id => id !== val)); }} style={{ accentColor: "var(--color-accent)", width: 16, height: 16, flexShrink: 0 }} />
                           <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{c.label}</span>
                         </label>
                       );
@@ -2219,28 +2219,28 @@ export function DashboardClient({ user }: { user: User }) {
               )}
             </div>
 
-            <button onClick={() => { setIsBulkMode(!isBulkMode); setRouteTab("map"); setBulkSelectedIds([]); setSelectedId(null); setIsDetailVisible(false); setRouteTabMode("new"); setEditingRouteId(null); setBulkCourier(""); setRouteType("mt"); }} style={{ ...topbarBtnStyle, height: 30, fontSize: 12, flexShrink: 0, background: isBulkMode ? "#1a1a18" : "#fff", color: isBulkMode ? "#fff" : "#1a1a18", borderColor: isBulkMode ? "#1a1a18" : "#e8e6df" }}>
+            <button onClick={() => { setIsBulkMode(!isBulkMode); setRouteTab("map"); setBulkSelectedIds([]); setSelectedId(null); setIsDetailVisible(false); setRouteTabMode("new"); setEditingRouteId(null); setBulkCourier(""); setRouteType("mt"); }} style={{ ...topbarBtnStyle, height: 30, fontSize: 12, flexShrink: 0, background: isBulkMode ? "var(--color-text)" : "#fff", color: isBulkMode ? "#fff" : "var(--color-text)", borderColor: isBulkMode ? "var(--color-text)" : "var(--color-border)" }}>
               {isBulkMode ? "✕ Маршруты" : "📍 Маршруты"}
             </button>
 
-            <div style={{ width: 1, height: 20, background: "#e8e6df", flexShrink: 0 }} />
+            <div style={{ width: 1, height: 20, background: "var(--color-border)", flexShrink: 0 }} />
 
-            <SlotBtn label="Все" active={selectedSlots.length === 0} color="#4a7aff" onClick={() => toggleSlot("all")} />
+            <SlotBtn label="Все" active={selectedSlots.length === 0} color="var(--color-accent)" onClick={() => toggleSlot("all")} />
             {SLOTS.map(sl => <SlotBtn key={sl.label} label={sl.label} active={selectedSlots.includes(sl.label)} color={sl.color} onClick={() => toggleSlot(sl.label)} />)}
-            <SlotBtn label="Другие" active={selectedSlots.includes("Другие")} color="#6b6860" onClick={() => toggleSlot("Другие")} />
+            <SlotBtn label="Другие" active={selectedSlots.includes("Другие")} color="var(--color-text-2)" onClick={() => toggleSlot("Другие")} />
           </div>
 
           {/* Ряд 3: переключатель вида или табы маршрутов */}
           {!isBulkMode ? (
-            <div style={{ display: "flex", padding: "6px 10px", background: "#f5f4f0", gap: 6, flexShrink: 0, borderBottom: "1px solid #e8e6df" }}>
+            <div style={{ display: "flex", padding: "6px 10px", background: "var(--color-bg)", gap: 6, flexShrink: 0, borderBottom: "1px solid #e8e6df" }}>
               <ViewToggleBtn active={mobileView === "map"} onClick={() => setMobileView("map")}>🗺️ Карта</ViewToggleBtn>
               <ViewToggleBtn active={mobileView === "split"} onClick={() => setMobileView("split")}>Вместе</ViewToggleBtn>
               <ViewToggleBtn active={mobileView === "panels"} onClick={() => setMobileView("panels")}>📋 Список</ViewToggleBtn>
             </div>
           ) : (
             <div style={{ display: "flex", padding: "8px 10px", background: "#fff", gap: 8, flexShrink: 0, borderBottom: "1px solid #e8e6df", zIndex: 10 }}>
-              <button onClick={() => setRouteTab("map")} style={{ ...s.routeTabBtn, flex: 1, background: routeTab === "map" ? "#eef3ff" : "#fff", color: routeTab === "map" ? "#4a7aff" : "#6b6860" }}>📍 Точки на карте</button>
-              <button onClick={() => setRouteTab("list")} style={{ ...s.routeTabBtn, flex: 1, background: routeTab === "list" ? "#eef3ff" : "#fff", color: routeTab === "list" ? "#4a7aff" : "#6b6860" }}>📋 Управление</button>
+              <button onClick={() => setRouteTab("map")} style={{ ...s.routeTabBtn, flex: 1, background: routeTab === "map" ? "var(--color-accent-soft)" : "#fff", color: routeTab === "map" ? "var(--color-accent)" : "var(--color-text-2)" }}>📍 Точки на карте</button>
+              <button onClick={() => setRouteTab("list")} style={{ ...s.routeTabBtn, flex: 1, background: routeTab === "list" ? "var(--color-accent-soft)" : "#fff", color: routeTab === "list" ? "var(--color-accent)" : "var(--color-text-2)" }}>📋 Управление</button>
             </div>
           )}
         </>
@@ -2258,11 +2258,11 @@ export function DashboardClient({ user }: { user: User }) {
                       <span style={s.countBadge}>{filtered.length}</span>
                       <div style={{ flex: 1, position: "relative", margin: "0 8px" }}>
                         <input type="text" placeholder="Поиск..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                          style={{ width: "100%", padding: "4px 20px 4px 24px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 11, outline: "none", background: "#fafaf8", boxSizing: "border-box", transition: "background 0.2s" }}
-                          onFocus={(e) => e.target.style.background = "#fff"} onBlur={(e) => e.target.style.background = "#fafaf8"} />
-                        <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", fontSize: 10, color: "#a8a49c", pointerEvents: "none" }}>🔍</span>
+                          style={{ width: "100%", padding: "4px 20px 4px 24px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 11, outline: "none", background: "var(--color-surface)", boxSizing: "border-box", transition: "background 0.2s" }}
+                          onFocus={(e) => e.target.style.background = "#fff"} onBlur={(e) => e.target.style.background = "var(--color-surface)"} />
+                        <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", fontSize: 10, color: "var(--color-text-3)", pointerEvents: "none" }}>🔍</span>
                         {searchQuery && (
-                          <button onClick={() => setSearchQuery("")} style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#a8a49c", cursor: "pointer", fontSize: 12, padding: 0, display: "flex", alignItems: "center" }}>✕</button>
+                          <button onClick={() => setSearchQuery("")} style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--color-text-3)", cursor: "pointer", fontSize: 12, padding: 0, display: "flex", alignItems: "center" }}>✕</button>
                         )}
                       </div>
                       <button onClick={() => setIsListVisible(false)} style={s.panelToggleArrow}>◀</button>
@@ -2286,7 +2286,7 @@ export function DashboardClient({ user }: { user: User }) {
             )}
             <div style={{ flex: 1, position: 'relative', display: "flex", flexDirection: "row", minWidth: 0 }}>
               {isBulkMode && (
-                <div style={{ width: 600, flexShrink: 0, background: "#f5f4f0", borderRight: "1px solid #e8e6df", zIndex: 10, display: "flex", flexDirection: "column" }}>
+                <div style={{ width: 600, flexShrink: 0, background: "var(--color-bg)", borderRight: "1px solid #e8e6df", zIndex: 10, display: "flex", flexDirection: "column" }}>
                   <div style={{ flex: 1, overflowY: "auto", overflowX: "auto", padding: 16 }}>
                     {renderRouteListPanel()}
                   </div>
@@ -2332,7 +2332,7 @@ export function DashboardClient({ user }: { user: User }) {
               </div>
             )}
             {isBulkMode && routeTab === "list" && (
-              <div style={{ flex: 1, background: "#f5f4f0", padding: 16, overflowY: "auto" }}>
+              <div style={{ flex: 1, background: "var(--color-bg)", padding: 16, overflowY: "auto" }}>
                 {renderRouteListPanel()}
               </div>
             )}
@@ -2368,8 +2368,8 @@ export function DashboardClient({ user }: { user: User }) {
                     const color = slotColor(o as any);
                     const late = isOrderLate(o);
                     return (
-                      <tr id={`row-${o.id}`} key={o.id} style={{ background: selectedId === o.id ? "#eef3ff" : i % 2 === 0 ? "#fff" : "#fafaf8", cursor: "pointer" }} onClick={() => { setSelectedId(o.id); setIsListVisible(true); setIsDetailVisible(true); }}>
-                        <td style={{ ...s.td, whiteSpace: "nowrap" }}><span style={{ ...s.statusDot, background: late ? "#d94040" : color }} /><span style={{ fontFamily: "monospace", fontSize: 10, color: "#a8a49c" }}>{o.externalId ?? o.crmId}</span></td>
+                      <tr id={`row-${o.id}`} key={o.id} style={{ background: selectedId === o.id ? "var(--color-accent-soft)" : i % 2 === 0 ? "#fff" : "var(--color-surface)", cursor: "pointer" }} onClick={() => { setSelectedId(o.id); setIsListVisible(true); setIsDetailVisible(true); }}>
+                        <td style={{ ...s.td, whiteSpace: "nowrap" }}><span style={{ ...s.statusDot, background: late ? "#d94040" : color }} /><span style={{ fontFamily: "monospace", fontSize: 10, color: "var(--color-text-3)" }}>{o.externalId ?? o.crmId}</span></td>
                         <td style={{ ...s.td, whiteSpace: "nowrap", color: late ? "#d94040" : color }}>{late ? "⏰ " : ""}{o.slotRaw ?? "—"}</td>
                         <td style={{ ...s.td, whiteSpace: "nowrap" }}>
                           {o.status === "DELIVERED" ? (
@@ -2378,7 +2378,7 @@ export function DashboardClient({ user }: { user: User }) {
                               <span style={{ color: late ? '#d94040' : '#10b981', fontWeight: 700 }}>{late ? "⏰ " : "✓ "}{o.deliveredAt ? new Date(o.deliveredAt).toLocaleTimeString("ru", { hour: '2-digit', minute: '2-digit' }) : "—"}</span>
                             </div>
                           ) : (
-                            <span style={{ color: late ? "#d94040" : "#4a7aff", fontWeight: 700 }}>{late ? "⏰ " : ""}{o.eta ?? "—"}</span>
+                            <span style={{ color: late ? "#d94040" : "var(--color-accent)", fontWeight: 700 }}>{late ? "⏰ " : ""}{o.eta ?? "—"}</span>
                           )}
                         </td>
                         <td style={{ ...s.td, minWidth: 160, maxWidth: 220 }}>
@@ -2390,11 +2390,11 @@ export function DashboardClient({ user }: { user: User }) {
                         <td style={{ ...s.td, whiteSpace: "nowrap", fontWeight: 600 }}>{o.courier ?? <span style={{ color: "#d94040" }}>—</span>}</td>
                         <td style={{ ...s.td, whiteSpace: "nowrap", color: o.wrongPrice ? "#d94040" : "inherit", fontWeight: o.wrongPrice ? 700 : 500 }}>{o.price ? `${o.price} ₽` : "—"}</td>
                         <td style={{ ...s.td, whiteSpace: "nowrap" }}><span style={{ padding: "2px 7px", borderRadius: 10, fontSize: 10, fontWeight: 500, background: `${color}18`, color }}>{STATUS_LABELS[o.status] ?? o.status}</span></td>
-                        <td style={{ ...s.td, minWidth: 140, maxWidth: 200, color: "#6b6860" }}>{o.comment ?? "—"}</td>
-                        <td style={{ ...s.td, minWidth: 120, maxWidth: 180, color: "#4a7aff" }}>{o.opComment ?? "—"}</td>
-                        <td style={{ ...s.td, minWidth: 140, maxWidth: 220, color: "#6b6860" }}>{o.items ?? "—"}</td>
-                        <td style={{ ...s.td, whiteSpace: "nowrap", color: "#a8a49c", fontSize: 10 }}>{o.crmCreatedAt ? new Date(o.crmCreatedAt).toLocaleString("ru", { timeZone: "Europe/Moscow", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
-                        <td style={{ ...s.td, whiteSpace: "nowrap", color: o.changedAt ? "#1a1a18" : "#a8a49c", fontSize: 10 }}>{(o.changedAt || o.updatedAt) ? new Date(o.changedAt || o.updatedAt!).toLocaleString("ru", { timeZone: "Europe/Moscow", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
+                        <td style={{ ...s.td, minWidth: 140, maxWidth: 200, color: "var(--color-text-2)" }}>{o.comment ?? "—"}</td>
+                        <td style={{ ...s.td, minWidth: 120, maxWidth: 180, color: "var(--color-accent)" }}>{o.opComment ?? "—"}</td>
+                        <td style={{ ...s.td, minWidth: 140, maxWidth: 220, color: "var(--color-text-2)" }}>{o.items ?? "—"}</td>
+                        <td style={{ ...s.td, whiteSpace: "nowrap", color: "var(--color-text-3)", fontSize: 10 }}>{o.crmCreatedAt ? new Date(o.crmCreatedAt).toLocaleString("ru", { timeZone: "Europe/Moscow", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
+                        <td style={{ ...s.td, whiteSpace: "nowrap", color: o.changedAt ? "var(--color-text)" : "var(--color-text-3)", fontSize: 10 }}>{(o.changedAt || o.updatedAt) ? new Date(o.changedAt || o.updatedAt!).toLocaleString("ru", { timeZone: "Europe/Moscow", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
                       </tr>
                     );
                   })}
@@ -2429,7 +2429,7 @@ export function DashboardClient({ user }: { user: User }) {
 
 function ViewToggleBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button onClick={onClick} style={{ flex: 1, padding: "6px", borderRadius: 8, fontSize: 11, fontWeight: 600, border: "none", cursor: "pointer", background: active ? "#4a7aff" : "#fff", color: active ? "#fff" : "#6b6860", boxShadow: active ? "0 2px 8px rgba(74,122,255,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", transition: "all 0.15s" }}>
+    <button onClick={onClick} style={{ flex: 1, padding: "6px", borderRadius: 8, fontSize: 11, fontWeight: 600, border: "none", cursor: "pointer", background: active ? "var(--color-accent)" : "#fff", color: active ? "#fff" : "var(--color-text-2)", boxShadow: active ? "0 2px 8px rgba(74,122,255,0.3)" : "0 1px 3px rgba(0,0,0,0.05)", transition: "all 0.15s" }}>
       {children}
     </button>
   );
@@ -2446,7 +2446,7 @@ function OrderCard({ order, selected, isBulkMode, isBulkSelected, onSelect }: an
   return (
     <div id={`card-${order.id}`} style={{ ...s.card, ...(selected || isBulkSelected ? s.cardSelected : {}), ...(order.isInvalid ? s.cardInvalid : {}) }} onClick={onSelect}>
       <div style={s.cardRow1}>
-        {isBulkMode && <input type="checkbox" checked={isBulkSelected} readOnly style={{ marginRight: 6, pointerEvents: "none", accentColor: "#4a7aff" }} />}
+        {isBulkMode && <input type="checkbox" checked={isBulkSelected} readOnly style={{ marginRight: 6, pointerEvents: "none", accentColor: "var(--color-accent)" }} />}
         <span style={{ ...s.statusDot, background: late ? "#d94040" : color }} />
         <span style={s.extId}>{order.externalId ?? order.crmId}</span>
         <span style={{ ...s.statusTag, background: `${color}18`, color }}>{STATUS_LABELS[order.status] ?? order.status}</span>
@@ -2457,11 +2457,11 @@ function OrderCard({ order, selected, isBulkMode, isBulkSelected, onSelect }: an
 
         {order.status === "DELIVERED" ? (
           <span style={{ fontSize: 10, color: late ? "#d94040" : "#10b981", fontWeight: 700, marginLeft: 6 }}>
-            {order.eta && <span style={{ color: "#a8a49c", textDecoration: "line-through", marginRight: 4 }}>{order.eta}</span>}
+            {order.eta && <span style={{ color: "var(--color-text-3)", textDecoration: "line-through", marginRight: 4 }}>{order.eta}</span>}
             {late ? "⏰ " : "✓ "}{order.deliveredAt ? new Date(order.deliveredAt).toLocaleTimeString("ru", { hour: '2-digit', minute: '2-digit' }) : "—"}
           </span>
         ) : (
-          order.eta && <span style={{ fontSize: 10, color: late ? "#d94040" : "#4a7aff", fontWeight: 700, marginLeft: 6 }}>{late ? "⏰ " : "~"}{order.eta}</span>
+          order.eta && <span style={{ fontSize: 10, color: late ? "#d94040" : "var(--color-accent)", fontWeight: 700, marginLeft: 6 }}>{late ? "⏰ " : "~"}{order.eta}</span>
         )}
 
         <span style={s.courierTag}>{order.courier ?? "—"}</span>
@@ -2487,25 +2487,25 @@ function CourierSearchSelect({ value, onChange, options }: { value: string, onCh
     <div ref={ref} style={{ position: "relative", flex: 1 }}>
       <div
         onClick={() => setOpen(!open)}
-        style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #e8e6df", background: "#fff", fontSize: 13, color: value ? "#1a1a18" : "#a8a49c", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", height: "100%", fontWeight: 600 }}
+        style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #e8e6df", background: "#fff", fontSize: 13, color: value ? "var(--color-text)" : "var(--color-text-3)", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", height: "100%", fontWeight: 600 }}
       >
         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedLabel}</span>
-        <span style={{ fontSize: 10, color: "#a8a49c", transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "rotate(0deg)" }}>▼</span>
+        <span style={{ fontSize: 10, color: "var(--color-text-3)", transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "rotate(0deg)" }}>▼</span>
       </div>
 
       {open && (
         <div style={{ position: "absolute", bottom: "calc(100% + 6px)", left: 0, right: 0, background: "#fff", border: "1px solid #e8e6df", borderRadius: 10, boxShadow: "0 -4px 24px rgba(0,0,0,0.12)", zIndex: 500, maxHeight: 280, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <div style={{ padding: "8px", borderBottom: "1px solid #f0efe9", background: "#fafaf8" }}>
+          <div style={{ padding: "8px", borderBottom: "1px solid #f0efe9", background: "var(--color-surface)" }}>
             <input autoFocus placeholder="Поиск курьера..." value={search} onChange={e => setSearch(e.target.value)} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 13, outline: "none" }} />
           </div>
           <div style={{ overflowY: "auto", padding: "4px 0", flex: 1 }}>
-            <div onClick={() => { onChange(""); setOpen(false); setSearch(""); }} style={{ padding: "10px 14px", fontSize: 13, cursor: "pointer", color: !value ? "#4a7aff" : "#a8a49c", background: !value ? "#f4f7ff" : "transparent" }}>— Выберите курьера —</div>
+            <div onClick={() => { onChange(""); setOpen(false); setSearch(""); }} style={{ padding: "10px 14px", fontSize: 13, cursor: "pointer", color: !value ? "var(--color-accent)" : "var(--color-text-3)", background: !value ? "#f4f7ff" : "transparent" }}>— Выберите курьера —</div>
             {filteredOptions.map(o => (
-              <div key={o.value} onClick={() => { onChange(String(o.value)); setOpen(false); setSearch(""); }} style={{ padding: "10px 14px", fontSize: 13, cursor: "pointer", borderBottom: "1px solid #f5f4f0", color: String(o.value) === String(value) ? "#4a7aff" : "#1a1a18", background: String(o.value) === String(value) ? "#f4f7ff" : "transparent", fontWeight: String(o.value) === String(value) ? 700 : 500 }}>
+              <div key={o.value} onClick={() => { onChange(String(o.value)); setOpen(false); setSearch(""); }} style={{ padding: "10px 14px", fontSize: 13, cursor: "pointer", borderBottom: "1px solid #f5f4f0", color: String(o.value) === String(value) ? "var(--color-accent)" : "var(--color-text)", background: String(o.value) === String(value) ? "#f4f7ff" : "transparent", fontWeight: String(o.value) === String(value) ? 700 : 500 }}>
                 {o.label}
               </div>
             ))}
-            {filteredOptions.length === 0 && <div style={{ padding: "16px", textAlign: "center", fontSize: 13, color: "#a8a49c" }}>Не найдено</div>}
+            {filteredOptions.length === 0 && <div style={{ padding: "16px", textAlign: "center", fontSize: 13, color: "var(--color-text-3)" }}>Не найдено</div>}
           </div>
         </div>
       )}
@@ -2514,20 +2514,20 @@ function CourierSearchSelect({ value, onChange, options }: { value: string, onCh
 }
 
 const s: Record<string, React.CSSProperties> = {
-  app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", overflow: "hidden" },
+  app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "var(--color-bg)", overflow: "hidden" },
   topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 16px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 100, position: "relative", overflow: "visible", flexWrap: "nowrap" },
 
   dropdownMenu: { position: "absolute", top: "100%", left: 0, marginTop: 6, background: "#fff", border: "1px solid #e8e6df", borderRadius: 12, padding: 8, zIndex: 100, display: "flex", flexDirection: "column", gap: 2, minWidth: 180, maxHeight: 300, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,0.12)" },
   dropdownItem: { display: "flex", alignItems: "center", gap: 10, fontSize: 13, cursor: "pointer", padding: "6px 8px", borderRadius: 6, transition: "background 0.15s", whiteSpace: "nowrap" },
-  logo: { fontSize: 15, fontWeight: 600, color: "#1a1a18", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap", flexShrink: 0, minWidth: "max-content", marginRight: "auto" },
-  navBtn: { padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "#1a1a18", whiteSpace: "nowrap" },
-  datePicker: { padding: "4px 8px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 11, outline: "none", color: "#1a1a18", background: "#fff", marginLeft: 8 },
-  nativeSelect: { height: 28, padding: "0 8px", borderRadius: 7, border: "1px solid #e0dfd7", fontSize: 11, fontWeight: 500, outline: "none", cursor: "pointer", background: "#fff", color: "#1a1a18", maxWidth: 120 },
+  logo: { fontSize: 15, fontWeight: 600, color: "var(--color-text)", display: "flex", alignItems: "center", gap: 7, whiteSpace: "nowrap", flexShrink: 0, minWidth: "max-content", marginRight: "auto" },
+  navBtn: { padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "var(--color-surface)", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "var(--color-text)", whiteSpace: "nowrap" },
+  datePicker: { padding: "4px 8px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 11, outline: "none", color: "var(--color-text)", background: "#fff", marginLeft: 8 },
+  nativeSelect: { height: 28, padding: "0 8px", borderRadius: 7, border: "1px solid #e0dfd7", fontSize: 11, fontWeight: 500, outline: "none", cursor: "pointer", background: "#fff", color: "var(--color-text)", maxWidth: 120 },
   slotBar: { display: "flex", gap: 4, marginLeft: 8 },
-  slotBtn: { padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 500, border: "1px solid #e8e6df", background: "transparent", color: "#6b6860", cursor: "pointer", whiteSpace: "nowrap" },
-  syncLabel: { fontSize: 11, color: "#a8a49c", whiteSpace: "nowrap", marginRight: 4 },
+  slotBtn: { padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 500, border: "1px solid #e8e6df", background: "transparent", color: "var(--color-text-2)", cursor: "pointer", whiteSpace: "nowrap" },
+  syncLabel: { fontSize: 11, color: "var(--color-text-3)", whiteSpace: "nowrap", marginRight: 4 },
   alertBadge: { display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 500, background: "rgba(217,64,64,0.08)", border: "1px solid rgba(217,64,64,0.2)", color: "#d94040", cursor: "pointer", whiteSpace: "nowrap" },
-  userBtn: { width: 32, height: 32, borderRadius: "50%", background: "#4a7aff", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, color: "#fff", flexShrink: 0 },
+  userBtn: { width: 32, height: 32, borderRadius: "50%", background: "var(--color-accent)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, color: "#fff", flexShrink: 0 },
   invalidBanner: { display: "flex", alignItems: "center", gap: 8, padding: "7px 16px", background: "rgba(217,64,64,0.07)", borderBottom: "1px solid rgba(217,64,64,0.15)", color: "#d94040", flexShrink: 0 },
   invalidBannerLink: { fontFamily: "monospace", fontWeight: 600, cursor: "pointer", textDecoration: "underline" },
   invalidBannerClose: { marginLeft: "auto", background: "none", border: "none", color: "#d94040", cursor: "pointer", fontSize: 14, flexShrink: 0, padding: 2 },
@@ -2535,29 +2535,29 @@ const s: Record<string, React.CSSProperties> = {
   leftPanel: { width: 300, minWidth: 260, background: "#fff", borderRight: "1px solid #e8e6df", display: "flex", flexDirection: "column", flexShrink: 0, overflow: "hidden", zIndex: 5 },
   cardsSection: { display: "flex", flexDirection: "column", overflow: "hidden" },
   sectionHeader: { padding: "10px 14px 8px", display: "flex", alignItems: "center", gap: 6, flexShrink: 0, borderBottom: "1px solid #f0efe9" },
-  sectionTitle: { fontSize: 11, fontWeight: 600, color: "#a8a49c", textTransform: "uppercase", letterSpacing: "0.5px" },
-  countBadge: { padding: "2px 7px", borderRadius: 10, background: "#f5f4f0", fontSize: 11, color: "#6b6860", fontWeight: 500 },
+  sectionTitle: { fontSize: 11, fontWeight: 600, color: "var(--color-text-3)", textTransform: "uppercase", letterSpacing: "0.5px" },
+  countBadge: { padding: "2px 7px", borderRadius: 10, background: "var(--color-bg)", fontSize: 11, color: "var(--color-text-2)", fontWeight: 500 },
   cardsList: { flex: 1, overflowY: "auto", padding: 6 },
-  empty: { padding: 24, textAlign: "center", color: "#a8a49c", fontSize: 12 },
+  empty: { padding: 24, textAlign: "center", color: "var(--color-text-3)", fontSize: 12 },
   detailSection: { display: "flex", flexDirection: "column", overflow: "hidden" },
   detailEmpty: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 },
-  panelToggleArrow: { background: "transparent", border: "none", cursor: "pointer", color: "#a8a49c", fontSize: 13, padding: "4px 8px", borderRadius: 4 },
-  expandSideBtn: { background: "#fff", border: "1px solid #e8e6df", borderLeft: "none", borderRadius: "0 8px 8px 0", padding: "10px 8px", cursor: "pointer", color: "#6b6860", fontSize: 13, boxShadow: "2px 2px 8px rgba(0,0,0,0.06)" },
-  card: { padding: "9px 11px", borderRadius: 8, marginBottom: 4, background: "#fafaf8", border: "1px solid #e8e6df", cursor: "pointer", transition: "all .12s" },
-  cardSelected: { background: "#eef3ff", borderColor: "#4a7aff" },
+  panelToggleArrow: { background: "transparent", border: "none", cursor: "pointer", color: "var(--color-text-3)", fontSize: 13, padding: "4px 8px", borderRadius: 4 },
+  expandSideBtn: { background: "#fff", border: "1px solid #e8e6df", borderLeft: "none", borderRadius: "0 8px 8px 0", padding: "10px 8px", cursor: "pointer", color: "var(--color-text-2)", fontSize: 13, boxShadow: "2px 2px 8px rgba(0,0,0,0.06)" },
+  card: { padding: "9px 11px", borderRadius: 8, marginBottom: 4, background: "var(--color-surface)", border: "1px solid #e8e6df", cursor: "pointer", transition: "all .12s" },
+  cardSelected: { background: "var(--color-accent-soft)", borderColor: "var(--color-accent)" },
   cardInvalid: { borderColor: "rgba(217,64,64,0.3)", background: "#fff8f8" },
   cardRow1: { display: "flex", alignItems: "center", gap: 5, marginBottom: 4 },
-  extId: { fontSize: 10, fontWeight: 600, color: "#a8a49c", fontFamily: "monospace" },
+  extId: { fontSize: 10, fontWeight: 600, color: "var(--color-text-3)", fontFamily: "monospace" },
   statusTag: { marginLeft: "auto", fontSize: 10, padding: "1px 6px", borderRadius: 10, fontWeight: 500 },
-  cardAddr: { fontSize: 12, color: "#1a1a18", lineHeight: "1.3", marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  cardAddr: { fontSize: 12, color: "var(--color-text)", lineHeight: "1.3", marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   cardMeta: { display: "flex", alignItems: "center", gap: 6 },
   slotTag: { fontSize: 10, fontWeight: 600 },
-  courierTag: { fontSize: 10, color: "#a8a49c", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 },
+  courierTag: { fontSize: 10, color: "var(--color-text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 },
   tableSection: { flexShrink: 0, background: "#fff", borderTop: "2px solid #e8e6df", display: "flex", flexDirection: "column", overflow: "hidden" },
   tableHeader: { display: "flex", alignItems: "center", gap: 6, padding: "7px 16px", borderBottom: "1px solid #f0efe9", flexShrink: 0 },
   table: { width: "max-content", minWidth: "100%", borderCollapse: "collapse", fontSize: 12 },
-  th: { padding: "7px 12px", textAlign: "left" as const, fontSize: 10, fontWeight: 600, color: "#a8a49c", textTransform: "uppercase", letterSpacing: ".4px", background: "#fafaf8", borderBottom: "1px solid #e8e6df", whiteSpace: "nowrap", position: "sticky", top: 0, zIndex: 1 },
-  td: { padding: "7px 12px", borderBottom: "0.5px solid #f0efe9", verticalAlign: "top", fontSize: 12, color: "#1a1a18" },
+  th: { padding: "7px 12px", textAlign: "left" as const, fontSize: 10, fontWeight: 600, color: "var(--color-text-3)", textTransform: "uppercase", letterSpacing: ".4px", background: "var(--color-surface)", borderBottom: "1px solid #e8e6df", whiteSpace: "nowrap", position: "sticky", top: 0, zIndex: 1 },
+  td: { padding: "7px 12px", borderBottom: "0.5px solid #f0efe9", verticalAlign: "top", fontSize: 12, color: "var(--color-text)" },
   statusDot: { width: 6, height: 6, borderRadius: "50%", flexShrink: 0, display: "inline-block", marginRight: 4, verticalAlign: "middle" },
   routeTabBtn: { padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid #e8e6df", cursor: "pointer", transition: "all 0.15s" },
   actionBtn: { padding: "8px 16px", border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer", borderRadius: 8 },
@@ -2565,12 +2565,12 @@ const s: Record<string, React.CSSProperties> = {
   overlay: { position: "fixed", inset: 0, zIndex: 199 },
   alertTitle: { fontSize: 11, fontWeight: 700, color: "#d94040", textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 10 },
   alertItem: { padding: "7px 0", borderBottom: "0.5px solid #f5f4f0", cursor: "pointer" },
-  alertAddr: { fontSize: 12, color: "#1a1a18", marginBottom: 2 },
+  alertAddr: { fontSize: 12, color: "var(--color-text)", marginBottom: 2 },
   alertSub: { fontSize: 11, color: "#d94040", opacity: 0.8 },
 };
 
 const sm: Record<string, React.CSSProperties> = {
-  app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", overflow: "hidden" },
+  app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "var(--color-bg)", overflow: "hidden" },
   topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 10px", height: 52, background: "#fff", borderBottom: "1px solid #e8e6df", flexShrink: 0, zIndex: 100, position: "relative", overflow: "visible", flexWrap: "nowrap" },
   mobileSlotsWrap: { display: "flex", gap: 4, padding: "6px 10px", background: "#fff", borderBottom: "1px solid #e8e6df", overflowX: "auto", flexShrink: 0 },
   body: { display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", minHeight: 0 },

@@ -7,7 +7,7 @@ export default async function CourierLayout({ children }: { children: React.Reac
   if (!user || user.role !== "COURIER") redirect("/login");
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#f5f4f0", overflow: "hidden" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--color-bg)", overflow: "hidden" }}>
       <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
         {children}
       </div>

@@ -1,4 +1,12 @@
 // prisma/schema.prisma
+//
+// ГОТОВАЯ СХЕМА. Заменяет текущий файл целиком.
+// Все изменения помечены комментарием // ★ НОВОЕ
+//
+// ВАЖНО: уникальный ключ Order.crmId НЕ трогается — остаётся @unique.
+// Почему — см. README-SCHEMA.md, раздел «Чего здесь намеренно нет».
+//
+// npx prisma db push && npx prisma generate
 
 generator client {
   provider = "prisma-client-js"
@@ -28,35 +36,162 @@ enum OrderStatus {
   CANCELLED
 }
 
+// ═══════════════════════════════════════════════════════════════
+// ★ НОВОЕ: компании, магазины, доступы, коннекторы
+// ═══════════════════════════════════════════════════════════════
+
+/// ★ НОВОЕ
+/// Компания — владелец одного или нескольких магазинов.
+/// Bunch и Meura станут магазинами внутри первой компании.
+model Company {
+  id            String   @id @default(cuid())
+  /// Публичный слаг: adelivo.ru/{slug} — по этой ссылке регистрируются сотрудники
+  slug          String   @unique
+  name          String
+  phone         String?
+  email         String?
+  /// Приглашение можно отключить, не удаляя компанию
+  inviteEnabled Boolean  @default(true)
+  /// Секрет в ссылке-приглашении: /join/{slug}?t={inviteToken}
+  inviteToken   String   @default(cuid())
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  shops Shop[]
+  users User[]
+}
+
+/// ★ НОВОЕ
+/// Магазин — точка, от лица которой приходят заказы.
+/// Строковое поле Order.shop остаётся, по нему делается бэкфилл.
+model Shop {
+  id       String  @id @default(cuid())
+  /// Совпадает со значением Order.shop: "bunch", "kaktusfiori", "meura-flowers"
+  slug     String  @unique
+  name     String
+  isActive Boolean @default(true)
+
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  // Настройки, которые сейчас глобальные в env, а должны быть на магазин.
+  // Пока пустые — код читает их с фолбэком на env, ничего не ломается.
+  crmKey        String? @db.Text
+  crmUrl        String?
+  /// RETAILCRM | BITRIX24 | WEBHOOK
+  connectorType String? @default("RETAILCRM")
+  /// Координаты склада, откуда стартуют маршруты (сейчас константа STORE_COORDS)
+  storeLat      Float?
+  storeLng      Float?
+  storeAddress  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders    Order[]
+  access    ShopAccess[]
+  connector Connector?
+
+  @@index([companyId])
+}
+
+/// ★ НОВОЕ
+/// Матрица доступов: одна строка = одна галочка в админке.
+model ShopAccess {
+  id        String   @id @default(cuid())
+  userId    String
+  shopId    String
+  /// Может редактировать заказы магазина, а не только смотреть
+  canEdit   Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, shopId])
+  @@index([userId])
+  @@index([shopId])
+}
+
+/// ★ НОВОЕ
+/// Настройки внешнего подключения магазина — под сценарий
+/// «вставил ключ, смапил поля, поехали» без правки кода.
+model Connector {
+  id     String @id @default(cuid())
+  shopId String @unique
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  /// RETAILCRM | BITRIX24 | WEBHOOK
+  type     String
+  isActive Boolean @default(false)
+  baseUrl  String?
+  apiKey   String? @db.Text
+
+  /// Маппинг полей: { "address": "delivery.address.text" }
+  fieldMap  Json?
+  /// Соответствие статусов: { "assembling-complete": "ASSEMBLING" }
+  statusMap Json?
+
+  lastSyncAt DateTime?
+  lastError  String?   @db.Text
+  /// После N ошибок подряд коннектор выключается сам
+  errorCount Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Существующие модели
+// ═══════════════════════════════════════════════════════════════
+
 model User {
-  id                String             @id @default(cuid())
-  email             String             @unique
-  role              Role               @default(COURIER)
-  firstName         String?
-  lastName          String?
-  phone             String?      
-  avatarUrl         String?            // 🔥 ДОБАВЛЕНО: Ссылка на аватарку      
-  lastLoginAt       DateTime?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  id                  String    @id @default(cuid())
+  email               String    @unique
+  role                Role      @default(COURIER)
+  firstName           String?
+  lastName            String?
+  phone               String?
+  avatarUrl           String? // 🔥 ДОБАВЛЕНО: Ссылка на аватарку
+  lastLoginAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  notifyNewOrder    Boolean            @default(true)
-  notifyStatus      Boolean            @default(true)
-  notifyCourier     Boolean            @default(true)
-  notifyAddress     Boolean            @default(true)
-  notifyTime        Boolean            @default(true)
-  notifyComment     Boolean            @default(true)
-  notifyOpComment   Boolean            @default(true)
-  notifyItems       Boolean            @default(true)
-  notifyLogistChanges Boolean          @default(true) // 🔥 Новый тумблер для менеджеров
+  notifyNewOrder      Boolean @default(true)
+  notifyStatus        Boolean @default(true)
+  notifyCourier       Boolean @default(true)
+  notifyAddress       Boolean @default(true)
+  notifyTime          Boolean @default(true)
+  notifyComment       Boolean @default(true)
+  notifyOpComment     Boolean @default(true)
+  notifyItems         Boolean @default(true)
+  notifyLogistChanges Boolean @default(true) // 🔥 Новый тумблер для менеджеров
 
-  sessions          Session[]
-  authCodes         AuthCode[]
-  pushSubscriptions PushSubscription[]
-  conversations1    Conversation[]     @relation("ConvUser1")
-  conversations2    Conversation[]     @relation("ConvUser2")
-  sentMessages      Message[]          @relation("SentMessages")
-  sentGlobalMessages GlobalMessage[] @relation("SentGlobalMessages")
+  // ★ НОВОЕ ─────────────────────────────────────────────────────
+  /// Глобальный админ: видит все магазины, игнорирует матрицу и управляет ей.
+  /// Локальный админ — это ADMIN без этого флага.
+  isSuperAdmin     Boolean @default(false)
+  /// false — сотрудник видит все магазины (текущее поведение).
+  /// true  — видит только отмеченные галочками в матрице.
+  accessRestricted Boolean @default(false)
+  companyId        String?
+  company          Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  shopAccess       ShopAccess[]
+  /// Кэш связи с профилем курьера. Сейчас связь ищется по email
+  /// (courier.findFirst({ where: { email } })) — поле про запас, ничего не читает.
+  courierId        Int?
+  // ──────────────────────────────────────────────────────────────
+
+  sessions           Session[]
+  authCodes          AuthCode[]
+  pushSubscriptions  PushSubscription[]
+  conversations1     Conversation[]     @relation("ConvUser1")
+  conversations2     Conversation[]     @relation("ConvUser2")
+  sentMessages       Message[]          @relation("SentMessages")
+  sentGlobalMessages GlobalMessage[]    @relation("SentGlobalMessages")
+
+  @@index([companyId]) // ★ НОВОЕ
 }
 
 model Session {
@@ -100,66 +235,80 @@ model PushSubscription {
 }
 
 model Courier {
-  id                Int        @id 
+  id                Int       @id
   firstName         String?
   lastName          String?
   patronymic        String?
-  fullName          String     
+  fullName          String
   phone             String?
   email             String?
-  description       String?  
-  isActive          Boolean    @default(true) 
-  lat               Float?   
-  lng               Float?   
+  description       String?
+  isActive          Boolean   @default(true)
+  lat               Float?
+  lng               Float?
   locationUpdatedAt DateTime?
-  homeLat           Float?   
-  homeLng           Float?   
-  homeAddress       String?  
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
+  homeLat           Float?
+  homeLng           Float?
+  homeAddress       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   // 🔥 ИНТЕГРАЦИЯ С КОНСОЛЬ.ПРО
-  konsolPhone        String?  
-  konsolContractorId String? 
-  isSelfEmployed     Boolean @default(false) 
-  priority  Int      @default(3)
+  konsolPhone        String?
+  konsolContractorId String?
+  isSelfEmployed     Boolean @default(false)
+  priority           Int     @default(3)
+
   shifts      CourierShift[]
   payments    CourierPayment[]
-  routes      Route[] 
-  isAuto      Boolean   @default(false) // 🔥 Наш новый признак авто-курьера
+  routes      Route[]
+  isAuto      Boolean          @default(false) // 🔥 Наш новый признак авто-курьера
   konsolTasks KonsolTask[] // 🔥 Связь с заданиями Консоли
+
+  // ★ НОВОЕ ─────────────────────────────────────────────────────
+  /// Может брать заказы с биржи. Ставится, когда привязана Консоль:
+  /// konsolContractorId != null && isSelfEmployed
+  canTakeExchange Boolean @default(false)
+  companyId       String?
+  // ──────────────────────────────────────────────────────────────
+  // Courier.id остаётся Int @id без autoincrement — id приходит из CRM.
+  // Курьерам, которые регистрируются сами, id выдаётся из отрицательного
+  // диапазона (см. nextLocalCourierId в prisma/backfill-shops.ts),
+  // чтобы никогда не столкнуться с CRM-шными.
+
+  @@index([companyId]) // ★ НОВОЕ
 }
 
 model CourierShift {
-  id        String   @id @default(cuid())
+  id        String @id @default(cuid())
   courierId Int
-  date      String   
-  
-  startTime String?  @default("10:00") // 🔥 Начало смены
-  endTime   String?  @default("22:00") // 🔥 Конец смены
+  date      String
 
-  courier   Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  startTime String? @default("10:00") // 🔥 Начало смены
+  endTime   String? @default("22:00") // 🔥 Конец смены
+
+  courier Courier @relation(fields: [courierId], references: [id], onDelete: Cascade)
 
   @@unique([courierId, date])
 }
 
 model CourierPayment {
-  id          String   @id @default(cuid())
-  courierId   Int
-  date        String
-  
-  // 🔥 ДОБАВЛЕНО ДЛЯ ИСТОРИЧЕСКОЙ СТАТИСТИКИ
-  amount      Float    @default(0) 
-  ordersCount Int      @default(0) 
+  id        String @id @default(cuid())
+  courierId Int
+  date      String
 
-  courier     Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
-  
+  // 🔥 ДОБАВЛЕНО ДЛЯ ИСТОРИЧЕСКОЙ СТАТИСТИКИ
+  amount      Float @default(0)
+  ordersCount Int   @default(0)
+
+  courier Courier @relation(fields: [courierId], references: [id], onDelete: Cascade)
+
   @@unique([courierId, date])
 }
 
 model Order {
   id            String      @id @default(cuid())
-  crmId         String      @unique
+  crmId         String      @unique // НЕ МЕНЯЕТСЯ — см. README-SCHEMA.md
   externalId    String?
   status        OrderStatus @default(NEW)
   address       String?
@@ -179,7 +328,7 @@ model Order {
   deliveryType  String?
   deliveryDate  String?
   deliveredAt   DateTime?
-  delayNotified Boolean @default(false)
+  delayNotified Boolean     @default(false)
   eta           String?
   photoUrl      String?
   crmStatus     String?
@@ -191,25 +340,47 @@ model Order {
   updatedAt     DateTime    @updatedAt
   changedAt     DateTime?
   courierManual Boolean     @default(false)
-  
-  name          String? // Имя получателя
+
+  name           String? // Имя получателя
   recipientPhone String? // Телефон получателя
-  
+
   // 🔥 НОВЫЕ ПОЛЯ ДЛЯ ЗАКАЗЧИКА:
   customerName  String?
   customerPhone String?
 
-  shop          String?
-  routeId       String?
-  route         Route?      @relation(fields: [routeId], references: [id], onDelete: SetNull)
-  routeOrder    Int?    
-  courierLink   String?     @db.Text  
-  wrongPrice    Boolean     @default(false) 
+  shop        String?
+  routeId     String?
+  route       Route?  @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  routeOrder  Int?
+  courierLink String? @db.Text
+  wrongPrice  Boolean @default(false)
+
+  // ★ НОВОЕ: связь с магазином ──────────────────────────────────
+  /// Строковое поле shop остаётся источником для бэкфилла,
+  /// shopId — то, по чему работает матрица доступов.
+  shopId  String?
+  shopRef Shop?   @relation(fields: [shopId], references: [id], onDelete: SetNull)
+
+  // ★ НОВОЕ: биржа заказов ──────────────────────────────────────
+  /// Заказ выставлен на биржу и виден курьерам на карте
+  onExchange       Boolean   @default(false)
+  /// Когда выставили — для сортировки «свежие сверху»
+  exchangeAt       DateTime?
+  /// Кто выставил (User.id) — видно в логах, кто отдал заказ вовне
+  exchangeById     String?
+  /// Кто забрал и когда
+  takenByCourierId Int?
+  takenAt          DateTime?
+  // Таймаута нет: заказ висит, пока его не заберут или не снимут вручную.
+  // Цена берётся из самого заказа (price / costPrice), отдельной ставки нет.
+  // ──────────────────────────────────────────────────────────────
 
   @@index([createdAt])
   @@index([slotFrom, slotTo])
   @@index([status])
   @@index([isInvalid])
+  @@index([shopId]) // ★ НОВОЕ
+  @@index([onExchange, exchangeAt]) // ★ НОВОЕ
 }
 
 model SyncState {
@@ -219,9 +390,9 @@ model SyncState {
 
 model NotificationLog {
   id        String   @id @default(cuid())
-  type      String   
-  channel   String   
-  payload   String   
+  type      String
+  channel   String
+  payload   String
   success   Boolean
   error     String?
   createdAt DateTime @default(now())
@@ -231,104 +402,104 @@ model NotificationLog {
 }
 
 model Route {
-  id                  String   @id @default(uuid())
-  name                String   
-  link                String?  @db.Text 
-  date                String   
-  departureAdvice     String?
-  courierId           Int
-  courier             Courier  @relation(fields: [courierId], references: [id])
+  id                   String   @id @default(uuid())
+  name                 String
+  link                 String?  @db.Text
+  date                 String
+  departureAdvice      String?
+  courierId            Int
+  courier              Courier  @relation(fields: [courierId], references: [id])
   plannedDepartureTime String? // Новое поле для ручной правки времени выезда оператором
-  baseArrivalTime     String?
-  estimatedReturnTime String?
-  sortOrder           Int      @default(0)
-  orders              Order[]
-  isDraft             Boolean  @default(false)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  isAccepted          Boolean  @default(false)
+  baseArrivalTime      String?
+  estimatedReturnTime  String?
+  sortOrder            Int      @default(0)
+  orders               Order[]
+  isDraft              Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  isAccepted           Boolean  @default(false)
 }
 
 model Conversation {
-  id          String    @id @default(cuid())
-  user1Id     String
-  user2Id     String
-  user1       User      @relation("ConvUser1", fields: [user1Id], references: [id], onDelete: Cascade)
-  user2       User      @relation("ConvUser2", fields: [user2Id], references: [id], onDelete: Cascade)
-  
-  messages    Message[]
-  
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id      String @id @default(cuid())
+  user1Id String
+  user2Id String
+  user1   User   @relation("ConvUser1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2   User   @relation("ConvUser2", fields: [user2Id], references: [id], onDelete: Cascade)
 
-  @@unique([user1Id, user2Id]) 
+  messages Message[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([user1Id, user2Id])
   @@index([user1Id])
   @@index([user2Id])
 }
 
 model Message {
-  id             String       @id @default(cuid())
-  text           String?      @db.Text
-  mediaUrl       String?      @db.Text
-  mediaType      String?      
-  
+  id        String  @id @default(cuid())
+  text      String? @db.Text
+  mediaUrl  String? @db.Text
+  mediaType String?
+
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  
-  senderId       String
-  sender         User         @relation("SentMessages", fields: [senderId], references: [id])
-  reactions  Json?   // 🔥 нужно добавить если нет
-  
-  readAt         DateTime?    
-  createdAt      DateTime     @default(now())
+
+  senderId  String
+  sender    User  @relation("SentMessages", fields: [senderId], references: [id])
+  reactions Json? // 🔥 нужно добавить если нет
+
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
 
   @@index([conversationId, createdAt])
   @@index([senderId])
 }
 
 model GlobalMessage {
-  id          String       @id @default(cuid())
-  text        String?      @db.Text
-  mediaUrl    String?      @db.Text
-  mediaType   String?      
-  
-  senderId    String
-  sender      User         @relation("SentGlobalMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  reactions  Json?   // 🔥 нужно добавить если нет
-  createdAt   DateTime     @default(now())
+  id        String  @id @default(cuid())
+  text      String? @db.Text
+  mediaUrl  String? @db.Text
+  mediaType String?
+
+  senderId  String
+  sender    User     @relation("SentGlobalMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  reactions Json? // 🔥 нужно добавить если нет
+  createdAt DateTime @default(now())
 
   @@index([createdAt])
   @@index([senderId])
 }
 
 model KonsolTask {
-  id             String   @id @default(cuid())
-  courierId      Int
-  konsolTaskId   String   
-  konsolActId    String?
-  date           DateTime
-  amount         Float    
-  
-  // 🔥 ДОБАВЛЕНО ДЛЯ ИСТОРИЧЕСКОЙ СТАТИСТИКИ
-  ordersCount    Int      @default(0) 
+  id           String   @id @default(cuid())
+  courierId    Int
+  konsolTaskId String
+  konsolActId  String?
+  date         DateTime
+  amount       Float
 
-  status         String   @default("DRAFT")
-  createdAt      DateTime @default(now())
-  
-  courier        Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
-  
+  // 🔥 ДОБАВЛЕНО ДЛЯ ИСТОРИЧЕСКОЙ СТАТИСТИКИ
+  ordersCount Int @default(0)
+
+  status    String   @default("DRAFT")
+  createdAt DateTime @default(now())
+
+  courier Courier @relation(fields: [courierId], references: [id], onDelete: Cascade)
+
   @@unique([courierId, date])
 }
 
 model ManagerNotification {
   id          String   @id @default(cuid())
   courierId   String?
-  courierName String   // 🔥 Одно чистое поле вместо firstName и lastName
-  routeName   String?  // 🔥 Добавляем это поле
-  newValue    String   
-  oldValue    String?  
+  courierName String // 🔥 Одно чистое поле вместо firstName и lastName
+  routeName   String? // 🔥 Добавляем это поле
+  newValue    String
+  oldValue    String?
   authorName  String?
-  changeType  String   
+  changeType  String
   isSeen      Boolean  @default(false)
   createdAt   DateTime @default(now())
 }

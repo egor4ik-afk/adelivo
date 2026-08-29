@@ -37,10 +37,10 @@ export function PWABanner() {
   // Баннер для Android (Кнопка "Установить")
   if (deferredPrompt) {
     return (
-      <div style={{ background: "#4a7aff", color: "#fff", padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10000 }}>
+      <div style={{ background: "var(--color-accent)", color: "#fff", padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10000 }}>
         <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.3 }}>Установите приложение для быстрой работы</div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <button onClick={async () => { deferredPrompt.prompt(); await deferredPrompt.userChoice; setDeferredPrompt(null); }} style={{ background: "#fff", color: "#4a7aff", border: "none", padding: "6px 12px", borderRadius: 8, fontWeight: 700, fontSize: 12 }}>Установить</button>
+          <button onClick={async () => { deferredPrompt.prompt(); await deferredPrompt.userChoice; setDeferredPrompt(null); }} style={{ background: "#fff", color: "var(--color-accent)", border: "none", padding: "6px 12px", borderRadius: 8, fontWeight: 700, fontSize: 12 }}>Установить</button>
           <button onClick={() => setClosed(true)} style={{ background: "none", border: "none", color: "#fff", fontSize: 20, padding: 0 }}>✕</button>
         </div>
       </div>
@@ -50,11 +50,11 @@ export function PWABanner() {
   // Баннер для iPhone (Инструкция)
   if (showIOSHint) {
     return (
-      <div style={{ background: "#facc15", color: "#1a1a18", padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10000 }}>
+      <div style={{ background: "#facc15", color: "var(--color-text)", padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10000 }}>
         <div style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.4 }}>
           Для работы Push-уведомлений на iPhone: нажмите <b>«Поделиться» ⍐</b> в браузере, а затем <b>«На экран Домой» ➕</b>
         </div>
-        <button onClick={() => setClosed(true)} style={{ background: "none", border: "none", color: "#1a1a18", fontSize: 20, padding: "0 0 0 10px" }}>✕</button>
+        <button onClick={() => setClosed(true)} style={{ background: "none", border: "none", color: "var(--color-text)", fontSize: 20, padding: "0 0 0 10px" }}>✕</button>
       </div>
     );
   }

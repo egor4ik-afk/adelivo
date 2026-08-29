@@ -57,6 +57,7 @@ export function AppFooter() {
               <Link className="ftr-l" href="/keysy">Кейсы</Link>
               <Link className="ftr-l" href="/keysy/bunch">Кейс: «Банч»</Link>
               <Link className="ftr-l" href="/#pricing">Тарифы</Link>
+              <Link className="ftr-l" href="/stat-kurerom">Работа курьером</Link>
               <a className="ftr-l" href="https://t.me/adelivo" target="_blank" rel="noopener noreferrer">Telegram</a>
               <a href="tel:+79959199869" className="ftr-l">+79959199869</a>
               <Link className="ftr-l" href="/design">Дизайн</Link>

@@ -4,11 +4,11 @@ import { useState, useEffect } from "react";
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
   NEW: { label: "Новый", color: "#d94040", bg: "#fef2f2" },
-  ASSIGNED: { label: "Назначен", color: "#4a7aff", bg: "#eef3ff" },
+  ASSIGNED: { label: "Назначен", color: "var(--color-accent)", bg: "var(--color-accent-soft)" },
   IN_DELIVERY: { label: "🚀 В пути", color: "#10b981", bg: "#ecfdf5" },
-  DELIVERED: { label: "✅ Доставлен", color: "#6b6860", bg: "#f5f4f0" },
+  DELIVERED: { label: "✅ Доставлен", color: "var(--color-text-2)", bg: "var(--color-bg)" },
   RETURNED: { label: "↩️ Возврат", color: "#d94040", bg: "#fef2f2" },
-  CANCELLED: { label: "❌ Отменен", color: "#a8a49c", bg: "#f5f4f0" }
+  CANCELLED: { label: "❌ Отменен", color: "var(--color-text-3)", bg: "var(--color-bg)" }
 };
 
 export function RouteEditor({ 
@@ -113,7 +113,7 @@ export function RouteEditor({
 
         <div>
           <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>
-            Маршрут {routeName} {hasChanges && <span style={{ color: "#4a7aff", fontSize: 12, marginLeft: 8 }}>*не сохранено</span>}
+            Маршрут {routeName} {hasChanges && <span style={{ color: "var(--color-accent)", fontSize: 12, marginLeft: 8 }}>*не сохранено</span>}
           </h4>
 
           {/* 🔥 Время выезда */}
@@ -131,7 +131,7 @@ export function RouteEditor({
             ) : (
               // Не выехал — редактируемый инпут с дропдауном
               <>
-                <span style={{ fontSize: 12, fontWeight: 600, color: "#4a7aff" }}>💡 Выезд:</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-accent)" }}>💡 Выезд:</span>
                 <div style={{ position: "relative", width: 86, flexShrink: 0 }}>
                   <input
                     type="text"
@@ -149,12 +149,12 @@ export function RouteEditor({
                     style={{
                       padding: "4px 24px 4px 6px", borderRadius: 6, border: "1px solid #4a7aff",
                       outline: "none", fontWeight: 700, fontFamily: "monospace",
-                      fontSize: 13, color: "#4a7aff", background: "#fff", width: "100%"
+                      fontSize: 13, color: "var(--color-accent)", background: "#fff", width: "100%"
                     }}
                   />
                   <div
                     onClick={() => setShowTimeDropdown(!showTimeDropdown)}
-                    style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 24, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#4a7aff", fontSize: 10 }}
+                    style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 24, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--color-accent)", fontSize: 10 }}
                   >
                     ▼
                   </div>
@@ -180,7 +180,7 @@ export function RouteEditor({
                               onClick={() => { setPlannedTime(t); setShowTimeDropdown(false); savePlannedTime(t); }}
                               style={{
                                 padding: "6px 10px", cursor: "pointer", fontSize: 13, fontWeight: 700,
-                                color: t === plannedTime ? "#4a7aff" : "#1a1a18",
+                                color: t === plannedTime ? "var(--color-accent)" : "var(--color-text)",
                                 background: t === plannedTime ? "#f0f5ff" : "transparent",
                                 borderBottom: "1px solid #f0f0f0", transition: "background 0.1s"
                               }}
@@ -201,7 +201,7 @@ export function RouteEditor({
                   <button
                     onClick={() => setPlannedTime(route?.plannedDepartureTime || "")}
                     title={route?.plannedDepartureTime ? `Вернуть: ${route.plannedDepartureTime}` : "Очистить"}
-                    style={{ background: "none", border: "none", color: "#a8a49c", cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1, flexShrink: 0 }}
+                    style={{ background: "none", border: "none", color: "var(--color-text-3)", cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1, flexShrink: 0 }}
                   >
                     {route?.plannedDepartureTime ? "↺" : "×"}
                   </button>
@@ -210,7 +210,7 @@ export function RouteEditor({
             )}
 
             {route?.estimatedReturnTime && route.estimatedReturnTime !== "—" && (
-              <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 600 }}>
+              <span style={{ fontSize: 11, color: "var(--color-text-3)", fontWeight: 600 }}>
                 🏠 На базе ~{route.estimatedReturnTime}
               </span>
             )}
@@ -219,16 +219,16 @@ export function RouteEditor({
 
         <div style={{ display: "flex", gap: 8, alignItems: "center", width: isMobile ? "100%" : "auto" }}>
           {routeLink && !hasChanges && (
-            <a href={routeLink} target="_blank" rel="noreferrer" style={{ flex: isMobile ? 1 : "none", textAlign: "center", fontSize: 11, background: "#facc15", color: "#1a1a18", padding: "8px 12px", borderRadius: 8, textDecoration: "none", fontWeight: 700 }}>
+            <a href={routeLink} target="_blank" rel="noreferrer" style={{ flex: isMobile ? 1 : "none", textAlign: "center", fontSize: 11, background: "#facc15", color: "var(--color-text)", padding: "8px 12px", borderRadius: 8, textDecoration: "none", fontWeight: 700 }}>
               📍 Яндекс Карты
             </a>
           )}
           {hasChanges && (
             <>
-              <button onClick={cancelChanges} disabled={saving} style={{ flex: isMobile ? 1 : "none", background: "#fff", color: "#1a1a18", border: "1px solid #e8e6df", padding: "8px 14px", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+              <button onClick={cancelChanges} disabled={saving} style={{ flex: isMobile ? 1 : "none", background: "#fff", color: "var(--color-text)", border: "1px solid #e8e6df", padding: "8px 14px", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
                 Отменить
               </button>
-              <button onClick={save} disabled={saving} style={{ flex: isMobile ? 1 : "none", background: "#4a7aff", color: "#fff", border: "none", padding: "8px 14px", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer", boxShadow: "0 4px 12px rgba(74,122,255,0.3)" }}>
+              <button onClick={save} disabled={saving} style={{ flex: isMobile ? 1 : "none", background: "var(--color-accent)", color: "#fff", border: "none", padding: "8px 14px", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer", boxShadow: "0 4px 12px rgba(74,122,255,0.3)" }}>
                 {saving ? "Сохранение..." : "💾 Сохранить"}
               </button>
             </>
@@ -247,12 +247,12 @@ export function RouteEditor({
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 2, alignItems: "center" }}>
                     <button onClick={() => move(index, -1)} disabled={index === 0} style={{ background: "none", border: "none", cursor: index === 0 ? "default" : "pointer", opacity: index === 0 ? 0.2 : 1, fontSize: 14, padding: 0, lineHeight: 1 }}>▲</button>
-                    <div style={{ width: 22, height: 22, borderRadius: "50%", background: "#1a1a18", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700 }}>{index + 1}</div>
+                    <div style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--color-text)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700 }}>{index + 1}</div>
                     <button onClick={() => move(index, 1)} disabled={index === orders.length - 1} style={{ background: "none", border: "none", cursor: index === orders.length - 1 ? "default" : "pointer", opacity: index === orders.length - 1 ? 0.2 : 1, fontSize: 14, padding: 0, lineHeight: 1 }}>▼</button>
                   </div>
                   <div>
-                    <div style={{ fontSize: 10, color: "#a8a49c", fontFamily: "monospace" }}>{o.externalId ?? o.crmId}</div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "#1a1a18" }}>{o.slotRaw}</div>
+                    <div style={{ fontSize: 10, color: "var(--color-text-3)", fontFamily: "monospace" }}>{o.externalId ?? o.crmId}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text)" }}>{o.slotRaw}</div>
                   </div>
                 </div>
 
@@ -266,7 +266,7 @@ export function RouteEditor({
                 </select>
               </div>
 
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", marginBottom: 10, lineHeight: 1.4, flex: 1 }}>{o.address}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text)", marginBottom: 10, lineHeight: 1.4, flex: 1 }}>{o.address}</div>
 
               {o.photoUrl && (
                 <div style={{ marginBottom: 12, position: "relative" }}>
@@ -277,18 +277,18 @@ export function RouteEditor({
                 </div>
               )}
 
-              <div style={{ background: "#fafaf8", borderRadius: 8, padding: 10, border: "1px solid #f0efe9" }}>
+              <div style={{ background: "var(--color-surface)", borderRadius: 8, padding: 10, border: "1px solid #f0efe9" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase" }}>Получатель</div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "#1a1a18" }}>
-                    {phone !== "—" ? <a href={`tel:${phone}`} style={{ color: "#4a7aff", textDecoration: "none" }}>{phone}</a> : "—"}
+                  <div style={{ fontSize: 11, color: "var(--color-text-3)", textTransform: "uppercase" }}>Получатель</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text)" }}>
+                    {phone !== "—" ? <a href={`tel:${phone}`} style={{ color: "var(--color-accent)", textDecoration: "none" }}>{phone}</a> : "—"}
                   </div>
                 </div>
-                {o.items && <div style={{ fontSize: 11, color: "#6b6860", borderTop: "1px solid #f0efe9", paddingTop: 6 }}>{o.items}</div>}
+                {o.items && <div style={{ fontSize: 11, color: "var(--color-text-2)", borderTop: "1px solid #f0efe9", paddingTop: 6 }}>{o.items}</div>}
               </div>
 
               <div style={{ marginTop: "auto", paddingTop: 12, display: "flex", gap: 8, borderTop: "1px dashed #e8e6df", alignItems: "center" }}>
-                <button onClick={() => onOpenDetail(o)} style={{ flex: 1, background: "#f5f4f0", color: "#1a1a18", border: "none", padding: "8px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", transition: "all 0.2s" }}>✏️ Открыть</button>
+                <button onClick={() => onOpenDetail(o)} style={{ flex: 1, background: "var(--color-bg)", color: "var(--color-text)", border: "none", padding: "8px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", transition: "all 0.2s" }}>✏️ Открыть</button>
                 <button onClick={() => remove(o.id)} style={{ flex: 1, background: "rgba(217, 64, 64, 0.08)", color: "#d94040", border: "none", padding: "8px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", transition: "all 0.2s" }}>❌ Убрать</button>
               </div>
             </div>
@@ -298,7 +298,7 @@ export function RouteEditor({
 
       {availableToADD.length > 0 && (
         <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid #e8e6df" }}>
-          <select value="" onChange={(e) => add(e.target.value)} style={{ width: "100%", maxWidth: isMobile ? "100%" : 450, background: "rgba(74, 122, 255, 0.08)", color: "#4a7aff", border: "none", padding: "10px 14px", borderRadius: 8, fontSize: 13, fontWeight: 700, outline: "none", cursor: "pointer", textOverflow: "ellipsis" }}>
+          <select value="" onChange={(e) => add(e.target.value)} style={{ width: "100%", maxWidth: isMobile ? "100%" : 450, background: "rgba(74, 122, 255, 0.08)", color: "var(--color-accent)", border: "none", padding: "10px 14px", borderRadius: 8, fontSize: 13, fontWeight: 700, outline: "none", cursor: "pointer", textOverflow: "ellipsis" }}>
             <option value="" disabled>➕ Добавить свободную точку в маршрут...</option>
             {availableToADD.map((free: any) => {
               const belongsToOther = free.courierId && free.courierId !== courierId;

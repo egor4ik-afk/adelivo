@@ -30,10 +30,10 @@ interface RouteOrder {
 }
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
-  ASSIGNED: { label: "Назначен", color: "#4a7aff", bg: "#eef3ff" },
+  ASSIGNED: { label: "Назначен", color: "var(--color-accent)", bg: "var(--color-accent-soft)" },
   ASSEMBLING: { label: "В сборке", color: "#d97706", bg: "#fffbeb" },
   IN_DELIVERY: { label: "🚀 В пути", color: "#10b981", bg: "#ecfdf5" },
-  DELIVERED: { label: "✅ Доставлен", color: "#6b6860", bg: "#f5f4f0" },
+  DELIVERED: { label: "✅ Доставлен", color: "var(--color-text-2)", bg: "var(--color-bg)" },
 };
 
 const STORE_COORDS = "55.749511,37.596205";
@@ -242,7 +242,7 @@ const syncPendingStatuses = async () => {
   };
 
   if (loading) return (
-    <div style={{ padding: 20, textAlign: "center", color: "#a8a49c" }}>Загрузка маршрутов...</div>
+    <div style={{ padding: 20, textAlign: "center", color: "var(--color-text-3)" }}>Загрузка маршрутов...</div>
   );
 
   const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" });
@@ -317,7 +317,7 @@ const syncPendingStatuses = async () => {
 
   return (
     <div style={{
-      display: "flex", flexDirection: "column", background: "#f5f4f0",
+      display: "flex", flexDirection: "column", background: "var(--color-bg)",
       minHeight: "100%", overflowY: "auto",
       paddingBottom: `calc(var(--nav-height, ${NAV_HEIGHT}px) + env(safe-area-inset-bottom) + 16px)`
     }}>
@@ -325,15 +325,15 @@ const syncPendingStatuses = async () => {
       {/* Шапка */}
       <div style={{ padding: "16px", background: "#fff", borderBottom: "1px solid #e8e6df", position: "sticky", top: 0, zIndex: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 18, color: "#1a1a18" }}>Мои маршруты</h1>
-          <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 4 }}>
-            На сегодня: {todayOrders.length} точек на сумму <span style={{ fontWeight: 700, color: "#1a1a18" }}>{todayOrders.reduce((sum, o) => sum + (o.price || 0), 0)} ₽</span>
+          <h1 style={{ margin: 0, fontSize: 18, color: "var(--color-text)" }}>Мои маршруты</h1>
+          <div style={{ fontSize: 12, color: "var(--color-text-3)", marginTop: 4 }}>
+            На сегодня: {todayOrders.length} точек на сумму <span style={{ fontWeight: 700, color: "var(--color-text)" }}>{todayOrders.reduce((sum, o) => sum + (o.price || 0), 0)} ₽</span>
           </div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", opacity: 0.5 }}>
           <img src="/favicon.svg" alt="App Logo" style={{ width: 24, height: 24 }} />
-          <span style={{ fontSize: 9, fontWeight: 800, color: "#1a1a18", marginTop: 2, textTransform: "uppercase", letterSpacing: "0.5px" }}>ADelivo</span>
+          <span style={{ fontSize: 9, fontWeight: 800, color: "var(--color-text)", marginTop: 2, textTransform: "uppercase", letterSpacing: "0.5px" }}>ADelivo</span>
         </div>
       </div>
 
@@ -347,15 +347,15 @@ const syncPendingStatuses = async () => {
             return (
               <div key={`banner-${rId}`} style={{ background: "#fff", border: "2px solid #4a7aff", borderRadius: 12, padding: 16, boxShadow: "0 4px 12px rgba(74, 122, 255, 0.15)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <div style={{ fontWeight: 800, color: "#1a1a18", fontSize: 16 }}>
+                  <div style={{ fontWeight: 800, color: "var(--color-text)", fontSize: 16 }}>
                     🆕 Новый маршрут
                   </div>
-                  <div style={{ fontSize: 12, fontWeight: 700, background: "#eef3ff", color: "#4a7aff", padding: "4px 8px", borderRadius: 6 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, background: "var(--color-accent-soft)", color: "var(--color-accent)", padding: "4px 8px", borderRadius: 6 }}>
                     {routePoints.length} точек
                   </div>
                 </div>
-                <div style={{ fontSize: 14, color: "#6b6860", marginBottom: 16, fontWeight: 500 }}>
-                  Маршрут <span style={{ fontWeight: 700, color: "#1a1a18" }}>{routeObj?.name}</span> назначен. Вы можете посмотреть заказы ниже.<br />
+                <div style={{ fontSize: 14, color: "var(--color-text-2)", marginBottom: 16, fontWeight: 500 }}>
+                  Маршрут <span style={{ fontWeight: 700, color: "var(--color-text)" }}>{routeObj?.name}</span> назначен. Вы можете посмотреть заказы ниже.<br />
                   {routeObj?.plannedDepartureTime && routeObj.plannedDepartureTime !== "—" && routeObj.plannedDepartureTime.trim() !== "" ? (
                     <span style={{ color: "#d94040", fontWeight: 700, display: "inline-block", marginTop: 4 }}>
                       Нужно забрать в {routeObj.plannedDepartureTime}
@@ -374,7 +374,7 @@ const syncPendingStatuses = async () => {
                       await fetch(`/api/routes/${rId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isAccepted: true }) });
                     } catch (e) { }
                   }}
-                  style={{ background: "#4a7aff", color: "#fff", width: "100%", padding: "12px", borderRadius: 8, fontSize: 15, fontWeight: 700, border: "none", cursor: "pointer", boxShadow: "0 2px 6px rgba(74, 122, 255, 0.3)" }}
+                  style={{ background: "var(--color-accent)", color: "#fff", width: "100%", padding: "12px", borderRadius: 8, fontSize: 15, fontWeight: 700, border: "none", cursor: "pointer", boxShadow: "0 2px 6px rgba(74, 122, 255, 0.3)" }}
                 >
                   ✅ Принять маршрут
                 </button>
@@ -422,16 +422,16 @@ const syncPendingStatuses = async () => {
           return (
             <div key={rId} style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
 
-              <div style={{ padding: "14px 16px", background: "#fafaf8", borderBottom: isExpanded ? "1px solid #e8e6df" : "none" }}>
+              <div style={{ padding: "14px 16px", background: "var(--color-surface)", borderBottom: isExpanded ? "1px solid #e8e6df" : "none" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "stretch", cursor: "pointer", marginBottom: isExpanded ? 12 : 0 }} onClick={onRouteHeaderClick}>
 
                   <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: "#1a1a18", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: "var(--color-text)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       Маршрут {routeName}
                     </div>
 
-                    <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 4 }}>
-                      {delivered}/{total} доставлено • <span style={{ fontWeight: 600, color: "#6b6860" }}>{routePriceTotal} ₽</span>
+                    <div style={{ fontSize: 12, color: "var(--color-text-3)", marginTop: 4 }}>
+                      {delivered}/{total} доставлено • <span style={{ fontWeight: 600, color: "var(--color-text-2)" }}>{routePriceTotal} ₽</span>
                     </div>
                     {(() => {
                       if (pickedUpTimeStr) {
@@ -496,7 +496,7 @@ const syncPendingStatuses = async () => {
                           {routeUrl && !isAllDelivered && (
                             <a href={routeUrl} target="_blank" rel="noopener noreferrer"
                               onClick={e => e.stopPropagation()}
-                              style={{ fontSize: 12, background: "#facc15", color: "#1a1a18", padding: "6px 12px", borderRadius: 8, textDecoration: "none", fontWeight: 800, whiteSpace: "nowrap", boxShadow: "0 2px 4px rgba(250,204,21,0.2)" }}
+                              style={{ fontSize: 12, background: "#facc15", color: "var(--color-text)", padding: "6px 12px", borderRadius: 8, textDecoration: "none", fontWeight: 800, whiteSpace: "nowrap", boxShadow: "0 2px 4px rgba(250,204,21,0.2)" }}
                             >
                               📍 Маршрут
                             </a>
@@ -506,12 +506,12 @@ const syncPendingStatuses = async () => {
                             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
                               <a href={toBaseUrl} target="_blank" rel="noopener noreferrer"
                                 onClick={e => e.stopPropagation()}
-                                style={{ fontSize: 12, background: "#e8e6df", color: "#1a1a18", padding: "6px 12px", borderRadius: 8, textDecoration: "none", fontWeight: 800, whiteSpace: "nowrap" }}
+                                style={{ fontSize: 12, background: "var(--color-border)", color: "var(--color-text)", padding: "6px 12px", borderRadius: 8, textDecoration: "none", fontWeight: 800, whiteSpace: "nowrap" }}
                               >
                                 🏠 На базу
                               </a>
                               {routeObj?.estimatedReturnTime && (
-                                <span style={{ fontSize: 10, color: "#a8a49c", fontWeight: 600 }}>к {routeObj.estimatedReturnTime}</span>
+                                <span style={{ fontSize: 10, color: "var(--color-text-3)", fontWeight: 600 }}>к {routeObj.estimatedReturnTime}</span>
                               )}
                             </div>
                           )}
@@ -519,7 +519,7 @@ const syncPendingStatuses = async () => {
                       );
                     })()}
 
-                    <div style={{ fontSize: 18, color: "#1a1a18", fontWeight: 900, transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s", marginTop: "auto", paddingTop: 10 }}>
+                    <div style={{ fontSize: 18, color: "var(--color-text)", fontWeight: 900, transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s", marginTop: "auto", paddingTop: 10 }}>
                       ▼
                     </div>
 
@@ -530,13 +530,13 @@ const syncPendingStatuses = async () => {
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: "1px dashed #e8e6df", paddingTop: 12 }} onClick={e => e.stopPropagation()}>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ fontSize: 11, color: "#a8a49c", fontWeight: 600 }}>На базе в:</span>
+                        <span style={{ fontSize: 11, color: "var(--color-text-3)", fontWeight: 600 }}>На базе в:</span>
                         <select
                           value={routeObj?.baseArrivalTime || ""}
                           onChange={(e) => handleBaseTimeChange(rId, e.target.value)}
                           style={{
                             border: "1px solid #e8e6df", borderRadius: 6, padding: "4px 8px",
-                            fontSize: 13, fontWeight: 600, color: "#1a1a18", background: "#fff",
+                            fontSize: 13, fontWeight: 600, color: "var(--color-text)", background: "#fff",
                             outline: "none", cursor: "pointer", minWidth: "90px"
                           }}
                         >
@@ -555,7 +555,7 @@ const syncPendingStatuses = async () => {
                       <button
                         onClick={() => handlePickupAll(rId)}
                         style={{
-                          background: "#4a7aff", color: "#fff", border: "none",
+                          background: "var(--color-accent)", color: "#fff", border: "none",
                           padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer",
                           boxShadow: "0 2px 6px rgba(74, 122, 255, 0.25)"
                         }}
@@ -613,7 +613,7 @@ const syncPendingStatuses = async () => {
                       isTooEarly = (baseTime.getTime() - moscowTime.getTime()) > 60 * 60 * 1000;
                     }
 
-                    const borderColor = o.status === "DELIVERED" ? "#10b981" : (o.status === "IN_DELIVERY" ? "#f59e0b" : "#4a7aff");
+                    const borderColor = o.status === "DELIVERED" ? "#10b981" : (o.status === "IN_DELIVERY" ? "#f59e0b" : "var(--color-accent)");
 
                     return (
                       <div
@@ -638,7 +638,7 @@ const syncPendingStatuses = async () => {
                             display: "flex",
                             alignItems: "flex-start",
                             gap: 10,
-                            background: isCollapsed ? "#fff" : "#fafaf8"
+                            background: isCollapsed ? "#fff" : "var(--color-surface)"
                           }}
                         >
                           {o.routeOrder && (
@@ -653,17 +653,17 @@ const syncPendingStatuses = async () => {
                           )}
 
                           <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-                            <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18", lineHeight: 1.3 }}>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text)", lineHeight: 1.3 }}>
                               {o.address}
                             </div>
 
                             {(o.name || phone !== "—") && (
-                              <div style={{ fontSize: 13, fontWeight: 600, color: "#4a7aff", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 2 }}>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-accent)", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 2 }}>
                                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                                   {o.name && <span>👤 {o.name}</span>}
-                                  {o.name && phone !== "—" && <span style={{ color: "#a8a49c" }}>·</span>}
+                                  {o.name && phone !== "—" && <span style={{ color: "var(--color-text-3)" }}>·</span>}
                                   {phone !== "—" && (
-                                    <a href={`tel:${phone}`} onClick={e => e.stopPropagation()} style={{ color: "#4a7aff", textDecoration: "none" }}>
+                                    <a href={`tel:${phone}`} onClick={e => e.stopPropagation()} style={{ color: "var(--color-accent)", textDecoration: "none" }}>
                                       📞 {phone}
                                     </a>
                                   )}
@@ -699,19 +699,19 @@ const syncPendingStatuses = async () => {
                               </div>
                             )}
 
-                            <div style={{ fontSize: 12, color: "#a8a49c", marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
+                            <div style={{ fontSize: 12, color: "var(--color-text-3)", marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
                               <span style={{ color: (isDelivered && actualTime) ? "#10b981" : "inherit", fontWeight: 500 }}>
                                 {(isDelivered && actualTime) ? `✅ Доставлен в ${actualTime}` : (o.slotRaw ?? "Время не указано")}
                               </span>
                               {o.eta && !isDelivered && (
-                                <span style={{ background: "#eef3ff", color: "#4a7aff", padding: "2px 6px", borderRadius: 4, fontWeight: 700, fontSize: 10 }}>
+                                <span style={{ background: "var(--color-accent-soft)", color: "var(--color-accent)", padding: "2px 6px", borderRadius: 4, fontWeight: 700, fontSize: 10 }}>
                                   ~{o.eta}
                                 </span>
                               )}
                             </div>
                           </div>
 
-                          <div style={{ fontSize: 12, color: "#a8a49c", transform: isCollapsed ? "none" : "rotate(180deg)", transition: "transform 0.2s", marginTop: 4 }}>
+                          <div style={{ fontSize: 12, color: "var(--color-text-3)", transform: isCollapsed ? "none" : "rotate(180deg)", transition: "transform 0.2s", marginTop: 4 }}>
                             ▼
                           </div>
                         </div>
@@ -720,7 +720,7 @@ const syncPendingStatuses = async () => {
                           <div style={{ padding: "12px 16px 16px", borderTop: "1px solid #f0efe9" }}>
 
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                              <div style={{ fontSize: 10, color: "#a8a49c", fontFamily: "monospace", fontWeight: 600 }}>
+                              <div style={{ fontSize: 10, color: "var(--color-text-3)", fontFamily: "monospace", fontWeight: 600 }}>
                                 {o.externalId ?? o.crmId}
                               </div>
                               <select
@@ -772,7 +772,7 @@ const syncPendingStatuses = async () => {
                                 <a
                                   href={`https://yandex.ru/maps/?mode=routes&rtext=${prevAddressStr}~${currentAddressStr}`}
                                   target="_blank"
-                                  style={{ fontSize: 11, background: "#eef3ff", color: "#4a7aff", padding: "4px 10px", borderRadius: 6, textDecoration: "none", fontWeight: 700, display: "inline-flex", alignItems: "center" }}
+                                  style={{ fontSize: 11, background: "var(--color-accent-soft)", color: "var(--color-accent)", padding: "4px 10px", borderRadius: 6, textDecoration: "none", fontWeight: 700, display: "inline-flex", alignItems: "center" }}
                                 >
                                   📍 От {isFirst ? "базы" : "пред. точки"} сюда
                                 </a>
@@ -780,21 +780,21 @@ const syncPendingStatuses = async () => {
                                   <a
                                     href={`https://yandex.ru/maps/?mode=routes&rtext=${currentAddressStr}~${STORE_COORDS}`}
                                     target="_blank"
-                                    style={{ fontSize: 11, background: "#f5f4f0", color: "#6b6860", padding: "4px 10px", borderRadius: 6, textDecoration: "none", fontWeight: 700, display: "inline-flex", alignItems: "center" }}
+                                    style={{ fontSize: 11, background: "var(--color-bg)", color: "var(--color-text-2)", padding: "4px 10px", borderRadius: 6, textDecoration: "none", fontWeight: 700, display: "inline-flex", alignItems: "center" }}
                                   >
                                     🏠 На базу
                                   </a>
                                 )}
                               </div>
                               {o.price !== null && (
-                                <div style={{ fontSize: 12, whiteSpace: "nowrap", color: o.wrongPrice ? "#d94040" : "#a8a49c", fontWeight: o.wrongPrice ? 800 : 600 }}>
+                                <div style={{ fontSize: 12, whiteSpace: "nowrap", color: o.wrongPrice ? "#d94040" : "var(--color-text-3)", fontWeight: o.wrongPrice ? 800 : 600 }}>
                                   {o.price} ₽
                                 </div>
                               )}
                             </div>
 
                             {o.items && o.items.trim() && (
-                              <div style={{ marginBottom: 10, background: "#fafaf8", borderRadius: 8, padding: 10, border: "1px solid #e8e6df" }}>
+                              <div style={{ marginBottom: 10, background: "var(--color-surface)", borderRadius: 8, padding: 10, border: "1px solid #e8e6df" }}>
                                 {(() => {
                                   const lines = o.items!.split('\n').map(l => l.trim()).filter(Boolean);
                                   const isMany = lines.length >= 3;
@@ -803,8 +803,8 @@ const syncPendingStatuses = async () => {
                                   if (!isMany) {
                                     return (
                                       <>
-                                        <div style={{ fontSize: 11, color: "#a8a49c", textTransform: "uppercase", marginBottom: 4, fontWeight: 600 }}>📦 Состав заказа</div>
-                                        <div style={{ fontSize: 12, color: "#1a1a18", lineHeight: 1.4 }}>
+                                        <div style={{ fontSize: 11, color: "var(--color-text-3)", textTransform: "uppercase", marginBottom: 4, fontWeight: 600 }}>📦 Состав заказа</div>
+                                        <div style={{ fontSize: 12, color: "var(--color-text)", lineHeight: 1.4 }}>
                                           {lines.map((l, i) => <div key={i}>• {l}</div>)}
                                         </div>
                                       </>
@@ -817,13 +817,13 @@ const syncPendingStatuses = async () => {
                                         onClick={() => setExpandedItems(prev => ({ ...prev, [o.id]: !prev[o.id] }))}
                                         style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
                                       >
-                                        <div style={{ fontSize: 11, color: "#1a1a18", textTransform: "uppercase", fontWeight: 700 }}>
+                                        <div style={{ fontSize: 11, color: "var(--color-text)", textTransform: "uppercase", fontWeight: 700 }}>
                                           📦 Состав ({lines.length} позиций)
                                         </div>
-                                        <div style={{ fontSize: 12, color: "#a8a49c" }}>{isItemExpanded ? "▲" : "▼"}</div>
+                                        <div style={{ fontSize: 12, color: "var(--color-text-3)" }}>{isItemExpanded ? "▲" : "▼"}</div>
                                       </div>
                                       {isItemExpanded && (
-                                        <div style={{ marginTop: 8, borderTop: "1px dashed #e8e6df", paddingTop: 8, fontSize: 12, color: "#1a1a18", lineHeight: 1.4 }}>
+                                        <div style={{ marginTop: 8, borderTop: "1px dashed #e8e6df", paddingTop: 8, fontSize: 12, color: "var(--color-text)", lineHeight: 1.4 }}>
                                           {lines.map((l, i) => <div key={i}>• {l}</div>)}
                                         </div>
                                       )}
@@ -835,17 +835,17 @@ const syncPendingStatuses = async () => {
 
                             <div style={{ marginBottom: 10 }}>
                               {uploading[o.id] ? (
-                                <div style={{ textAlign: "center", padding: "14px", background: "#fafaf8", borderRadius: 8, color: "#a8a49c", fontWeight: 600, fontSize: 13 }}>
+                                <div style={{ textAlign: "center", padding: "14px", background: "var(--color-surface)", borderRadius: 8, color: "var(--color-text-3)", fontWeight: 600, fontSize: 13 }}>
                                   ⏳ Загрузка фото...
                                 </div>
                               ) : (
                                 <div style={{ display: "flex", gap: 8 }}>
                                   <label style={{
                                     flex: 1, background: o.photoUrl ? "#ecfdf5" : "#fff",
-                                    border: `1px solid ${o.photoUrl ? "#10b981" : "#e8e6df"}`,
+                                    border: `1px solid ${o.photoUrl ? "#10b981" : "var(--color-border)"}`,
                                     padding: "10px", borderRadius: 8, cursor: "pointer",
                                     textAlign: "center", fontWeight: 700, fontSize: 13,
-                                    color: o.photoUrl ? "#10b981" : "#1a1a18"
+                                    color: o.photoUrl ? "#10b981" : "var(--color-text)"
                                   }}>
                                     <input
                                       type="file" accept="image/*" capture="environment" style={{ display: "none" }}
@@ -857,7 +857,7 @@ const syncPendingStatuses = async () => {
                                   <label style={{
                                     flex: 1, background: "#fff", border: "1px solid #e8e6df",
                                     padding: "10px", borderRadius: 8, cursor: "pointer",
-                                    textAlign: "center", fontWeight: 700, fontSize: 13, color: "#1a1a18"
+                                    textAlign: "center", fontWeight: 700, fontSize: 13, color: "var(--color-text)"
                                   }}>
                                     <input
                                       type="file" accept="image/*" style={{ display: "none" }}
@@ -907,8 +907,8 @@ const syncPendingStatuses = async () => {
                     );
                   })}
                   {routeObj?.estimatedReturnTime && (
-                    <div style={{ fontSize: 12, color: "#a8a49c", padding: "8px 16px 12px", textAlign: "center" }}>
-                      🏠 Расчётное время возвращения на базу: <span style={{ fontWeight: 700, color: "#6b6860" }}>{routeObj.estimatedReturnTime}</span>
+                    <div style={{ fontSize: 12, color: "var(--color-text-3)", padding: "8px 16px 12px", textAlign: "center" }}>
+                      🏠 Расчётное время возвращения на базу: <span style={{ fontWeight: 700, color: "var(--color-text-2)" }}>{routeObj.estimatedReturnTime}</span>
                     </div>
                   )}
                 </div>
@@ -918,7 +918,7 @@ const syncPendingStatuses = async () => {
         })}
 
         {todayOrders.length === 0 && (
-          <div style={{ textAlign: "center", padding: 40, color: "#a8a49c", fontSize: 14 }}>
+          <div style={{ textAlign: "center", padding: 40, color: "var(--color-text-3)", fontSize: 14 }}>
             Маршрутов на сегодня нет
           </div>
         )}
@@ -928,17 +928,17 @@ const syncPendingStatuses = async () => {
           <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e6df", overflow: "hidden" }}>
             <div
               onClick={() => setShowPast(!showPast)}
-              style={{ padding: "14px 16px", background: "#fafaf8", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+              style={{ padding: "14px 16px", background: "var(--color-surface)", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
             >
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#1a1a18" }}>Прошлые заказы</div>
-              <div style={{ fontSize: 13, color: "#a8a49c", fontWeight: 600 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text)" }}>Прошлые заказы</div>
+              <div style={{ fontSize: 13, color: "var(--color-text-3)", fontWeight: 600 }}>
                 {pastOrders.length} {showPast ? "▲" : "▼"}
               </div>
             </div>
 
             {showPast && pastDates.map(date => (
               <div key={date} style={{ borderTop: "1px solid #f0efe9" }}>
-                <div style={{ padding: "8px 16px", background: "#fafaf8", fontSize: 11, color: "#a8a49c", fontWeight: 600, textTransform: "uppercase" }}>
+                <div style={{ padding: "8px 16px", background: "var(--color-surface)", fontSize: 11, color: "var(--color-text-3)", fontWeight: 600, textTransform: "uppercase" }}>
                   {date}
                 </div>
                 {pastGrouped[date]
@@ -954,9 +954,9 @@ const syncPendingStatuses = async () => {
                       <div key={o.id} style={{ padding: "12px 16px", borderBottom: "1px solid #f0efe9", opacity: 0.7 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                           <div>
-                            <div style={{ fontSize: 10, color: "#a8a49c", fontFamily: "monospace" }}>{o.externalId ?? o.crmId}</div>
+                            <div style={{ fontSize: 10, color: "var(--color-text-3)", fontFamily: "monospace" }}>{o.externalId ?? o.crmId}</div>
                             <div style={{
-                              fontSize: 12, fontWeight: 600, color: (isDelivered && actualTime) ? "#10b981" : "#1a1a18"
+                              fontSize: 12, fontWeight: 600, color: (isDelivered && actualTime) ? "#10b981" : "var(--color-text)"
                             }}>
                               {(isDelivered && actualTime) ? `Доставлен в ${actualTime}` : (o.slotRaw ?? "Время не указано")}
                             </div>
@@ -965,9 +965,9 @@ const syncPendingStatuses = async () => {
                             {st.label}
                           </div>
                         </div>
-                        <div style={{ fontSize: 13, color: "#1a1a18", marginBottom: 4 }}>{o.address}</div>
+                        <div style={{ fontSize: 13, color: "var(--color-text)", marginBottom: 4 }}>{o.address}</div>
                         {phone !== "—" && (
-                          <a href={`tel:${phone}`} style={{ fontSize: 12, color: "#4a7aff", textDecoration: "none" }}>📞 {phone}</a>
+                          <a href={`tel:${phone}`} style={{ fontSize: 12, color: "var(--color-accent)", textDecoration: "none" }}>📞 {phone}</a>
                         )}
                         {opComment && (
                           <div style={{ fontSize: 11, color: "#78350f", background: "#fffbeb", padding: "4px 8px", borderRadius: 6, marginTop: 6 }}>

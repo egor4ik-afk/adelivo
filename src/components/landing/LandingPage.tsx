@@ -80,6 +80,8 @@ const css = `
   .btn-pri:hover{opacity:0.88}
   .btn-ghost{display:inline-flex;align-items:center;gap:0.5rem;padding:0.85rem 2rem;border-radius:10px;font-weight:600;font-size:0.9rem;border:1px solid ${C.border};color:${C.text};transition:border-color 0.2s;white-space:nowrap}
   .btn-ghost:hover{border-color:${C.accent}}
+  .btn-courier{display:inline-flex;align-items:center;gap:0.5rem;padding:0.85rem 2rem;border-radius:10px;font-weight:700;font-size:0.9rem;letter-spacing:0.03em;border:1px solid rgba(var(--ew-green-rgb),0.45);background:rgba(var(--ew-green-rgb),0.10);color:${C.green};transition:background 0.2s,border-color 0.2s;white-space:nowrap}
+  .btn-courier:hover{background:rgba(var(--ew-green-rgb),0.18);border-color:${C.green}}
   .btn-big{display:inline-flex;align-items:center;justify-content:center;gap:0.6rem;width:100%;padding:0.9rem 1.5rem;border-radius:12px;font-weight:700;font-size:0.88rem;background:${C.green};color:#fff;transition:opacity 0.2s}
   .btn-big:hover{opacity:0.88}
 
@@ -262,6 +264,7 @@ export function LandingPage() {
                   </p>
                   <div style={{ display: "flex", gap: "0.8rem", flexWrap: "wrap", marginBottom: "3rem" }}>
                     <a href="#request" className="btn-pri">Оставить заявку →</a>
+                    <Link href="/stat-kurerom" className="btn-courier">🛵 Стать курьером</Link>
                     <a href="https://t.me/adelivo" target="_blank" rel="noopener noreferrer" className="btn-ghost">Написать в Telegram</a>
                   </div>
                   <div className="stat-row">
@@ -816,6 +819,7 @@ export function LandingPage() {
                 </p>
                 <div style={{ display: "flex", gap: "1rem", justifyContent: "center", flexWrap: "wrap" }}>
                   <a href="#request" className="btn-pri">Оставить заявку →</a>
+                  <Link href="/stat-kurerom" className="btn-courier">🛵 Стать курьером</Link>
                   <a href="https://t.me/adelivo" target="_blank" rel="noopener noreferrer" className="btn-ghost">Написать в Telegram</a>
                 </div>
               </div>

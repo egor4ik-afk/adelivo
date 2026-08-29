@@ -69,37 +69,37 @@ export default function AdminPage() {
   // Пока проверяем права, показываем загрузку (чтобы интерфейс не мелькал)
   if (!isAuthorized) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f5f4f0]">
-        <p className="text-[#a8a49c] font-medium animate-pulse">Проверка прав доступа...</p>
+      <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg)]">
+        <p className="text-[var(--color-text-3)] font-medium animate-pulse">Проверка прав доступа...</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6 min-h-screen bg-[#f5f4f0]">
-      <h1 className="text-2xl font-bold mb-6 text-[#1a1a18]">Управление доступом (Админ)</h1>
+    <div className="max-w-4xl mx-auto p-6 min-h-screen bg-[var(--color-bg)]">
+      <h1 className="text-2xl font-bold mb-6 text-[var(--color-text)]">Управление доступом (Админ)</h1>
       
-      <div className="bg-white rounded-2xl shadow-sm border border-[#e8e6df] overflow-hidden">
+      <div className="bg-[var(--color-card)] rounded-2xl shadow-sm border border-[var(--color-border)] overflow-hidden">
         <table className="w-full text-left">
-          <thead className="bg-[#fafaf8] border-b border-[#e8e6df]">
+          <thead className="bg-[var(--color-surface)] border-b border-[var(--color-border)]">
             <tr>
-              <th className="p-4 text-xs font-bold text-[#a8a49c] uppercase tracking-wider">Сотрудник</th>
-              <th className="p-4 text-xs font-bold text-[#a8a49c] uppercase tracking-wider">Роль</th>
+              <th className="p-4 text-xs font-bold text-[var(--color-text-3)] uppercase tracking-wider">Сотрудник</th>
+              <th className="p-4 text-xs font-bold text-[var(--color-text-3)] uppercase tracking-wider">Роль</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#e8e6df]">
+          <tbody className="divide-y divide-[var(--color-border)]">
             {users.map((user) => (
-              <tr key={user.id} className="hover:bg-[#fafaf8] transition-colors">
+              <tr key={user.id} className="hover:bg-[var(--color-surface)] transition-colors">
                 <td className="p-4">
-                  <div className="font-bold text-[#1a1a18]">{user.name || 'Имя не указано'}</div>
-                  <div className="text-sm font-medium text-[#a8a49c]">{user.email || user.phone}</div>
+                  <div className="font-bold text-[var(--color-text)]">{user.name || 'Имя не указано'}</div>
+                  <div className="text-sm font-medium text-[var(--color-text-3)]">{user.email || user.phone}</div>
                 </td>
                 <td className="p-4">
                   <select
                     value={user.role}
                     disabled={loadingId === user.id}
                     onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                    className="p-2 border border-[#e8e6df] rounded-lg bg-white text-[#1a1a18] font-medium focus:outline-none focus:border-[#4a7aff] disabled:opacity-50 cursor-pointer"
+                    className="p-2 border border-[var(--color-border)] rounded-lg bg-[var(--color-card)] text-[var(--color-text)] font-medium focus:outline-none focus:border-[var(--color-accent)] disabled:opacity-50 cursor-pointer"
                   >
                     <option value="COURIER">Курьер</option>
                     <option value="OPERATOR">Менеджер</option>

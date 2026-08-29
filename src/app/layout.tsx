@@ -7,6 +7,7 @@ import "@/lib/cron";
 import { GlobalChatWrapper } from "@/components/GlobalChatWrapper";
 import OfflineIndicator from "@/components/OfflineIndicator";
 import ScrollToTop from "@/components/ScrollToTop";
+import { ThemeScript } from "@/components/theme/ThemeScript";
 
 const inter = Inter({ subsets: ["latin", "cyrillic"] });
 
@@ -111,6 +112,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ru">
+      <head>
+        {/* Ставит data-ew-theme на <html> до первой отрисовки — и в публичной части,
+            и в кабинетах. Без этого светлая тема мигает тёмной при загрузке. */}
+        <ThemeScript />
+      </head>
       <body className={inter.className}>
         <ScrollToTop />
         <OfflineIndicator />

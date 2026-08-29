@@ -95,7 +95,7 @@ export function CourierNav({ currentUserId }: { currentUserId: string }) {
               alignItems: "center",
               justifyContent: "center",
               textDecoration: "none",
-              color: isActive ? "#4a7aff" : "#a8a49c",
+              color: isActive ? "var(--color-accent)" : "var(--color-text-3)",
               gap: 2,
             }}>
               <div style={{
@@ -123,7 +123,7 @@ export function CourierNav({ currentUserId }: { currentUserId: string }) {
             justifyContent: "center",
             background: "none",
             border: "none",
-            color: "#a8a49c",
+            color: "var(--color-text-3)",
             gap: 2,
             cursor: "pointer",
             padding: 0,

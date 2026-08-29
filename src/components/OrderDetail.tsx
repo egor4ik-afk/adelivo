@@ -46,7 +46,7 @@ function CourierSelect({ value, onChange, couriers }: {
         onClick={() => { setOpen(v => !v); setSearch(""); }}
         style={{
           width: "100%", padding: "7px 9px", borderRadius: 7,
-          border: "1px solid #e8e6df", fontSize: 12, background: "#fafaf8",
+          border: "1px solid #e8e6df", fontSize: 12, background: "var(--color-surface)",
           cursor: "pointer", textAlign: "left", display: "flex",
           justifyContent: "space-between", alignItems: "center",
         }}
@@ -54,7 +54,7 @@ function CourierSelect({ value, onChange, couriers }: {
         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
           {displayLabel}
         </span>
-        <span style={{ fontSize: 9, color: "#a8a49c", marginLeft: 6, flexShrink: 0 }}>▼</span>
+        <span style={{ fontSize: 9, color: "var(--color-text-3)", marginLeft: 6, flexShrink: 0 }}>▼</span>
       </button>
 
       {open && (
@@ -76,7 +76,7 @@ function CourierSelect({ value, onChange, couriers }: {
           <div style={{ overflowY: "auto", flex: 1 }}>
             <div
               onMouseDown={() => { onChange(""); setOpen(false); }}
-              style={{ padding: "7px 10px", fontSize: 12, cursor: "pointer", color: !value ? "#4a7aff" : "#a8a49c", background: !value ? "#f4f7ff" : "transparent", borderBottom: "1px solid #f5f4f0" }}
+              style={{ padding: "7px 10px", fontSize: 12, cursor: "pointer", color: !value ? "var(--color-accent)" : "var(--color-text-3)", background: !value ? "#f4f7ff" : "transparent", borderBottom: "1px solid #f5f4f0" }}
             >
               — Не назначен —
             </div>
@@ -84,13 +84,13 @@ function CourierSelect({ value, onChange, couriers }: {
               <div
                 key={c.value}
                 onMouseDown={() => { onChange(c.value); setOpen(false); }}
-                style={{ padding: "7px 10px", fontSize: 12, cursor: "pointer", color: c.value === value ? "#4a7aff" : "#1a1a18", background: c.value === value ? "#f4f7ff" : "transparent", borderBottom: "1px solid #f5f4f0", fontWeight: c.value === value ? 600 : 400 }}
+                style={{ padding: "7px 10px", fontSize: 12, cursor: "pointer", color: c.value === value ? "var(--color-accent)" : "var(--color-text)", background: c.value === value ? "#f4f7ff" : "transparent", borderBottom: "1px solid #f5f4f0", fontWeight: c.value === value ? 600 : 400 }}
               >
                 {c.label}
               </div>
             ))}
             {filtered.length === 0 && (
-              <div style={{ padding: "10px", fontSize: 12, color: "#a8a49c", textAlign: "center" }}>Не найдено</div>
+              <div style={{ padding: "10px", fontSize: 12, color: "var(--color-text-3)", textAlign: "center" }}>Не найдено</div>
             )}
           </div>
         </div>
@@ -265,7 +265,7 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
         <div style={{ flex: 1, fontSize: 14, fontWeight: 700, fontFamily: "monospace" }}>
           {selected.externalId ?? selected.crmId}
         </div>
-        <button style={{ background: "none", border: "none", color: "#a8a49c", fontSize: 14, cursor: "pointer" }} onClick={onClose}>✕</button>
+        <button style={{ background: "none", border: "none", color: "var(--color-text-3)", fontSize: 14, cursor: "pointer" }} onClick={onClose}>✕</button>
       </div>
 
       {selected.isInvalid && (
@@ -315,7 +315,7 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
               }}
               placeholder="0"
             />
-            <span style={{ fontSize: 12, color: "#6b6860", fontWeight: 600 }}>₽</span>
+            <span style={{ fontSize: 12, color: "var(--color-text-2)", fontWeight: 600 }}>₽</span>
           </div>
         </div>
       </div>
@@ -356,7 +356,7 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
       {selected.comment && (
         <div style={{ marginBottom: 10 }}>
           <div style={lbl}>Комментарий клиента</div>
-          <div style={{ fontSize: 12, color: "#6b6860" }}>{selected.comment}</div>
+          <div style={{ fontSize: 12, color: "var(--color-text-2)" }}>{selected.comment}</div>
         </div>
       )}
 
@@ -369,8 +369,8 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
         style={{
           width: "100%", padding: 8, borderRadius: 8, border: "none",
           fontSize: 12, fontWeight: 600,
-          background: saved ? "#1a9e5c" : hasChanges ? "#4a7aff" : "#e8e6df",
-          color: hasChanges || saved ? "#fff" : "#a8a49c",
+          background: saved ? "#1a9e5c" : hasChanges ? "var(--color-accent)" : "var(--color-border)",
+          color: hasChanges || saved ? "#fff" : "var(--color-text-3)",
           cursor: hasChanges ? "pointer" : "default",
           marginBottom: 16,
         }}
@@ -383,10 +383,10 @@ export function OrderDetail({ selected, couriers, onClose, onUpdateSuccess, onPr
   );
 }
 
-const lbl: React.CSSProperties = { fontSize: 10, color: "#a8a49c", textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 4 };
-const card: React.CSSProperties = { background: "#f5f4f0", borderRadius: 7, padding: "7px 9px" };
-const ta: React.CSSProperties = { width: "100%", padding: "7px 9px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 12, resize: "none", background: "#fafaf8", outline: "none", display: "block", fontFamily: "Manrope, system-ui, sans-serif", boxSizing: "border-box" as const };
-const sel: React.CSSProperties = { width: "100%", padding: "7px 9px", borderRadius: 7, border: "1px solid #e8e6df", fontSize: 12, background: "#fafaf8", outline: "none", cursor: "pointer" };
-const inputPhone: React.CSSProperties = { width: "100%", padding: "7px 9px", borderRadius: 7, border: "1px solid #e8e6df", fontSize: 12, background: "#fafaf8", outline: "none", fontWeight: 600, color: "#1a1a18" };
+const lbl: React.CSSProperties = { fontSize: 10, color: "var(--color-text-3)", textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 4 };
+const card: React.CSSProperties = { background: "var(--color-bg)", borderRadius: 7, padding: "7px 9px" };
+const ta: React.CSSProperties = { width: "100%", padding: "7px 9px", borderRadius: 6, border: "1px solid #e8e6df", fontSize: 12, resize: "none", background: "var(--color-surface)", outline: "none", display: "block", fontFamily: "Manrope, system-ui, sans-serif", boxSizing: "border-box" as const };
+const sel: React.CSSProperties = { width: "100%", padding: "7px 9px", borderRadius: 7, border: "1px solid #e8e6df", fontSize: 12, background: "var(--color-surface)", outline: "none", cursor: "pointer" };
+const inputPhone: React.CSSProperties = { width: "100%", padding: "7px 9px", borderRadius: 7, border: "1px solid #e8e6df", fontSize: 12, background: "var(--color-surface)", outline: "none", fontWeight: 600, color: "var(--color-text)" };
 const geoBtn: React.CSSProperties = { flex: 1, padding: 7, borderRadius: 6, border: "1px solid #e8e6df", background: "#fff", fontSize: 11, cursor: "pointer", fontWeight: 600 };
 const aiBtn: React.CSSProperties = { flex: 1, padding: 7, borderRadius: 6, border: "none", background: "#7c4dff", color: "#fff", fontSize: 11, cursor: "pointer", fontWeight: 600 };
