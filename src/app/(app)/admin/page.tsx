@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 interface User {
   id: string;
@@ -77,7 +78,27 @@ export default function AdminPage() {
 
   return (
     <div className="max-w-4xl mx-auto p-6 min-h-screen bg-[var(--color-bg)]">
-      <h1 className="text-2xl font-bold mb-6 text-[var(--color-text)]">Управление доступом (Админ)</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <h1 className="text-2xl font-bold text-[var(--color-text)]">Управление доступом (Админ)</h1>
+        <div className="flex gap-2">
+          <Link
+            href="/company"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--color-border)] text-[var(--color-text-2)] text-sm font-bold hover:border-[var(--color-accent)] hover:text-[var(--color-text)] transition-colors"
+          >
+            Компания и магазины
+          </Link>
+          <Link
+            href="/admin/access"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-bold shadow-sm hover:bg-[var(--color-accent-dark)] transition-colors"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <path d="M3 9h18M9 21V9" />
+            </svg>
+            Матрица магазинов
+          </Link>
+        </div>
+      </div>
       
       <div className="bg-[var(--color-card)] rounded-2xl shadow-sm border border-[var(--color-border)] overflow-hidden">
         <table className="w-full text-left">

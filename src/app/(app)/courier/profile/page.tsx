@@ -5,6 +5,7 @@ import { usePushNotifications } from "@/components/usePushNotifications";
 import { IMaskInput } from "react-imask";
 import imageCompression from "browser-image-compression";
 import { performLogout } from '@/lib/logout'; // 🔥 Импортируем
+import { AppThemeRow } from "@/components/theme/AppThemeRow";
 
 interface Profile {
   id: string; 
@@ -415,6 +416,11 @@ export default function CourierProfilePage() {
               🚗 Авто
             </button>
           </div>
+        </div>
+
+        {/* Тема оформления */}
+        <div style={{ background: "var(--color-card)", borderRadius: 12, border: "1px solid var(--color-border)", padding: 16, marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
+          <AppThemeRow rowStyle={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }} />
         </div>
 
         {stats && (
