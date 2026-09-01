@@ -1,5 +1,5 @@
 {
-  "name": "AgentDelivery",
+  "name": "Agent Delivo",
   "short_name": "ADelivo",
   "icons": [
     {
@@ -16,6 +16,6 @@
     }
   ],
   "theme_color": "#ffffff",
-  "background_color": "#b4c0d4",
+  "background_color": "#cdb8c1",
   "display": "standalone"
 }
