@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getViewer, courierScope } from '@/lib/access';
+import type { NextRequest } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const viewer = await getViewer(req);
+    if (!viewer) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
     // 1. Получаем текущую дату в Москве в формате YYYY-MM-DD
     const moscowTodayStr = new Date().toLocaleDateString('en-CA', { 
       timeZone: 'Europe/Moscow' 
@@ -12,6 +17,9 @@ export async function GET() {
 
     // 2. Вытягиваем последние маршруты с курьерами и заказами
     const routes = await prisma.route.findMany({
+      // Маршрут принадлежит курьеру, курьер — компании.
+      // Через это и режем чужие маршруты вместе с их заказами.
+      where: { courier: courierScope(viewer) },
       include: {
         courier: true,
         orders: {

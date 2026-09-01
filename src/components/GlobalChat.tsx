@@ -502,28 +502,28 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
           zIndex: 10000,
         }}>
           {/* Шапка */}
-          <div style={{ padding: "11px 14px", background: "var(--color-text)", color: "#fff", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          <div style={{ padding: "11px 14px", background: "var(--color-chat-header-bg)", color: "var(--color-chat-header-fg)", display: "flex", alignItems: "center", gap: 8, flexShrink: 0, borderBottom: "1px solid var(--color-border)" }}>
             {view !== "list" && (
-              <button onClick={() => { setView("list"); setActiveConv(null); setMessages([]); setHasMore(false); }} style={{ background: "none", border: "none", color: "#fff", fontSize: 18, cursor: "pointer", padding: 0, lineHeight: 1 }}>←</button>
+              <button onClick={() => { setView("list"); setActiveConv(null); setMessages([]); setHasMore(false); }} style={{ background: "none", border: "none", color: "var(--color-chat-header-fg)", fontSize: 18, cursor: "pointer", padding: 0, lineHeight: 1 }}>←</button>
             )}
             <span style={{ fontWeight: 700, fontSize: 14, flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {view === "list" && "💬 Чаты"}
               {view === "search" && "🔍 Новый чат"}
               {view === "dialog" && activeConv && (activeConv.id === "general" ? "🌐 Общий чат" : userName(interlocutor(activeConv)))}
             </span>
-            <button onClick={toggleNotifyMode} title={notifyMode === "sound" ? "Звук включён" : "Без звука"} style={{ background: "none", border: "none", color: "#fff", fontSize: 16, cursor: "pointer", padding: "0 4px", opacity: notifyMode === "mute" ? 0.45 : 1 }}>
+            <button onClick={toggleNotifyMode} title={notifyMode === "sound" ? "Звук включён" : "Без звука"} style={{ background: "none", border: "none", color: "var(--color-chat-header-fg)", fontSize: 16, cursor: "pointer", padding: "0 4px", opacity: notifyMode === "mute" ? 0.45 : 1 }}>
               {notifyMode === "sound" ? "🔔" : "🔕"}
             </button>
             {view === "list" && (
-              <button onClick={() => { setView("search"); setSearchQ(""); }} style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "#fff", borderRadius: 8, padding: "4px 10px", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>+ Новый</button>
+              <button onClick={() => { setView("search"); setSearchQ(""); }} style={{ background: "var(--color-chat-header-tint)", border: "none", color: "var(--color-chat-header-fg)", borderRadius: 8, padding: "4px 10px", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>+ Новый</button>
             )}
-            <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", color: "#fff", fontSize: 22, cursor: "pointer", lineHeight: 1, marginLeft: 4 }}>×</button>
+            <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", color: "var(--color-chat-header-fg)", fontSize: 22, cursor: "pointer", lineHeight: 1, marginLeft: 4 }}>×</button>
           </div>
 
           {/* Список чатов */}
           {view === "list" && (
             <div style={{ flex: 1, overflowY: "auto", minHeight: 0, WebkitOverflowScrolling: "touch" }}>
-              <div onClick={() => openDialog("general")} style={{ padding: "10px 14px", borderBottom: "1px solid #f0ede8", cursor: "pointer", display: "flex", gap: 10, alignItems: "center", background: "#fcfcfa" }}>
+              <div onClick={() => openDialog("general")} style={{ padding: "10px 14px", borderBottom: "1px solid var(--color-border)", cursor: "pointer", display: "flex", gap: 10, alignItems: "center", background: "var(--color-surface)" }}>
                 <div style={{ width: 40, height: 40, borderRadius: "50%", background: "var(--color-accent)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 20, flexShrink: 0 }}>🌐</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -542,7 +542,7 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
                 const last = c.messages?.[0];
                 const initial = (other.firstName?.[0] ?? other.lastName?.[0] ?? other.email?.[0] ?? "?").toUpperCase();
                 return (
-                  <div key={c.id} onClick={() => openDialog(c)} style={{ padding: "10px 14px", borderBottom: "1px solid #f0ede8", cursor: "pointer", display: "flex", gap: 10, alignItems: "center", background: "var(--color-card)", transition: "background 0.15s" }} onMouseEnter={e => (e.currentTarget.style.background = "var(--color-bg)")} onMouseLeave={e => (e.currentTarget.style.background = "var(--color-card)")}>
+                  <div key={c.id} onClick={() => openDialog(c)} style={{ padding: "10px 14px", borderBottom: "1px solid var(--color-border)", cursor: "pointer", display: "flex", gap: 10, alignItems: "center", background: "var(--color-card)", transition: "background 0.15s" }} onMouseEnter={e => (e.currentTarget.style.background = "var(--color-bg)")} onMouseLeave={e => (e.currentTarget.style.background = "var(--color-card)")}>
                     {other.avatarUrl ? (
                       <img src={other.avatarUrl} alt="ava" style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "1px solid var(--color-border)" }} />
                     ) : (
@@ -578,7 +578,7 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
               <div style={{ flex: 1, overflowY: "auto", minHeight: 0, WebkitOverflowScrolling: "touch" }}>
                 {searchResults.length === 0 && searchQ.length > 0 && <div style={{ fontSize: 12, color: "var(--color-text-3)", textAlign: "center", marginTop: 40 }}>Никого не найдено</div>}
                 {searchResults.map(u => (
-                  <div key={u.id} onClick={() => startChat(u)} style={{ padding: "10px 14px", borderBottom: "1px solid #f0ede8", cursor: "pointer", display: "flex", gap: 10, alignItems: "center", background: "var(--color-card)", transition: "background 0.1s" }} onMouseEnter={e => (e.currentTarget.style.background = "var(--color-bg)")} onMouseLeave={e => (e.currentTarget.style.background = "var(--color-card)")}>
+                  <div key={u.id} onClick={() => startChat(u)} style={{ padding: "10px 14px", borderBottom: "1px solid var(--color-border)", cursor: "pointer", display: "flex", gap: 10, alignItems: "center", background: "var(--color-card)", transition: "background 0.1s" }} onMouseEnter={e => (e.currentTarget.style.background = "var(--color-bg)")} onMouseLeave={e => (e.currentTarget.style.background = "var(--color-card)")}>
                     {u.avatarUrl ? <img src={u.avatarUrl} alt="ava" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} /> : <div style={{ width: 36, height: 36, borderRadius: "50%", background: roleColor(u.role), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 13, flexShrink: 0 }}>{(u.firstName?.[0] ?? u.lastName?.[0] ?? u.email?.[0] ?? "?").toUpperCase()}</div>}
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text)" }}>{userName(u)}</div>

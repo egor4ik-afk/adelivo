@@ -5,7 +5,11 @@ import Link from 'next/link';
 
 interface User {
   id: string;
-  name: string | null;
+  // API отдаёт firstName/lastName, а тип ждал name — из-за этого
+  // в таблице у всех было «Имя не указано». Держим оба варианта.
+  name?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
   email: string | null;
   phone: string | null;
   role: 'COURIER' | 'OPERATOR' | 'ADMIN';
@@ -14,6 +18,8 @@ interface User {
 export default function AdminPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [q, setQ] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'ALL' | 'ADMIN' | 'OPERATOR' | 'COURIER'>('ALL');
   
   // 🔥 ДОБАВЛЕНО: Состояние проверки прав
   const [isAuthorized, setIsAuthorized] = useState(false);
@@ -76,6 +82,13 @@ export default function AdminPage() {
     );
   }
 
+  const shownUsers = users.filter((u) => {
+    if (roleFilter !== 'ALL' && u.role !== roleFilter) return false;
+    if (!q.trim()) return true;
+    const hay = `${u.firstName ?? ''} ${u.lastName ?? ''} ${u.name ?? ''} ${u.email ?? ''} ${u.phone ?? ''}`.toLowerCase();
+    return hay.includes(q.toLowerCase().trim());
+  });
+
   return (
     <div className="max-w-4xl mx-auto p-6 min-h-screen bg-[var(--color-bg)]">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
@@ -100,6 +113,34 @@ export default function AdminPage() {
         </div>
       </div>
       
+      {/* Поиск и фильтр — как в матрице доступов и в заказах */}
+      <div className="flex flex-wrap gap-2 items-center mb-4">
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Имя, почта, телефон"
+          className="px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] text-[13px] text-[var(--color-text)] outline-none focus:border-[var(--color-accent)] min-w-[220px] flex-1"
+        />
+        <div className="flex bg-[var(--color-border)] p-1 rounded-xl gap-1">
+          {(['ALL', 'ADMIN', 'OPERATOR', 'COURIER'] as const).map((r) => (
+            <button
+              key={r}
+              onClick={() => setRoleFilter(r)}
+              className={`px-3 py-1.5 rounded-lg text-[12px] font-bold transition-all ${
+                roleFilter === r
+                  ? 'bg-[var(--color-card)] shadow-sm text-[var(--color-text)]'
+                  : 'text-[var(--color-text-2)] hover:text-[var(--color-text)]'
+              }`}
+            >
+              {r === 'ALL' ? 'Все' : r === 'ADMIN' ? 'Админы' : r === 'OPERATOR' ? 'Операторы' : 'Курьеры'}
+            </button>
+          ))}
+        </div>
+        <span className="text-[12px] text-[var(--color-text-3)]">
+          {shownUsers.length} из {users.length}
+        </span>
+      </div>
+
       <div className="bg-[var(--color-card)] rounded-2xl shadow-sm border border-[var(--color-border)] overflow-hidden">
         <table className="w-full text-left">
           <thead className="bg-[var(--color-surface)] border-b border-[var(--color-border)]">
@@ -109,10 +150,10 @@ export default function AdminPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--color-border)]">
-            {users.map((user) => (
+            {shownUsers.map((user) => (
               <tr key={user.id} className="hover:bg-[var(--color-surface)] transition-colors">
                 <td className="p-4">
-                  <div className="font-bold text-[var(--color-text)]">{user.name || 'Имя не указано'}</div>
+                  <div className="font-bold text-[var(--color-text)]">{[user.firstName, user.lastName].filter(Boolean).join(' ') || user.name || 'Имя не указано'}</div>
                   <div className="text-sm font-medium text-[var(--color-text-3)]">{user.email || user.phone}</div>
                 </td>
                 <td className="p-4">

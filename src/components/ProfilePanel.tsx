@@ -5,9 +5,11 @@ import { usePushNotifications } from "./usePushNotifications";
 import imageCompression from "browser-image-compression"; // 🔥 Для сжатия фото перед загрузкой
 import { performLogout } from '@/lib/logout'; // 🔥 Импортируем
 import { AppThemeRow } from '@/components/theme/AppThemeRow';
+import Link from 'next/link';
 
 interface Profile {
   id: string; email: string; role: string;
+  isSuperAdmin?: boolean; companyId?: string | null;
   firstName?: string | null; lastName?: string | null;
   phone?: string | null; lastLoginAt?: string | null;
   avatarUrl?: string | null; // 🔥 Добавили аватарку
@@ -186,6 +188,22 @@ export function ProfilePanel({ onClose }: { onClose: () => void; }) {
             <InfoRow label="Последний вход" value={new Date(profile.lastLoginAt).toLocaleString("ru")} muted />
           )}
 
+          {/* Ссылки администратора: раньше на /company, /admin и /admin/access
+              можно было попасть только вводом адреса руками */}
+          {(profile?.role === 'ADMIN' || profile?.isSuperAdmin) && (
+            <>
+              <div style={s.divider} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-3)', marginBottom: 6 }}>
+                  Управление
+                </div>
+                <Link href="/company" style={s.adminLink} onClick={onClose}>🏢 Компания и магазины</Link>
+                <Link href="/admin" style={s.adminLink} onClick={onClose}>👥 Пользователи и роли</Link>
+                <Link href="/admin/access" style={s.adminLink} onClick={onClose}>🔑 Доступы к магазинам</Link>
+              </div>
+            </>
+          )}
+
           <div style={s.divider} />
 
           {/* Тема оформления */}
@@ -271,6 +289,19 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
 }
 
 const s: Record<string, React.CSSProperties> = {
+  adminLink: {
+    display: 'block',
+    padding: '8px 10px',
+    borderRadius: 8,
+    fontSize: 13,
+    fontWeight: 500,
+    color: 'var(--color-text)',
+    textDecoration: 'none',
+    background: 'var(--color-surface)',
+    border: '1px solid var(--color-border)',
+    marginBottom: 4,
+  } as React.CSSProperties,
+
   panel: { 
     background: "var(--color-card)", border: "1px solid var(--color-border)", borderRadius: 12, padding: 16, width: 300, 
     boxShadow: "0 4px 24px rgba(0,0,0,0.09)", fontFamily: "Manrope, system-ui, sans-serif",

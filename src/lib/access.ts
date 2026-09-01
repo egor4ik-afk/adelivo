@@ -165,3 +165,34 @@ export class AccessError extends Error {
     this.name = "AccessError";
   }
 }
+
+/* ─── Границы компании для остальных сущностей ────────────────
+   Магазины закрыты через shopFilter, но по компании делятся ещё
+   пользователи, курьеры, маршруты и уведомления. Правило то же:
+   глобальный админ видит всё, сотрудник — свою компанию,
+   пользователь без компании — ничего.                            */
+
+/** Кусок where для выборок пользователей. */
+export function userScope(viewer: Viewer): Record<string, unknown> {
+  if (viewer.isSuperAdmin) return {};
+  if (!viewer.companyId) return { id: { in: [] as string[] } };
+  return { companyId: viewer.companyId };
+}
+
+/** Кусок where для выборок курьеров. */
+export function courierScope(viewer: Viewer): Record<string, unknown> {
+  if (viewer.isSuperAdmin) return {};
+  if (!viewer.companyId) return { id: { in: [] as number[] } };
+  return { companyId: viewer.companyId };
+}
+
+/** Идентификаторы курьеров компании — для фильтров по courierId. */
+export async function companyCourierIds(viewer: Viewer): Promise<number[] | null> {
+  if (viewer.isSuperAdmin) return null;
+  if (!viewer.companyId) return [];
+  const rows = await prisma.courier.findMany({
+    where: { companyId: viewer.companyId },
+    select: { id: true },
+  });
+  return rows.map((r) => r.id);
+}

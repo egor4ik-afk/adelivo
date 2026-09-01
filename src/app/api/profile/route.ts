@@ -33,6 +33,8 @@ export async function GET(req: NextRequest) {
     where: { id: user.id },
     select: {
       id: true, email: true, role: true,
+      // нужны панели профиля, чтобы показать ссылки управления
+      isSuperAdmin: true, companyId: true,
       firstName: true, lastName: true, phone: true,
       avatarUrl: true, // 🔥 ДОБАВЛЕНО: Возвращаем фото профиля при загрузке страницы
       lastLoginAt: true, createdAt: true,
@@ -84,6 +86,7 @@ export async function PATCH(req: NextRequest) {
       data: userData, // 🔥 avatarUrl теперь автоматически сохраняется здесь
       select: {
         id: true, email: true, role: true,
+        isSuperAdmin: true, companyId: true,
         firstName: true, lastName: true, phone: true,
         avatarUrl: true, // 🔥 ДОБАВЛЕНО: возвращаем обновленное фото
         notifyNewOrder: true, notifyStatus: true, notifyCourier: true,
