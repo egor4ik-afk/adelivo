@@ -266,6 +266,12 @@ model Courier {
   konsolTasks KonsolTask[] // 🔥 Связь с заданиями Консоли
 
   // ★ НОВОЕ ─────────────────────────────────────────────────────
+  /// Допуск к работе. Профиль курьера создаётся автоматически при регистрации,
+  /// поэтому выход на линию подтверждает администратор галочкой в /admin/access.
+  /// default(true) — чтобы уже работающие курьеры не отвалились при обновлении;
+  /// новым профилям isApproved: false проставляется явно в link-courier.
+  isApproved      Boolean @default(true)
+
   /// Может брать заказы с биржи. Ставится, когда привязана Консоль:
   /// konsolContractorId != null && isSelfEmployed
   canTakeExchange Boolean @default(false)

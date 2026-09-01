@@ -100,6 +100,45 @@ export async function requireSuperAdmin(req?: NextRequest): Promise<Viewer> {
   return viewer;
 }
 
+/**
+ * Админка доступов: пускаем и глобального админа, и локального.
+ *
+ * Глобальный видит всех, локальный — только свою компанию. Это важно
+ * для самостоятельных компаний: без этого владелец не смог бы ни допустить
+ * своего курьера к работе, ни раздать доступы к магазинам, и любая мелочь
+ * упиралась бы в нас.
+ */
+export async function requireAdminScope(req?: NextRequest): Promise<{
+  viewer: Viewer;
+  /** Кусок where для выборок: пусто у глобального, компания у локального. */
+  scope: { companyId?: string };
+}> {
+  const viewer = await getViewer(req);
+  if (!viewer) throw new AccessError("Unauthorized", 401);
+
+  if (viewer.isSuperAdmin) return { viewer, scope: {} };
+
+  if (viewer.role === "ADMIN" && viewer.companyId) {
+    return { viewer, scope: { companyId: viewer.companyId } };
+  }
+
+  throw new AccessError("Недостаточно прав", 403);
+}
+
+/** Может ли этот админ трогать конкретного пользователя. */
+export async function canManageUser(viewer: Viewer, userId: string): Promise<boolean> {
+  if (viewer.isSuperAdmin) return true;
+  if (viewer.role !== "ADMIN" || !viewer.companyId) return false;
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { companyId: true, isSuperAdmin: true },
+  });
+  // Локальный админ не может трогать глобального — иначе он смог бы
+  // снять с него флаг и остаться единственным хозяином системы
+  if (!target || target.isSuperAdmin) return false;
+  return target.companyId === viewer.companyId;
+}
+
 export class AccessError extends Error {
   constructor(message: string, public status: number) {
     super(message);

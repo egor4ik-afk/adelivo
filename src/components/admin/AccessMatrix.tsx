@@ -11,6 +11,7 @@ type User = {
 };
 type Shop = { id: string; slug: string; name: string; isActive: boolean };
 type Access = { userId: string; shopId: string; canEdit: boolean };
+type Courier = { id: number; email: string | null; fullName: string; isApproved: boolean; isActive: boolean };
 
 const ROLES: Record<string, { label: string; cls: string }> = {
   ADMIN: { label: "Админ", cls: "bg-purple-100 text-purple-800" },
@@ -22,6 +23,7 @@ export function AccessMatrix() {
   const [users, setUsers] = useState<User[]>([]);
   const [shops, setShops] = useState<Shop[]>([]);
   const [access, setAccess] = useState<Access[]>([]);
+  const [couriers, setCouriers] = useState<Courier[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
@@ -37,6 +39,7 @@ export function AccessMatrix() {
       setUsers(data.users);
       setShops(data.shops);
       setAccess(data.access);
+      setCouriers(data.couriers ?? []);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка загрузки");
@@ -46,6 +49,14 @@ export function AccessMatrix() {
   };
 
   useEffect(() => { load(); }, []);
+
+  // Профиль курьера ищется по email — так же, как во всём остальном коде
+  const courierOf = useMemo(() => {
+    const byEmail = new Map(
+      couriers.filter(c => c.email).map(c => [c.email!.toLowerCase(), c])
+    );
+    return (email: string) => byEmail.get(email.toLowerCase()) ?? null;
+  }, [couriers]);
 
   const has = useMemo(() => {
     const s = new Set(access.map((a) => `${a.userId}:${a.shopId}`));
@@ -88,6 +99,15 @@ export function AccessMatrix() {
     const next = !u.accessRestricted;
     setUsers((p) => p.map((x) => (x.id === u.id ? { ...x, accessRestricted: next } : x)));
     const ok = await patch({ userId: u.id, accessRestricted: next }, `r:${u.id}`);
+    if (!ok) load();
+  };
+
+  const toggleWork = async (u: User) => {
+    const c = courierOf(u.email);
+    if (!c) return;
+    const next = !c.isApproved;
+    setCouriers(p => p.map(x => (x.id === c.id ? { ...x, isApproved: next } : x)));
+    const ok = await patch({ userId: u.id, courierApproved: next }, `w:${u.id}`);
     if (!ok) load();
   };
 
@@ -153,6 +173,7 @@ export function AccessMatrix() {
                 <th className="text-left px-4 py-3 font-bold text-[var(--color-text)] sticky left-0 bg-[var(--color-surface)] z-10 min-w-[220px]">
                   Сотрудник
                 </th>
+                <th className="px-3 py-3 font-bold text-[var(--color-text)] whitespace-nowrap">Работа</th>
                 <th className="px-3 py-3 font-bold text-[var(--color-text)] whitespace-nowrap">Ограничить</th>
                 {shops.map((s) => (
                   <th key={s.id} className="px-3 py-3 font-bold text-[var(--color-text)] whitespace-nowrap text-center">
@@ -177,6 +198,34 @@ export function AccessMatrix() {
                         </span>
                         <span className="text-[11px] text-[var(--color-text-3)] truncate max-w-[160px]">{u.email}</span>
                       </div>
+                    </td>
+
+                    {/* Допуск курьера к работе */}
+                    <td className="px-3 py-3 text-center">
+                      {u.role === "COURIER" ? (
+                        (() => {
+                          const c = courierOf(u.email);
+                          if (!c) {
+                            return (
+                              <span className="text-[10px] text-[var(--color-text-3)]" title="Профиль появится после первого входа курьера">
+                                нет профиля
+                              </span>
+                            );
+                          }
+                          return (
+                            <input
+                              type="checkbox"
+                              checked={c.isApproved}
+                              disabled={saving === `w:${u.id}`}
+                              onChange={() => toggleWork(u)}
+                              title={c.isApproved ? "Допущен к работе" : "Не допущен: заказы не приходят"}
+                              className="w-4 h-4 accent-[var(--color-accent)] cursor-pointer"
+                            />
+                          );
+                        })()
+                      ) : (
+                        <span className="text-[10px] text-[var(--color-text-3)]">—</span>
+                      )}
                     </td>
 
                     {/* Включить ограничения */}
@@ -226,7 +275,7 @@ export function AccessMatrix() {
               })}
               {shown.length === 0 && (
                 <tr>
-                  <td colSpan={shops.length + 3} className="px-4 py-10 text-center text-[var(--color-text-3)]">
+                  <td colSpan={shops.length + 4} className="px-4 py-10 text-center text-[var(--color-text-3)]">
                     Никого не нашлось
                   </td>
                 </tr>
@@ -241,6 +290,8 @@ export function AccessMatrix() {
         магазинами, как раньше. Ограничения включаются по одному человеку: так можно
         раскатывать доступы постепенно, не ломая работу кабинета.
         Глобальный админ игнорирует матрицу и управляет ей.
+        Колонка «Работа» — допуск курьера на линию: пока галочка снята,
+        заказы ему не приходят, даже если маршрут назначен.
       </p>
     </div>
   );

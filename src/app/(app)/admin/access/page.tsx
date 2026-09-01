@@ -10,7 +10,10 @@ export const metadata = { title: "Доступы к магазинам" };
 export default async function AccessPage() {
   const viewer = await getViewer();
   if (!viewer) redirect("/login");
-  if (!viewer.isSuperAdmin) redirect("/dashboard");
+  // Пускаем и глобального админа, и админа компании: свои доступы
+  // компания должна раздавать сама, не дёргая нас
+  const isAdmin = viewer.isSuperAdmin || (viewer.role === "ADMIN" && !!viewer.companyId);
+  if (!isAdmin) redirect("/dashboard");
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)]">
@@ -25,7 +28,9 @@ export default async function AccessPage() {
         </Link>
         <div>
           <h1 className="text-lg sm:text-xl font-bold text-[var(--color-text)] tracking-tight">Доступы к магазинам</h1>
-          <p className="text-[12px] text-[var(--color-text-3)]">Кто какие магазины видит и редактирует</p>
+          <p className="text-[12px] text-[var(--color-text-3)]">
+            {viewer.isSuperAdmin ? "Все компании" : "Сотрудники вашей компании"} · допуск к работе и доступ к магазинам
+          </p>
         </div>
       </header>
 

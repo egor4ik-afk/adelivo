@@ -230,3 +230,12 @@ function netError(e: unknown): string {
   if (err.code === "CERT_HAS_EXPIRED") return "У сервера просрочен SSL-сертификат";
   return err.message || "Не удалось соединиться";
 }
+
+// ── Слой опроса источников ────────────────────────────────────
+// Транспорт и маппинг вынесены из lib/crm.ts, доменная логика осталась там же.
+export * from "./types";
+export { resolveCreds, activeShops, MEURA_SLUGS } from "./credentials";
+export { retailCrmConnector, normalizeRetailCrm } from "./retailcrm";
+export { bitrixConnector } from "./bitrix24";
+export { onecConnector } from "./onec";
+export { getConnector, pollShop, pollAllShops, upsertNormalized, buildCrmId } from "./poll";

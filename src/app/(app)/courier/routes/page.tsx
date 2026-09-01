@@ -2,6 +2,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { NAV_HEIGHT } from "@/components/CourierNav";
+import { uploadOrderPhoto } from "@/lib/upload-photo";
 
 interface RouteOrder {
   id: string; externalId: string; crmId: string; address: string; status: string;
@@ -198,44 +199,20 @@ const syncPendingStatuses = async () => {
     await fetch(`/api/routes/${routeId}/pickup-all`, { method: "POST" });
   };
 
-  // 🔥 Загрузку фото оставляем как была, без изменений
   const handlePhotoUpload = async (orderId: string, file: File) => {
     setUploading(prev => ({ ...prev, [orderId]: true }));
     try {
-      const imageCompression = (await import('browser-image-compression')).default;
-      const compressedFile = await imageCompression(file, { maxSizeMB: 1, maxWidthOrHeight: 1280 });
-
-      const signRes = await fetch("/api/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          filename: `photo_${orderId}.jpg`,
-          contentType: compressedFile.type || "image/jpeg"
-        }),
-      });
-
-      if (!signRes.ok) throw new Error("Не удалось получить ссылку от сервера");
-      const { uploadUrl, fileUrl } = await signRes.json();
-
-      const uploadRes = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": compressedFile.type || "image/jpeg" },
-        body: compressedFile,
-      });
-
-      if (!uploadRes.ok) throw new Error("Не удалось загрузить файл в Яндекс Облако");
-
-      await fetch(`/api/orders/${orderId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photoUrl: fileUrl }),
+      // Сжатие и повторы живут в src/lib/upload-photo.ts:
+      // курьер снимает на улице, где сеть рвётся, а фото — единственное
+      // доказательство доставки, поэтому разовым запросом обойтись нельзя
+      const { fileUrl } = await uploadOrderPhoto(orderId, file, (stage, attempt) => {
+        if (stage === "retry") console.warn(`[Фото] повтор ${attempt} для ${orderId}`);
       });
 
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, photoUrl: fileUrl } : o));
-
     } catch (e) {
       console.error(e);
-      alert("❌ Ошибка при загрузке фото. Проверьте интернет и попробуйте еще раз.");
+      alert("❌ Фото не загрузилось даже после нескольких попыток. Проверьте сеть и повторите.");
     } finally {
       setUploading(prev => ({ ...prev, [orderId]: false }));
     }
@@ -273,16 +250,46 @@ const syncPendingStatuses = async () => {
     return 2;
   };
 
+  // Ближайшее по времени окно среди ещё не закрытых точек маршрута.
+  // Именно оно определяет, какой маршрут нужно везти первым.
+  const toMinutes = (time?: string | null) => {
+    if (!time) return 24 * 60 + 1;
+    const m = time.match(/(\d{1,2}):(\d{2})/);
+    return m ? Number(m[1]) * 60 + Number(m[2]) : 24 * 60 + 1;
+  };
+
+  const getRouteDeadline = (rId: string) => {
+    const points = todayGrouped[rId] || [];
+    const open = points.filter(p => !['DELIVERED', 'RETURNED', 'CANCELLED'].includes(p.status));
+    const source = open.length ? open : points;
+    const times = source.map(p => toMinutes(p.slotTo || p.slotFrom));
+    if (!times.length) return 24 * 60 + 1;
+    return Math.min(...times);
+  };
+
   const todayRouteKeys = Object.keys(todayGrouped).sort((a, b) => {
     const weightA = getRouteStatusWeight(a);
     const weightB = getRouteStatusWeight(b);
     if (weightA !== weightB) return weightA - weightB;
 
+    // Среди одинаковых по состоянию сверху идёт тот, который нужно
+    // закрыть раньше. Раньше сортировка шла по времени создания —
+    // из-за этого позже созданный маршрут на 12:00 оказывался
+    // выше созданного раньше маршрута на 10:00.
+    const deadlineA = getRouteDeadline(a);
+    const deadlineB = getRouteDeadline(b);
+    if (deadlineA !== deadlineB) return deadlineA - deadlineB;
+
+    // Совсем одинаковые — по времени выезда, затем по созданию
     const routeA = todayGrouped[a][0]?.route;
     const routeB = todayGrouped[b][0]?.route;
+    const depA = toMinutes(routeA?.plannedDepartureTime);
+    const depB = toMinutes(routeB?.plannedDepartureTime);
+    if (depA !== depB) return depA - depB;
+
     const timeA = routeA?.createdAt ? new Date(routeA.createdAt).getTime() : 0;
     const timeB = routeB?.createdAt ? new Date(routeB.createdAt).getTime() : 0;
-    return timeB - timeA;
+    return timeA - timeB;
   });
 
   const pastGrouped: Record<string, RouteOrder[]> = {};
@@ -374,7 +381,7 @@ const syncPendingStatuses = async () => {
                       await fetch(`/api/routes/${rId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isAccepted: true }) });
                     } catch (e) { }
                   }}
-                  style={{ background: "var(--color-accent)", color: "#fff", width: "100%", padding: "12px", borderRadius: 8, fontSize: 15, fontWeight: 700, border: "none", cursor: "pointer", boxShadow: "0 2px 6px rgba(74, 122, 255, 0.3)" }}
+                  style={{ background: "var(--color-accent)", color: "#fff", width: "100%", padding: "12px", borderRadius: 8, fontSize: 15, fontWeight: 700, border: "none", cursor: "pointer", boxShadow: "var(--color-btn-shadow)" }}
                 >
                   ✅ Принять маршрут
                 </button>
@@ -387,7 +394,20 @@ const syncPendingStatuses = async () => {
       {/* СПИСОК МАРШРУТОВ */}
       <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 16 }}>
         {todayRouteKeys.map((rId) => {
-          const routePoints = todayGrouped[rId].sort((a, b) => (a.routeOrder || 0) - (b.routeOrder || 0));
+          const routePoints = [...todayGrouped[rId]].sort((a, b) => {
+            // Сервер уже перенумеровал точки после доставки, но пока ответ
+            // не пришёл (или курьер офлайн), опираемся на факт доставки:
+            // закрытая точка не должна висеть ниже открытой.
+            const doneA = ['DELIVERED', 'RETURNED', 'CANCELLED'].includes(a.status);
+            const doneB = ['DELIVERED', 'RETURNED', 'CANCELLED'].includes(b.status);
+            if (doneA !== doneB) return doneA ? -1 : 1;
+            if (doneA && doneB) {
+              const ta = a.deliveredAt ? new Date(a.deliveredAt).getTime() : 0;
+              const tb = b.deliveredAt ? new Date(b.deliveredAt).getTime() : 0;
+              if (ta !== tb) return ta - tb;
+            }
+            return (a.routeOrder || 0) - (b.routeOrder || 0);
+          });
           const routeObj = routePoints[0]?.route;
           const routeName = routeObj ? routeObj.name : "Без маршрута";
           const routeLink = routeObj?.link ?? null;
@@ -438,7 +458,7 @@ const syncPendingStatuses = async () => {
                         return (
                           <div style={{ marginTop: 8, padding: "4px 8px", background: "var(--color-ok-bg)", border: "1px solid #a7f3d0", borderRadius: 6, display: "inline-flex", gap: 6, alignItems: "center" }}>
                             <span style={{ fontSize: 12 }}>✅</span>
-                            <div style={{ fontSize: 11, color: "#065f46", fontWeight: 700 }}>Забрал с базы в {pickedUpTimeStr}</div>
+                            <div style={{ fontSize: 11, color: "var(--color-ok-text)", fontWeight: 700 }}>Забрал с базы в {pickedUpTimeStr}</div>
                           </div>
                         );
                       }
@@ -454,7 +474,7 @@ const syncPendingStatuses = async () => {
                               setAcknowledgedTimes(prev => ({ ...prev, [routeName]: plannedTime }));
                             }}
                             style={{
-                              marginTop: 8, padding: "4px 10px", background: "#facc15", border: "1px solid #eab308",
+                              marginTop: 8, padding: "4px 10px", background: "var(--color-warn-bg-2)", border: "1px solid var(--color-warn-border)",
                               borderRadius: 6, display: "inline-flex", gap: 6, alignItems: "center", cursor: "pointer",
                               boxShadow: "0 2px 8px rgba(250,204,21,0.5)", transition: "0.2s"
                             }}
@@ -496,7 +516,7 @@ const syncPendingStatuses = async () => {
                           {routeUrl && !isAllDelivered && (
                             <a href={routeUrl} target="_blank" rel="noopener noreferrer"
                               onClick={e => e.stopPropagation()}
-                              style={{ fontSize: 12, background: "#facc15", color: "var(--color-text)", padding: "6px 12px", borderRadius: 8, textDecoration: "none", fontWeight: 800, whiteSpace: "nowrap", boxShadow: "0 2px 4px rgba(250,204,21,0.2)" }}
+                              style={{ fontSize: 12, background: "var(--color-warn-bg-2)", color: "var(--color-warn-text)", padding: "6px 12px", borderRadius: 8, textDecoration: "none", fontWeight: 800, whiteSpace: "nowrap", boxShadow: "var(--color-btn-shadow)" }}
                             >
                               📍 Маршрут
                             </a>
@@ -881,7 +901,7 @@ const syncPendingStatuses = async () => {
                             </div>
 
                             {o.comment && (
-                              <div style={{ background: "#fdf8f6", borderRadius: 8, padding: 10, border: "1px solid #fce8e3", marginBottom: opComment ? 8 : 0 }}>
+                              <div style={{ background: "var(--color-danger-bg)", borderRadius: 8, padding: 10, border: "1px solid var(--color-danger-border)", marginBottom: opComment ? 8 : 0 }}>
                                 <div style={{ fontSize: 12, color: "#d94040", fontWeight: 600 }}>
                                   ⚠ {o.comment}
                                 </div>

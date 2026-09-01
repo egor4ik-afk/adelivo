@@ -7,6 +7,7 @@ import { updateCrmOrder, updateCrmOrderDeliveryPrice } from "@/lib/crm";
 import { OrderStatus } from "@prisma/client";
 import { applyUniversalEtaShift } from "@/lib/eta";
 import { notify, createManagerPlaque } from "@/lib/notifications";
+import { recalcRouteOfOrder } from "@/lib/route-order";
 
 const STORE_COORDS = "55.749511,37.596205";
 
@@ -345,6 +346,13 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     const statusChanged = body.status !== undefined && order.status !== body.status;
     if (statusChanged && (body.status === "IN_DELIVERY" || body.status === "DELIVERED")) {
       await applyUniversalEtaShift(id, body.status, body.eta);
+    }
+
+    // Точку закрыли — пересобираем порядок маршрута.
+    // Если доставили не первую, она встаёт наверх, а остальные
+    // перенумеровываются от неё: сначала ближайшее временное окно, потом близость.
+    if (statusChanged && ["DELIVERED", "RETURNED", "CANCELLED"].includes(body.status)) {
+      await recalcRouteOfOrder(id);
     }
 
     const tgToken = process.env.TELEGRAM_BOT_TOKEN;

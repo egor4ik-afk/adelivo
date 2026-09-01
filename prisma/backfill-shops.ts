@@ -1,14 +1,17 @@
 // prisma/backfill-shops.ts
-// Разовый скрипт: заводит компанию, магазины и проставляет shopId существующим заказам.
-// Запуск: npx tsx prisma/backfill-shops.ts
+// Разделение на компании: заводит компанию «Банч», магазины и раскладывает
+// по ним всё существующее — пользователей, курьеров и заказы.
 //
-// Идемпотентен — можно гонять повторно, ничего не задвоится.
+// Запуск: npx tsx prisma/backfill-shops.ts
+// Идемпотентен: можно гонять повторно, ничего не задвоится и не перезапишется.
 
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-// Что сейчас реально лежит в Order.shop (см. lib/crm.ts: isMeura)
+const COMPANY = { slug: "bunch", name: "Банч" };
+
+// Значения, которые реально лежат в Order.shop
 const SHOPS = [
   { slug: "bunch", name: "Банч", connectorType: "RETAILCRM" },
   { slug: "kaktusfiori", name: "Meura (Kaktus Fiori)", connectorType: "RETAILCRM" },
@@ -17,13 +20,15 @@ const SHOPS = [
 ];
 
 async function main() {
-  // 1. Компания-владелец текущих магазинов
+  console.log("── Разделение на компании ──\n");
+
+  // 1. Компания
   const company = await prisma.company.upsert({
-    where: { slug: "bunch" },
+    where: { slug: COMPANY.slug },
     update: {},
-    create: { slug: "bunch", name: "Банч" },
+    create: COMPANY,
   });
-  console.log(`компания: ${company.name} → adelivo.ru/${company.slug}`);
+  console.log(`Компания: ${company.name} → adelivo.ru/join/${company.slug}`);
 
   // 2. Магазины
   for (const s of SHOPS) {
@@ -33,11 +38,11 @@ async function main() {
       create: { ...s, companyId: company.id },
     });
   }
-  const shops = await prisma.shop.findMany();
+  const shops = await prisma.shop.findMany({ where: { companyId: company.id } });
   const bySlug = new Map(shops.map((s) => [s.slug, s.id]));
-  console.log(`магазинов: ${shops.length}`);
+  console.log(`Магазинов: ${shops.length}`);
 
-  // 3. Заказы без shopId → привязываем по строковому shop
+  // 3. Заказы → магазины
   let linked = 0;
   for (const [slug, id] of bySlug) {
     const res = await prisma.order.updateMany({
@@ -48,44 +53,73 @@ async function main() {
     linked += res.count;
   }
 
-  // 4. Осиротевшие заказы (shop пустой или неизвестный) → в основной магазин
+  // Заказы с пустым или неизвестным shop уходят в основной магазин:
+  // без shopId матрица доступов их не увидит и они выпадут из выдачи
   const fallback = bySlug.get("bunch")!;
   const orphans = await prisma.order.updateMany({
     where: { shopId: null },
     data: { shopId: fallback },
   });
   if (orphans.count) console.log(`  без магазина → bunch: ${orphans.count}`);
-  console.log(`всего привязано заказов: ${linked + orphans.count}`);
+  console.log(`Всего заказов привязано: ${linked + orphans.count}`);
 
-  // 5. Существующие пользователи и курьеры → в компанию.
-  //    Матрицу доступов НЕ заполняем: по договорённости пока все видят всё,
-  //    ограничения включаются флагом accessRestricted у конкретного пользователя.
-  await prisma.user.updateMany({ where: { companyId: null }, data: { companyId: company.id } });
-
-  // 6. Первый ADMIN становится глобальным админом
-  const admin = await prisma.user.findFirst({
-    where: { role: "ADMIN" },
-    orderBy: { createdAt: "asc" },
+  // 4. Пользователи → компания.
+  //    accessRestricted не трогаем: он false, значит все видят все магазины,
+  //    как и раньше. Ограничения включаются точечно в /admin/access.
+  const users = await prisma.user.updateMany({
+    where: { companyId: null },
+    data: { companyId: company.id },
   });
-  if (admin && !admin.isSuperAdmin) {
-    await prisma.user.update({ where: { id: admin.id }, data: { isSuperAdmin: true } });
-    console.log(`глобальный админ: ${admin.email}`);
-  } else if (!admin) {
-    console.log("⚠️  ADMIN не найден — назначьте isSuperAdmin вручную, иначе в админку никто не войдёт");
+  console.log(`Пользователей привязано: ${users.count}`);
+
+  // 5. Курьеры → компания
+  const couriers = await prisma.courier.updateMany({
+    where: { companyId: null },
+    data: { companyId: company.id },
+  });
+  console.log(`Курьеров привязано: ${couriers.count}`);
+
+  // 6. Глобальный админ — иначе в /admin/access никто не войдёт
+  const supers = await prisma.user.count({ where: { isSuperAdmin: true } });
+  if (supers === 0) {
+    const admin = await prisma.user.findFirst({
+      where: { role: "ADMIN" },
+      orderBy: { createdAt: "asc" },
+    });
+    if (admin) {
+      await prisma.user.update({ where: { id: admin.id }, data: { isSuperAdmin: true } });
+      console.log(`Глобальный админ: ${admin.email}`);
+    } else {
+      console.log("⚠️  ADMIN не найден. Назначьте isSuperAdmin вручную:");
+      console.log('    UPDATE "User" SET "isSuperAdmin" = true WHERE email = \'ваша@почта\';');
+    }
+  } else {
+    console.log(`Глобальных админов уже есть: ${supers}`);
   }
 
-  // 7. Курьерам проставляем признак доступа к бирже
-  const ready = await prisma.courier.updateMany({
-    where: { isSelfEmployed: true, konsolContractorId: { not: null } },
-    data: { canTakeExchange: true },
+  // 7. Допуск к работе — разовая история для тех, кто УЖЕ возит заказы.
+  //    Дальше допуск выдаётся только вручную, галочкой в /admin/access.
+  //    Ни привязка Консоли, ни что-либо ещё его не выдаёт: Консоль отвечает
+  //    за выплаты, а не за право выходить на линию.
+  const approved = await prisma.courier.updateMany({
+    where: { isActive: true, isApproved: false },
+    data: { isApproved: true },
   });
-  console.log(`курьеров с доступом к бирже: ${ready.count}`);
+  if (approved.count) console.log(`Курьеров подтверждено (уже работали): ${approved.count}`);
+
+
+  // 8. Проверка
+  const left = await prisma.order.count({ where: { shopId: null } });
+  const noCompany = await prisma.user.count({ where: { companyId: null } });
+  console.log("\n── Проверка ──");
+  console.log(`Заказов без магазина: ${left} (должно быть 0)`);
+  console.log(`Пользователей без компании: ${noCompany} (должно быть 0)`);
 }
 
 /**
- * ID для курьера, который зарегистрировался сам (без CRM).
- * CRM выдаёт положительные id — свои берём из отрицательного диапазона,
- * чтобы они никогда не столкнулись.
+ * ID для курьера, который зарегистрировался сам, без CRM.
+ * CRM выдаёт положительные id, поэтому свои берём из отрицательного
+ * диапазона — столкнуться они не смогут.
  */
 export async function nextLocalCourierId(): Promise<number> {
   const min = await prisma.courier.aggregate({ _min: { id: true } });

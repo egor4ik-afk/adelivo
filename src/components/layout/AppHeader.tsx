@@ -44,6 +44,7 @@ export function AppHeader() {
                 <li><Link href="/integracii">Интеграции</Link></li>
                 <li><Link href="/keysy">Кейсы</Link></li>
                 <li><Link href="/#pricing">Тарифы</Link></li>
+                  <li><Link href="/register-company">Для компаний</Link></li>
                 <li><Link href="/stat-kurerom" style={{ color: "var(--ew-green)", fontWeight: 700 }}>Стать курьером</Link></li>
               </ul>
             </nav>

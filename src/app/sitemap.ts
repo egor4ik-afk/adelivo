@@ -18,6 +18,7 @@ const pages: Entry[] = [
   { path: "/design", priority: 0.5, changeFrequency: "monthly" }, // мокап
 
   // Пилларные посадочные
+  { path: "/register-company", priority: 0.9, changeFrequency: "monthly" },
   { path: "/sistema-upravleniya-kurerami", priority: 0.9, changeFrequency: "weekly" },
   { path: "/ai-marshrutizaciya", priority: 0.9, changeFrequency: "weekly" },
   { path: "/pochemu-my", priority: 0.8, changeFrequency: "monthly" },

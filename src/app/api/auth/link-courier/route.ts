@@ -137,6 +137,9 @@ export async function POST(request: Request) {
           phone,
           email: user.email,
           isActive: true,
+          // Профиль создаётся сам при регистрации, поэтому на линию
+          // курьер выходит только после подтверждения в админке
+          isApproved: false,
         }
       });
 
