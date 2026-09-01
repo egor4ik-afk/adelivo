@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { getViewer, userScope } from "@/lib/access";
 import { notify } from "@/lib/notifications";
 
 export async function GET(req: NextRequest) {
@@ -13,12 +14,20 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(parseInt(searchParams.get("limit") ?? "30"), 100);
   const before = searchParams.get("before");
 
+  // Общий чат был общим на всю систему: сотрудник новой компании читал
+  // переписку Банча и наоборот. Сообщение принадлежит компании через автора.
+  const viewer = await getViewer(req);
+  const scope = viewer ? { sender: userScope(viewer) } : {};
+
   const messages = await prisma.globalMessage.findMany({
-    where: before ? {
-      createdAt: {
-        lt: (await prisma.globalMessage.findUnique({ where: { id: before }, select: { createdAt: true } }))?.createdAt ?? new Date(),
-      }
-    } : {},
+    where: {
+      ...scope,
+      ...(before ? {
+        createdAt: {
+          lt: (await prisma.globalMessage.findUnique({ where: { id: before }, select: { createdAt: true } }))?.createdAt ?? new Date(),
+        }
+      } : {}),
+    },
     orderBy: { createdAt: "desc" },
     take: limit,
     include: {

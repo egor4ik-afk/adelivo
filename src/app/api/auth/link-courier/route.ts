@@ -95,14 +95,33 @@ export async function POST(request: Request) {
 
       console.log(`[LinkCourier] Профиль найден и обновлён: ${standardFullName} (ID ${courier.id})`);
     } else {
-      // Профиль не найден — создаём в CRM и у нас
+      // Профиль не найден — создаём.
+      //
+      // Раньше КАЖДЫЙ новый курьер уезжал в RetailCRM Банча: ключ брался
+      // из общих переменных окружения независимо от того, к какой компании
+      // человек относится. Теперь в CRM отправляем только тогда, когда
+      // у компании курьера есть хотя бы один магазин на RetailCRM.
+      // У остальных курьер живёт только у нас, а в CRM попадёт позже,
+      // когда компания подключит магазин.
+      const account = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { companyId: true },
+      });
+
+      const crmShop = account?.companyId
+        ? await prisma.shop.findFirst({
+            where: { companyId: account.companyId, connectorType: "RETAILCRM" },
+            select: { id: true },
+          })
+        : null;
+
       const crmUrl = process.env.RETAILCRM_API_URL;
       const crmKey = process.env.RETAILCRM_API_KEY;
+      const pushToCrm = !!crmShop && !!crmUrl && !!crmKey;
 
-      if (!crmUrl || !crmKey) {
-        throw new Error("Не настроены ключи RetailCRM");
-      }
+      let crmCourierId: number | null = null;
 
+      if (pushToCrm) {
       const courierPayload = {
         firstName: cleanFirstName,
         lastName: cleanLastName,
@@ -128,9 +147,21 @@ export async function POST(request: Request) {
         throw new Error(`Ошибка CRM: ${crmData.errorMsg} ` + JSON.stringify(crmData.errors || {}));
       }
 
+      crmCourierId = crmData.id;
+      }
+
+      // Идентификатор без CRM берём из отрицательного диапазона: CRM выдаёт
+      // положительные, поэтому столкнуться они не могут никогда.
+      if (crmCourierId === null) {
+        const min = await prisma.courier.aggregate({ _min: { id: true } });
+        const current = min._min.id ?? 0;
+        crmCourierId = current > 0 ? -1 : current - 1;
+      }
+
       courier = await prisma.courier.create({
         data: {
-          id: crmData.id,
+          id: crmCourierId,
+          companyId: account?.companyId ?? null,
           firstName: cleanFirstName,
           lastName: cleanLastName,
           fullName: standardFullName,
@@ -143,7 +174,10 @@ export async function POST(request: Request) {
         }
       });
 
-      console.log(`[LinkCourier] Новый профиль создан: ${standardFullName} (ID ${courier.id})`);
+      console.log(
+        `[LinkCourier] Новый профиль создан: ${standardFullName} (ID ${courier.id})` +
+        (pushToCrm ? " — отправлен в RetailCRM" : " — только в нашей системе, магазина на RetailCRM у компании нет")
+      );
     }
 
     const eventType = profileFound ? "Курьер авторизовался" : "Новый курьер зарегистрировался";
