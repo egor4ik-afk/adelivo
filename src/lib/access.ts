@@ -1,11 +1,20 @@
 // src/lib/access.ts
-// Единая точка правды по доступу к магазинам.
-// Правило одно: суперадмин видит всё, остальные — то, что отмечено галочками,
-// но только если у пользователя включён accessRestricted.
+// Доступ определяется МАТРИЦЕЙ, а не компанией.
 //
-// Пока accessRestricted = false у всех — поведение ровно такое же, как сейчас
-// (все видят все заказы). Ограничения включаются по одному пользователю,
-// поэтому раскатка не ломает работающий кабинет.
+// Было: companyId жёстко резал всё, а галочки лишь сужали доступ внутри
+// компании. Из-за этого «снять галочку» работало только на заказах,
+// а всё остальное всё равно упиралось в companyId.
+//
+// Стало — две разные вещи, и их важно не путать:
+//
+//   ShopAccess  — ЧТО видно: заказы, курьеры, маршруты, чат.
+//                 Источник правды. Нет строк — нет данных.
+//   companyId   — ОТКУДА человек пришёл: по чьей ссылке зарегистрировался.
+//                 Нужен для админки (кем можно управлять) и для решения,
+//                 отправлять ли курьера в CRM. На видимость данных не влияет.
+//
+// Практическое следствие: чтобы дать сотруднику доступ к магазину другой
+// компании, достаточно поставить галочку. Раньше это было невозможно.
 
 import { prisma } from "./prisma";
 import { getSession } from "./auth";
@@ -16,7 +25,7 @@ export type Viewer = {
   email: string;
   role: string;
   isSuperAdmin: boolean;
-  accessRestricted: boolean;
+  accessRestricted: boolean; // устарело, оставлено для совместимости схемы
   companyId: string | null;
 };
 
@@ -36,61 +45,100 @@ export async function getViewer(req?: NextRequest): Promise<Viewer | null> {
 }
 
 /**
- * Список id магазинов, доступных пользователю.
- * null означает «ограничений нет» — это НЕ то же самое, что пустой массив.
- * Пустой массив = не видит ничего.
+ * Магазины, доступные пользователю.
+ * null — ограничений нет (глобальный админ).
+ * Пустой массив — доступа нет ни к чему.
  */
 export async function visibleShopIds(viewer: Viewer): Promise<string[] | null> {
-  // Глобальный админ видит всё
   if (viewer.isSuperAdmin) return null;
-
-  // Пользователь без компании не видит ничего. Это про курьера, который
-  // зарегистрировался сам, не по ссылке-приглашению: он в системе есть,
-  // но ни к какой компании не относится, и чужие заказы ему показывать нельзя.
-  if (!viewer.companyId) return [];
-
-  // Граница компании — жёсткая и не зависит от галочек. Раньше проверялся
-  // только accessRestricted, а он по умолчанию false — из-за этого
-  // сотрудник новой компании видел заказы всех остальных.
-  const companyShops = await prisma.shop.findMany({
-    where: { companyId: viewer.companyId },
-    select: { id: true },
-  });
-  const companyIds = companyShops.map((s) => s.id);
-
-  // Внутри своей компании галочки сужают доступ ещё сильнее
-  if (!viewer.accessRestricted) return companyIds;
 
   const rows = await prisma.shopAccess.findMany({
     where: { userId: viewer.id },
     select: { shopId: true },
   });
-  const allowed = new Set(rows.map((r) => r.shopId));
-  return companyIds.filter((id) => allowed.has(id));
+  return rows.map((r) => r.shopId);
 }
 
 /**
- * Кусок where для запросов к заказам.
- * Использование:
- *   const where = { ...restOfFilters, ...(await shopFilter(viewer)) };
+ * Компании, к магазинам которых есть доступ.
+ * Через них ограничиваются сущности, у которых своего магазина нет:
+ * курьеры, маршруты, плашки менеджера.
  */
+export async function accessibleCompanyIds(viewer: Viewer): Promise<string[] | null> {
+  if (viewer.isSuperAdmin) return null;
+
+  const shopIds = await visibleShopIds(viewer);
+  if (!shopIds || shopIds.length === 0) return [];
+
+  const shops = await prisma.shop.findMany({
+    where: { id: { in: shopIds } },
+    select: { companyId: true },
+  });
+  return [...new Set(shops.map((s) => s.companyId).filter(Boolean) as string[])];
+}
+
+/** Кусок where для заказов. */
 export async function shopFilter(viewer: Viewer): Promise<Record<string, unknown>> {
   const ids = await visibleShopIds(viewer);
   if (ids === null) return {};
-  if (ids.length === 0) return { shopId: { in: [] as string[] } }; // ничего не отдаём
   return { shopId: { in: ids } };
 }
 
-/** Может ли пользователь смотреть конкретный магазин. */
-export async function canViewShop(viewer: Viewer, shopId: string): Promise<boolean> {
-  const ids = await visibleShopIds(viewer);
-  return ids === null || ids.includes(shopId);
+/** Кусок where для курьеров. */
+export async function courierScope(viewer: Viewer): Promise<Record<string, unknown>> {
+  const companies = await accessibleCompanyIds(viewer);
+  if (companies === null) return {};
+  return { companyId: { in: companies } };
 }
 
-/** Может ли редактировать заказы магазина (галочка canEdit в матрице). */
+/** Идентификаторы курьеров, доступных пользователю. */
+export async function accessibleCourierIds(viewer: Viewer): Promise<number[] | null> {
+  const companies = await accessibleCompanyIds(viewer);
+  if (companies === null) return null;
+  if (companies.length === 0) return [];
+
+  const rows = await prisma.courier.findMany({
+    where: { companyId: { in: companies } },
+    select: { id: true },
+  });
+  return rows.map((r) => r.id);
+}
+
+/**
+ * Кусок where для списков людей в рабочих разделах (чат, поиск сотрудников).
+ * Виден тот, с кем есть хотя бы один общий магазин — это и есть «коллега».
+ */
+export async function coworkerScope(viewer: Viewer): Promise<Record<string, unknown>> {
+  if (viewer.isSuperAdmin) return {};
+
+  const shopIds = await visibleShopIds(viewer);
+  if (!shopIds || shopIds.length === 0) return { id: { in: [] as string[] } };
+
+  return { shopAccess: { some: { shopId: { in: shopIds } } } };
+}
+
+/**
+ * Кусок where для АДМИНКИ: кем можно управлять.
+ * Здесь companyId уместен — управление людьми идёт по принадлежности,
+ * а не по совпадению магазинов. Иначе новый сотрудник без единой галочки
+ * был бы не виден тому, кто должен эти галочки ему поставить.
+ */
+export function adminUserScope(viewer: Viewer): Record<string, unknown> {
+  if (viewer.isSuperAdmin) return {};
+  if (!viewer.companyId) return { id: { in: [] as string[] } };
+  return { companyId: viewer.companyId };
+}
+
+/** То же для курьеров в админке. */
+export function adminCourierScope(viewer: Viewer): Record<string, unknown> {
+  if (viewer.isSuperAdmin) return {};
+  if (!viewer.companyId) return { id: { in: [] as number[] } };
+  return { companyId: viewer.companyId };
+}
+
+/** Может ли редактировать заказы магазина. */
 export async function canEditShop(viewer: Viewer, shopId: string): Promise<boolean> {
   if (viewer.isSuperAdmin) return true;
-  if (!viewer.accessRestricted) return true;
   const row = await prisma.shopAccess.findUnique({
     where: { userId_shopId: { userId: viewer.id, shopId } },
     select: { canEdit: true },
@@ -98,21 +146,21 @@ export async function canEditShop(viewer: Viewer, shopId: string): Promise<boole
   return !!row?.canEdit;
 }
 
-/** Проверка доступа к заказу — по магазину, к которому он привязан. */
+/** Доступ к конкретному заказу — по его магазину. */
 export async function canViewOrder(viewer: Viewer, orderId: string): Promise<boolean> {
   const ids = await visibleShopIds(viewer);
   if (ids === null) return true;
+
   const order = await prisma.order.findUnique({
     where: { id: orderId },
     select: { shopId: true },
   });
-  // Заказ без магазина показываем только глобальному админу: до бэкфилла
-  // это была «ничья» запись, и отдавать её всем подряд нельзя
-  if (!order?.shopId) return viewer.isSuperAdmin;
+  // Заказ без магазина — «ничей», его видит только глобальный админ
+  if (!order?.shopId) return false;
   return ids.includes(order.shopId);
 }
 
-/** Только для глобальной админки. Бросает, если прав нет. */
+/** Только для глобальной админки. */
 export async function requireSuperAdmin(req?: NextRequest): Promise<Viewer> {
   const viewer = await getViewer(req);
   if (!viewer) throw new AccessError("Unauthorized", 401);
@@ -120,26 +168,21 @@ export async function requireSuperAdmin(req?: NextRequest): Promise<Viewer> {
   return viewer;
 }
 
-/**
- * Админка доступов: пускаем и глобального админа, и локального.
- *
- * Глобальный видит всех, локальный — только свою компанию. Это важно
- * для самостоятельных компаний: без этого владелец не смог бы ни допустить
- * своего курьера к работе, ни раздать доступы к магазинам, и любая мелочь
- * упиралась бы в нас.
- */
+/** Админка доступов: глобальный админ и админ компании. */
 export async function requireAdminScope(req?: NextRequest): Promise<{
   viewer: Viewer;
-  /** Кусок where для выборок: пусто у глобального, компания у локального. */
-  scope: { companyId?: string };
+  scope: Record<string, unknown>;
+  courierScopeWhere: Record<string, unknown>;
 }> {
   const viewer = await getViewer(req);
   if (!viewer) throw new AccessError("Unauthorized", 401);
 
-  if (viewer.isSuperAdmin) return { viewer, scope: {} };
-
-  if (viewer.role === "ADMIN" && viewer.companyId) {
-    return { viewer, scope: { companyId: viewer.companyId } };
+  if (viewer.isSuperAdmin || (viewer.role === "ADMIN" && viewer.companyId)) {
+    return {
+      viewer,
+      scope: adminUserScope(viewer),
+      courierScopeWhere: adminCourierScope(viewer),
+    };
   }
 
   throw new AccessError("Недостаточно прав", 403);
@@ -149,14 +192,48 @@ export async function requireAdminScope(req?: NextRequest): Promise<{
 export async function canManageUser(viewer: Viewer, userId: string): Promise<boolean> {
   if (viewer.isSuperAdmin) return true;
   if (viewer.role !== "ADMIN" || !viewer.companyId) return false;
+
   const target = await prisma.user.findUnique({
     where: { id: userId },
     select: { companyId: true, isSuperAdmin: true },
   });
-  // Локальный админ не может трогать глобального — иначе он смог бы
-  // снять с него флаг и остаться единственным хозяином системы
+  // Локальный админ не трогает глобального — иначе снял бы с него флаг
   if (!target || target.isSuperAdmin) return false;
   return target.companyId === viewer.companyId;
+}
+
+/**
+ * Выдать пользователю доступ ко всем магазинам компании.
+ * Вызывается при входе по ссылке-приглашению и при создании магазина —
+ * иначе новый сотрудник или новый магазин остаются невидимыми.
+ */
+export async function grantCompanyShops(userId: string, companyId: string): Promise<number> {
+  const shops = await prisma.shop.findMany({
+    where: { companyId },
+    select: { id: true },
+  });
+  if (shops.length === 0) return 0;
+
+  const res = await prisma.shopAccess.createMany({
+    data: shops.map((s) => ({ userId, shopId: s.id })),
+    skipDuplicates: true,
+  });
+  return res.count;
+}
+
+/** Выдать доступ к новому магазину всем сотрудникам компании. */
+export async function grantShopToCompany(shopId: string, companyId: string): Promise<number> {
+  const users = await prisma.user.findMany({
+    where: { companyId },
+    select: { id: true },
+  });
+  if (users.length === 0) return 0;
+
+  const res = await prisma.shopAccess.createMany({
+    data: users.map((u) => ({ userId: u.id, shopId })),
+    skipDuplicates: true,
+  });
+  return res.count;
 }
 
 export class AccessError extends Error {
@@ -164,35 +241,4 @@ export class AccessError extends Error {
     super(message);
     this.name = "AccessError";
   }
-}
-
-/* ─── Границы компании для остальных сущностей ────────────────
-   Магазины закрыты через shopFilter, но по компании делятся ещё
-   пользователи, курьеры, маршруты и уведомления. Правило то же:
-   глобальный админ видит всё, сотрудник — свою компанию,
-   пользователь без компании — ничего.                            */
-
-/** Кусок where для выборок пользователей. */
-export function userScope(viewer: Viewer): Record<string, unknown> {
-  if (viewer.isSuperAdmin) return {};
-  if (!viewer.companyId) return { id: { in: [] as string[] } };
-  return { companyId: viewer.companyId };
-}
-
-/** Кусок where для выборок курьеров. */
-export function courierScope(viewer: Viewer): Record<string, unknown> {
-  if (viewer.isSuperAdmin) return {};
-  if (!viewer.companyId) return { id: { in: [] as number[] } };
-  return { companyId: viewer.companyId };
-}
-
-/** Идентификаторы курьеров компании — для фильтров по courierId. */
-export async function companyCourierIds(viewer: Viewer): Promise<number[] | null> {
-  if (viewer.isSuperAdmin) return null;
-  if (!viewer.companyId) return [];
-  const rows = await prisma.courier.findMany({
-    where: { companyId: viewer.companyId },
-    select: { id: true },
-  });
-  return rows.map((r) => r.id);
 }

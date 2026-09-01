@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { geocodeAddress } from "@/lib/crm";
+import { getViewer, canViewOrder } from "@/lib/access";
 import OpenAI from "openai";
 
 const YANDEX_CLOUD_FOLDER = process.env.YANDEX_CLOUD_FOLDER || "b1gcr5m4ptniag2qpsqm";
@@ -21,6 +22,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { id } = await params;
     const body = await req.json();
     const { mode, manualAddress } = body;
+
+    // Эндпоинт правит адрес заказа и жжёт токены AI, а проверки не было
+    // вообще: по чужому id можно было и посмотреть заказ, и переписать адрес.
+    const viewer = await getViewer();
+    if (!viewer) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!(await canViewOrder(viewer, id))) {
+      return NextResponse.json({ error: "Заказ недоступен" }, { status: 403 });
+    }
 
     const order = await prisma.order.findUnique({ where: { id } });
     if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });

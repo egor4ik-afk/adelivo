@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getViewer, companyCourierIds } from '@/lib/access';
+import { getViewer, accessibleCourierIds } from '@/lib/access';
 import type { NextRequest } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     // Через список курьеров компании и отсекаем чужие плашки.
     // Записи без курьера (UNASSIGNED) видит только глобальный админ:
     // понять, чьи они, по самой записи невозможно.
-    const courierIds = await companyCourierIds(viewer);
+    const courierIds = await accessibleCourierIds(viewer);
     const scope = courierIds === null
       ? {}
       : { courierId: { in: courierIds.map(String) } };

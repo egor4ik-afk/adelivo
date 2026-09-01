@@ -64,6 +64,7 @@ export function CourierNav({ currentUserId }: { currentUserId: string }) {
   const navItems = [
     { href: "/courier/points", icon: "📍", label: "Карта" },
     { href: "/courier/routes", icon: "📋", label: "Маршруты" },
+    { href: "/courier/exchange", icon: "🌐", label: "Биржа" },
     { href: "/courier/profile", icon: "👤", label: "Профиль" },
   ];
 

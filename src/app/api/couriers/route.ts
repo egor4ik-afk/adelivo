@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     const toStr   = to.toISOString().split("T")[0];
 
     const couriers = await prisma.courier.findMany({
-      where: courierScope(viewer),
+      where: await courierScope(viewer),
       include: {
         shifts: {
           where: { date: { gte: fromStr, lte: toStr } },

@@ -4,6 +4,7 @@
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { grantCompanyShops } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,9 @@ export default async function JoinPage({
     if (full && !full.companyId) {
       await prisma.user.update({ where: { id: user.id }, data: { companyId: company.id } });
     }
+    // Доступ к магазинам выдаём при каждом заходе по ссылке: человек мог
+    // зарегистрироваться раньше, а магазины появиться позже
+    await grantCompanyShops(user.id, company.id);
     redirect(full?.role === "COURIER" ? "/courier/routes" : "/dashboard");
   }
 

@@ -1,7 +1,7 @@
 // src/app/api/chat/users/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getViewer, userScope } from "@/lib/access";
+import { getViewer, coworkerScope } from "@/lib/access";
 
 export async function GET(req: NextRequest) {
   const session = await getViewer(req);
@@ -12,9 +12,10 @@ export async function GET(req: NextRequest) {
   const users = await prisma.user.findMany({
     where: {
       id: { not: session.id },
-      // Переписываться можно только внутри своей компании: иначе через
-      // поиск чата видны имена, почты и телефоны чужих сотрудников
-      ...userScope(session),
+      // Коллега — тот, с кем есть хотя бы один общий магазин.
+      // Привязка к companyId здесь не годится: доступ теперь даёт матрица,
+      // и человек может работать с магазином другой компании.
+      ...(await coworkerScope(session)),
       ...(q ? {
         OR: [
           { firstName: { contains: q, mode: "insensitive" } },

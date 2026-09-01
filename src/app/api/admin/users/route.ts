@@ -1,7 +1,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getViewer, userScope, canManageUser } from '@/lib/access';
+import { getViewer, adminUserScope, canManageUser } from '@/lib/access';
 import type { NextRequest } from 'next/server';
 // GET: Получить всех пользователей для таблицы в админке
 export async function GET(req: NextRequest) {
@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
 
     // ВНИМАНИЕ: Если модель называется не user, замени prisma.user на свою (например, prisma.courier)
     const users = await prisma.user.findMany({
-      where: userScope(viewer),
+      where: adminUserScope(viewer),
       select: { id: true, firstName: true, lastName: true, email: true, phone: true, role: true, companyId: true },
       orderBy: { createdAt: 'desc' }
     });

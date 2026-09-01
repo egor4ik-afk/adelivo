@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getViewer, type Viewer } from "@/lib/access";
 import { testConnector, type ConnectorType } from "@/lib/connectors";
+import { grantShopToCompany } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -64,7 +65,11 @@ export async function POST(req: NextRequest) {
       include: { connector: true },
     });
 
-    return NextResponse.json({ ok: true, shop });
+    // Без этого новый магазин не увидел бы никто, включая создателя:
+    // доступ живёт в матрице, а строк для него ещё нет
+    const granted = await grantShopToCompany(shop.id, viewer.companyId!);
+
+    return NextResponse.json({ ok: true, shop, granted });
   } catch (e) {
     console.error("[company/shops POST]", e);
     return NextResponse.json({ error: "Не удалось создать магазин" }, { status: 500 });

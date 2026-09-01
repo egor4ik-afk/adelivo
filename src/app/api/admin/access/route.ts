@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 /** GET — вся матрица разом: пользователи, магазины, отмеченные галочки. */
 export async function GET(req: NextRequest) {
   try {
-    const { scope } = await requireAdminScope(req);
+    const { scope, courierScopeWhere } = await requireAdminScope(req);
 
     const [users, shops, access, couriers] = await Promise.all([
       prisma.user.findMany({
@@ -21,14 +21,14 @@ export async function GET(req: NextRequest) {
         orderBy: [{ role: "asc" }, { email: "asc" }],
       }),
       prisma.shop.findMany({
-        where: scope,
+        where: scope.companyId ? { companyId: scope.companyId } : {},
         select: { id: true, slug: true, name: true, isActive: true, companyId: true },
         orderBy: { name: "asc" },
       }),
       prisma.shopAccess.findMany({ select: { userId: true, shopId: true, canEdit: true } }),
       // Профили курьеров: связь с пользователем по email, как и во всём остальном коде
       prisma.courier.findMany({
-        where: scope,
+        where: courierScopeWhere,
         select: { id: true, email: true, fullName: true, isApproved: true, isActive: true },
       }),
     ]);
@@ -47,12 +47,11 @@ export async function GET(req: NextRequest) {
  * PATCH — переключение одной галочки или флага пользователя.
  * Тело: { userId, shopId, checked }        — галочка доступа
  *       { userId, shopId, canEdit }        — право редактирования
- *       { userId, accessRestricted }       — включить ограничения для пользователя
  *       { userId, isSuperAdmin }           — сделать глобальным админом
  */
 export async function PATCH(req: NextRequest) {
   try {
-    const { viewer, scope } = await requireAdminScope(req);
+    const { viewer } = await requireAdminScope(req);
     const b = await req.json();
 
     if (!b.userId) {
@@ -83,15 +82,6 @@ export async function PATCH(req: NextRequest) {
           { status: 400 }
         );
       }
-      return NextResponse.json({ ok: true });
-    }
-
-    // Флаги пользователя
-    if (b.accessRestricted !== undefined) {
-      await prisma.user.update({
-        where: { id: b.userId },
-        data: { accessRestricted: !!b.accessRestricted },
-      });
       return NextResponse.json({ ok: true });
     }
 
@@ -138,36 +128,10 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // Пока у пользователя accessRestricted = false, он видит все магазины
-    // своей компании, а строк в матрице у него нет. Первое снятие галочки
-    // должно означать «ограничить»: включаем режим и выдаём доступ ко всем
-    // магазинам, КРОМЕ снятого. Иначе снятие галочки выглядело бы как
-    // «ничего не изменилось» — ровно то, на что вы наткнулись.
-    const target = await prisma.user.findUnique({
-      where: { id: b.userId },
-      select: { accessRestricted: true, companyId: true },
-    });
-
-    if (!target?.accessRestricted && !b.checked) {
-      const shops = await prisma.shop.findMany({
-        where: target?.companyId ? { companyId: target.companyId } : {},
-        select: { id: true },
-      });
-
-      await prisma.$transaction([
-        prisma.user.update({ where: { id: b.userId }, data: { accessRestricted: true } }),
-        prisma.shopAccess.deleteMany({ where: { userId: b.userId } }),
-        prisma.shopAccess.createMany({
-          data: shops
-            .filter((s) => s.id !== b.shopId)
-            .map((s) => ({ userId: b.userId, shopId: s.id })),
-          skipDuplicates: true,
-        }),
-      ]);
-
-      return NextResponse.json({ ok: true, restrictedNow: true });
-    }
-
+    // Галочка — это ровно строка в ShopAccess, и ничего больше.
+    // Прежняя схема с accessRestricted убрана: она означала, что до первого
+    // снятия галочки матрица вообще не действовала, и доступ по факту
+    // определялся companyId. Теперь источник правды один.
     if (b.checked) {
       await prisma.shopAccess.upsert({
         where: { userId_shopId: { userId: b.userId, shopId: b.shopId } },

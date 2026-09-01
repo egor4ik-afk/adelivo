@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 type User = {
   id: string; email: string; role: string;
   firstName: string | null; lastName: string | null;
-  isSuperAdmin: boolean; accessRestricted: boolean;
+  isSuperAdmin: boolean; accessRestricted?: boolean;
   companyId: string | null; lastLoginAt: string | null;
 };
 type Shop = { id: string; slug: string; name: string; isActive: boolean };
@@ -84,22 +84,13 @@ export function AccessMatrix() {
   };
 
   const toggleShop = async (userId: string, shopId: string) => {
-    const user = users.find((x) => x.id === userId);
-    const wasUnrestricted = user && !user.accessRestricted;
-    const checked = wasUnrestricted ? false : !has(userId, shopId);
-
+    const checked = !has(userId, shopId);
+    setAccess((p) =>
+      checked
+        ? [...p, { userId, shopId, canEdit: true }]
+        : p.filter((a) => !(a.userId === userId && a.shopId === shopId))
+    );
     const ok = await patch({ userId, shopId, checked }, `${userId}:${shopId}`);
-    // Сервер мог заодно включить режим ограничений и создать строки
-    // по остальным магазинам, поэтому перечитываем состояние целиком,
-    // а не подкручиваем его на клиенте.
-    load();
-    if (!ok) return;
-  };
-
-  const toggleRestricted = async (u: User) => {
-    const next = !u.accessRestricted;
-    setUsers((p) => p.map((x) => (x.id === u.id ? { ...x, accessRestricted: next } : x)));
-    const ok = await patch({ userId: u.id, accessRestricted: next }, `r:${u.id}`);
     if (!ok) load();
   };
 
@@ -107,7 +98,7 @@ export function AccessMatrix() {
     const c = courierOf(u.email);
     if (!c) return;
     const next = !c.isApproved;
-    setCouriers(p => p.map(x => (x.id === c.id ? { ...x, isApproved: next } : x)));
+    setCouriers((p) => p.map((x) => (x.id === c.id ? { ...x, isApproved: next } : x)));
     const ok = await patch({ userId: u.id, courierApproved: next }, `w:${u.id}`);
     if (!ok) load();
   };
@@ -175,7 +166,6 @@ export function AccessMatrix() {
                   Сотрудник
                 </th>
                 <th className="px-3 py-3 font-bold text-[var(--color-text)] whitespace-nowrap">Работа</th>
-                <th className="px-3 py-3 font-bold text-[var(--color-text)] whitespace-nowrap">Ограничить</th>
                 {shops.map((s) => (
                   <th key={s.id} className="px-3 py-3 font-bold text-[var(--color-text)] whitespace-nowrap text-center">
                     {s.name}
@@ -188,7 +178,6 @@ export function AccessMatrix() {
             <tbody>
               {shown.map((u) => {
                 const roleConf = ROLES[u.role] ?? { label: u.role, cls: "bg-gray-100 text-gray-700" };
-                const unrestricted = !u.accessRestricted || u.isSuperAdmin;
                 return (
                   <tr key={u.id} className="border-t border-[var(--color-border)] hover:bg-[var(--color-surface)]">
                     <td className="px-4 py-3 sticky left-0 bg-[var(--color-card)] z-10">
@@ -229,42 +218,22 @@ export function AccessMatrix() {
                       )}
                     </td>
 
-                    {/* Включить ограничения */}
-                    <td className="px-3 py-3 text-center">
-                      <button
-                        onClick={() => toggleRestricted(u)}
-                        disabled={u.isSuperAdmin || saving === `r:${u.id}`}
-                        title={u.isSuperAdmin ? "Глобальный админ видит всё" : "Ограничить доступ галочками"}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
-                          u.isSuperAdmin
-                            ? "border-[var(--color-border)] text-[var(--color-text-3)] cursor-not-allowed"
-                            : u.accessRestricted
-                            ? "border-orange-200 bg-orange-50 text-orange-700"
-                            : "border-[var(--color-border)] text-[var(--color-text-3)] hover:border-[var(--color-accent)]"
-                        }`}
-                      >
-                        {u.accessRestricted ? "по галочкам" : "видит всё"}
-                      </button>
-                    </td>
-
                     {/* Галочки по магазинам */}
                     {shops.map((s) => (
                       <td key={s.id} className="px-3 py-3 text-center">
                         <input
                           type="checkbox"
-                          checked={unrestricted ? true : has(u.id, s.id)}
-                          // Галочки больше не блокируются: снятие любой из них
-                          // само переводит пользователя в режим ограничений.
-                          // Блокируем только для глобального админа — он по
-                          // определению видит всё, и матрица на него не влияет.
+                          // Галочка — ровно строка в ShopAccess.
+                          // Блокируем только у глобального админа: он вне матрицы.
+                          checked={u.isSuperAdmin ? true : has(u.id, s.id)}
                           disabled={u.isSuperAdmin || saving === `${u.id}:${s.id}`}
                           onChange={() => toggleShop(u.id, s.id)}
                           title={
                             u.isSuperAdmin
                               ? "Глобальный админ видит все магазины"
-                              : unrestricted
-                              ? `Снять галочку — ограничить доступ, оставив всё кроме «${s.name}»`
-                              : s.name
+                              : has(u.id, s.id)
+                              ? `Снять доступ к «${s.name}»`
+                              : `Дать доступ к «${s.name}»`
                           }
                           className="w-4 h-4 accent-[var(--color-accent)] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                         />
@@ -286,7 +255,7 @@ export function AccessMatrix() {
               })}
               {shown.length === 0 && (
                 <tr>
-                  <td colSpan={shops.length + 4} className="px-4 py-10 text-center text-[var(--color-text-3)]">
+                  <td colSpan={shops.length + 3} className="px-4 py-10 text-center text-[var(--color-text-3)]">
                     Никого не нашлось
                   </td>
                 </tr>
@@ -297,14 +266,11 @@ export function AccessMatrix() {
       )}
 
       <p className="text-[12px] text-[var(--color-text-3)] leading-relaxed">
-        «Видит всё» означает доступ ко всем магазинам своей компании. Снимите любую
-        галочку — сотрудник автоматически перейдёт в режим ограничений, сохранив доступ
-        ко всем магазинам, кроме снятого. Ограничения включаются по одному человеку: так можно
-        раскатывать доступы постепенно, не ломая работу кабинета.
-        Глобальный админ игнорирует матрицу и управляет ей.
-        Колонка «Работа» — допуск курьера на линию: пока галочка снята,
-        заказы ему не приходят, даже если маршрут назначен.
+Доступ определяется этой матрицей и только ей: отмеченные магазины — это
+        всё, что человек видит в заказах, маршрутах, курьерах и чате. Компания,
+        по чьей ссылке он зарегистрировался, на видимость не влияет — она нужна
+        только для того, чтобы понимать, кто кем управляет.
       </p>
     </div>
   );
-}
+}og

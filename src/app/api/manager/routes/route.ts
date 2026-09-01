@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     const routes = await prisma.route.findMany({
       // Маршрут принадлежит курьеру, курьер — компании.
       // Через это и режем чужие маршруты вместе с их заказами.
-      where: { courier: courierScope(viewer) },
+      where: { courier: await courierScope(viewer) },
       include: {
         courier: true,
         orders: {

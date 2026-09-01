@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { getViewer, userScope } from "@/lib/access";
+import { getViewer, coworkerScope } from "@/lib/access";
 import { notify } from "@/lib/notifications";
 
 export async function GET(req: NextRequest) {
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   // Общий чат был общим на всю систему: сотрудник новой компании читал
   // переписку Банча и наоборот. Сообщение принадлежит компании через автора.
   const viewer = await getViewer(req);
-  const scope = viewer ? { sender: userScope(viewer) } : {};
+  const scope = viewer ? { sender: await coworkerScope(viewer) } : {};
 
   const messages = await prisma.globalMessage.findMany({
     where: {

@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { getViewer, shopFilter } from "@/lib/access";
 
 export async function GET() {
   const user = await getSession();
@@ -25,21 +26,11 @@ export async function GET() {
     });
   }
 
-  // Ограничение по магазинам, если оно включено для этого пользователя.
-  // Пока accessRestricted = false — фильтра нет, поведение прежнее.
-  const account = await prisma.user.findUnique({
-    where: { id: user.id },
-    select: { accessRestricted: true, isSuperAdmin: true },
-  });
-
-  let shopFilter = {};
-  if (account?.accessRestricted && !account.isSuperAdmin) {
-    const allowed = await prisma.shopAccess.findMany({
-      where: { userId: user.id },
-      select: { shopId: true },
-    });
-    shopFilter = { shopId: { in: allowed.map((a) => a.shopId) } };
-  }
+  // Курьер видит только заказы тех магазинов, что отмечены ему в матрице.
+  // Раньше проверялся accessRestricted, а он по умолчанию выключен —
+  // из-за этого фильтр фактически не работал.
+  const viewer = await getViewer();
+  const shopWhere = viewer ? await shopFilter(viewer) : {};
 
   const orders = await prisma.order.findMany({
     where: {
@@ -50,7 +41,7 @@ export async function GET() {
         { route: { isDraft: false } },
         { routeId: null }
       ],
-      ...shopFilter,
+      ...shopWhere,
     },
     include: { route: true },
     orderBy: [{ routeId: 'asc' }, { routeOrder: 'asc' }, { slotFrom: 'asc' }]
