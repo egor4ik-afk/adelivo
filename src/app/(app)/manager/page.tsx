@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ProfilePanel } from '@/components/ProfilePanel';
 import Link from 'next/link';
+import { OrdersTab } from '@/components/manager/OrdersTab';
 
 type ChangeType = 'TIME_CHANGED' | 'ORDERS_CHANGED' | 'ROUTE_REASSIGNED' | 'COURIER_CHANGED' | 'OP_COMMENT_ADDED' | 'ITEMS_CHANGED' | string;
 interface Notification {
@@ -97,7 +98,7 @@ const ContactBadge = ({ title, phone, name, isCourier }: { title?: string, phone
 };
 
 export default function ManagerDashboard() {
-  const [activeTab, setActiveTab] = useState<'new' | 'routes' | 'history'>('new');
+  const [activeTab, setActiveTab] = useState<'new' | 'routes' | 'history' | 'orders'>('new');
   const [tasks, setTasks] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [routes, setRoutes] = useState<any[]>([]);
@@ -354,6 +355,7 @@ export default function ManagerDashboard() {
             </button>
             <button onClick={() => setActiveTab('routes')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap shrink-0 ${activeTab === 'routes' ? 'bg-[var(--color-card)] shadow-sm text-[var(--color-text)]' : 'text-[var(--color-text-2)] hover:text-[var(--color-text)]'}`}>Все маршруты</button>
             <button onClick={() => setActiveTab('history')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap shrink-0 ${activeTab === 'history' ? 'bg-[var(--color-card)] shadow-sm text-[var(--color-text)]' : 'text-[var(--color-text-2)] hover:text-[var(--color-text)]'}`}>История логов</button>
+            <button onClick={() => setActiveTab('orders')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap shrink-0 ${activeTab === 'orders' ? 'bg-[var(--color-card)] shadow-sm text-[var(--color-text)]' : 'text-[var(--color-text-2)] hover:text-[var(--color-text)]'}`}>Все заказы</button>
           </div>
         </div>
 
@@ -525,6 +527,8 @@ export default function ManagerDashboard() {
                 </div>
               </div>
             )}
+
+            {activeTab === 'orders' && <OrdersTab />}
 
             {activeTab === 'routes' && (
               <>

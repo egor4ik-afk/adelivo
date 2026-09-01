@@ -41,14 +41,32 @@ export async function getViewer(req?: NextRequest): Promise<Viewer | null> {
  * Пустой массив = не видит ничего.
  */
 export async function visibleShopIds(viewer: Viewer): Promise<string[] | null> {
+  // Глобальный админ видит всё
   if (viewer.isSuperAdmin) return null;
-  if (!viewer.accessRestricted) return null;
+
+  // Пользователь без компании не видит ничего. Это про курьера, который
+  // зарегистрировался сам, не по ссылке-приглашению: он в системе есть,
+  // но ни к какой компании не относится, и чужие заказы ему показывать нельзя.
+  if (!viewer.companyId) return [];
+
+  // Граница компании — жёсткая и не зависит от галочек. Раньше проверялся
+  // только accessRestricted, а он по умолчанию false — из-за этого
+  // сотрудник новой компании видел заказы всех остальных.
+  const companyShops = await prisma.shop.findMany({
+    where: { companyId: viewer.companyId },
+    select: { id: true },
+  });
+  const companyIds = companyShops.map((s) => s.id);
+
+  // Внутри своей компании галочки сужают доступ ещё сильнее
+  if (!viewer.accessRestricted) return companyIds;
 
   const rows = await prisma.shopAccess.findMany({
     where: { userId: viewer.id },
     select: { shopId: true },
   });
-  return rows.map((r) => r.shopId);
+  const allowed = new Set(rows.map((r) => r.shopId));
+  return companyIds.filter((id) => allowed.has(id));
 }
 
 /**
@@ -88,7 +106,9 @@ export async function canViewOrder(viewer: Viewer, orderId: string): Promise<boo
     where: { id: orderId },
     select: { shopId: true },
   });
-  if (!order?.shopId) return true; // заказ без магазина виден всем — до бэкфилла
+  // Заказ без магазина показываем только глобальному админу: до бэкфилла
+  // это была «ничья» запись, и отдавать её всем подряд нельзя
+  if (!order?.shopId) return viewer.isSuperAdmin;
   return ids.includes(order.shopId);
 }
 

@@ -74,6 +74,9 @@ export function OrderForm({
   const [couriers, setCouriers] = useState<Courier[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pasteText, setPasteText] = useState("");
+  const [parsing, setParsing] = useState(false);
+  const [parseNote, setParseNote] = useState<string | null>(null);
 
   const set = (k: keyof OrderFormValues) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setV((p) => ({ ...p, [k]: e.target.value }));
@@ -84,6 +87,44 @@ export function OrderForm({
       .then((d) => setCouriers(Array.isArray(d) ? d : d?.couriers ?? []))
       .catch(() => setCouriers([]));
   }, []);
+
+  const parse = async () => {
+    if (pasteText.trim().length < 10) return;
+    setParsing(true);
+    setParseNote(null);
+    try {
+      const res = await fetch("/api/orders/parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: pasteText }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d?.error || "Не удалось разобрать");
+
+      // Заполняем только пустые поля: если оператор уже что-то ввёл руками,
+      // разбор не должен это затирать
+      setV((prev) => {
+        const next = { ...prev };
+        for (const [key, value] of Object.entries(d.parsed ?? {})) {
+          if (value === null || value === undefined || value === "") continue;
+          const k = key as keyof OrderFormValues;
+          if (!next[k]) next[k] = String(value);
+        }
+        return next;
+      });
+
+      const filled = Object.values(d.parsed ?? {}).filter(Boolean).length;
+      setParseNote(
+        d.warning
+          ? `${d.warning}. Заполнено полей: ${filled}`
+          : `Разобрано полей: ${filled}. Проверьте адрес и телефоны.`
+      );
+    } catch (e) {
+      setParseNote(e instanceof Error ? e.message : "Не удалось разобрать");
+    } finally {
+      setParsing(false);
+    }
+  };
 
   const submit = async () => {
     setError(null);
@@ -141,6 +182,50 @@ export function OrderForm({
           <div className="rounded-xl border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)] text-[var(--color-danger-text)] px-4 py-3 text-[13px] font-medium">
             {error}
           </div>
+        )}
+
+        {/* Вставка текста заявки */}
+        {mode === "create" && (
+          <section className={card}>
+            <h2 className="text-[13px] font-bold text-[var(--color-text)] mb-1">Вставить заявку текстом</h2>
+            <p className="text-[11px] text-[var(--color-text-3)] mb-3 leading-relaxed">
+              Скопируйте сообщение из чата целиком — адрес, телефон, время и состав
+              разложатся по полям. Проверьте результат перед сохранением.
+            </p>
+            <textarea
+              rows={4}
+              className={input}
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+              placeholder={"Заказ 8821\nМосква, Ленина 42, кв 7, домофон 7К\nАнна +7 999 000-00-00\nзавтра с 14 до 18\nБукет «Весна», открытка\n4500 руб"}
+            />
+            <div className="flex flex-wrap items-center gap-3 mt-3">
+              <button
+                type="button"
+                onClick={parse}
+                disabled={parsing || pasteText.trim().length < 10}
+                className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${
+                  parsing || pasteText.trim().length < 10
+                    ? "bg-[var(--color-border)] text-[var(--color-text-3)] cursor-not-allowed"
+                    : "bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-dark)]"
+                }`}
+              >
+                {parsing ? "Разбираем…" : "Разобрать текст"}
+              </button>
+              {pasteText && (
+                <button
+                  type="button"
+                  onClick={() => { setPasteText(""); setParseNote(null); }}
+                  className="text-[12px] text-[var(--color-text-3)] hover:text-[var(--color-text)]"
+                >
+                  Очистить
+                </button>
+              )}
+              {parseNote && (
+                <span className="text-[11px] text-[var(--color-text-2)]">{parseNote}</span>
+              )}
+            </div>
+          </section>
         )}
 
         {/* Доставка */}

@@ -84,15 +84,16 @@ export function AccessMatrix() {
   };
 
   const toggleShop = async (userId: string, shopId: string) => {
-    const checked = !has(userId, shopId);
-    // оптимистично
-    setAccess((p) =>
-      checked
-        ? [...p, { userId, shopId, canEdit: true }]
-        : p.filter((a) => !(a.userId === userId && a.shopId === shopId))
-    );
+    const user = users.find((x) => x.id === userId);
+    const wasUnrestricted = user && !user.accessRestricted;
+    const checked = wasUnrestricted ? false : !has(userId, shopId);
+
     const ok = await patch({ userId, shopId, checked }, `${userId}:${shopId}`);
-    if (!ok) load(); // откатываем на серверное состояние
+    // Сервер мог заодно включить режим ограничений и создать строки
+    // по остальным магазинам, поэтому перечитываем состояние целиком,
+    // а не подкручиваем его на клиенте.
+    load();
+    if (!ok) return;
   };
 
   const toggleRestricted = async (u: User) => {
@@ -252,9 +253,19 @@ export function AccessMatrix() {
                         <input
                           type="checkbox"
                           checked={unrestricted ? true : has(u.id, s.id)}
-                          disabled={unrestricted || saving === `${u.id}:${s.id}`}
+                          // Галочки больше не блокируются: снятие любой из них
+                          // само переводит пользователя в режим ограничений.
+                          // Блокируем только для глобального админа — он по
+                          // определению видит всё, и матрица на него не влияет.
+                          disabled={u.isSuperAdmin || saving === `${u.id}:${s.id}`}
                           onChange={() => toggleShop(u.id, s.id)}
-                          title={unrestricted ? "Доступ не ограничен — галочки не действуют" : s.name}
+                          title={
+                            u.isSuperAdmin
+                              ? "Глобальный админ видит все магазины"
+                              : unrestricted
+                              ? `Снять галочку — ограничить доступ, оставив всё кроме «${s.name}»`
+                              : s.name
+                          }
                           className="w-4 h-4 accent-[var(--color-accent)] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                         />
                       </td>
@@ -286,8 +297,9 @@ export function AccessMatrix() {
       )}
 
       <p className="text-[12px] text-[var(--color-text-3)] leading-relaxed">
-        Пока у сотрудника стоит «видит всё», галочки не действуют — он работает со всеми
-        магазинами, как раньше. Ограничения включаются по одному человеку: так можно
+        «Видит всё» означает доступ ко всем магазинам своей компании. Снимите любую
+        галочку — сотрудник автоматически перейдёт в режим ограничений, сохранив доступ
+        ко всем магазинам, кроме снятого. Ограничения включаются по одному человеку: так можно
         раскатывать доступы постепенно, не ломая работу кабинета.
         Глобальный админ игнорирует матрицу и управляет ей.
         Колонка «Работа» — допуск курьера на линию: пока галочка снята,

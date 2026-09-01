@@ -1,11 +1,11 @@
 // src/app/api/orders/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/auth";
+import { getViewer, shopFilter } from "@/lib/access";
 
 export async function GET(req: NextRequest) {
-  const user = await getSession(req);
-  if (!user) {
+  const viewer = await getViewer(req);
+  if (!viewer) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -56,6 +56,10 @@ export async function GET(req: NextRequest) {
   if (invalid === "true") {
     where.isInvalid = true;
   }
+
+  // Заказы чужих компаний не отдаём. Без этого сотрудник только что
+  // зарегистрированной компании видел весь поток, включая Банч.
+  Object.assign(where, await shopFilter(viewer));
 
   const orders = await prisma.order.findMany({
     where,

@@ -138,6 +138,36 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // Пока у пользователя accessRestricted = false, он видит все магазины
+    // своей компании, а строк в матрице у него нет. Первое снятие галочки
+    // должно означать «ограничить»: включаем режим и выдаём доступ ко всем
+    // магазинам, КРОМЕ снятого. Иначе снятие галочки выглядело бы как
+    // «ничего не изменилось» — ровно то, на что вы наткнулись.
+    const target = await prisma.user.findUnique({
+      where: { id: b.userId },
+      select: { accessRestricted: true, companyId: true },
+    });
+
+    if (!target?.accessRestricted && !b.checked) {
+      const shops = await prisma.shop.findMany({
+        where: target?.companyId ? { companyId: target.companyId } : {},
+        select: { id: true },
+      });
+
+      await prisma.$transaction([
+        prisma.user.update({ where: { id: b.userId }, data: { accessRestricted: true } }),
+        prisma.shopAccess.deleteMany({ where: { userId: b.userId } }),
+        prisma.shopAccess.createMany({
+          data: shops
+            .filter((s) => s.id !== b.shopId)
+            .map((s) => ({ userId: b.userId, shopId: s.id })),
+          skipDuplicates: true,
+        }),
+      ]);
+
+      return NextResponse.json({ ok: true, restrictedNow: true });
+    }
+
     if (b.checked) {
       await prisma.shopAccess.upsert({
         where: { userId_shopId: { userId: b.userId, shopId: b.shopId } },

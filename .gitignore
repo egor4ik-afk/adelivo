@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+# генерируется next-pwa при каждой сборке
+public/sw.js
+public/sw.js.map
+public/workbox-*.js
+public/workbox-*.js.map

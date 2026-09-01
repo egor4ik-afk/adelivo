@@ -69,6 +69,22 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     if (b.deliveryDate !== undefined) data.deliveryDate = b.deliveryDate || null;
     if (b.status !== undefined) data.status = b.status as OrderStatus;
 
+    // Биржа: заказ виден курьерам на карте, пока его не заберут
+    // или не снимут вручную. Таймаута нет — так и договаривались.
+    if (b.onExchange !== undefined) {
+      data.onExchange = !!b.onExchange;
+      data.exchangeAt = b.onExchange ? new Date() : null;
+      data.exchangeById = b.onExchange ? user.id : null;
+      // Выкладывать заказ с уже назначенным курьером бессмысленно:
+      // на бирже он никому не нужен, а курьер получит путаницу
+      if (b.onExchange) {
+        data.courierId = null;
+        data.courier = null;
+        data.routeId = null;
+        data.routeOrder = null;
+      }
+    }
+
     if (b.slotFrom !== undefined || b.slotTo !== undefined) {
       const from = b.slotFrom ?? order.slotFrom;
       const to = b.slotTo ?? order.slotTo;
@@ -102,5 +118,68 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   } catch (e) {
     console.error("[manager/orders PATCH]", e);
     return NextResponse.json({ error: "Не удалось сохранить заказ" }, { status: 500 });
+  }
+}
+
+
+/**
+ * DELETE — удаление заказа.
+ *
+ * Заказы из CRM физически не удаляем: поллинг привезёт их обратно
+ * следующим циклом, и удаление будет выглядеть как «не работает».
+ * Для них ставим CANCELLED, что и означает «убрать из работы».
+ * Удаляются только ручные заказы (crmId с префиксом MAN-).
+ */
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const user = await getSession(req);
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (user.role === "COURIER") {
+    return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
+  }
+
+  try {
+    const { id } = await ctx.params;
+    const order = await prisma.order.findUnique({ where: { id } });
+    if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    const isManual = order.crmId.startsWith("MAN-");
+
+    // Маршрут, в котором остался один этот заказ, тоже убираем —
+    // иначе у курьера повиснет пустой маршрут
+    if (order.routeId) {
+      const siblings = await prisma.order.count({
+        where: { routeId: order.routeId, id: { not: id } },
+      });
+      if (siblings === 0) {
+        await prisma.route.deleteMany({ where: { id: order.routeId } });
+      }
+    }
+
+    if (isManual) {
+      await prisma.order.delete({ where: { id } });
+      return NextResponse.json({ ok: true, deleted: true });
+    }
+
+    await prisma.order.update({
+      where: { id },
+      data: {
+        status: "CANCELLED",
+        courierId: null,
+        courier: null,
+        routeId: null,
+        routeOrder: null,
+        onExchange: false,
+        changedAt: new Date(),
+      },
+    });
+
+    return NextResponse.json({
+      ok: true,
+      deleted: false,
+      note: "Заказ из CRM — переведён в «Отменён». Физическое удаление невозможно: поллинг вернёт его обратно.",
+    });
+  } catch (e) {
+    console.error("[manager/orders DELETE]", e);
+    return NextResponse.json({ error: "Не удалось удалить заказ" }, { status: 500 });
   }
 }
