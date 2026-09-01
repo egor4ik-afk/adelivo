@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CONNECTORS, type ConnectorType } from "@/lib/connectors";
+import { CONNECTORS, type ConnectorType } from "@/lib/connectors/catalog";
 
 type Shop = {
   id: string; slug: string; name: string; isActive: boolean;

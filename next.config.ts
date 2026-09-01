@@ -13,7 +13,7 @@ const withPWA = withPWAInit({
       urlPattern: /^https?.*/,
       handler: "NetworkFirst",
       options: {
-        cacheName: "event-wave-offline-cache",
+        cacheName: "adelivo-offline-cache",
         expiration: {
           maxEntries: 200,
           maxAgeSeconds: 24 * 60 * 60,
