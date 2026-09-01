@@ -268,23 +268,15 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       changes.recipientPhoneChanged
     ].some(Boolean);
 
-    // Уведомляем только если реально что-то изменилось
+    // Уведомляем только если реально что-то изменилось.
+    // Блок был продублирован — на каждое изменение уходило по два
+    // одинаковых уведомления. Оставлен один вызов.
     if (hasRealChanges) {
       notify({
         type: "order.updated",
         order: updatedOrder as any,
         previousStatus: changes.statusChanged ? order.status : undefined,
-        changes, 
-      }).catch(console.error);
-    }
-
-    // Уведомляем только если реально что-то изменилось
-    if (hasRealChanges) {
-      notify({
-        type: "order.updated",
-        order: updatedOrder as any,
-        previousStatus: changes.statusChanged ? order.status : undefined,
-        changes, 
+        changes,
       }).catch(console.error);
     }
 
@@ -355,25 +347,64 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       await recalcRouteOfOrder(id);
     }
 
+    // Фото доставки → в Telegram админу.
+    // Отправляем напрямую в api.telegram.org, как в /api/request
+    // и /api/auth/link-courier. Прокси убран: он был третьей точкой отказа,
+    // про которую в логах не было ни слова.
     const tgToken = process.env.TELEGRAM_BOT_TOKEN;
     const tgChat = process.env.TELEGRAM_ADMIN_CHAT_ID;
-    const proxyUrl = process.env.PROXY_URL; // 🔥 URL прокси
+    const photoAdded = !!body.photoUrl && body.photoUrl !== order.photoUrl;
 
-    if (proxyUrl && tgToken && tgChat && body.photoUrl && body.photoUrl !== order.photoUrl) {
-      fetch(proxyUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          token: tgToken,
-          method: "sendPhoto",
-          payload: {
-            chat_id: tgChat,
-            photo: body.photoUrl,
-            caption: `📸 *Фото к заказу ${order.externalId || order.crmId}*\n📍 *Адрес:* ${order.address}`,
-            parse_mode: "Markdown"
+    if (photoAdded) {
+      if (!tgToken || !tgChat) {
+        // Раньше блок молча пропускался — понять, почему фото не приходит,
+        // по логам было невозможно
+        const missing = [!tgToken && "TELEGRAM_BOT_TOKEN", !tgChat && "TELEGRAM_ADMIN_CHAT_ID"]
+          .filter(Boolean).join(", ");
+        console.warn(`[Photo] Не отправлено в Telegram, не задано: ${missing}`);
+      } else {
+        const caption =
+          `📸 *Фото к заказу ${order.externalId || order.crmId}*\n` +
+          `📍 *Адрес:* ${order.address || "—"}` +
+          (updatedOrder.courier ? `\n🚚 *Курьер:* ${updatedOrder.courier}` : "");
+
+        // Не блокируем ответ курьеру: телефон должен получить ответ сразу,
+        // а доставка сообщения админу может занять секунды
+        void (async () => {
+          try {
+            const res = await fetch(`https://api.telegram.org/bot${tgToken}/sendPhoto`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                chat_id: tgChat,
+                photo: body.photoUrl,
+                caption,
+                parse_mode: "Markdown",
+              }),
+            });
+
+            if (!res.ok) {
+              const err = await res.text().catch(() => "");
+              console.error("[Photo] Telegram sendPhoto:", res.status, err);
+
+              // Частый случай: Telegram не смог сам скачать файл по ссылке
+              // (приватный бакет, медленный ответ хранилища). Тогда хотя бы
+              // отправляем ссылку текстом — админ откроет её руками.
+              await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  chat_id: tgChat,
+                  text: `${caption}\n\n🔗 ${body.photoUrl}`,
+                  parse_mode: "Markdown",
+                }),
+              }).catch((e) => console.error("[Photo] Telegram fallback:", e));
+            }
+          } catch (e) {
+            console.error("[Photo] Telegram недоступен:", e);
           }
-        }),
-      }).catch(() => { });
+        })();
+      }
     }
 
     if (finalPrice !== undefined && order.crmId) await updateCrmOrderDeliveryPrice(order.crmId, finalPrice);
