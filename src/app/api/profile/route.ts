@@ -13,6 +13,7 @@ const updateSchema = z.object({
   homeAddress:    z.string().max(200).optional(),
   konsolPhone:    z.string().optional(),
   isAuto:         z.boolean().optional(),
+  showExchange:   z.boolean().optional(),
   avatarUrl:      z.string().optional(), // 🔥 ДОБАВЛЕНО: Теперь бэкенд видит и принимает ссылку на фото
   notifyNewOrder: z.boolean().optional(),
   notifyStatus:   z.boolean().optional(),
@@ -50,6 +51,7 @@ export async function GET(req: NextRequest) {
   let konsolPhone: string | null = null;
   let isLinked = false;
   let isAuto = false;
+  let showExchange = true;
 
   if (profile.email) {
     const courier = await prisma.courier.findFirst({ where: { email: profile.email } });
@@ -58,6 +60,7 @@ export async function GET(req: NextRequest) {
       konsolPhone  = courier.konsolPhone || null;
       isLinked     = !!courier.konsolContractorId;
       isAuto       = courier.isAuto || false;
+      showExchange = courier.showExchange ?? false;
 
       if (profile.role === "COURIER") {
         profile.firstName = profile.firstName || courier.firstName || null;
@@ -67,7 +70,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ...profile, homeAddress, konsolPhone, isLinked, isAuto });
+  return NextResponse.json({ ...profile, homeAddress, konsolPhone, isLinked, isAuto, showExchange });
 }
 
 // PATCH /api/profile
@@ -78,7 +81,7 @@ export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
     // Извлекаем homeAddress, konsolPhone, isAuto, а остальное (включая avatarUrl) уходит в userData
-    const { homeAddress, konsolPhone, isAuto, ...userData } = updateSchema.parse(body);
+    const { homeAddress, konsolPhone, isAuto, showExchange, ...userData } = updateSchema.parse(body);
 
     // 1. Обновляем User
     const updated = await prisma.user.update({
@@ -102,7 +105,8 @@ export async function PATCH(req: NextRequest) {
 
       if (homeAddress !== undefined) courierData.homeAddress = homeAddress;
       if (userData.phone !== undefined) courierData.phone = userData.phone;
-      if (isAuto !== undefined) courierData.isAuto = isAuto; 
+      if (isAuto !== undefined) courierData.isAuto = isAuto;
+      if (showExchange !== undefined) courierData.showExchange = showExchange;
 
       if (konsolPhone !== undefined) {
         if (konsolPhone === "" || konsolPhone === null) {

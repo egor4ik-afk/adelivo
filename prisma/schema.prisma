@@ -258,7 +258,7 @@ model Courier {
   konsolContractorId String?
   isSelfEmployed     Boolean @default(false)
   priority           Int     @default(3)
-
+  showExchange    Boolean @default(false)
   shifts      CourierShift[]
   payments    CourierPayment[]
   routes      Route[]

@@ -103,7 +103,8 @@ export default function CourierProfilePage() {
   const [newFirstName, setNewFirstName] = useState("");
   const [newLastName, setNewLastName] = useState("");
   const [newHomeAddress, setNewHomeAddress] = useState(""); 
-  const [isAuto, setIsAuto] = useState(false); 
+  const [isAuto, setIsAuto] = useState(false);
+  const [showExchange, setShowExchange] = useState(true);
   
   const [konsolModalOpen, setKonsolModalOpen] = useState(false);
   const [inputKonsolPhone, setInputKonsolPhone] = useState("");
@@ -172,6 +173,7 @@ export default function CourierProfilePage() {
       setNewLastName(data.lastName || "");
       setNewHomeAddress(data.homeAddress || "");
       setIsAuto(data.isAuto || false);
+      setShowExchange(data.showExchange ?? true);
     });
 
     fetch("/api/courier/my-stats").then(r => r.json()).then(data => {
@@ -297,6 +299,20 @@ export default function CourierProfilePage() {
     }
   };
 
+  const toggleExchange = async () => {
+    const next = !showExchange;
+    setShowExchange(next);
+    try {
+      await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showExchange: next }),
+      });
+    } catch {
+      setShowExchange(!next); // не сохранилось — возвращаем как было
+    }
+  };
+
   const toggleAutoStatus = async () => {
     const newStatus = !isAuto;
     setIsAuto(newStatus);
@@ -416,6 +432,34 @@ export default function CourierProfilePage() {
               🚗 Авто
             </button>
           </div>
+        </div>
+
+        {/* Биржа заказов */}
+        <div style={{ background: "var(--color-card)", borderRadius: 12, border: "1px solid var(--color-border)", padding: 16, marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text)" }}>Биржа заказов</div>
+            <div style={{ fontSize: 11, color: "var(--color-text-3)", marginTop: 2, lineHeight: 1.5 }}>
+              {showExchange
+                ? "Вкладка «Биржа» показана в меню"
+                : "Вкладка скрыта — только свои маршруты"}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={toggleExchange}
+            aria-label="Показывать биржу"
+            style={{
+              width: 46, height: 26, borderRadius: 13, border: "none", cursor: "pointer",
+              background: showExchange ? "var(--color-green)" : "var(--color-border)",
+              position: "relative", transition: "background .2s", flexShrink: 0,
+            }}
+          >
+            <span style={{
+              position: "absolute", top: 3, left: showExchange ? 23 : 3,
+              width: 20, height: 20, borderRadius: "50%", background: "#fff",
+              transition: "left .2s",
+            }} />
+          </button>
         </div>
 
         {/* Тема оформления */}

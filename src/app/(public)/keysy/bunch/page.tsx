@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     description: "Пиковая доставка цветов на ADelivo: RetailCRM, AI-маршруты и автоматические выплаты.",
     url: `${SITE_URL}${PATH}`,
     siteName: "ADelivo",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Кейс «Банч» — ADelivo" }],
+    images: [{ url: "/og-image.jpg", width: 1200, height: 630, alt: "Кейс «Банч» — ADelivo" }],
     locale: "ru_RU",
     type: "article",
   },
@@ -70,7 +70,7 @@ export default function Page() {
           author: { "@type": "Organization", name: "ADelivo", url: SITE_URL },
           publisher: { "@type": "Organization", name: "ADelivo", url: SITE_URL },
           mainEntityOfPage: `${SITE_URL}${PATH}`,
-          image: `${SITE_URL}/og-image.png`,
+          image: `${SITE_URL}/og-image.jpg`,
           inLanguage: "ru-RU",
         },
       ]}

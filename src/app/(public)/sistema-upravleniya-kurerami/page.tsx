@@ -28,7 +28,7 @@ export const metadata: Metadata = {
       "Заказы, маршруты, курьеры и выплаты в одном окне. Любая CRM подключается бесплатно за 3 дня.",
     url: `${SITE_URL}${PATH}`,
     siteName: "ADelivo",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "ADelivo — система управления курьерами" }],
+    images: [{ url: "/og-image.jpg", width: 1200, height: 630, alt: "ADelivo — система управления курьерами" }],
     locale: "ru_RU",
     type: "website",
   },

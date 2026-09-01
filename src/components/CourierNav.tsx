@@ -1,8 +1,8 @@
 // src/components/CourierNav.tsx
 "use client";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
 import { GlobalChat } from "./GlobalChat";
 
 // 🔥 Экспортируем константу высоты навбара для использования в страницах
@@ -10,6 +10,16 @@ export const NAV_HEIGHT = 56;
 
 export function CourierNav({ currentUserId }: { currentUserId: string }) {
   const pathname = usePathname();
+
+  // Вкладка биржи не всем нужна: курьер, который возит только свои маршруты,
+  // выключает её в профиле. Право брать заказы это не отбирает.
+  const [showExchange, setShowExchange] = useState(false);
+  useEffect(() => {
+    fetch("/api/profile")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setShowExchange(d?.showExchange ?? false))
+      .catch(() => setShowExchange(false));
+  }, []);
   const [unread, setUnread] = useState(0);
 
   useEffect(() => {
@@ -64,7 +74,7 @@ export function CourierNav({ currentUserId }: { currentUserId: string }) {
   const navItems = [
     { href: "/courier/points", icon: "📍", label: "Карта" },
     { href: "/courier/routes", icon: "📋", label: "Маршруты" },
-    { href: "/courier/exchange", icon: "🌐", label: "Биржа" },
+    ...(showExchange ? [{ href: "/courier/exchange", icon: "🌐", label: "Биржа" }] : []),
     { href: "/courier/profile", icon: "👤", label: "Профиль" },
   ];
 
