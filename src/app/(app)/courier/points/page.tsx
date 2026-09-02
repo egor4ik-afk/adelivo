@@ -269,7 +269,18 @@ export default function CourierPointsPage() {
 
   const buildRoute = useCallback(async (to: [number, number], mode: "auto" | "mt") => {
     const ymaps3 = window.ymaps3;
-    if (!userLocation || !mapRef.current || !ymaps3) return;
+    if (!mapRef.current || !ymaps3) return;
+
+    // Без своей позиции маршрут строить не от чего. Раньше функция просто
+    // молча выходила — кнопки «Пешком» и «Авто» выглядели неработающими,
+    // хотя дело было в том, что браузер не отдал геолокацию.
+    if (!userLocation) {
+      setRouteInfo({
+        distance: "нет геопозиции",
+        duration: "разрешите доступ к местоположению",
+      });
+      return;
+    }
 
     // Снимаем прошлую линию до запроса: иначе при быстром переключении
     // точек на карте остаются две
@@ -334,11 +345,7 @@ export default function CourierPointsPage() {
         mapRef.current.update({ location: { bounds, duration: 400 } });
       }
     } catch (e) {
-      // Текст ошибки от Яндекса важен: «Invalid key», «Forbidden» и
-      // «route not found» лечатся по-разному, а без него остаётся гадать
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error("[Карта] маршрут не построился:", msg, e);
-      setRouteInfo({ distance: "маршрут не построен", duration: msg.slice(0, 60) });
+      console.error("[Карта] маршрут не построился", e);
     }
   }, [userLocation]);
 
@@ -423,7 +430,9 @@ export default function CourierPointsPage() {
       {/* Карточка заказа */}
       {activeOrder && (
         <div style={{
-          position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 15,
+          // Отступ снизу больше: у карты 3.0 внизу своя кнопка
+          // «Открыть в Яндекс.Картах», и карточка её перекрывала
+          position: "absolute", left: 10, right: 10, bottom: 52, zIndex: 15,
           background: "var(--color-card)", border: "1px solid var(--color-border)",
           borderRadius: 16, padding: 14, boxShadow: "0 8px 30px rgba(0,0,0,0.35)",
         }}>

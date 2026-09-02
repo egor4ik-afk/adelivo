@@ -27,9 +27,6 @@ export type Viewer = {
   isSuperAdmin: boolean;
   accessRestricted: boolean; // устарело, оставлено для совместимости схемы
   companyId: string | null;
-  /// Может выкладывать заказы на биржу. У админа право есть всегда,
-  /// остальным выдаётся галочкой в матрице.
-  canPostExchange: boolean;
 };
 
 /** Пользователь текущего запроса вместе с флагами доступа. */
@@ -42,7 +39,6 @@ export async function getViewer(req?: NextRequest): Promise<Viewer | null> {
     select: {
       id: true, email: true, role: true,
       isSuperAdmin: true, accessRestricted: true, companyId: true,
-      canPostExchange: true,
     },
   });
   return user as Viewer | null;
@@ -88,27 +84,29 @@ export async function shopFilter(viewer: Viewer): Promise<Record<string, unknown
   return { shopId: { in: ids } };
 }
 
-/**
- * Кусок where для курьеров.
- *
- * Курьер виден по двум признакам, и второй важнее первого:
- *   1. он в компании, чьи магазины вам доступны;
- *   2. он возит заказы ваших магазинов.
- *
- * Второй нужен, потому что у курьеров, заведённых до появления компаний,
- * companyId пустой — по первому признаку они не находились, и список
- * курьеров в дашборде оказывался пустым. Курьер, который уже развозит
- * ваши заказы, ваш по факту, независимо от того, что записано в профиле.
- */
+/** Кусок where для курьеров. */
 export async function courierScope(viewer: Viewer): Promise<Record<string, unknown>> {
-  const companies = await accessibleCompanyIds(viewer);
-  if (companies === null) return {};
+  if (viewer.isSuperAdmin) return {};
 
   const shopIds = await visibleShopIds(viewer);
-  if (!shopIds || shopIds.length === 0) {
-    return { companyId: { in: companies } };
-  }
+  if (!shopIds || shopIds.length === 0) return { id: { in: [] as number[] } };
 
+  // Курьер виден, если у ЕГО учётной записи есть доступ к одному из ваших
+  // магазинов. Именно это вы и отмечаете галочкой в матрице — раньше
+  // галочка на видимость курьера не влияла вообще, потому что список
+  // строился по Courier.companyId, а он у самостоятельно
+  // зарегистрировавшихся курьеров пустой.
+  //
+  // Связь Courier ↔ User в проекте идёт по email, поэтому и здесь по нему.
+  const users = await prisma.user.findMany({
+    where: { shopAccess: { some: { shopId: { in: shopIds } } } },
+    select: { email: true },
+  });
+  const emails = users.map((u) => u.email).filter(Boolean);
+
+  // Второй признак — фактический: курьер, который уже возит заказы ваших
+  // магазинов, ваш независимо от того, что записано в матрице.
+  // Без него курьер пропадал из списка сразу после снятия с заказа.
   const rows = await prisma.order.findMany({
     where: { shopId: { in: shopIds }, courierId: { not: null } },
     select: { courierId: true },
@@ -117,17 +115,26 @@ export async function courierScope(viewer: Viewer): Promise<Record<string, unkno
   });
   const courierIds = rows.map((r) => r.courierId!).filter(Boolean);
 
-  if (courierIds.length === 0) return { companyId: { in: companies } };
+  const or: Record<string, unknown>[] = [];
+  if (emails.length) or.push({ email: { in: emails, mode: "insensitive" } });
+  if (courierIds.length) or.push({ id: { in: courierIds } });
 
-  return { OR: [{ companyId: { in: companies } }, { id: { in: courierIds } }] };
+  // Совсем без признаков — пусто, чтобы не показать чужих
+  if (or.length === 0) return { id: { in: [] as number[] } };
+
+  return { OR: or };
 }
 
 /** Идентификаторы курьеров, доступных пользователю. */
 export async function accessibleCourierIds(viewer: Viewer): Promise<number[] | null> {
-  if (viewer.isSuperAdmin) return null;
+  const companies = await accessibleCompanyIds(viewer);
+  if (companies === null) return null;
+  if (companies.length === 0) return [];
 
-  const where = await courierScope(viewer);
-  const rows = await prisma.courier.findMany({ where, select: { id: true } });
+  const rows = await prisma.courier.findMany({
+    where: { companyId: { in: companies } },
+    select: { id: true },
+  });
   return rows.map((r) => r.id);
 }
 
@@ -153,14 +160,18 @@ export async function coworkerScope(viewer: Viewer): Promise<Record<string, unkn
 export function adminUserScope(viewer: Viewer): Record<string, unknown> {
   if (viewer.isSuperAdmin) return {};
   if (!viewer.companyId) return { id: { in: [] as string[] } };
-  return { companyId: viewer.companyId };
+  // Плюс «ничьи»: их нужно видеть, чтобы принять в компанию
+  return { OR: [{ companyId: viewer.companyId }, { companyId: null }] };
 }
 
 /** То же для курьеров в админке. */
 export function adminCourierScope(viewer: Viewer): Record<string, unknown> {
   if (viewer.isSuperAdmin) return {};
   if (!viewer.companyId) return { id: { in: [] as number[] } };
-  return { companyId: viewer.companyId };
+  // Курьеры без компании видны админу в АДМИНКЕ: иначе «ничьего» курьера,
+  // который зарегистрировался сам, некому подобрать — он не показывается
+  // ни в одном списке и остаётся невидимкой навсегда.
+  return { OR: [{ companyId: viewer.companyId }, { companyId: null }] };
 }
 
 /** Может ли редактировать заказы магазина. */
@@ -226,7 +237,11 @@ export async function canManageUser(viewer: Viewer, userId: string): Promise<boo
   });
   // Локальный админ не трогает глобального — иначе снял бы с него флаг
   if (!target || target.isSuperAdmin) return false;
-  return target.companyId === viewer.companyId;
+
+  // Свой сотрудник — можно. «Ничей» — тоже: именно так его и принимают
+  // в компанию. Раньше на нём PATCH отвечал 403, галочка в матрице
+  // отскакивала обратно, и выглядело это как «матрица не работает».
+  return target.companyId === viewer.companyId || target.companyId === null;
 }
 
 /**
@@ -268,9 +283,4 @@ export class AccessError extends Error {
     super(message);
     this.name = "AccessError";
   }
-}
-
-/** Может ли пользователь выкладывать заказы на биржу. */
-export function canPostToExchange(viewer: Viewer): boolean {
-  return viewer.isSuperAdmin || viewer.role === "ADMIN" || viewer.canPostExchange;
 }

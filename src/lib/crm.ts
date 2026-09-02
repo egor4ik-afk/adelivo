@@ -492,30 +492,6 @@ export async function geocodeNewOrders() {
 // СОХРАНЕНИЕ / ОБНОВЛЕНИЕ ЗАКАЗА (UPSERT)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Соответствие slug магазина его записи в таблице Shop.
- *
- * Доступ к заказам считается по shopId. Поллинг его не проставлял,
- * поэтому КАЖДЫЙ приехавший из CRM заказ оказывался «ничьим»:
- * фильтр `shopId in [...]` его не пропускал, и заказ пропадал
- * из выдачи у всех, включая администратора.
- *
- * Кэш живёт 5 минут: магазины меняются редко, а ходить в базу
- * на каждый заказ при 700 заказах в день незачем.
- */
-let shopCache: { at: number; map: Map<string, string> } | null = null;
-
-async function resolveShopId(slug?: string | null): Promise<string | null> {
-  if (!slug) return null;
-
-  if (!shopCache || Date.now() - shopCache.at > 5 * 60_000) {
-    const shops = await prisma.shop.findMany({ select: { id: true, slug: true } });
-    shopCache = { at: Date.now(), map: new Map(shops.map((s) => [s.slug, s.id])) };
-  }
-
-  return shopCache.map.get(slug) ?? null;
-}
-
 export async function upsertOrder(crmOrder: CrmOrder) {
   const data = await mapCrmOrder(crmOrder);
 
@@ -614,23 +590,10 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     if (hasCoreChanges) updateFields.changedAt = new Date();
   }
 
-  // Магазин по slug из CRM. Если магазина в базе ещё нет, shopId останется
-  // пустым — заказ создастся, но будет виден только глобальному админу,
-  // и это заметный сигнал, что нужно завести магазин в разделе «Компания».
-  const shopId = await resolveShopId(data.shop);
-  if (!shopId && data.shop) {
-    console.warn(`[upsertOrder] магазин "${data.shop}" не найден в таблице Shop — заказ ${data.crmId} останется без привязки`);
-  }
-
   const order = await prisma.order.upsert({
     where: { crmId: data.crmId },
-    update: { ...updateFields, ...(shopId ? { shopId } : {}) },
-    create: {
-      ...data,
-      ...(shopId ? { shopId } : {}),
-      isInvalid: false,
-      geocoded: isExceptionAddress(data.address),
-    },
+    update: updateFields,
+    create: { ...data, isInvalid: false, geocoded: isExceptionAddress(data.address) },
   });
 
   if (!existing) {
@@ -689,7 +652,14 @@ export async function pollCrmOrders() {
       },
       select: { crmId: true },
     });
-    const activeIds = activeOrders.map(o => o.crmId);
+    // Заказы, заведённые у нас (ручные MAN-, из Telegram TG-), в CRM
+    // не существуют. Отправлять их идентификаторы в filter[ids][] нельзя:
+    // RetailCRM отвечает 400 «Errors in the input parameters» и роняет
+    // ВЕСЬ пакет из 50 заказов, включая настоящие. В логах это видно
+    // как MAN-shop-975512-954288 среди обычных номеров.
+    const activeIds = activeOrders
+      .map(o => o.crmId)
+      .filter(id => /^\d+$/.test(id));
 
     for (let i = 0; i < activeIds.length; i += 50) {
       const chunk = activeIds.slice(i, i + 50);
@@ -940,7 +910,14 @@ export async function pollMeuraOrders() {
       },
       select: { crmId: true },
     });
-    const activeIds = activeOrders.map(o => o.crmId);
+    // Заказы, заведённые у нас (ручные MAN-, из Telegram TG-), в CRM
+    // не существуют. Отправлять их идентификаторы в filter[ids][] нельзя:
+    // RetailCRM отвечает 400 «Errors in the input parameters» и роняет
+    // ВЕСЬ пакет из 50 заказов, включая настоящие. В логах это видно
+    // как MAN-shop-975512-954288 среди обычных номеров.
+    const activeIds = activeOrders
+      .map(o => o.crmId)
+      .filter(id => /^\d+$/.test(id));
 
     for (let i = 0; i < activeIds.length; i += 50) {
       const chunk = activeIds.slice(i, i + 50);

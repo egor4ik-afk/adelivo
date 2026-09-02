@@ -17,7 +17,6 @@ export async function GET(req: NextRequest) {
         select: {
           id: true, email: true, role: true, firstName: true, lastName: true,
           isSuperAdmin: true, accessRestricted: true, companyId: true, lastLoginAt: true,
-          canPostExchange: true,
         },
         orderBy: [{ role: "asc" }, { email: "asc" }],
       }),
@@ -86,15 +85,6 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // Право выкладывать заказы на биржу
-    if (b.canPostExchange !== undefined) {
-      await prisma.user.update({
-        where: { id: b.userId },
-        data: { canPostExchange: !!b.canPostExchange },
-      });
-      return NextResponse.json({ ok: true });
-    }
-
     if (b.isSuperAdmin !== undefined) {
       if (!viewer.isSuperAdmin) {
         return NextResponse.json(
@@ -142,6 +132,28 @@ export async function PATCH(req: NextRequest) {
     // Прежняя схема с accessRestricted убрана: она означала, что до первого
     // снятия галочки матрица вообще не действовала, и доступ по факту
     // определялся companyId. Теперь источник правды один.
+    // Если человек ещё «ничей», первая же выданная галочка принимает его
+    // в компанию администратора. Без этого он оставался без companyId,
+    // не попадал ни в один список и висел в системе призраком.
+    if (b.checked && viewer.companyId) {
+      await prisma.user.updateMany({
+        where: { id: b.userId, companyId: null },
+        data: { companyId: viewer.companyId },
+      });
+
+      const target = await prisma.user.findUnique({
+        where: { id: b.userId },
+        select: { email: true, companyId: true },
+      });
+      if (target?.email && target.companyId) {
+        // Профиль курьера тоже привязываем — по нему считаются выплаты
+        await prisma.courier.updateMany({
+          where: { email: { equals: target.email, mode: "insensitive" }, companyId: null },
+          data: { companyId: target.companyId },
+        });
+      }
+    }
+
     if (b.checked) {
       await prisma.shopAccess.upsert({
         where: { userId_shopId: { userId: b.userId, shopId: b.shopId } },

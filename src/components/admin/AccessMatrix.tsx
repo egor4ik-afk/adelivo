@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 type User = {
   id: string; email: string; role: string;
   firstName: string | null; lastName: string | null;
-  isSuperAdmin: boolean; accessRestricted?: boolean; canPostExchange?: boolean;
+  isSuperAdmin: boolean; accessRestricted?: boolean;
   companyId: string | null; lastLoginAt: string | null;
 };
 type Shop = { id: string; slug: string; name: string; isActive: boolean };
@@ -91,7 +91,14 @@ export function AccessMatrix() {
         : p.filter((a) => !(a.userId === userId && a.shopId === shopId))
     );
     const ok = await patch({ userId, shopId, checked }, `${userId}:${shopId}`);
-    if (!ok) load();
+    // Сервер мог заодно принять человека в компанию — перечитываем,
+    // чтобы это было видно сразу, а не после обновления страницы
+    load();
+    if (!ok) {
+      // Галочка отскочила — значит запрос отклонён. Раньше причина
+      // терялась, и выглядело это как «матрица работает через раз».
+      console.warn("[Матрица] доступ не сохранён", { userId, shopId, checked });
+    }
   };
 
   const toggleWork = async (u: User) => {
@@ -100,13 +107,6 @@ export function AccessMatrix() {
     const next = !c.isApproved;
     setCouriers((p) => p.map((x) => (x.id === c.id ? { ...x, isApproved: next } : x)));
     const ok = await patch({ userId: u.id, courierApproved: next }, `w:${u.id}`);
-    if (!ok) load();
-  };
-
-  const toggleExchange = async (u: User) => {
-    const next = !u.canPostExchange;
-    setUsers((p) => p.map((x) => (x.id === u.id ? { ...x, canPostExchange: next } : x)));
-    const ok = await patch({ userId: u.id, canPostExchange: next }, `e:${u.id}`);
     if (!ok) load();
   };
 
@@ -173,7 +173,6 @@ export function AccessMatrix() {
                   Сотрудник
                 </th>
                 <th className="px-3 py-3 font-bold text-[var(--color-text)] whitespace-nowrap">Работа</th>
-                <th className="px-3 py-3 font-bold text-[var(--color-text)] whitespace-nowrap">Биржа</th>
                 {shops.map((s) => (
                   <th key={s.id} className="px-3 py-3 font-bold text-[var(--color-text)] whitespace-nowrap text-center">
                     {s.name}
@@ -226,29 +225,6 @@ export function AccessMatrix() {
                       )}
                     </td>
 
-                    {/* Право выкладывать на биржу */}
-                    <td className="px-3 py-3 text-center">
-                      {u.role === "COURIER" ? (
-                        <span className="text-[10px] text-[var(--color-text-3)]">—</span>
-                      ) : (
-                        <input
-                          type="checkbox"
-                          // У админа право есть всегда и не снимается:
-                          // иначе компания могла бы остаться без единого
-                          // человека, способного отдать заказ на биржу
-                          checked={u.role === "ADMIN" || u.isSuperAdmin ? true : !!u.canPostExchange}
-                          disabled={u.role === "ADMIN" || u.isSuperAdmin || saving === `e:${u.id}`}
-                          onChange={() => toggleExchange(u)}
-                          title={
-                            u.role === "ADMIN" || u.isSuperAdmin
-                              ? "У администратора право есть всегда"
-                              : "Может выкладывать заказы на биржу"
-                          }
-                          className="w-4 h-4 accent-[var(--color-accent)] cursor-pointer disabled:opacity-40"
-                        />
-                      )}
-                    </td>
-
                     {/* Галочки по магазинам */}
                     {shops.map((s) => (
                       <td key={s.id} className="px-3 py-3 text-center">
@@ -286,7 +262,7 @@ export function AccessMatrix() {
               })}
               {shown.length === 0 && (
                 <tr>
-                  <td colSpan={shops.length + 4} className="px-4 py-10 text-center text-[var(--color-text-3)]">
+                  <td colSpan={shops.length + 3} className="px-4 py-10 text-center text-[var(--color-text-3)]">
                     Никого не нашлось
                   </td>
                 </tr>
