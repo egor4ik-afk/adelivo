@@ -9,7 +9,10 @@ import { applyUniversalEtaShift } from "@/lib/eta";
 import { notify, createManagerPlaque } from "@/lib/notifications";
 import { recalcRouteOfOrder } from "@/lib/route-order";
 
-const STORE_COORDS = "55.749511,37.596205";
+// Координаты базы берутся из магазина заказа. Значение ниже — запасное,
+// на случай незаполненной базы: раньше оно было единственным, и маршрут
+// любого магазина строился от адреса Банча.
+const FALLBACK_STORE_COORDS = "55.749511,37.596205";
 
 export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const user = await getSession(req as any);
@@ -130,11 +133,20 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     const rttMode = updateData.courierId
       ? ((await prisma.courier.findUnique({ where: { id: updateData.courierId } }))?.isAuto ? "auto" : "mt")
       : "auto";
-    const freshCoords = await prisma.order.findUnique({ where: { id }, select: { lat: true, lng: true } });
+    const freshCoords = await prisma.order.findUnique({
+      where: { id },
+      select: { lat: true, lng: true, shopRef: { select: { storeLat: true, storeLng: true } } },
+    });
+
+    const shopBase = freshCoords?.shopRef;
+    const storeCoords =
+      shopBase?.storeLat != null && shopBase?.storeLng != null
+        ? `${shopBase.storeLat},${shopBase.storeLng}`
+        : FALLBACK_STORE_COORDS;
     const finalCourier = updateData.courier !== undefined ? updateData.courier : order.courier;
     if (finalCourier && (body.courier !== undefined || body.address !== undefined)) {
       if (freshCoords?.lat && freshCoords?.lng) {
-        updateData.courierLink = `https://yandex.ru/maps/?mode=routes&rtext=${STORE_COORDS}~${freshCoords.lat},${freshCoords.lng}&rtt=${rttMode}`;
+        updateData.courierLink = `https://yandex.ru/maps/?mode=routes&rtext=${storeCoords}~${freshCoords.lat},${freshCoords.lng}&rtt=${rttMode}`;
       }
     }
 

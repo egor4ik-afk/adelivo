@@ -301,6 +301,10 @@ export default function CourierPointsPage() {
 
     if (typeof ymaps3.route !== "function") {
       console.warn("[Карта] ymaps3.route недоступен — линия не строится");
+      setRouteInfo({
+        distance: "маршрут недоступен",
+        duration: "у ключа нет прав на маршрутизацию",
+      });
       return;
     }
 
@@ -451,7 +455,14 @@ export default function CourierPointsPage() {
       {/* Карточка заказа */}
       {activeOrder && (
         <div style={{
-          position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 15,
+          position: "absolute", left: 10, right: 10,
+          // Отступ снизу — чтобы не перекрывать встроенную кнопку
+          // «Открыть в Яндекс.Картах»: убрать её нельзя, это условие API.
+          bottom: 52,
+          // zIndex 15 не хватало: у карты 3.0 поверх всего лежит свой слой
+          // управления, и он перехватывал нажатия — клик по «Пешком»
+          // уходил в карту, а та открывала Яндекс.Карты.
+          zIndex: 1200,
           background: "var(--color-card)", border: "1px solid var(--color-border)",
           borderRadius: 16, padding: 14, boxShadow: "0 8px 30px rgba(0,0,0,0.35)",
         }}>

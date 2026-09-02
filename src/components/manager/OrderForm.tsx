@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AddressSuggest } from "@/components/AddressSuggest";
 
 type Courier = { id: number; fullName: string; isActive?: boolean };
 
@@ -246,11 +247,11 @@ export function OrderForm({
           <h2 className="text-[13px] font-bold text-[var(--color-text)] mb-3">Доставка</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <Field id="address" title="Адрес *" wide hint="После сохранения адрес автоматически геокодируется и попадёт в маршрут">
-              <input
-                id="address"
-                className={`${input} ${!v.address.trim() ? "border-[var(--color-amber)]" : ""}`}
+              <AddressSuggest
+                className={input}
                 value={v.address}
-                onChange={set("address")}
+                onChange={(val) => setV((p) => ({ ...p, address: val }))}
+                invalid={!v.address.trim()}
                 placeholder="Москва, ул. Ленина, 42, кв. 7"
               />
             </Field>

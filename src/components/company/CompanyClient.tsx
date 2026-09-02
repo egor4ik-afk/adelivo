@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CONNECTORS, type ConnectorType } from "@/lib/connectors/catalog";
 import { TelegramSources } from "./TelegramSources";
+import { AddressSuggest } from "@/components/AddressSuggest";
 
 type Shop = {
   id: string; slug: string; name: string; isActive: boolean;
@@ -363,9 +364,12 @@ export function CompanyClient({ siteUrl }: { siteUrl: string }) {
 
                     <div>
                       <label className={label}>Адрес базы</label>
-                      <input className={input} value={form.storeAddress}
-                        onChange={(e) => setForm((p) => ({ ...p, storeAddress: e.target.value }))}
-                        placeholder="Москва, ул. Правды, 24с2" />
+                      <AddressSuggest
+                        className={input}
+                        value={form.storeAddress}
+                        onChange={(val) => setForm((p) => ({ ...p, storeAddress: val }))}
+                        placeholder="Москва, ул. Правды, 24с2"
+                      />
                       <p className="text-[11px] text-[var(--color-text-3)] mt-1.5 leading-relaxed">
                         Точка, откуда курьеры забирают заказы. Маршрут на карте строится
                         от неё, а не от текущего положения курьера — так курьер видит
