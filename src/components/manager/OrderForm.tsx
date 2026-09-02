@@ -20,7 +20,7 @@ export type OrderFormValues = {
   comment: string;
   opComment: string;
   price: string;
-  shop: string;
+  shopId: string;
   status: string;
   courierId: string;
 };
@@ -28,7 +28,7 @@ export type OrderFormValues = {
 const EMPTY: OrderFormValues = {
   externalId: "", address: "", deliveryDate: "", slotFrom: "", slotTo: "",
   name: "", recipientPhone: "", customerName: "", customerPhone: "",
-  items: "", comment: "", opComment: "", price: "", shop: "", status: "NEW", courierId: "",
+  items: "", comment: "", opComment: "", price: "", shopId: "", status: "NEW", courierId: "",
 };
 
 const STATUSES = [
@@ -72,6 +72,7 @@ export function OrderForm({
   const router = useRouter();
   const [v, setV] = useState<OrderFormValues>({ ...EMPTY, ...initial });
   const [couriers, setCouriers] = useState<Courier[]>([]);
+  const [shops, setShops] = useState<{ id: string; name: string; slug: string }[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pasteText, setPasteText] = useState("");
@@ -82,6 +83,16 @@ export function OrderForm({
     setV((p) => ({ ...p, [k]: e.target.value }));
 
   useEffect(() => {
+    fetch("/api/company")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const list = d?.shops ?? [];
+        setShops(list);
+        // Магазин один — выбирать не из чего, подставляем сразу
+        if (list.length === 1) setV((p) => (p.shopId ? p : { ...p, shopId: list[0].id }));
+      })
+      .catch(() => setShops([]));
+
     fetch("/api/couriers")
       .then((r) => (r.ok ? r.json() : []))
       .then((d) => setCouriers(Array.isArray(d) ? d : d?.couriers ?? []))
@@ -129,6 +140,8 @@ export function OrderForm({
   const submit = async () => {
     setError(null);
     if (!v.address.trim()) { setError("Укажите адрес доставки"); return; }
+    // Без магазина заказ не увидит никто: доступ считается по нему
+    if (!v.shopId) { setError("Выберите магазин — от него зависит, кто увидит заказ"); return; }
 
     setSaving(true);
     try {
@@ -232,8 +245,14 @@ export function OrderForm({
         <section className={card}>
           <h2 className="text-[13px] font-bold text-[var(--color-text)] mb-3">Доставка</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-            <Field id="address" title="Адрес" wide hint="После сохранения адрес автоматически геокодируется и попадёт в маршрут">
-              <input id="address" className={input} value={v.address} onChange={set("address")} placeholder="Москва, ул. Ленина, 42, кв. 7" />
+            <Field id="address" title="Адрес *" wide hint="После сохранения адрес автоматически геокодируется и попадёт в маршрут">
+              <input
+                id="address"
+                className={`${input} ${!v.address.trim() ? "border-[var(--color-amber)]" : ""}`}
+                value={v.address}
+                onChange={set("address")}
+                placeholder="Москва, ул. Ленина, 42, кв. 7"
+              />
             </Field>
             <Field id="deliveryDate" title="Дата доставки">
               <input id="deliveryDate" type="date" className={input} value={v.deliveryDate} onChange={set("deliveryDate")} />
@@ -297,8 +316,22 @@ export function OrderForm({
               <Field id="externalId" title="Номер заказа" hint={mode === "create" ? "Оставьте пустым — сгенерируем автоматически" : "Изменить нельзя"}>
                 <input id="externalId" className={input} value={v.externalId} onChange={set("externalId")} disabled={mode === "edit"} placeholder="8821" />
               </Field>
-              <Field id="shop" title="Магазин / источник">
-                <input id="shop" className={input} value={v.shop} onChange={set("shop")} placeholder="Manual" />
+              <Field
+                id="shopId"
+                title="Магазин *"
+                hint={shops.length === 0 ? "Магазинов нет — создайте его в разделе «Компания»" : "От магазина зависит, кто увидит заказ"}
+              >
+                <select
+                  id="shopId"
+                  className={`${input} ${!v.shopId ? "border-[var(--color-amber)]" : ""}`}
+                  value={v.shopId}
+                  onChange={set("shopId")}
+                >
+                  <option value="">— выберите —</option>
+                  {shops.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name} ({s.slug})</option>
+                  ))}
+                </select>
               </Field>
             </div>
           </div>

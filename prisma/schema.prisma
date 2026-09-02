@@ -60,6 +60,7 @@ model Company {
 
   shops Shop[]
   users User[]
+  telegramSources TelegramSource[]
 }
 
 /// ★ НОВОЕ
@@ -92,6 +93,7 @@ model Shop {
   orders    Order[]
   access    ShopAccess[]
   connector Connector?
+  telegramSources TelegramSource[]
 
   @@index([companyId])
 }
@@ -140,6 +142,26 @@ model Connector {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model TelegramSource {
+  id        String   @id @default(cuid())
+  chatId    String   @unique
+  title     String?
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  shopId    String
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  isActive  Boolean  @default(true)
+  autoCreate Boolean @default(false)
+  hintTemplate String? @db.Text
+  lastMessageAt DateTime?
+  lastError     String?  @db.Text
+  ordersCreated Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([companyId])
+  @@index([shopId])
 }
 
 // ═══════════════════════════════════════════════════════════════

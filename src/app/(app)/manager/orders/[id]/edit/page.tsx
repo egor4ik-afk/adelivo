@@ -33,7 +33,7 @@ export default async function EditOrderPage({ params }: { params: Promise<{ id: 
         comment: order.comment ?? "",
         opComment: order.opComment ?? "",
         price: order.price != null ? String(order.price) : "",
-        shop: order.shop ?? "",
+        shopId: order.shopId ?? "",
         status: order.status,
         courierId: order.courierId != null ? String(order.courierId) : "",
       }}

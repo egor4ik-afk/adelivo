@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { getViewer, visibleShopIds } from "@/lib/access";
 import { geocodeAddress, calcBaseDeliveryPrice } from "@/lib/crm";
 import { OrderStatus } from "@prisma/client";
 
@@ -32,9 +33,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Укажите адрес доставки" }, { status: 400 });
     }
 
+    // Магазин обязателен. Доступ к заказам считается по shopId, поэтому
+    // заказ без магазина не увидит вообще никто, включая того, кто его создал.
+    if (!b.shopId) {
+      return NextResponse.json({ error: "Выберите магазин" }, { status: 400 });
+    }
+
+    const viewer = await getViewer(req);
+    const allowed = viewer ? await visibleShopIds(viewer) : [];
+    if (allowed !== null && !allowed.includes(b.shopId)) {
+      return NextResponse.json({ error: "Магазин недоступен" }, { status: 403 });
+    }
+
+    const shop = await prisma.shop.findUnique({
+      where: { id: b.shopId },
+      select: { id: true, slug: true },
+    });
+    if (!shop) return NextResponse.json({ error: "Магазин не найден" }, { status: 404 });
+
     // Номер заказа: свой, если задали, иначе генерим
     const externalId = b.externalId?.trim() || String(Date.now()).slice(-6);
-    const crmId = `${MANUAL_PREFIX}${externalId}`;
+    const crmId = `${MANUAL_PREFIX}${shop.slug}-${externalId}`;
 
     const exists = await prisma.order.findUnique({ where: { crmId } });
     if (exists) {
@@ -74,7 +93,8 @@ export async function POST(req: NextRequest) {
         items: b.items?.trim() || null,
         comment: b.comment?.trim() || null,
         opComment: b.opComment?.trim() || null,
-        shop: b.shop?.trim() || "Manual",
+        shopId: shop.id,
+        shop: shop.slug,
         deliveryType: b.deliveryType?.trim() || null,
         deliveryDate: b.deliveryDate || null,
         slotFrom,

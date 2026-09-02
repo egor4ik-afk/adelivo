@@ -15,6 +15,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { NAV_HEIGHT } from "@/components/CourierNav";
+import { loadYmaps3, loadMapControls, toLngLat } from "@/lib/maps";
 
 interface CourierOrder {
   id: string; externalId: string; crmId: string; address: string; status: string;
@@ -44,10 +45,6 @@ const MARKER_COLOR: Record<string, string> = {
   IN_DELIVERY: "#34D399",
   ASSEMBLING: "#FBBF24",
 };
-
-declare global {
-  interface Window { ymaps3: any }
-}
 
 export default function CourierPointsPage() {
   const mapEl = useRef<HTMLDivElement>(null);
@@ -150,16 +147,17 @@ export default function CourierPointsPage() {
       initedRef.current = true;
 
       try {
-        await window.ymaps3.ready;
+        const ymaps3 = await loadYmaps3();
+
+        // Всё это лежит в ядре
         const {
-          YMap, YMapDefaultSchemeLayer, YMapDefaultFeaturesLayer,
-          YMapControls, YMapZoomControl, YMapGeolocationControl,
-        } = window.ymaps3;
+          YMap, YMapDefaultSchemeLayer, YMapDefaultFeaturesLayer, YMapControls,
+        } = ymaps3;
 
         const map = new YMap(mapEl.current, {
-          location: { center: [37.61, 55.75], zoom: 11 }, // [lng, lat]!
+          location: { center: toLngLat(55.75, 37.61), zoom: 11 },
           // Ради этого и переезжали: pinchRotate — поворот двумя пальцами,
-          // panTilt — наклон карты, в v2 их не было вообще
+          // panTilt — наклон карты. В 2.1 их не было вообще.
           behaviors: ["drag", "pinchZoom", "scrollZoom", "dblClick", "pinchRotate", "panTilt"],
           camera: { tilt: 0, azimuth: 0 },
         });
@@ -167,29 +165,32 @@ export default function CourierPointsPage() {
         map.addChild(new YMapDefaultSchemeLayer({ theme: "auto" }));
         map.addChild(new YMapDefaultFeaturesLayer({}));
 
-        const controls = new YMapControls({ position: "right" });
-        controls.addChild(new YMapZoomControl({}));
-        controls.addChild(new YMapGeolocationControl({}));
-        map.addChild(controls);
+        // А вот кнопки зума и геолокации — в отдельном пакете.
+        // Если он не подгрузится, карта всё равно работает: жесты на месте.
+        const ui = await loadMapControls(ymaps3);
+        if (ui?.YMapZoomControl) {
+          const controls = new YMapControls({ position: "right" });
+          controls.addChild(new ui.YMapZoomControl({}));
+          if (ui.YMapGeolocationControl) {
+            controls.addChild(new ui.YMapGeolocationControl({}));
+          }
+          map.addChild(controls);
+        }
 
         mapRef.current = map;
         setMapReady(true);
       } catch (e) {
         console.error("[Карта] не удалось инициализировать v3", e);
-        setMapError("Карта не загрузилась. Проверьте связь и обновите страницу.");
+        setMapError(
+          e instanceof Error && e.message.includes("ключ")
+            ? "Не задан ключ карт для версии 3.0"
+            : "Карта не загрузилась. Обновите страницу."
+        );
         initedRef.current = false;
       }
     };
 
-    if (window.ymaps3) { init(); return; }
-
-    const s = document.createElement("script");
-    // v3 живёт по другому адресу и не совместим с 2.1: у них разные
-    // глобальные объекты, поэтому обе версии могут работать на разных страницах
-    s.src = `https://api-maps.yandex.ru/v3/?apikey=${process.env.NEXT_PUBLIC_YANDEX_MAPS_KEY}&lang=ru_RU`;
-    s.onload = () => init();
-    s.onerror = () => setMapError("Не удалось загрузить карту");
-    document.head.appendChild(s);
+    init();
   }, []);
 
   /* ── маркеры ───────────────────────────────────────────── */
@@ -237,7 +238,7 @@ export default function CourierPointsPage() {
       el.onclick = () => { setActiveOrderId(o.id); setIsCardMinimized(false); };
 
       // Снова: в v3 координаты идут [долгота, широта]
-      const marker = new YMapMarker({ coordinates: [o.lng, o.lat] }, el);
+      const marker = new YMapMarker({ coordinates: toLngLat(o.lat, o.lng) }, el);
       mapRef.current.addChild(marker);
       markersRef.current.set(o.id, marker);
     });
@@ -280,8 +281,8 @@ export default function CourierPointsPage() {
     try {
       const routes = await ymaps3.route({
         points: [
-          [userLocation[1], userLocation[0]], // [lng, lat]
-          [to[1], to[0]],
+          toLngLat(userLocation[0], userLocation[1]),
+          toLngLat(to[0], to[1]),
         ],
         type: mode === "mt" ? "masstransit" : "driving",
         bounds: true,

@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CONNECTORS, type ConnectorType } from "@/lib/connectors/catalog";
+import { TelegramSources } from "./TelegramSources";
 
 type Shop = {
   id: string; slug: string; name: string; isActive: boolean;
@@ -380,6 +381,8 @@ export function CompanyClient({ siteUrl }: { siteUrl: string }) {
           })}
         </div>
       </section>
+
+      {isAdmin && <TelegramSources shops={shops} />}
 
       <p className="text-[12px] text-[var(--color-text-3)] leading-relaxed">
         Проверка подключения только читает данные — она делает один запрос и ничего не меняет

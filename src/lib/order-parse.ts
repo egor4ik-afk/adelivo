@@ -1,30 +1,17 @@
 // src/lib/order-parse.ts
 // Разбор свободного текста заказа в поля формы.
 //
-// Первый шаг к приёму заказов из Telegram: пока текст вставляют руками
-// в форму создания, потом тот же разбор будет вызывать бот при появлении
-// сообщения в группе компании.
+// Используется и формой создания заказа, и приёмом сообщений из Telegram.
 //
 // Двухслойная схема: сначала регулярки, потом AI поверх них.
-// Регулярки надёжны на телефонах, датах и времени — там нечего понимать,
-// там строгий формат. AI нужен для того, что формализовать нельзя:
-// где в тексте адрес, где имя получателя, а где имя заказчика,
-// и что из этого состав букета.
+// Регулярки надёжны на телефонах, датах и времени — там строгий формат.
+// AI нужен для того, что формализовать нельзя: где адрес, где имя получателя,
+// а где заказчика, и что из этого состав заказа.
 //
 // Порядок важен: если AI недоступен или вернул мусор, форма всё равно
 // получит телефон, дату и слот — а это половина полей.
 
-import OpenAI from "openai";
-
-const YANDEX_CLOUD_FOLDER = process.env.YANDEX_CLOUD_FOLDER || "b1gcr5m4ptniag2qpsqm";
-const YANDEX_CLOUD_API_KEY = process.env.YANDEX_LLM_API_KEY;
-const YANDEX_CLOUD_MODEL = "aliceai-llm/latest";
-
-const client = new OpenAI({
-  apiKey: YANDEX_CLOUD_API_KEY,
-  baseURL: "https://ai.api.cloud.yandex.net/v1",
-  defaultHeaders: { "OpenAI-Project": YANDEX_CLOUD_FOLDER },
-});
+import { callAI, hasAIKey } from "./ai";
 
 export type ParsedOrder = {
   externalId: string | null;
@@ -189,21 +176,17 @@ export async function parseOrderText(text: string): Promise<{
 }> {
   const rules = parseByRules(text);
 
-  if (!YANDEX_CLOUD_API_KEY) {
-    return { parsed: rules, source: "rules", warning: "YANDEX_LLM_API_KEY не задан — разобрано только по шаблонам" };
+  if (!hasAIKey()) {
+    return {
+      parsed: rules,
+      source: "rules",
+      warning: "Ключ OPENCODE_ZEN_API_KEY не задан — разобрано только по шаблонам",
+    };
   }
 
   try {
-    const res = await client.chat.completions.create({
-      model: YANDEX_CLOUD_MODEL,
-      temperature: 0,
-      messages: [
-        { role: "system", content: SYSTEM },
-        { role: "user", content: text.slice(0, 4000) },
-      ],
-    });
-
-    const data = safeJson(res.choices?.[0]?.message?.content ?? "");
+    const raw = await callAI(SYSTEM, text.slice(0, 4000), { maxTokens: 1200, temperature: 0 });
+    const data = safeJson(raw);
     if (!data) return { parsed: rules, source: "rules", warning: "AI вернул неразбираемый ответ" };
 
     const price = Number(data.price);
@@ -230,6 +213,10 @@ export async function parseOrderText(text: string): Promise<{
     };
   } catch (e) {
     console.error("[order-parse] AI недоступен:", e);
-    return { parsed: rules, source: "rules", warning: "AI недоступен — разобрано только по шаблонам" };
+    return {
+      parsed: rules,
+      source: "rules",
+      warning: e instanceof Error ? `AI недоступен: ${e.message}` : "AI недоступен",
+    };
   }
 }
