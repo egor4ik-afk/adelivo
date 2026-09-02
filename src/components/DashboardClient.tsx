@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef, Fragment, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { ProfilePanel } from "./ProfilePanel";
+import { AppMenu } from "./layout/AppMenu";
 import { OrderDetail } from "./OrderDetail";
 import { STATUS_OPTIONS, STATUS_LABELS, SLOTS, slotColor } from "@/lib/constants";
 import Link from "next/link";
@@ -1938,14 +1939,11 @@ export function DashboardClient({ user }: { user: User }) {
           </div>
         </Link>
 
-        {/* 2. Основные кнопки навигации */}
-        <button onClick={() => router.push('/orders')} style={topbarBtnStyle}>
-          ≡ Заказы
-          <span style={{ background: '#eef3ff', color: 'var(--color-accent)', padding: '1px 6px', borderRadius: 10, fontSize: 11, fontWeight: 700 }}>
-            {filtered.length}
-          </span>
-        </button>
-        <button onClick={() => router.push('/couriers')} style={topbarBtnStyle}>🚚 Курьеры</button>
+        {/* 2. Меню разделов.
+            «Заказы» и «Курьеры» переехали сюда из топбара: они занимали
+            место, которого на мобильном не хватало фильтрам и датам,
+            а нажимают их несколько раз за смену, не постоянно. */}
+        <AppMenu isAdmin={user.role === "ADMIN"} compact={isMobile} />
 
         {/* 🔥 ПОКАЗЫВАЕМ ЭТО ТОЛЬКО НА ДЕСКТОПЕ (На мобилке они уедут во 2-й ряд) */}
         {!isMobile && (

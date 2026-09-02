@@ -15,7 +15,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { NAV_HEIGHT } from "@/components/CourierNav";
-import { loadYmaps3, loadMapControls, toLngLat } from "@/lib/maps";
+import { loadYmaps3, loadMapControls, toLngLat, formatDistance, formatDuration } from "@/lib/maps";
 
 interface CourierOrder {
   id: string; externalId: string; crmId: string; address: string; status: string;
@@ -162,7 +162,12 @@ export default function CourierPointsPage() {
           camera: { tilt: 0, azimuth: 0 },
         });
 
-        map.addChild(new YMapDefaultSchemeLayer({ theme: "auto" }));
+        // theme принимает только "light" или "dark" — значения "auto" нет.
+        // Берём текущую тему приложения, чтобы карта не светила белым
+        // на тёмном интерфейсе.
+        const appTheme =
+          document.documentElement.getAttribute("data-ew-theme") === "dark" ? "dark" : "light";
+        map.addChild(new YMapDefaultSchemeLayer({ theme: appTheme }));
         map.addChild(new YMapDefaultFeaturesLayer({}));
 
         // А вот кнопки зума и геолокации — в отдельном пакете.
@@ -266,47 +271,68 @@ export default function CourierPointsPage() {
     const ymaps3 = window.ymaps3;
     if (!userLocation || !mapRef.current || !ymaps3) return;
 
+    // Снимаем прошлую линию до запроса: иначе при быстром переключении
+    // точек на карте остаются две
     if (routeRef.current) {
       try { mapRef.current.removeChild(routeRef.current); } catch {}
       routeRef.current = null;
     }
     setRouteInfo(null);
 
-    // В v3 нет multiRouter: маршрут отдаёт ymaps3.route(), а рисуем сами.
     if (typeof ymaps3.route !== "function") {
-      console.warn("[Карта] ymaps3.route недоступен — линия маршрута не строится");
+      console.warn("[Карта] ymaps3.route недоступен — линия не строится");
       return;
     }
 
     try {
-      const routes = await ymaps3.route({
+      // Порядок именно такой: points — массив LngLat, type — строка.
+      // bounds: true просит вернуть габариты маршрута, чтобы подогнать камеру.
+      const response = await ymaps3.route({
         points: [
           toLngLat(userLocation[0], userLocation[1]),
           toLngLat(to[0], to[1]),
         ],
-        type: mode === "mt" ? "masstransit" : "driving",
+        type: mode === "mt" ? "walking" : "driving",
         bounds: true,
       });
 
-      const first = routes?.[0];
-      if (!first) return;
+      if (!response?.[0]) {
+        console.warn("[Карта] маршрут не найден");
+        return;
+      }
 
-      const geometry = first.toRoute?.()?.geometry ?? first.geometry;
-      if (!geometry) return;
+      // Ответ роутера — не геометрия. Превращаем в RouteFeature,
+      // и только у него есть geometry для отрисовки.
+      const route = response[0].toRoute();
+      if (!route?.geometry?.coordinates?.length) return;
 
       const { YMapFeature } = ymaps3;
       const line = new YMapFeature({
-        geometry,
-        style: { stroke: [{ color: "#5b87ff", width: 6 }] },
+        id: "active-route",
+        geometry: route.geometry,
+        style: {
+          stroke: [
+            // Две линии: широкая тёмная снизу даёт контур, из-за него
+            // маршрут читается и поверх светлых улиц, и поверх парков
+            { color: "rgba(0,0,0,0.35)", width: 9 },
+            { color: "#5b87ff", width: 5 },
+          ],
+        },
       });
       mapRef.current.addChild(line);
       routeRef.current = line;
 
-      const props = first.properties ?? {};
+      const props = route.properties ?? response[0].properties ?? {};
       setRouteInfo({
-        distance: props.distance?.text ?? "—",
-        duration: props.duration?.text ?? "—",
+        distance: props.distance?.text ?? formatDistance(props.distance?.value ?? props.distance),
+        duration: props.duration?.text ?? formatDuration(props.duration?.value ?? props.duration),
       });
+
+      // Подгоняем камеру под маршрут, сохраняя текущий наклон и поворот
+      const bounds = response[0].bounds ?? props.bounds;
+      if (bounds) {
+        mapRef.current.update({ location: { bounds, duration: 400 } });
+      }
     } catch (e) {
       console.error("[Карта] маршрут не построился", e);
     }

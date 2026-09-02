@@ -51,6 +51,15 @@ export function loadYmaps3(): Promise<Ymaps3> {
     const done = async () => {
       try {
         await window.ymaps3!.ready;
+
+        // Без явного CDN ymaps3.import в отдельных сборках не находит пакеты.
+        // Вызов идемпотентный, повторно регистрировать безопасно.
+        try {
+          window.ymaps3!.import?.registerCdn?.(
+            "https://cdn.jsdelivr.net/npm/{package}",
+            ["@yandex/ymaps3-controls@0.0.1", "@yandex/ymaps3-default-ui-theme@0.0"]
+          );
+        } catch { /* необязательно */ }
         resolve(window.ymaps3);
       } catch (e) {
         reject(e);
@@ -94,16 +103,41 @@ export function loadYmaps3(): Promise<Ymaps3> {
  * жесты зума и так есть.
  */
 export async function loadMapControls(ymaps3: Ymaps3) {
-  try {
-    const ui = await ymaps3.import("@yandex/ymaps3-default-ui-theme");
-    return {
-      YMapZoomControl: ui.YMapZoomControl,
-      YMapGeolocationControl: ui.YMapGeolocationControl,
-    };
-  } catch (e) {
-    console.warn("[Карта] пакет элементов управления не загрузился", e);
-    return null;
+  // Пакетов два, и в разных сборках API доступен то один, то другой:
+  // ymaps3-controls — старый и лёгкий, default-ui-theme — новый с темами.
+  // Пробуем по очереди, чтобы не зависеть от версии скрипта.
+  const packages = ["@yandex/ymaps3-controls@0.0.1", "@yandex/ymaps3-default-ui-theme"];
+
+  for (const pkg of packages) {
+    try {
+      const ui = await ymaps3.import(pkg);
+      if (ui?.YMapZoomControl) {
+        return {
+          YMapZoomControl: ui.YMapZoomControl,
+          YMapGeolocationControl: ui.YMapGeolocationControl,
+        };
+      }
+    } catch {
+      // пробуем следующий
+    }
   }
+
+  console.warn("[Карта] элементы управления недоступны — работаем без кнопок");
+  return null;
+}
+
+/** Метры и секунды от роутера — в человеческий вид. */
+export function formatDistance(meters?: number | null): string {
+  if (!meters && meters !== 0) return "—";
+  return meters < 1000 ? `${Math.round(meters)} м` : `${(meters / 1000).toFixed(1)} км`;
+}
+
+export function formatDuration(seconds?: number | null): string {
+  if (!seconds && seconds !== 0) return "—";
+  const m = Math.round(seconds / 60);
+  if (m < 60) return `${m} мин`;
+  const h = Math.floor(m / 60);
+  return `${h} ч ${m % 60} мин`;
 }
 
 /** В 3.0 координаты идут [долгота, широта] — обратный порядок к 2.1. */
