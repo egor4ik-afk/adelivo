@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { getViewer, accessibleCourierIds } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,12 @@ export async function GET(req: Request) {
     const start = searchParams.get("start");
     const end = searchParams.get("end");
 
+    // Выплаты — чувствительные данные: суммы, задания, статусы актов.
+    // Отдаём только по своим курьерам.
+    const viewer = await getViewer(req as never);
+    const courierIds = viewer ? await accessibleCourierIds(viewer) : [];
+    const courierFilter = courierIds === null ? {} : { courierId: { in: courierIds } };
+
     // 🔥 2. Формируем жесткий фильтр по датам
     let dateFilter = {};
     if (start && end) {
@@ -30,7 +37,7 @@ export async function GET(req: Request) {
     }
 
     const tasks = await prisma.konsolTask.findMany({
-      where: dateFilter, // Применяем фильтр!
+      where: { ...dateFilter, ...courierFilter },
       include: {
         courier: {
           select: {

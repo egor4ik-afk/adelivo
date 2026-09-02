@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import axios from "axios";
+import { getViewer } from "@/lib/access";
 
 const CRM_URL = process.env.RETAILCRM_API_URL;
 const CRM_KEY = process.env.RETAILCRM_API_KEY;
@@ -9,6 +10,14 @@ const CRM_KEY = process.env.RETAILCRM_API_KEY;
 const BAD_WORDS = ["сдэк", "яндекс", "доставк", "курьер", "тест", "пеший", "авто", "logisty", "dostavista"];
 
 export async function GET() {
+  // Эндпоинт тянет справочник курьеров из CRM и пишет в базу,
+  // а проверки не было вообще: дёрнуть мог кто угодно, зная адрес.
+  const viewer = await getViewer();
+  if (!viewer) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (viewer.role !== "ADMIN" && !viewer.isSuperAdmin) {
+    return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
+  }
+
   if (!CRM_URL || !CRM_KEY) {
     return NextResponse.json({ error: "No CRM config" }, { status: 500 });
   }

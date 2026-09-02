@@ -43,7 +43,11 @@ export async function GET() {
       ],
       ...shopWhere,
     },
-    include: { route: true },
+    // База магазина нужна карте: маршрут строится ОТ неё, а не от курьера
+    include: {
+      route: true,
+      shopRef: { select: { storeLat: true, storeLng: true, storeAddress: true, name: true } },
+    },
     orderBy: [{ routeId: 'asc' }, { routeOrder: 'asc' }, { slotFrom: 'asc' }]
   });
 

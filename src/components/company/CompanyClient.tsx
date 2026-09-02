@@ -8,7 +8,8 @@ import { TelegramSources } from "./TelegramSources";
 
 type Shop = {
   id: string; slug: string; name: string; isActive: boolean;
-  connectorType: string | null; storeAddress: string | null; ordersCount: number;
+  connectorType: string | null; storeAddress: string | null;
+  storeLat: number | null; storeLng: number | null; ordersCount: number;
   connector: {
     type: string; isActive: boolean; baseUrl: string | null;
     hasKey: boolean; lastSyncAt: string | null; lastError: string | null;
@@ -48,7 +49,7 @@ export function CompanyClient({ siteUrl }: { siteUrl: string }) {
   const [addingShop, setAddingShop] = useState(false);
   // настройка подключения
   const [editing, setEditing] = useState<string | null>(null);
-  const [form, setForm] = useState({ connectorType: "RETAILCRM" as ConnectorType, baseUrl: "", apiKey: "" });
+  const [form, setForm] = useState({ connectorType: "RETAILCRM" as ConnectorType, baseUrl: "", apiKey: "", storeAddress: "" });
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -111,6 +112,7 @@ export function CompanyClient({ siteUrl }: { siteUrl: string }) {
       connectorType: (s.connector?.type ?? s.connectorType ?? "RETAILCRM") as ConnectorType,
       baseUrl: s.connector?.baseUrl ?? "",
       apiKey: "",
+      storeAddress: s.storeAddress ?? "",
     });
   };
 
@@ -296,6 +298,7 @@ export function CompanyClient({ siteUrl }: { siteUrl: string }) {
                     <div className="font-bold text-[14px] text-[var(--color-text)]">{s.name}</div>
                     <div className="text-[11px] text-[var(--color-text-3)] mt-0.5">
                       {s.slug} · {conf?.label ?? "не настроено"} · заказов: {s.ordersCount}
+                      {s.storeAddress ? ` · база: ${s.storeAddress}` : " · база не указана"}
                     </div>
                     {s.connector?.lastError && (
                       <div className="text-[11px] text-red-600 mt-1">Ошибка: {s.connector.lastError}</div>
@@ -357,6 +360,19 @@ export function CompanyClient({ siteUrl }: { siteUrl: string }) {
                         )}
                       </>
                     )}
+
+                    <div>
+                      <label className={label}>Адрес базы</label>
+                      <input className={input} value={form.storeAddress}
+                        onChange={(e) => setForm((p) => ({ ...p, storeAddress: e.target.value }))}
+                        placeholder="Москва, ул. Правды, 24с2" />
+                      <p className="text-[11px] text-[var(--color-text-3)] mt-1.5 leading-relaxed">
+                        Точка, откуда курьеры забирают заказы. Маршрут на карте строится
+                        от неё, а не от текущего положения курьера — так курьер видит
+                        реальный путь развоза, а не дорогу от дивана до первого адреса.
+                        {s.storeLat ? " Координаты определены." : " Координаты появятся после сохранения."}
+                      </p>
+                    </div>
 
                     {testResult && (
                       <div className={`rounded-lg px-3 py-2.5 text-[12px] font-medium border ${

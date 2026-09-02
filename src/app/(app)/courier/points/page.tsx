@@ -22,6 +22,7 @@ interface CourierOrder {
   lat: number | null; lng: number | null; slotRaw: string | null;
   routeId: string | null; routeOrder: number | null;
   route?: { id: string; name: string } | null;
+  shopRef?: { storeLat: number | null; storeLng: number | null; storeAddress: string | null; name: string } | null;
   deliveryDate?: string | null; crmCreatedAt?: string | null;
   // заказ с биржи, а не свой
   isExchange?: boolean;
@@ -271,13 +272,21 @@ export default function CourierPointsPage() {
     const ymaps3 = window.ymaps3;
     if (!mapRef.current || !ymaps3) return;
 
-    // Без своей позиции маршрут строить не от чего. Раньше функция просто
-    // молча выходила — кнопки «Пешком» и «Авто» выглядели неработающими,
-    // хотя дело было в том, что браузер не отдал геолокацию.
-    if (!userLocation) {
+    // Маршрут строится ОТ БАЗЫ магазина, а не от текущего положения курьера.
+    // Курьеру нужен путь развоза «база → адрес»: утром он дома, днём —
+    // на предыдущей точке, и маршрут от него самого мало что значит.
+    // Геопозиция остаётся запасным вариантом, если база не заполнена.
+    const current = [...orders, ...exchange].find((o) => o.id === activeOrderId);
+    const base = current?.shopRef;
+    const from: [number, number] | null =
+      base?.storeLat != null && base?.storeLng != null
+        ? [base.storeLat, base.storeLng]
+        : userLocation;
+
+    if (!from) {
       setRouteInfo({
-        distance: "нет геопозиции",
-        duration: "разрешите доступ к местоположению",
+        distance: "нет точки старта",
+        duration: "укажите адрес базы магазина в разделе «Компания»",
       });
       return;
     }
@@ -300,7 +309,7 @@ export default function CourierPointsPage() {
       // bounds: true просит вернуть габариты маршрута, чтобы подогнать камеру.
       const response = await ymaps3.route({
         points: [
-          toLngLat(userLocation[0], userLocation[1]),
+          toLngLat(from[0], from[1]),
           toLngLat(to[0], to[1]),
         ],
         type: mode === "mt" ? "walking" : "driving",
@@ -345,12 +354,17 @@ export default function CourierPointsPage() {
         mapRef.current.update({ location: { bounds, duration: 400 } });
       }
     } catch (e) {
-      console.error("[Карта] маршрут не построился", e);
+      // Текст ошибки от Яндекса важен: «Invalid key», «Forbidden» и
+      // «route not found» лечатся по-разному, а без него остаётся гадать
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[Карта] маршрут не построился:", msg, e);
+      setRouteInfo({ distance: "маршрут не построен", duration: msg.slice(0, 60) });
     }
-  }, [userLocation]);
+  }, [userLocation, orders, exchange, activeOrderId]);
 
   useEffect(() => {
-    if (!activeOrderId || !userLocation) return;
+    // Геопозиция больше не обязательна: старт берётся от базы
+    if (!activeOrderId) return;
     const o = [...orders, ...exchange].find((x) => x.id === activeOrderId);
     if (o && hasCoords(o)) buildRoute([o.lat, o.lng], routeType);
   }, [routeType, activeOrderId, userLocation, buildRoute, orders, exchange]);
@@ -376,8 +390,15 @@ export default function CourierPointsPage() {
   };
 
   const activeOrder = [...orders, ...exchange].find((o) => o.id === activeOrderId);
-  const navUrl = activeOrder && userLocation
-    ? `https://yandex.ru/maps/?rtext=${userLocation[0]},${userLocation[1]}~${activeOrder.lat},${activeOrder.lng}&rtt=${routeType}`
+  // В навигатор отправляем тоже от базы: иначе курьер получит два разных
+  // маршрута — один на карте, другой в приложении Яндекса
+  const navFrom: [number, number] | null =
+    activeOrder?.shopRef?.storeLat != null && activeOrder?.shopRef?.storeLng != null
+      ? [activeOrder.shopRef.storeLat, activeOrder.shopRef.storeLng]
+      : userLocation;
+
+  const navUrl = activeOrder && navFrom
+    ? `https://yandex.ru/maps/?rtext=${navFrom[0]},${navFrom[1]}~${activeOrder.lat},${activeOrder.lng}&rtt=${routeType}`
     : "#";
 
   /* ── разметка ──────────────────────────────────────────── */
@@ -430,9 +451,7 @@ export default function CourierPointsPage() {
       {/* Карточка заказа */}
       {activeOrder && (
         <div style={{
-          // Отступ снизу больше: у карты 3.0 внизу своя кнопка
-          // «Открыть в Яндекс.Картах», и карточка её перекрывала
-          position: "absolute", left: 10, right: 10, bottom: 52, zIndex: 15,
+          position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 15,
           background: "var(--color-card)", border: "1px solid var(--color-border)",
           borderRadius: 16, padding: 14, boxShadow: "0 8px 30px rgba(0,0,0,0.35)",
         }}>

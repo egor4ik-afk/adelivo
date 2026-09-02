@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getViewer, type Viewer } from "@/lib/access";
 import { testConnector, type ConnectorType } from "@/lib/connectors";
+import { geocodeAddress } from "@/lib/crm";
 import { grantShopToCompany } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
@@ -131,12 +132,40 @@ export async function PATCH(req: NextRequest) {
     // Пустой ключ = «не менять». Иначе нельзя было бы править URL, не вводя ключ заново.
     const apiKey = b.apiKey ? String(b.apiKey).trim() : shop.connector?.apiKey ?? null;
 
+    // Адрес базы — точка, ОТ которой курьер едет к клиенту.
+    // Сразу геокодим: без координат маршрут строить не от чего,
+    // а требовать от человека вводить широту и долготу руками — плохо.
+    const storeAddress =
+      b.storeAddress !== undefined ? b.storeAddress?.trim() || null : shop.storeAddress;
+
+    let storeLat = shop.storeLat;
+    let storeLng = shop.storeLng;
+
+    if (b.storeAddress !== undefined && storeAddress !== shop.storeAddress) {
+      if (storeAddress) {
+        const geo = await geocodeAddress(storeAddress);
+        storeLat = geo?.lat ?? null;
+        storeLng = geo?.lng ?? null;
+        if (!geo) {
+          return NextResponse.json(
+            { error: "Адрес базы не найден на карте — уточните его" },
+            { status: 400 }
+          );
+        }
+      } else {
+        storeLat = null;
+        storeLng = null;
+      }
+    }
+
     await prisma.shop.update({
       where: { id: shop.id },
       data: {
         connectorType: type,
         name: b.name?.trim() || shop.name,
-        storeAddress: b.storeAddress !== undefined ? b.storeAddress?.trim() || null : shop.storeAddress,
+        storeAddress,
+        storeLat,
+        storeLng,
       },
     });
 

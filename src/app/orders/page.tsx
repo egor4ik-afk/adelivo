@@ -39,7 +39,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  NEW: "#a8a49c", ASSIGNED: "#4a7aff",ASSEMBLING: "#f59e0b", IN_DELIVERY: "#7c4dff",
+  NEW: "var(--color-text-3)", ASSIGNED: "var(--color-accent)",ASSEMBLING: "#f59e0b", IN_DELIVERY: "#7c4dff",
   DELIVERED: "#1a9e5c", RETURNED: "#c8780a", CANCELLED: "#d94040",
 };
 
@@ -300,20 +300,20 @@ export default function OrdersPage() {
   ];
 
   return (
-    <div style={{ fontFamily: "Manrope, system-ui, sans-serif", background: "#f5f4f0", minHeight: "100vh", paddingBottom: selectedIds.size > 0 ? 80 : 0 }}>
+    <div style={{ fontFamily: "Manrope, system-ui, sans-serif", background: "var(--color-bg)", minHeight: "100vh", paddingBottom: selectedIds.size > 0 ? 80 : 0 }}>
 
       {/* Шапка */}
-      <div style={{ background: "#fff", borderBottom: "1px solid #e8e6df", padding: "0 24px", height: 56, display: "flex", alignItems: "center", gap: 16, overflowX: "auto" }}>
-        <Link href="/dashboard" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 7, color: "#1a1a18", fontWeight: 600, fontSize: 15, flexShrink: 0 }}>
+      <div style={{ background: "var(--color-card)", borderBottom: "1px solid var(--color-border)", padding: "0 24px", height: 56, display: "flex", alignItems: "center", gap: 16, overflowX: "auto" }}>
+        <Link href="/dashboard" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 7, color: "var(--color-text)", fontWeight: 600, fontSize: 15, flexShrink: 0 }}>
           <img src="/favicon.svg" alt="Logo" style={{ width: 22, height: 22 }} />
           ADelivo
         </Link>
-        <div style={{ width: 1, height: 20, background: "#e8e6df" }} />
+        <div style={{ width: 1, height: 20, background: "var(--color-border)" }} />
         <Link href="/dashboard" style={navBtn}>🗺️ Дашборд</Link>
         <Link href="/couriers" style={navBtn}>🚚 Курьеры</Link>
-        <span style={{ fontSize: 15, fontWeight: 700, color: "#1a1a18", marginLeft: 8, whiteSpace: "nowrap" }}>Все заказы</span>
+        <span style={{ fontSize: 15, fontWeight: 700, color: "var(--color-text)", marginLeft: 8, whiteSpace: "nowrap" }}>Все заказы</span>
         <div style={{ flex: 1 }} />
-        <button onClick={handleSync} disabled={syncing} style={{ ...syncBtn, background: syncing ? "#e8e6df" : "#1a1a18" }}>
+        <button onClick={handleSync} disabled={syncing} style={{ ...syncBtn, background: syncing ? "var(--color-border)" : "var(--color-contrast-bg)" }}>
           {syncing ? "Синхронизация..." : "↻ Обновить из CRM"}
         </button>
       </div>
@@ -335,8 +335,8 @@ export default function OrdersPage() {
 
       {/* СТАТИСТИКА ЗАКАЗОВ */}
       <div style={{ padding: "0 24px 16px", display: "flex", gap: 16, fontSize: 13 }}>
-        <div style={{ background: "#fff", padding: "6px 12px", borderRadius: 8, border: "1px solid #e8e6df" }}>
-          <span style={{ color: "#a8a49c" }}>Отфильтровано:</span> <span style={{ fontWeight: 700, color: "#4a7aff" }}>{countableOrders.length}</span>
+        <div style={{ background: "var(--color-card)", padding: "6px 12px", borderRadius: 8, border: "1px solid var(--color-border)" }}>
+          <span style={{ color: "var(--color-text-3)" }}>Отфильтровано:</span> <span style={{ fontWeight: 700, color: "var(--color-accent)" }}>{countableOrders.length}</span>
         </div>
         {selectedIds.size > 0 && (
           <div style={{ background: "#e8f4eb", padding: "6px 12px", borderRadius: 8, border: "1px solid #cce3d3" }}>
@@ -347,11 +347,11 @@ export default function OrdersPage() {
 
       {/* Таблица */}
       <div style={{ padding: "0 24px 24px" }}>
-        <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e8e6df", overflow: "hidden" }}>
+        <div style={{ background: "var(--color-card)", borderRadius: 10, border: "1px solid var(--color-border)", overflow: "hidden" }}>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
-                <tr style={{ background: "#fafaf8", borderBottom: "1px solid #e8e6df", userSelect: "none" }}>
+                <tr style={{ background: "var(--color-surface)", borderBottom: "1px solid var(--color-border)", userSelect: "none" }}>
                   <th style={{ padding: "10px 14px", textAlign: "left", width: 40 }}>
                     <input type="checkbox" checked={isAllSelected} onChange={toggleSelectAll} style={{ cursor: "pointer" }} />
                   </th>
@@ -365,7 +365,7 @@ export default function OrdersPage() {
                       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                         {h.label}
                         {sortConfig.key === h.key && (
-                          <span style={{ fontSize: 10, color: "#4a7aff" }}>{sortConfig.direction === 'asc' ? "▲" : "▼"}</span>
+                          <span style={{ fontSize: 10, color: "var(--color-accent)" }}>{sortConfig.direction === 'asc' ? "▲" : "▼"}</span>
                         )}
                       </div>
                     </th>
@@ -374,19 +374,19 @@ export default function OrdersPage() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={13} style={{ padding: 32, textAlign: "center", color: "#a8a49c" }}>Загрузка...</td></tr>
+                  <tr><td colSpan={13} style={{ padding: 32, textAlign: "center", color: "var(--color-text-3)" }}>Загрузка...</td></tr>
                 ) : sortedAndFiltered.map((o, i) => {
-                  const statusColor = STATUS_COLORS[o.status] ?? "#a8a49c";
+                  const statusColor = STATUS_COLORS[o.status] ?? "var(--color-text-3)";
                   const isSelected = selectedIds.has(o.id);
                   const displayCost = o.costPrice || localCosts[o.id];
                   const ignored = isIgnoredAddress(o.address);
 
                   return (
-                    <tr key={o.id} style={{ borderBottom: "1px solid #f5f4f0", background: isSelected ? "#f4f7ff" : (i % 2 === 0 ? "#fff" : "#fafaf8"), opacity: ignored ? 0.6 : 1 }}>
+                    <tr key={o.id} style={{ borderBottom: "1px solid var(--color-bg)", background: isSelected ? "#f4f7ff" : (i % 2 === 0 ? "var(--color-card)" : "var(--color-surface)"), opacity: ignored ? 0.6 : 1 }}>
                       <td style={{ padding: "10px 14px" }}>
                         <input type="checkbox" checked={isSelected} disabled={ignored} onChange={() => toggleSelectOne(o.id)} style={{ cursor: ignored ? "not-allowed" : "pointer" }} />
                       </td>
-                      <td style={{ padding: "10px 14px", fontFamily: "monospace", color: "#6b6860" }}>{o.externalId ?? o.crmId}</td>
+                      <td style={{ padding: "10px 14px", fontFamily: "monospace", color: "var(--color-text-2)" }}>{o.externalId ?? o.crmId}</td>
 
                       <td style={{ padding: "10px 14px", fontWeight: 600 }}>
                         {o.shop === 'kaktusfiori' || o.shop === 'meura-flowers'
@@ -400,11 +400,11 @@ export default function OrdersPage() {
                           {STATUS_LABELS[o.status] || o.status}
                         </span>
                       </td>
-                      <td style={{ padding: "10px 14px", color: o.courier ? "#1a1a18" : "#d94040" }}>{o.courier || "—"}</td>
+                      <td style={{ padding: "10px 14px", color: o.courier ? "var(--color-text)" : "#d94040" }}>{o.courier || "—"}</td>
 
                       <td style={{ padding: "10px 14px", fontWeight: 500 }}>{o.name || "—"}</td>
 
-                      <td style={{ padding: "10px 14px", whiteSpace: "nowrap", fontFamily: "monospace", color: "#4a7aff" }}>
+                      <td style={{ padding: "10px 14px", whiteSpace: "nowrap", fontFamily: "monospace", color: "var(--color-accent)" }}>
                         {editingCell?.id === o.id && editingCell?.field === "recipientPhone" ? (
                           <IMaskInput
                             mask="+7 (000) 000-00-00"
@@ -420,7 +420,7 @@ export default function OrdersPage() {
                           <span
                             onClick={() => handleEditClick(o.id, "recipientPhone", o.recipientPhone)}
                             title="Нажмите, чтобы изменить"
-                            style={{ borderBottom: "1px dashed #a8a49c", cursor: "pointer", display: "inline-block", minHeight: 20 }}
+                            style={{ borderBottom: "1px dashed var(--color-text-3)", cursor: "pointer", display: "inline-block", minHeight: 20 }}
                           >
                             {o.recipientPhone || "—"}
                           </span>
@@ -428,7 +428,7 @@ export default function OrdersPage() {
                       </td>
 
                       <td style={{ padding: "10px 14px", maxWidth: 260 }}>{o.address || "—"}</td>
-                      <td style={{ padding: "10px 14px", color: "#6b6860" }}>{o.slotRaw || "—"}</td>
+                      <td style={{ padding: "10px 14px", color: "var(--color-text-2)" }}>{o.slotRaw || "—"}</td>
 
                       <td style={{ padding: "10px 14px", minWidth: 90 }}>
                         {editingCell?.id === o.id && editingCell?.field === "costPrice" ? (
@@ -446,7 +446,7 @@ export default function OrdersPage() {
                             {displayCost ? (
                               <div
                                 onClick={() => handleEditClick(o.id, "costPrice", displayCost)}
-                                style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", color: "#1a9e5c", fontWeight: 700, borderBottom: "1px dashed #a8a49c" }}
+                                style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", color: "#1a9e5c", fontWeight: 700, borderBottom: "1px dashed var(--color-text-3)" }}
                                 title="Изменить"
                               >
                                 {displayCost} ₽ <span style={{ fontSize: 10, opacity: 0.6 }}>✏️</span>
@@ -476,13 +476,13 @@ export default function OrdersPage() {
                             onChange={e => setEditValue(e.target.value)}
                             onBlur={handleEditSave}
                             onKeyDown={handleKeyDown}
-                            style={{ ...inlineInputStyle, borderColor: o.wrongPrice ? "#d94040" : "#4a7aff" }}
+                            style={{ ...inlineInputStyle, borderColor: o.wrongPrice ? "#d94040" : "var(--color-accent)" }}
                           />
                         ) : (
                           <span
                             onClick={() => handleEditClick(o.id, "price", o.price)}
                             title={o.wrongPrice ? "⚠️ Цена не совпадает с расчетной! Нажмите для ред." : "Нажмите, чтобы изменить"}
-                            style={{ borderBottom: o.wrongPrice ? "1px dashed #d94040" : "1px dashed #a8a49c", cursor: "pointer", display: "inline-block", minHeight: 20 }}
+                            style={{ borderBottom: o.wrongPrice ? "1px dashed #d94040" : "1px dashed var(--color-text-3)", cursor: "pointer", display: "inline-block", minHeight: 20 }}
                           >
                             {o.wrongPrice && "⚠️ "}{o.price ? `${o.price} ₽` : "—"}
                           </span>
@@ -510,11 +510,11 @@ export default function OrdersPage() {
           <button
             onClick={handleMassUpdateCost}
             disabled={massUpdating}
-            style={{ ...actionBtnStyle, background: massUpdating ? "#404040" : "#4a7aff", cursor: massUpdating ? "wait" : "pointer" }}
+            style={{ ...actionBtnStyle, background: massUpdating ? "#404040" : "var(--color-accent)", cursor: massUpdating ? "wait" : "pointer" }}
           >
             {massUpdating ? "⚡ Обработка..." : "🪄 Рассчитать себестоимость"}
           </button>
-          <button onClick={() => setSelectedIds(new Set())} style={{ background: "none", border: "none", color: "#a8a49c", fontSize: 12, cursor: "pointer" }}>✕</button>
+          <button onClick={() => setSelectedIds(new Set())} style={{ background: "none", border: "none", color: "var(--color-text-3)", fontSize: 12, cursor: "pointer" }}>✕</button>
         </div>
       )}
     </div>
@@ -522,12 +522,12 @@ export default function OrdersPage() {
 }
 
 // Стили
-const navBtn = { padding: "5px 10px", borderRadius: 6, border: "1px solid #e8e6df", background: "#fafaf8", fontSize: 11, fontWeight: 600, color: "#1a1a18", textDecoration: "none" };
-const syncBtn = { padding: "6px 14px", color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer" };
-const inputStyle = { padding: "7px 10px", borderRadius: 7, border: "1px solid #e0dfd7", fontSize: 12, outline: "none", color: "#1a1a18", background: "#fff", maxWidth: 160 };
-const inlineInputStyle = { width: "100%", padding: "4px 6px", borderRadius: 4, border: "1px solid #4a7aff", outline: "none", fontWeight: 600, fontSize: 12 };
-const thStyle = { padding: "10px 14px", textAlign: "left" as const, fontSize: 10, fontWeight: 700, color: "#a8a49c", textTransform: "uppercase" as const, letterSpacing: ".4px", whiteSpace: "nowrap" as const };
-const openBtnStyle = { color: "#1a1a18", textDecoration: "none", fontSize: 11, fontWeight: 600, background: "#f5f4f0", border: "1px solid #e8e6df", padding: "4px 8px", borderRadius: 6, whiteSpace: "nowrap" as const };
-const calcBtnStyle = (disabled: boolean) => ({ padding: "4px 8px", fontSize: 10, borderRadius: 5, border: "1px solid #e8e6df", background: "#fff", cursor: disabled ? "not-allowed" : "pointer", fontWeight: 600, color: disabled ? "#a8a49c" : "#1a1a18" });
-const floatingPanelStyle = { position: "fixed" as const, bottom: 24, left: "50%", transform: "translateX(-50%)", background: "#1a1a18", padding: "12px 24px", borderRadius: 12, display: "flex", alignItems: "center", gap: 20, zIndex: 100, color: "#fff", boxShadow: "0 8px 32px rgba(0,0,0,0.3)" };
+const navBtn = { padding: "5px 10px", borderRadius: 6, border: "1px solid var(--color-border)", background: "var(--color-surface)", fontSize: 11, fontWeight: 600, color: "var(--color-text)", textDecoration: "none" };
+const syncBtn = { padding: "6px 14px", color: "var(--color-contrast-fg)", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer" };
+const inputStyle = { padding: "7px 10px", borderRadius: 7, border: "1px solid #e0dfd7", fontSize: 12, outline: "none", color: "var(--color-text)", background: "var(--color-card)", maxWidth: 160 };
+const inlineInputStyle = { width: "100%", padding: "4px 6px", borderRadius: 4, border: "1px solid var(--color-accent)", outline: "none", fontWeight: 600, fontSize: 12 };
+const thStyle = { padding: "10px 14px", textAlign: "left" as const, fontSize: 10, fontWeight: 700, color: "var(--color-text-3)", textTransform: "uppercase" as const, letterSpacing: ".4px", whiteSpace: "nowrap" as const };
+const openBtnStyle = { color: "var(--color-text)", textDecoration: "none", fontSize: 11, fontWeight: 600, background: "var(--color-bg)", border: "1px solid var(--color-border)", padding: "4px 8px", borderRadius: 6, whiteSpace: "nowrap" as const };
+const calcBtnStyle = (disabled: boolean) => ({ padding: "4px 8px", fontSize: 10, borderRadius: 5, border: "1px solid var(--color-border)", background: "var(--color-card)", cursor: disabled ? "not-allowed" : "pointer", fontWeight: 600, color: disabled ? "var(--color-text-3)" : "var(--color-text)" });
+const floatingPanelStyle = { position: "fixed" as const, bottom: 24, left: "50%", transform: "translateX(-50%)", background: "var(--color-contrast-bg)", padding: "12px 24px", borderRadius: 12, display: "flex", alignItems: "center", gap: 20, zIndex: 100, color: "var(--color-contrast-fg)", boxShadow: "0 8px 32px rgba(0,0,0,0.3)" };
 const actionBtnStyle = { color: "#fff", border: "none", padding: "8px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600 };
