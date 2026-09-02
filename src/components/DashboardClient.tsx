@@ -359,14 +359,29 @@ export function DashboardClient({ user }: { user: User }) {
 
   const fetchData = useCallback(async () => {
     try {
-      const [ordersRes, couriersRes] = await Promise.all([
+      // 1. ДОБАВЛЯЕМ fetch(`/api/company/shops...`)
+      const [ordersRes, couriersRes, shopsRes] = await Promise.all([
         fetch(`/api/orders?t=${Date.now()}`),
-        fetch(`/api/couriers?t=${Date.now()}`)
+        fetch(`/api/couriers?t=${Date.now()}`),
+        fetch(`/api/company/shops?t=${Date.now()}`) 
       ]);
-      if (ordersRes.ok) { setOrders(await ordersRes.json()); setLastSync(new Date().toLocaleTimeString("ru", { timeZone: "Europe/Moscow" })); }
-      if (couriersRes.ok) setDbCouriers(await couriersRes.json());
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+      
+      if (ordersRes.ok) { 
+          setOrders(await ordersRes.json()); 
+          setLastSync(new Date().toLocaleTimeString("ru", { timeZone: "Europe/Moscow" })); 
+      }
+      if (couriersRes.ok) {
+          setDbCouriers(await couriersRes.json());
+      }
+      // 2. ДОБАВЛЯЕМ СОХРАНЕНИЕ МАГАЗИНОВ В СТЕЙТ
+      if (shopsRes.ok) {
+          setShopBases(await shopsRes.json());
+      }
+    } catch (e) { 
+        console.error(e); 
+    } finally { 
+        setLoading(false); 
+    }
   }, []);
 
   useEffect(() => { fetchData(); const t = setInterval(fetchData, 30_000); return () => clearInterval(t); }, [fetchData]);

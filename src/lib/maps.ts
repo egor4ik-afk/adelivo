@@ -1,9 +1,6 @@
 // src/lib/maps.ts
 
-export const MAPS_V3_KEY = process.env.NEXT_PUBLIC_YANDEX_MAPS_V3_KEY;
-
-// Ключ для маршрутов, который будет использоваться при серверных / прямых HTTP запросах
-export const ROUTER_KEY = process.env.NEXT_PUBLIC_YANDEX_ROUTER_KEY;
+export const MAPS_V3_KEY = process.env.NEXT_PUBLIC_YANDEX_MAPS_V3_KEY || "";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Ymaps3 = any;
@@ -51,7 +48,7 @@ export function loadYmaps3(): Promise<Ymaps3> {
       return;
     }
 
-    // Оставляем только ключ карты. router_apikey Яндексом здесь больше не принимается!
+    // Собираем параметры только с одним супер-ключом
     const params = new URLSearchParams({ apikey: MAPS_V3_KEY, lang: "ru_RU" });
 
     const s = document.createElement("script");
