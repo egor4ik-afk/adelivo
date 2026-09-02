@@ -177,7 +177,7 @@ export function DashboardClient({ user }: { user: User }) {
   const ymapRef = useRef<any>(null);
   const clustererRef = useRef<any>(null);
   const couriersGeoObjectsRef = useRef<any>(null);
-  // 🔥 ДОБАВЛЯЕМ ЭТО:
+  const basesCollectionRef = useRef<any>(null); // 🔥 ДОБАВИТЬ ЭТО
   const multiRouteRef = useRef<any>(null); // Для создания нового маршрута
   // 🔥 ДОБАВЛЯЕМ ЭТО (Для текущих активных маршрутов):
   const activeRoutesRefs = useRef<any[]>([]); const clickedFromMapRef = useRef(false); // пока не включено
@@ -560,6 +560,7 @@ export function DashboardClient({ user }: { user: User }) {
 
   const handleSort = (key: string) => { setSortConfig(prev => ({ key, dir: prev.key === key && prev.dir === 'asc' ? 'desc' : 'asc' })); };
 
+  // 1. Инициализация карты и зон
   useEffect(() => {
     let mounted = true;
     loadYMaps().then(() => {
@@ -579,36 +580,9 @@ export function DashboardClient({ user }: { user: User }) {
       const courierColl = new window.ymaps.GeoObjectCollection();
       map.geoObjects.add(courierColl);
 
-      // Метка на каждый магазин с заполненной базой. Адрес больше не зашит
-      // в код: он приходит из настроек магазина, и подпись показывает,
-      // чья это база — при нескольких магазинах иначе не разобрать.
-      // Внутри loadYMaps().then(() => { ... })
-
-      // Формируем список всех магазинов, даже если в БД пока NULL
-      // Если базы пришли из БД, подставляем их координаты. 
-      // Если у базы координаты NULL, временно ставим дефолтные (STORE_LAT/LNG)
-      const basesToShow = shopBases.length > 0
-        ? shopBases.map((b) => ({
-            id: b.id,
-            name: b.name,
-            slug: b.slug,
-            storeLat: b.storeLat ?? STORE_LAT,
-            storeLng: b.storeLng ?? STORE_LNG,
-            storeAddress: b.storeAddress ?? "Большой Афанасьевский переулок, 35-37с4"
-          }))
-        : [{ id: "fallback", name: "База", slug: "", storeLat: STORE_LAT, storeLng: STORE_LNG, storeAddress: null }];
-
-      for (const b of basesToShow) {
-        const pm = new window.ymaps.Placemark(
-          [b.storeLat as number, b.storeLng as number], // 🔥 "as number" убирает ошибку TS
-          { hintContent: `БАЗА: ${b.name}${b.storeAddress ? ` — ${b.storeAddress}` : ""}` },
-          { preset: "islands#grayDotIcon" }
-        );
-        map.geoObjects.add(pm as any);
-      }
-
+      // Загрузка зон kml
       const constructorUrl = "/zones.kml";
-      (window.ymaps as any).geoXml.load(constructorUrl)
+      (window.ymaps as any).geoXml?.load?.(constructorUrl)
         .then((res: any) => {
           if (!mounted) return;
           const applyStyles = (collection: any) => {
@@ -632,13 +606,51 @@ export function DashboardClient({ user }: { user: User }) {
         })
         .catch((err: any) => console.error("Ошибка загрузки локальных зон:", err));
 
-      ymapRef.current = map;
       clustererRef.current = clusterer;
       couriersGeoObjectsRef.current = courierColl;
+      ymapRef.current = map;
       setMapReady(true);
     });
     return () => { mounted = false; };
   }, []);
+
+  // 2. Отрисовка баз магазинов при получении данных из БД
+  useEffect(() => {
+    if (!mapReady || !ymapRef.current || !window.ymaps) return;
+
+    const map = ymapRef.current;
+
+    if (!basesCollectionRef.current) {
+      basesCollectionRef.current = new window.ymaps.GeoObjectCollection();
+      map.geoObjects.add(basesCollectionRef.current);
+    }
+
+    basesCollectionRef.current.removeAll();
+
+    const basesToShow = shopBases.length > 0
+      ? shopBases.map((b) => ({
+          id: b.id,
+          name: b.name,
+          slug: b.slug,
+          storeLat: b.storeLat ?? STORE_LAT,
+          storeLng: b.storeLng ?? STORE_LNG,
+          storeAddress: b.storeAddress ?? "Большой Афанасьевский переулок, 35-37с4"
+        }))
+      : [{ id: "fallback", name: "Банч", slug: "bunch", storeLat: STORE_LAT, storeLng: STORE_LNG, storeAddress: "Большой Афанасьевский переулок, 35-37с4" }];
+
+    for (const b of basesToShow) {
+      const pm = new window.ymaps.Placemark(
+        [b.storeLat as number, b.storeLng as number],
+        { 
+          iconContent: `🏪 ${b.name}`,
+          hintContent: `📍 ${b.storeAddress}`,
+          balloonContent: `<b>${b.name}</b><br/>${b.storeAddress}`
+        },
+        { preset: "islands#blackStretchyIcon" }
+      );
+      basesCollectionRef.current.add(pm);
+    }
+  }, [shopBases, mapReady]);
 
   const toggleBulkSelect = (id: string) => {
     setBulkSelectedIds(prev => {
