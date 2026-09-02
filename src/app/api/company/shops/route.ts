@@ -203,3 +203,35 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Не удалось сохранить" }, { status: 500 });
   }
 }
+
+/** GET — получить список магазинов компании (для Дашборда и Карты) */
+export async function GET(req: NextRequest) {
+  const viewer = await getViewer(req);
+  if (!viewer || !viewer.companyId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const shops = await prisma.shop.findMany({
+      where: {
+        companyId: viewer.companyId,
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        storeLat: true,
+        storeLng: true,
+        storeAddress: true,
+      },
+      orderBy: {
+        name: 'asc'
+      }
+    });
+
+    return NextResponse.json(shops);
+  } catch (e) {
+    console.error("[company/shops GET]", e);
+    return NextResponse.json({ error: "Не удалось загрузить магазины" }, { status: 500 });
+  }
+}
