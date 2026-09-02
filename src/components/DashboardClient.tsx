@@ -359,28 +359,26 @@ export function DashboardClient({ user }: { user: User }) {
 
   const fetchData = useCallback(async () => {
     try {
-      // 1. ДОБАВЛЯЕМ fetch(`/api/company/shops...`)
       const [ordersRes, couriersRes, shopsRes] = await Promise.all([
         fetch(`/api/orders?t=${Date.now()}`),
         fetch(`/api/couriers?t=${Date.now()}`),
-        fetch(`/api/company/shops?t=${Date.now()}`) 
+        fetch(`/api/company/shops?t=${Date.now()}`) // 🔥 ДОБАВИЛИ ЗАПРОС БАЗ
       ]);
       
       if (ordersRes.ok) { 
-          setOrders(await ordersRes.json()); 
-          setLastSync(new Date().toLocaleTimeString("ru", { timeZone: "Europe/Moscow" })); 
+        setOrders(await ordersRes.json()); 
+        setLastSync(new Date().toLocaleTimeString("ru", { timeZone: "Europe/Moscow" })); 
       }
       if (couriersRes.ok) {
-          setDbCouriers(await couriersRes.json());
+        setDbCouriers(await couriersRes.json());
       }
-      // 2. ДОБАВЛЯЕМ СОХРАНЕНИЕ МАГАЗИНОВ В СТЕЙТ
       if (shopsRes.ok) {
-          setShopBases(await shopsRes.json());
+        setShopBases(await shopsRes.json()); // 🔥 СОХРАНИЛИ В СТЕЙТ
       }
     } catch (e) { 
-        console.error(e); 
+      console.error(e); 
     } finally { 
-        setLoading(false); 
+      setLoading(false); 
     }
   }, []);
 
@@ -587,31 +585,23 @@ export function DashboardClient({ user }: { user: User }) {
       // Внутри loadYMaps().then(() => { ... })
 
       // Формируем список всех магазинов, даже если в БД пока NULL
-      const basesToShow = shopBases.map((b) => ({
-        id: b.id,
-        name: b.name,
-        slug: b.slug,
-        storeLat: b.storeLat ?? STORE_LAT,
-        storeLng: b.storeLng ?? STORE_LNG,
-        storeAddress: b.storeAddress ?? "Большой Афанасьевский переулок, 35-37с4"
-      }));
-
-      // Защита, если магазины вообще не прилетели
-      if (basesToShow.length === 0) {
-        basesToShow.push({
-          id: "fallback",
-          name: "База",
-          slug: "",
-          storeLat: STORE_LAT,
-          storeLng: STORE_LNG,
-          storeAddress: "Большой Афанасьевский переулок, 35-37с4"
-        });
-      }
+      // Если базы пришли из БД, подставляем их координаты. 
+      // Если у базы координаты NULL, временно ставим дефолтные (STORE_LAT/LNG)
+      const basesToShow = shopBases.length > 0
+        ? shopBases.map((b) => ({
+            id: b.id,
+            name: b.name,
+            slug: b.slug,
+            storeLat: b.storeLat ?? STORE_LAT,
+            storeLng: b.storeLng ?? STORE_LNG,
+            storeAddress: b.storeAddress ?? "Большой Афанасьевский переулок, 35-37с4"
+          }))
+        : [{ id: "fallback", name: "База", slug: "", storeLat: STORE_LAT, storeLng: STORE_LNG, storeAddress: null }];
 
       for (const b of basesToShow) {
         const pm = new window.ymaps.Placemark(
-          [b.storeLat, b.storeLng], 
-          { hintContent: `База ${b.name}: ${b.storeAddress}` },
+          [b.storeLat as number, b.storeLng as number], // 🔥 "as number" убирает ошибку TS
+          { hintContent: `БАЗА: ${b.name}${b.storeAddress ? ` — ${b.storeAddress}` : ""}` },
           { preset: "islands#grayDotIcon" }
         );
         map.geoObjects.add(pm as any);
