@@ -204,18 +204,25 @@ export async function PATCH(req: NextRequest) {
   }
 }
 
-/** GET — получить список магазинов компании (для Дашборда и Карты) */
+/** GET — получить список магазинов (супер-админ видит все, остальные — только своей компании) */
 export async function GET(req: NextRequest) {
   const viewer = await getViewer(req);
-  if (!viewer || !viewer.companyId) {
+  if (!viewer) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
+    // 🔥 Если супер-админ, не ограничиваем по companyId, отдаем все активные магазины
+    const whereClause: any = { isActive: true };
+    if (!viewer.isSuperAdmin) {
+      if (!viewer.companyId) {
+        return NextResponse.json([], { status: 200 });
+      }
+      whereClause.companyId = viewer.companyId;
+    }
+
     const shops = await prisma.shop.findMany({
-      where: {
-        companyId: viewer.companyId,
-      },
+      where: whereClause,
       select: {
         id: true,
         name: true,
@@ -223,6 +230,7 @@ export async function GET(req: NextRequest) {
         storeLat: true,
         storeLng: true,
         storeAddress: true,
+        companyId: true, // Полезно видеть, к какой компании относится магазин
       },
       orderBy: {
         name: 'asc'
