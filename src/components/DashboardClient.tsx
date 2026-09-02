@@ -569,16 +569,34 @@ export function DashboardClient({ user }: { user: User }) {
       // Метка на каждый магазин с заполненной базой. Адрес больше не зашит
       // в код: он приходит из настроек магазина, и подпись показывает,
       // чья это база — при нескольких магазинах иначе не разобрать.
-      const bases = shopBases.filter((s) => s.storeLat != null && s.storeLng != null);
-      const basesToShow = bases.length
-        ? bases
-        : [{ id: "fallback", name: "База", slug: "", storeLat: STORE_LAT, storeLng: STORE_LNG, storeAddress: null }];
+      // Внутри loadYMaps().then(() => { ... })
+
+      // Формируем список всех магазинов, даже если в БД пока NULL
+      const basesToShow = shopBases.map((b) => ({
+        id: b.id,
+        name: b.name,
+        slug: b.slug,
+        storeLat: b.storeLat ?? STORE_LAT,
+        storeLng: b.storeLng ?? STORE_LNG,
+        storeAddress: b.storeAddress ?? "Большой Афанасьевский переулок, 35-37с4"
+      }));
+
+      // Защита, если магазины вообще не прилетели
+      if (basesToShow.length === 0) {
+        basesToShow.push({
+          id: "fallback",
+          name: "База",
+          slug: "",
+          storeLat: STORE_LAT,
+          storeLng: STORE_LNG,
+          storeAddress: "Большой Афанасьевский переулок, 35-37с4"
+        });
+      }
 
       for (const b of basesToShow) {
         const pm = new window.ymaps.Placemark(
-          // Добавляем "as number" для TS, так как мы уже отфильтровали null значения
-          [b.storeLat as number, b.storeLng as number], 
-          { hintContent: `БАЗА: ${b.name}${b.storeAddress ? ` — ${b.storeAddress}` : ""}` },
+          [b.storeLat, b.storeLng], 
+          { hintContent: `База ${b.name}: ${b.storeAddress}` },
           { preset: "islands#grayDotIcon" }
         );
         map.geoObjects.add(pm as any);
@@ -1215,14 +1233,12 @@ export function DashboardClient({ user }: { user: User }) {
     const validOrders = ordersToRoute.filter(o => o.lat && o.lng && !o.isInvalid);
     if (validOrders.length === 0) return null;
     if (validOrders.length > 50) validOrders.length = 50;
-    // Старт от базы магазина, к которому относятся заказы. Раньше сюда
-    // всегда подставлялся адрес Банча, и маршрут другого магазина начинался
-    // с чужой точки.
+    
+    // Ищем магазин и корректно фоллбэчимся, если координаты в БД пока NULL
     const shopOfRoute = shopBases.find((s) => s.slug === validOrders[0]?.shop);
-    const base =
-      shopOfRoute?.storeLat != null && shopOfRoute?.storeLng != null
-        ? `${shopOfRoute.storeLat},${shopOfRoute.storeLng}`
-        : STORE_COORDS;
+    const baseLat = shopOfRoute?.storeLat ?? STORE_LAT;
+    const baseLng = shopOfRoute?.storeLng ?? STORE_LNG;
+    const base = `${baseLat},${baseLng}`;
 
     const rtextArr = [base, ...validOrders.map(o => `${o.lat},${o.lng}`)];
     if (rtb) rtextArr.push(base);
