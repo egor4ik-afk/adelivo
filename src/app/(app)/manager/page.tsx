@@ -498,7 +498,7 @@ export default function ManagerDashboard() {
 
                                   return (
                                     <div key={order.id} className="flex gap-2 items-start p-2.5 bg-[var(--color-card)] rounded-lg border border-[var(--color-border)] shadow-sm">
-                                      <div className="w-5 h-5 rounded-md bg-[var(--color-text)] text-white flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">{idx + 1}</div>
+                                      <div className="w-5 h-5 rounded-md bg-[var(--color-contrast-bg)] text-[var(--color-contrast-fg)] flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">{idx + 1}</div>
                                       <div className="flex-grow min-w-0">
                                         <p className="text-[12px] sm:text-[13px] font-bold text-[var(--color-text)] leading-snug break-words mb-1.5">{order.address || 'Адрес не указан'}</p>
 
@@ -584,7 +584,7 @@ export default function ManagerDashboard() {
                       А4
                     </label>
 
-                    <button onClick={handlePrintLabels} disabled={selectedOrders.size === 0} className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all shadow-sm flex items-center justify-center gap-1 sm:gap-2 ${selectedOrders.size > 0 ? 'bg-[var(--color-text)] text-white hover:bg-gray-800' : 'bg-[var(--color-bg)] text-[var(--color-text-3)] cursor-not-allowed border border-[var(--color-border)]'}`}>
+                    <button onClick={handlePrintLabels} disabled={selectedOrders.size === 0} className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all shadow-sm flex items-center justify-center gap-1 sm:gap-2 ${selectedOrders.size > 0 ? 'bg-[var(--color-contrast-bg)] text-[var(--color-contrast-fg)] hover:opacity-90' : 'bg-[var(--color-bg)] text-[var(--color-text-3)] cursor-not-allowed border border-[var(--color-border)]'}`}>
                       🖨️ Печать ({printA4 ? 'А4' : '75x120'})
                     </button>
                   </div>
@@ -670,7 +670,7 @@ export default function ManagerDashboard() {
                                       <div className="flex justify-between items-start mb-2">
                                         <div className="flex items-center gap-2">
                                           <input type="checkbox" className="w-4 h-4 accent-[var(--color-text)] rounded cursor-pointer shrink-0" checked={selectedOrders.has(order.id)} onChange={() => toggleOrderSelection(order.id)} />
-                                          <div className="w-5 h-5 rounded bg-[var(--color-text)] text-white flex items-center justify-center text-[10px] font-black shrink-0">{idx + 1}</div>
+                                          <div className="w-5 h-5 rounded bg-[var(--color-contrast-bg)] text-[var(--color-contrast-fg)] flex items-center justify-center text-[10px] font-black shrink-0">{idx + 1}</div>
                                           <span className="font-black text-[13px] sm:text-[14px] text-[var(--color-text)] truncate max-w-[100px]" title={String(displayId)}>{displayId}</span>
                                         </div>
                                         <span className="text-[10px] font-bold text-[var(--color-text-2)] bg-[var(--color-bg)] px-1.5 py-0.5 rounded border border-[var(--color-border)] shrink-0">⏱ {order.slotRaw || '—'}</span>

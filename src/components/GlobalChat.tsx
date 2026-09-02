@@ -764,7 +764,7 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
       {!isCourier && (
         <button
           onClick={() => setOpen(v => !v)}
-          style={{ position: "fixed", bottom: 24, left: 24, width: 56, height: 56, borderRadius: "50%", background: "var(--color-text)", color: "#fff", border: "none", fontSize: 24, cursor: "pointer", boxShadow: "0 6px 20px rgba(0,0,0,0.25)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, transition: "transform 0.2s" }}
+          style={{ position: "fixed", bottom: 24, left: 24, width: 56, height: 56, borderRadius: "50%", background: "var(--color-contrast-bg)", color: "var(--color-contrast-fg)", border: "none", fontSize: 24, cursor: "pointer", boxShadow: "0 6px 20px rgba(0,0,0,0.25)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, transition: "transform 0.2s" }}
           onMouseDown={e => e.currentTarget.style.transform = "scale(0.95)"}
           onMouseUp={e => e.currentTarget.style.transform = "scale(1)"}
           onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}

@@ -1274,7 +1274,7 @@ const s: Record<string, React.CSSProperties> = {
   tabInactive: { padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "1px solid var(--color-border)", cursor: "pointer", background: "var(--color-surface)", color: "var(--color-text-2)", whiteSpace: "nowrap" },
   controls: { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", width: "100%" },
   input: { padding: "8px 12px", borderRadius: 8, border: "1px solid var(--color-border)", outline: "none", fontSize: 13 },
-  syncBtn: { padding: "8px 16px", borderRadius: 8, border: "none", background: "var(--color-text)", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" },
+  syncBtn: { padding: "8px 16px", borderRadius: 8, border: "none", background: "var(--color-contrast-bg)", color: "var(--color-contrast-fg)", fontSize: 12, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" },
   arrowBtn: { padding: "6px 12px", borderRadius: 6, border: "1px solid var(--color-border)", background: "var(--color-card)", fontSize: 12, fontWeight: 600, cursor: "pointer", color: "var(--color-text-2)" },
   tableWrap: { background: "var(--color-card)", borderRadius: 12, border: "1px solid var(--color-border)", overflow: "auto", maxHeight: "calc(100vh - 160px)", boxShadow: "0 2px 8px rgba(0,0,0,0.02)", width: "100%" },
   table: { width: "100%", minWidth: 800, borderCollapse: "collapse", textAlign: "left" },

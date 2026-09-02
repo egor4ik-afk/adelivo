@@ -27,6 +27,9 @@ export type Viewer = {
   isSuperAdmin: boolean;
   accessRestricted: boolean; // устарело, оставлено для совместимости схемы
   companyId: string | null;
+  /// Может выкладывать заказы на биржу. У админа право есть всегда,
+  /// остальным выдаётся галочкой в матрице.
+  canPostExchange: boolean;
 };
 
 /** Пользователь текущего запроса вместе с флагами доступа. */
@@ -39,6 +42,7 @@ export async function getViewer(req?: NextRequest): Promise<Viewer | null> {
     select: {
       id: true, email: true, role: true,
       isSuperAdmin: true, accessRestricted: true, companyId: true,
+      canPostExchange: true,
     },
   });
   return user as Viewer | null;
@@ -84,23 +88,46 @@ export async function shopFilter(viewer: Viewer): Promise<Record<string, unknown
   return { shopId: { in: ids } };
 }
 
-/** Кусок where для курьеров. */
+/**
+ * Кусок where для курьеров.
+ *
+ * Курьер виден по двум признакам, и второй важнее первого:
+ *   1. он в компании, чьи магазины вам доступны;
+ *   2. он возит заказы ваших магазинов.
+ *
+ * Второй нужен, потому что у курьеров, заведённых до появления компаний,
+ * companyId пустой — по первому признаку они не находились, и список
+ * курьеров в дашборде оказывался пустым. Курьер, который уже развозит
+ * ваши заказы, ваш по факту, независимо от того, что записано в профиле.
+ */
 export async function courierScope(viewer: Viewer): Promise<Record<string, unknown>> {
   const companies = await accessibleCompanyIds(viewer);
   if (companies === null) return {};
-  return { companyId: { in: companies } };
+
+  const shopIds = await visibleShopIds(viewer);
+  if (!shopIds || shopIds.length === 0) {
+    return { companyId: { in: companies } };
+  }
+
+  const rows = await prisma.order.findMany({
+    where: { shopId: { in: shopIds }, courierId: { not: null } },
+    select: { courierId: true },
+    distinct: ["courierId"],
+    take: 500,
+  });
+  const courierIds = rows.map((r) => r.courierId!).filter(Boolean);
+
+  if (courierIds.length === 0) return { companyId: { in: companies } };
+
+  return { OR: [{ companyId: { in: companies } }, { id: { in: courierIds } }] };
 }
 
 /** Идентификаторы курьеров, доступных пользователю. */
 export async function accessibleCourierIds(viewer: Viewer): Promise<number[] | null> {
-  const companies = await accessibleCompanyIds(viewer);
-  if (companies === null) return null;
-  if (companies.length === 0) return [];
+  if (viewer.isSuperAdmin) return null;
 
-  const rows = await prisma.courier.findMany({
-    where: { companyId: { in: companies } },
-    select: { id: true },
-  });
+  const where = await courierScope(viewer);
+  const rows = await prisma.courier.findMany({ where, select: { id: true } });
   return rows.map((r) => r.id);
 }
 
@@ -241,4 +268,9 @@ export class AccessError extends Error {
     super(message);
     this.name = "AccessError";
   }
+}
+
+/** Может ли пользователь выкладывать заказы на биржу. */
+export function canPostToExchange(viewer: Viewer): boolean {
+  return viewer.isSuperAdmin || viewer.role === "ADMIN" || viewer.canPostExchange;
 }

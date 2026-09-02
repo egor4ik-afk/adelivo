@@ -334,7 +334,11 @@ export default function CourierPointsPage() {
         mapRef.current.update({ location: { bounds, duration: 400 } });
       }
     } catch (e) {
-      console.error("[Карта] маршрут не построился", e);
+      // Текст ошибки от Яндекса важен: «Invalid key», «Forbidden» и
+      // «route not found» лечатся по-разному, а без него остаётся гадать
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[Карта] маршрут не построился:", msg, e);
+      setRouteInfo({ distance: "маршрут не построен", duration: msg.slice(0, 60) });
     }
   }, [userLocation]);
 

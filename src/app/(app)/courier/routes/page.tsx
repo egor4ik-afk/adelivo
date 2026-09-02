@@ -516,7 +516,23 @@ const syncPendingStatuses = async () => {
                           {routeUrl && !isAllDelivered && (
                             <a href={routeUrl} target="_blank" rel="noopener noreferrer"
                               onClick={e => e.stopPropagation()}
-                              style={{ fontSize: 12, background: "var(--color-warn-bg-2)", color: "var(--color-warn-text)", padding: "6px 12px", borderRadius: 8, textDecoration: "none", fontWeight: 800, whiteSpace: "nowrap", boxShadow: "var(--color-btn-shadow)" }}
+                              style={{
+                                fontSize: 14,
+                                background: "var(--color-warn-bg)",
+                                color: "var(--color-warn-text)",
+                                border: "1px solid var(--color-warn-border)",
+                                // Курьер жмёт эту кнопку на ходу, часто в перчатках:
+                                // площадь важнее компактности
+                                padding: "11px 18px",
+                                borderRadius: 10,
+                                textDecoration: "none",
+                                fontWeight: 800,
+                                whiteSpace: "nowrap",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 6,
+                                minHeight: 44,
+                              }}
                             >
                               📍 Маршрут
                             </a>

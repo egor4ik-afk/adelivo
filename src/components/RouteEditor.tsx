@@ -219,7 +219,28 @@ export function RouteEditor({
 
         <div style={{ display: "flex", gap: 8, alignItems: "center", width: isMobile ? "100%" : "auto" }}>
           {routeLink && !hasChanges && (
-            <a href={routeLink} target="_blank" rel="noreferrer" style={{ flex: isMobile ? 1 : "none", textAlign: "center", fontSize: 11, background: "#facc15", color: "var(--color-text)", padding: "8px 12px", borderRadius: 8, textDecoration: "none", fontWeight: 700 }}>
+            <a href={routeLink} target="_blank" rel="noreferrer" style={{
+                flex: isMobile ? 1 : "none",
+                textAlign: "center",
+                // Было #facc15 с color: var(--color-text). В тёмной теме это
+                // ядовито-жёлтая заливка, а текст на ней почти белый —
+                // и режет глаз, и не читается. Теперь приглушённая подложка
+                // со своим цветом текста: в светлой теме мягкий песочный,
+                // в тёмной — тёмный янтарь со светлым текстом.
+                fontSize: 13,
+                background: "var(--color-warn-bg)",
+                color: "var(--color-warn-text)",
+                border: "1px solid var(--color-warn-border)",
+                padding: "10px 16px",
+                borderRadius: 10,
+                textDecoration: "none",
+                fontWeight: 700,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                whiteSpace: "nowrap",
+              }}>
               📍 Яндекс Карты
             </a>
           )}

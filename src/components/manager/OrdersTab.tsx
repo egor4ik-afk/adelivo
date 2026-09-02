@@ -53,6 +53,9 @@ export function OrdersTab() {
   const [busy, setBusy] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<FilterId>("all");
+  // Право выкладывать на биржу выдаётся в матрице доступов.
+  // У менеджера Банча кнопки быть не должно, у админа она есть всегда.
+  const [canPost, setCanPost] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -69,7 +72,13 @@ export function OrdersTab() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    fetch("/api/profile")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setCanPost(d?.role === "ADMIN" || d?.isSuperAdmin || !!d?.canPostExchange))
+      .catch(() => setCanPost(false));
+  }, []);
 
   const toggleExchange = async (o: Order) => {
     const next = !o.onExchange;
@@ -230,6 +239,7 @@ export function OrdersTab() {
 
                 {/* Действия */}
                 <div className="flex items-center gap-2 ml-auto">
+                  {canPost && (
                   <button
                     onClick={() => toggleExchange(o)}
                     disabled={busy === o.id}
@@ -242,6 +252,7 @@ export function OrdersTab() {
                   >
                     {o.onExchange ? "Снять с биржи" : "На биржу"}
                   </button>
+                  )}
 
                   <Link
                     href={`/manager/orders/${o.id}/edit`}

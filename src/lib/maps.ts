@@ -21,10 +21,31 @@
  * Если NEXT_PUBLIC_YANDEX_MAPS_V3_KEY не задан, падаем на старый ключ:
  * так дашборд на 2.1 продолжит работать, даже если новый ключ ещё не завели.
  */
+// Билдер подставляет эту строку вместо переменной, которой нет в настройках
+// проекта. Она НЕПУСТАЯ, поэтому проверка `if (!key)` её пропускает и в URL
+// уезжает мусор вместо ключа. Та же защита стоит в lib/ai.ts.
+const ENV_STUB = "auto-generated-stub-for-build";
+
+const clean = (v?: string) => (v && v !== ENV_STUB ? v : "");
+
 export const MAPS_V3_KEY =
-  process.env.NEXT_PUBLIC_YANDEX_MAPS_V3_KEY ||
-  process.env.NEXT_PUBLIC_YANDEX_MAPS_KEY ||
+  clean(process.env.NEXT_PUBLIC_YANDEX_MAPS_V3_KEY) ||
+  clean(process.env.NEXT_PUBLIC_YANDEX_MAPS_KEY) ||
   "";
+
+/**
+ * Отдельный ключ маршрутизации. По умолчанию его НЕТ, и это правильно.
+ *
+ * Посмотрел, как строит маршруты дашборд на 2.1:
+ *   api-maps.yandex.ru/2.1/?lang=ru_RU&apikey=<ключ>&suggest_apikey=<ключ саджеста>
+ * multiRouter там работает тем же ключом, что и карта. Отдельный ключ нужен
+ * только саджесту, и параметр называется `suggest_apikey` — то есть схема
+ * у Яндекса `<сервис>_apikey`, а не `apikey_<сервис>`, как я написал раньше.
+ *
+ * Поэтому сначала пробуем одним ключом. Переменную ниже задавать только
+ * если Яндекс прямо ответит, что нужен ключ маршрутизации.
+ */
+const ROUTER_KEY = clean(process.env.NEXT_PUBLIC_YANDEX_ROUTER_KEY);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Ymaps3 = any;
@@ -44,7 +65,10 @@ export function loadYmaps3(): Promise<Ymaps3> {
 
   loader = new Promise<Ymaps3>((resolve, reject) => {
     if (!MAPS_V3_KEY) {
-      reject(new Error("Не задан ключ карт: NEXT_PUBLIC_YANDEX_MAPS_V3_KEY"));
+      reject(new Error(
+        "Не задан ключ карт. NEXT_PUBLIC_* вшивается в бандл на СБОРКЕ, " +
+        "поэтому переменную нужно передать сборщику, а не только в рантайм."
+      ));
       return;
     }
 
@@ -76,10 +100,23 @@ export function loadYmaps3(): Promise<Ymaps3> {
       return;
     }
 
+    const params = new URLSearchParams({ apikey: MAPS_V3_KEY, lang: "ru_RU" });
+    if (ROUTER_KEY && ROUTER_KEY !== MAPS_V3_KEY) {
+      params.set("router_apikey", ROUTER_KEY);
+    }
+
     const s = document.createElement("script");
-    s.src = `https://api-maps.yandex.ru/v3/?apikey=${MAPS_V3_KEY}&lang=ru_RU`;
+    s.src = `https://api-maps.yandex.ru/v3/?${params.toString()}`;
     s.async = true;
     s.dataset.ymaps3 = "1";
+
+    // Видно, какой ключ реально ушёл в запрос. Обрезан намеренно:
+    // по первым символам понятно, тот ли он, а светить целиком незачем.
+    console.log(
+      `[Карта] v3, ключ ${MAPS_V3_KEY.slice(0, 8)}…` +
+      (ROUTER_KEY ? " + отдельный ключ маршрутизации" : "")
+    );
+
     s.onload = done;
     s.onerror = () => reject(new Error("Скрипт карт не загрузился"));
     document.head.appendChild(s);

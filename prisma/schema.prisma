@@ -197,6 +197,7 @@ model User {
   /// false — сотрудник видит все магазины (текущее поведение).
   /// true  — видит только отмеченные галочками в матрице.
   accessRestricted Boolean @default(false)
+  canPostExchange  Boolean @default(false)
   companyId        String?
   company          Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   shopAccess       ShopAccess[]
@@ -212,7 +213,6 @@ model User {
   conversations2     Conversation[]     @relation("ConvUser2")
   sentMessages       Message[]          @relation("SentMessages")
   sentGlobalMessages GlobalMessage[]    @relation("SentGlobalMessages")
-
   @@index([companyId]) // ★ НОВОЕ
 }
 

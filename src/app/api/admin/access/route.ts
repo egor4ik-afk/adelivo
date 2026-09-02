@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
         select: {
           id: true, email: true, role: true, firstName: true, lastName: true,
           isSuperAdmin: true, accessRestricted: true, companyId: true, lastLoginAt: true,
+          canPostExchange: true,
         },
         orderBy: [{ role: "asc" }, { email: "asc" }],
       }),
@@ -82,6 +83,15 @@ export async function PATCH(req: NextRequest) {
           { status: 400 }
         );
       }
+      return NextResponse.json({ ok: true });
+    }
+
+    // Право выкладывать заказы на биржу
+    if (b.canPostExchange !== undefined) {
+      await prisma.user.update({
+        where: { id: b.userId },
+        data: { canPostExchange: !!b.canPostExchange },
+      });
       return NextResponse.json({ ok: true });
     }
 

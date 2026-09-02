@@ -33,7 +33,9 @@
     --color-warn-bg: #fff8e6;
     --color-warn-bg-2: #fff0c2;
     --color-warn-border: #ffe082;
-    --color-warn-text: #b38a00;
+    /* Было #b38a00 — на песочной подложке всего 3.03, для мелкого текста мало.
+       #7a5c00 даёт 5.9 и при этом остаётся тёплым, а не коричневым. */
+    --color-warn-text: #7a5c00;
     --color-danger-bg: #fff1f2;
     --color-danger-border: #ffe4e6;
     --color-danger-text: #881337;
@@ -47,6 +49,11 @@
     --color-btn-shadow: 0 2px 6px rgba(74, 122, 255, 0.3);
     --color-card-shadow: 0 2px 8px rgba(0,0,0,0.04);
     /* шапка чата: в светлой теме тёмная плашка с белым текстом */
+    /* «Инвертированные» элементы: тёмная плашка со светлым текстом.
+       Раньше они брали background: var(--color-text) — в тёмной теме
+       это почти белый, и получался белый текст на белом фоне. */
+    --color-contrast-bg: #1a1a18;
+    --color-contrast-fg: #ffffff;
     --color-chat-header-bg: #1a1a18;
     --color-chat-header-fg: #ffffff;
     --color-chat-header-tint: rgba(255,255,255,0.15);
@@ -140,6 +147,8 @@
     /* В тёмной теме шапка чата брала background: var(--color-text),
        а он здесь почти белый — получалась белая плашка с белым текстом.
        Теперь это отдельная поверхность, чуть светлее карточки. */
+    --color-contrast-bg: #2A2A31;
+    --color-contrast-fg: #F4F6F9;
     --color-chat-header-bg: #1E1E23;
     --color-chat-header-fg: #F4F6F9;
     --color-chat-header-tint: rgba(255,255,255,0.10);
