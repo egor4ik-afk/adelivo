@@ -99,9 +99,8 @@ export function loadYmaps3(): Promise<Ymaps3> {
     }
 
     const params = new URLSearchParams({ apikey: MAPS_V3_KEY, lang: "ru_RU" });
-    if (ROUTER_KEY && ROUTER_KEY !== MAPS_V3_KEY) {
-      params.set("router_apikey", ROUTER_KEY);
-    }
+
+    
 
     const s = document.createElement("script");
     s.src = `https://api-maps.yandex.ru/v3/?${params.toString()}`;
