@@ -57,6 +57,9 @@ export default function CourierPointsPage() {
 
   const [orders, setOrders] = useState<CourierOrder[]>([]);
   const [exchange, setExchange] = useState<CourierOrder[]>([]);
+  const [bases, setBases] = useState<
+    { id: string; name: string; storeLat: number | null; storeLng: number | null; storeAddress: string | null }[]
+  >([]);
   const [canTake, setCanTake] = useState(false);
   const [showExchange, setShowExchange] = useState(false);
   const [taking, setTaking] = useState(false);
@@ -97,6 +100,14 @@ export default function CourierPointsPage() {
       setCanTake(!!d.canTake);
       setExchange((d.orders ?? []).map((o: CourierOrder) => ({ ...o, isExchange: true })));
     } catch { /* биржа необязательна, молча пропускаем */ }
+  }, []);
+
+  useEffect(() => {
+    // Базы магазинов — курьеру полезно видеть, откуда забирать заказ
+    fetch("/api/company")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setBases((d?.shops ?? []).filter((s: { storeLat: number | null }) => s.storeLat != null)))
+      .catch(() => setBases([]));
   }, []);
 
   useEffect(() => {
@@ -249,6 +260,25 @@ export default function CourierPointsPage() {
       markersRef.current.set(o.id, marker);
     });
 
+    // Метки баз: квадратные, чтобы не путались с точками доставки
+    bases.forEach((b) => {
+      if (b.storeLat == null || b.storeLng == null) return;
+      const el = document.createElement("div");
+      el.style.cssText = `
+        width:26px;height:26px;border-radius:7px;
+        background:var(--color-contrast-bg);border:2px solid #fff;
+        box-shadow:0 2px 6px rgba(0,0,0,0.4);
+        display:flex;align-items:center;justify-content:center;
+        color:#fff;font-size:13px;cursor:default;
+        transform:translate(-50%,-50%);
+      `;
+      el.textContent = "🏠";
+      el.title = `База: ${b.name}${b.storeAddress ? ` — ${b.storeAddress}` : ""}`;
+      const marker = new YMapMarker({ coordinates: toLngLat(b.storeLat, b.storeLng) }, el);
+      mapRef.current.addChild(marker);
+      markersRef.current.set(`base-${b.id}`, marker);
+    });
+
     if (visibleOrders.length > 0 && !boundsDone.current) {
       boundsDone.current = true;
       const lngs = visibleOrders.map((o) => o.lng!);
@@ -264,7 +294,7 @@ export default function CourierPointsPage() {
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders, exchange, showExchange, filterStatus, filterDate, mapReady, activeOrderId]);
+  }, [orders, exchange, showExchange, filterStatus, filterDate, mapReady, activeOrderId, bases]);
 
   /* ── маршрут ───────────────────────────────────────────── */
 
@@ -301,10 +331,6 @@ export default function CourierPointsPage() {
 
     if (typeof ymaps3.route !== "function") {
       console.warn("[Карта] ymaps3.route недоступен — линия не строится");
-      setRouteInfo({
-        distance: "маршрут недоступен",
-        duration: "у ключа нет прав на маршрутизацию",
-      });
       return;
     }
 
@@ -362,7 +388,13 @@ export default function CourierPointsPage() {
       // «route not found» лечатся по-разному, а без него остаётся гадать
       const msg = e instanceof Error ? e.message : String(e);
       console.error("[Карта] маршрут не построился:", msg, e);
-      setRouteInfo({ distance: "маршрут не построен", duration: msg.slice(0, 60) });
+      // «Route requests is not allowed» значит, что у ключа нет прав
+      // на маршрутизацию — это отдельная услуга в кабинете разработчика
+      const noRights = /not allowed|forbidden|403/i.test(msg);
+      setRouteInfo({
+        distance: noRights ? "маршрутизация не подключена" : "маршрут не построен",
+        duration: noRights ? "включите её для ключа в кабинете Яндекса" : msg.slice(0, 60),
+      });
     }
   }, [userLocation, orders, exchange, activeOrderId]);
 
@@ -421,33 +453,46 @@ export default function CourierPointsPage() {
         </div>
       )}
 
-      {/* Фильтры */}
+      {/* Фильтры: статус дропдауном, чтобы не занимать всю ширину,
+          и дата — без неё курьер не мог посмотреть завтрашние заказы */}
       <div style={{
-        position: "absolute", top: 10, left: 10, right: 10, zIndex: 10,
-        display: "flex", gap: 6, overflowX: "auto",
-      }} className="hide-scrollbar">
-        {FILTERS.map((f) => (
-          <button
-            key={f.id}
-            onClick={() => { setFilterStatus(f.id); boundsDone.current = false; }}
-            style={{
-              padding: "7px 12px", borderRadius: 10, fontSize: 12, fontWeight: 700,
-              whiteSpace: "nowrap", border: "1px solid var(--color-border)",
-              background: filterStatus === f.id ? "var(--color-accent)" : "var(--color-card)",
-              color: filterStatus === f.id ? "#fff" : "var(--color-text-2)",
-              cursor: "pointer", fontFamily: "inherit",
-            }}
-          >
-            {f.label}
-          </button>
-        ))}
+        position: "absolute", top: 10, left: 10, right: 10, zIndex: 1100,
+        display: "flex", gap: 8, alignItems: "center",
+      }}>
+        <select
+          value={filterStatus}
+          onChange={(e) => { setFilterStatus(e.target.value); boundsDone.current = false; }}
+          style={{
+            flex: 1, minWidth: 0, padding: "9px 12px", borderRadius: 10,
+            border: "1px solid var(--color-border)", background: "var(--color-card)",
+            color: "var(--color-text)", fontSize: 13, fontWeight: 700,
+            fontFamily: "inherit", cursor: "pointer",
+          }}
+        >
+          {FILTERS.map((f) => (
+            <option key={f.id} value={f.id}>{f.label}</option>
+          ))}
+        </select>
+
+        <input
+          type="date"
+          value={filterDate}
+          onChange={(e) => { setFilterDate(e.target.value); boundsDone.current = false; }}
+          style={{
+            padding: "9px 10px", borderRadius: 10,
+            border: "1px solid var(--color-border)", background: "var(--color-card)",
+            color: "var(--color-text)", fontSize: 13, fontWeight: 600,
+            fontFamily: "inherit", colorScheme: "light dark",
+          }}
+        />
+
         {showExchange && (
           <span style={{
-            padding: "7px 12px", borderRadius: 10, fontSize: 12, fontWeight: 700,
+            padding: "9px 12px", borderRadius: 10, fontSize: 13, fontWeight: 700,
             whiteSpace: "nowrap", border: "1px solid var(--color-border)",
             background: "var(--color-card)", color: "#2DD4BF",
           }}>
-            ★ биржа: {exchange.length}
+            ★ {exchange.length}
           </span>
         )}
       </div>
@@ -455,14 +500,7 @@ export default function CourierPointsPage() {
       {/* Карточка заказа */}
       {activeOrder && (
         <div style={{
-          position: "absolute", left: 10, right: 10,
-          // Отступ снизу — чтобы не перекрывать встроенную кнопку
-          // «Открыть в Яндекс.Картах»: убрать её нельзя, это условие API.
-          bottom: 52,
-          // zIndex 15 не хватало: у карты 3.0 поверх всего лежит свой слой
-          // управления, и он перехватывал нажатия — клик по «Пешком»
-          // уходил в карту, а та открывала Яндекс.Карты.
-          zIndex: 1200,
+          position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 15,
           background: "var(--color-card)", border: "1px solid var(--color-border)",
           borderRadius: 16, padding: 14, boxShadow: "0 8px 30px rgba(0,0,0,0.35)",
         }}>

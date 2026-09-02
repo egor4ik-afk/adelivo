@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
         select: {
           id: true, email: true, role: true, firstName: true, lastName: true,
           isSuperAdmin: true, accessRestricted: true, companyId: true, lastLoginAt: true,
+          canPostExchange: true,
         },
         orderBy: [{ role: "asc" }, { email: "asc" }],
       }),
@@ -29,7 +30,8 @@ export async function GET(req: NextRequest) {
       // Профили курьеров: связь с пользователем по email, как и во всём остальном коде
       prisma.courier.findMany({
         where: courierScopeWhere,
-        select: { id: true, email: true, fullName: true, isApproved: true, isActive: true },
+        // companyId нужен, чтобы отличить своих от «ничьих» в интерфейсе
+        select: { id: true, email: true, fullName: true, isApproved: true, isActive: true, companyId: true, phone: true },
       }),
     ]);
 
@@ -53,6 +55,29 @@ export async function PATCH(req: NextRequest) {
   try {
     const { viewer } = await requireAdminScope(req);
     const b = await req.json();
+
+    // Курьер без учётной записи: правим профиль напрямую по courierId.
+    // Такие приходят из CRM и в таблице User их нет вовсе — раньше они
+    // не показывались в админке и управлять ими было нечем.
+    if (b.courierId !== undefined && b.userId === undefined) {
+      const data: Record<string, unknown> = {};
+      if (b.courierApproved !== undefined) data.isApproved = !!b.courierApproved;
+      if (b.courierCompany !== undefined) data.companyId = b.courierCompany || null;
+
+      if (Object.keys(data).length === 0) {
+        return NextResponse.json({ error: "Нечего менять" }, { status: 400 });
+      }
+
+      const where = viewer.isSuperAdmin
+        ? { id: Number(b.courierId) }
+        : { id: Number(b.courierId), OR: [{ companyId: viewer.companyId }, { companyId: null }] };
+
+      const res = await prisma.courier.updateMany({ where, data });
+      if (res.count === 0) {
+        return NextResponse.json({ error: "Курьер не найден или не ваш" }, { status: 403 });
+      }
+      return NextResponse.json({ ok: true });
+    }
 
     if (!b.userId) {
       return NextResponse.json({ error: "userId обязателен" }, { status: 400 });
@@ -82,6 +107,15 @@ export async function PATCH(req: NextRequest) {
           { status: 400 }
         );
       }
+      return NextResponse.json({ ok: true });
+    }
+
+    // Право выкладывать заказы на биржу
+    if (b.canPostExchange !== undefined) {
+      await prisma.user.update({
+        where: { id: b.userId },
+        data: { canPostExchange: !!b.canPostExchange },
+      });
       return NextResponse.json({ ok: true });
     }
 

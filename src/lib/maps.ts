@@ -27,6 +27,19 @@ export const MAPS_V3_KEY =
   "";
 
 /**
+ * Ключ маршрутизации.
+ *
+ * Яндекс ответил «Route requests is not allowed» — значит у ключа карты
+ * нет прав на маршрутизацию. Это отдельная услуга: в кабинете разработчика
+ * её нужно либо включить для существующего ключа, либо выпустить
+ * отдельный ключ и положить его в NEXT_PUBLIC_YANDEX_ROUTER_KEY.
+ *
+ * Пока прав нет, карта работает, а линия маршрута не рисуется — курьер
+ * пользуется кнопкой «Открыть в Навигаторе», она ключа не требует.
+ */
+const ROUTER_KEY = process.env.NEXT_PUBLIC_YANDEX_ROUTER_KEY || "";
+
+/**
  * Маршруты в 3.0 строятся ТЕМ ЖЕ ключом, что и карта.
  *
  * Проверил по вашему дашборду на 2.1:
@@ -85,8 +98,13 @@ export function loadYmaps3(): Promise<Ymaps3> {
       return;
     }
 
+    const params = new URLSearchParams({ apikey: MAPS_V3_KEY, lang: "ru_RU" });
+    if (ROUTER_KEY && ROUTER_KEY !== MAPS_V3_KEY) {
+      params.set("router_apikey", ROUTER_KEY);
+    }
+
     const s = document.createElement("script");
-    s.src = `https://api-maps.yandex.ru/v3/?apikey=${MAPS_V3_KEY}&lang=ru_RU`;
+    s.src = `https://api-maps.yandex.ru/v3/?${params.toString()}`;
     s.async = true;
     s.dataset.ymaps3 = "1";
     s.onload = done;

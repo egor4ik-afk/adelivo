@@ -252,6 +252,49 @@
 :root[data-ew-theme="dark"] .text-gray-500,
 :root[data-ew-theme="dark"] .text-gray-400 { color: var(--color-text-3) !important; }
 
+
+/* ── Тёмная тема для внешних виджетов ────────────────────────
+   Подсказки адреса рисует Яндекс своей разметкой, календарь и списки —
+   браузер. Ни то, ни другое не знает про наши переменные, поэтому
+   в тёмной теме оставалось белым. */
+
+/* Календарь и стрелки в input[type=date], выпадающие списки */
+:root[data-ew-theme="dark"] input,
+:root[data-ew-theme="dark"] select,
+:root[data-ew-theme="dark"] textarea {
+  color-scheme: dark;
+}
+
+/* Подсказки адреса от Яндекса (SuggestView) */
+:root[data-ew-theme="dark"] .ymaps-2-1-79-search__suggest,
+:root[data-ew-theme="dark"] ymaps[class$="-search__suggest"] {
+  background: var(--color-card) !important;
+  border: 1px solid var(--color-border) !important;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.5) !important;
+}
+:root[data-ew-theme="dark"] .ymaps-2-1-79-suggest-item,
+:root[data-ew-theme="dark"] ymaps[class$="-suggest-item"] {
+  background: transparent !important;
+  color: var(--color-text) !important;
+}
+:root[data-ew-theme="dark"] .ymaps-2-1-79-search__suggest-item_selected_yes,
+:root[data-ew-theme="dark"] ymaps[class*="suggest-item_selected"] {
+  background: var(--color-surface) !important;
+}
+:root[data-ew-theme="dark"] .ymaps-2-1-79-search__suggest-highlight {
+  color: var(--color-accent-fg) !important;
+}
+
+/* Балуны и подсказки на карте 2.1 */
+:root[data-ew-theme="dark"] .ymaps-2-1-79-balloon__content,
+:root[data-ew-theme="dark"] .ymaps-2-1-79-hint__text {
+  background: var(--color-card) !important;
+  color: var(--color-text) !important;
+}
+:root[data-ew-theme="dark"] .ymaps-2-1-79-balloon__tail:after {
+  background: var(--color-card) !important;
+}
+
 /* Скрытый горизонтальный скроллбар для топбара */
 .hide-scrollbar {
   overflow-x: auto;

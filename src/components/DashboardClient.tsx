@@ -13,6 +13,8 @@ import { ru } from "date-fns/locale";
 import { MiddlewareReturn } from "@floating-ui/core";
 import { MiddlewareState } from "@floating-ui/dom";
 
+// Запасные координаты на случай, если у магазина не заполнена база.
+// Раньше это был единственный источник, и адрес Банча подставлялся всем.
 const STORE_LAT = 55.749511;
 const STORE_LNG = 37.596205;
 const STORE_COORDS = `${STORE_LAT},${STORE_LNG}`;
@@ -51,6 +53,8 @@ const CustomDateInput = React.forwardRef(({ value, onClick }: any, ref: any) => 
 CustomDateInput.displayName = "CustomDateInput";
 
 export interface DashboardOrder {
+  // Нужен, чтобы понять, от базы какого магазина строить маршрут
+  shop?: string | null;
   id: string; crmId: string; externalId?: string | null; status: string;
   address?: string | null; lat?: number | null; lng?: number | null;
   price?: number | null; wrongPrice?: boolean; courierId?: number | null; courier?: string | null;
@@ -201,6 +205,10 @@ export function DashboardClient({ user }: { user: User }) {
 
   const [filterDate, setFilterDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" }));
   const [orders, setOrders] = useState<DashboardOrder[]>([]);
+  // Базы доступных магазинов: адрес и координаты приходят из настроек компании
+  const [shopBases, setShopBases] = useState<
+    { id: string; name: string; slug: string; storeLat: number | null; storeLng: number | null; storeAddress: string | null }[]
+  >([]);
   const [dbCouriers, setDbCouriers] = useState<DbCourier[]>([]);
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
   // СТАЛО:
@@ -558,12 +566,23 @@ export function DashboardClient({ user }: { user: User }) {
       const courierColl = new window.ymaps.GeoObjectCollection();
       map.geoObjects.add(courierColl);
 
-      const storePm = new window.ymaps.Placemark(
-        [STORE_LAT, STORE_LNG],
-        { hintContent: "БАЗА: Большой Афанасьевский переулок, 39" }, // Убрали iconCaption: "База"
-        { preset: 'islands#grayDotIcon' } // Поставили аккуратный серый пин
-      );
-      map.geoObjects.add(storePm as any);
+      // Метка на каждый магазин с заполненной базой. Адрес больше не зашит
+      // в код: он приходит из настроек магазина, и подпись показывает,
+      // чья это база — при нескольких магазинах иначе не разобрать.
+      const bases = shopBases.filter((s) => s.storeLat != null && s.storeLng != null);
+      const basesToShow = bases.length
+        ? bases
+        : [{ id: "fallback", name: "База", slug: "", storeLat: STORE_LAT, storeLng: STORE_LNG, storeAddress: null }];
+
+      for (const b of basesToShow) {
+        const pm = new window.ymaps.Placemark(
+          // Добавляем "as number" для TS, так как мы уже отфильтровали null значения
+          [b.storeLat as number, b.storeLng as number], 
+          { hintContent: `БАЗА: ${b.name}${b.storeAddress ? ` — ${b.storeAddress}` : ""}` },
+          { preset: "islands#grayDotIcon" }
+        );
+        map.geoObjects.add(pm as any);
+      }
 
       const constructorUrl = "/zones.kml";
       (window.ymaps as any).geoXml.load(constructorUrl)
@@ -1196,8 +1215,17 @@ export function DashboardClient({ user }: { user: User }) {
     const validOrders = ordersToRoute.filter(o => o.lat && o.lng && !o.isInvalid);
     if (validOrders.length === 0) return null;
     if (validOrders.length > 50) validOrders.length = 50;
-    const rtextArr = [STORE_COORDS, ...validOrders.map(o => `${o.lat},${o.lng}`)];
-    if (rtb) rtextArr.push(STORE_COORDS);
+    // Старт от базы магазина, к которому относятся заказы. Раньше сюда
+    // всегда подставлялся адрес Банча, и маршрут другого магазина начинался
+    // с чужой точки.
+    const shopOfRoute = shopBases.find((s) => s.slug === validOrders[0]?.shop);
+    const base =
+      shopOfRoute?.storeLat != null && shopOfRoute?.storeLng != null
+        ? `${shopOfRoute.storeLat},${shopOfRoute.storeLng}`
+        : STORE_COORDS;
+
+    const rtextArr = [base, ...validOrders.map(o => `${o.lat},${o.lng}`)];
+    if (rtb) rtextArr.push(base);
     return `https://yandex.ru/maps/?rtext=${rtextArr.join("~")}&rtt=${type}`;
   };
 

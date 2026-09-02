@@ -6,12 +6,12 @@ import { useEffect, useMemo, useState } from "react";
 type User = {
   id: string; email: string; role: string;
   firstName: string | null; lastName: string | null;
-  isSuperAdmin: boolean; accessRestricted?: boolean;
+  isSuperAdmin: boolean; accessRestricted?: boolean; canPostExchange?: boolean;
   companyId: string | null; lastLoginAt: string | null;
 };
 type Shop = { id: string; slug: string; name: string; isActive: boolean };
 type Access = { userId: string; shopId: string; canEdit: boolean };
-type Courier = { id: number; email: string | null; fullName: string; isApproved: boolean; isActive: boolean };
+type Courier = { id: number; email: string | null; fullName: string; isApproved: boolean; isActive: boolean; companyId?: string | null; phone?: string | null };
 
 const ROLES: Record<string, { label: string; cls: string }> = {
   ADMIN: { label: "Админ", cls: "bg-purple-100 text-purple-800" },
@@ -110,6 +110,21 @@ export function AccessMatrix() {
     if (!ok) load();
   };
 
+  const toggleExchange = async (u: User) => {
+    const next = !u.canPostExchange;
+    setUsers((p) => p.map((x) => (x.id === u.id ? { ...x, canPostExchange: next } : x)));
+    const ok = await patch({ userId: u.id, canPostExchange: next }, `e:${u.id}`);
+    if (!ok) load();
+  };
+
+  // Курьер без учётной записи: правится напрямую по courierId
+  const toggleCourierWork = async (c: Courier) => {
+    const next = !c.isApproved;
+    setCouriers((p) => p.map((x) => (x.id === c.id ? { ...x, isApproved: next } : x)));
+    const ok = await patch({ courierId: c.id, courierApproved: next }, `cw:${c.id}`);
+    if (!ok) load();
+  };
+
   const toggleSuper = async (u: User) => {
     const next = !u.isSuperAdmin;
     const ok = await patch({ userId: u.id, isSuperAdmin: next }, `s:${u.id}`);
@@ -173,6 +188,7 @@ export function AccessMatrix() {
                   Сотрудник
                 </th>
                 <th className="px-3 py-3 font-bold text-[var(--color-text)] whitespace-nowrap">Работа</th>
+                <th className="px-3 py-3 font-bold text-[var(--color-text)] whitespace-nowrap">Биржа</th>
                 {shops.map((s) => (
                   <th key={s.id} className="px-3 py-3 font-bold text-[var(--color-text)] whitespace-nowrap text-center">
                     {s.name}
@@ -225,6 +241,29 @@ export function AccessMatrix() {
                       )}
                     </td>
 
+                    {/* Право выкладывать на биржу */}
+                    <td className="px-3 py-3 text-center">
+                      {u.role === "COURIER" ? (
+                        <span className="text-[10px] text-[var(--color-text-3)]">—</span>
+                      ) : (
+                        <input
+                          type="checkbox"
+                          // У админа право есть всегда: иначе компания могла бы
+                          // остаться без единого человека, способного отдать
+                          // заказ на биржу
+                          checked={u.role === "ADMIN" || u.isSuperAdmin ? true : !!u.canPostExchange}
+                          disabled={u.role === "ADMIN" || u.isSuperAdmin || saving === `e:${u.id}`}
+                          onChange={() => toggleExchange(u)}
+                          title={
+                            u.role === "ADMIN" || u.isSuperAdmin
+                              ? "У администратора право есть всегда"
+                              : "Может выкладывать заказы на биржу"
+                          }
+                          className="w-4 h-4 accent-[var(--color-accent)] cursor-pointer disabled:opacity-40"
+                        />
+                      )}
+                    </td>
+
                     {/* Галочки по магазинам */}
                     {shops.map((s) => (
                       <td key={s.id} className="px-3 py-3 text-center">
@@ -262,7 +301,7 @@ export function AccessMatrix() {
               })}
               {shown.length === 0 && (
                 <tr>
-                  <td colSpan={shops.length + 3} className="px-4 py-10 text-center text-[var(--color-text-3)]">
+                  <td colSpan={shops.length + 4} className="px-4 py-10 text-center text-[var(--color-text-3)]">
                     Никого не нашлось
                   </td>
                 </tr>
@@ -271,6 +310,55 @@ export function AccessMatrix() {
           </table>
         </div>
       )}
+
+      {/* Курьеры без учётной записи.
+          Приходят из CRM: профиль курьера есть, а пользователя в системе нет —
+          такие не попадали в таблицу выше вообще, и управлять ими было нечем.
+          Магазины им не назначить: галочки живут на учётной записи,
+          а её нет. Доступна только отметка «допущен к работе». */}
+      {(() => {
+        const emails = new Set(users.map((u) => u.email.toLowerCase()));
+        const orphans = couriers.filter(
+          (c) => !c.email || !emails.has(c.email.toLowerCase())
+        );
+        if (orphans.length === 0) return null;
+
+        return (
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+            <h3 className="text-[13px] font-bold text-[var(--color-text)] mb-1">
+              Курьеры без учётной записи ({orphans.length})
+            </h3>
+            <p className="text-[11px] text-[var(--color-text-3)] mb-3 leading-relaxed">
+              Профиль есть в справочнике, но в системе такой пользователь ещё
+              не входил. Магазины назначить нельзя — галочки живут на учётной
+              записи. Появится после первого входа по своей почте.
+            </p>
+            <div className="flex flex-col gap-2">
+              {orphans.map((c) => (
+                <div key={c.id} className="flex flex-wrap items-center gap-3 py-2 border-t border-[var(--color-border)]">
+                  <div className="flex-1 min-w-[180px]">
+                    <div className="text-[13px] font-semibold text-[var(--color-text)]">{c.fullName}</div>
+                    <div className="text-[11px] text-[var(--color-text-3)]">
+                      #{c.id} · {c.email || "почта не указана"}{c.phone ? ` · ${c.phone}` : ""}
+                      {c.companyId ? "" : " · без компании"}
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 text-[12px] text-[var(--color-text-2)] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={c.isApproved}
+                      disabled={saving === `cw:${c.id}`}
+                      onChange={() => toggleCourierWork(c)}
+                      className="w-4 h-4 accent-[var(--color-accent)] cursor-pointer"
+                    />
+                    допущен к работе
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       <p className="text-[12px] text-[var(--color-text-3)] leading-relaxed">
 Доступ определяется этой матрицей и только ей: отмеченные магазины — это
