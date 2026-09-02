@@ -614,7 +614,7 @@ export function DashboardClient({ user }: { user: User }) {
     return () => { mounted = false; };
   }, []);
 
-  // 2. Отрисовка баз магазинов при получении данных из БД
+  // 2. Отрисовка баз магазинов (только с заполненными координатами)
   useEffect(() => {
     if (!mapReady || !ymapRef.current || !window.ymaps) return;
 
@@ -627,26 +627,19 @@ export function DashboardClient({ user }: { user: User }) {
 
     basesCollectionRef.current.removeAll();
 
-    const basesToShow = shopBases.length > 0
-      ? shopBases.map((b) => ({
-          id: b.id,
-          name: b.name,
-          slug: b.slug,
-          storeLat: b.storeLat ?? STORE_LAT,
-          storeLng: b.storeLng ?? STORE_LNG,
-          storeAddress: b.storeAddress ?? "Большой Афанасьевский переулок, 35-37с4"
-        }))
-      : [{ id: "fallback", name: "Банч", slug: "bunch", storeLat: STORE_LAT, storeLng: STORE_LNG, storeAddress: "Большой Афанасьевский переулок, 35-37с4" }];
+    // 🔥 Оставляем только те магазины, у которых реально заполнены координаты в БД
+    const validBases = shopBases.filter(b => b.storeLat != null && b.storeLng != null);
 
-    for (const b of basesToShow) {
+    for (const b of validBases) {
       const pm = new window.ymaps.Placemark(
         [b.storeLat as number, b.storeLng as number],
         { 
-          iconContent: `🏪 ${b.name}`,
-          hintContent: `📍 ${b.storeAddress}`,
-          balloonContent: `<b>${b.name}</b><br/>${b.storeAddress}`
+          hintContent: `🏪 ${b.name}\n📍 ${b.storeAddress || "Адрес не указан"}`,
+          balloonContent: `<b>${b.name}</b><br/>${b.storeAddress || ""}`
         },
-        { preset: "islands#blackStretchyIcon" }
+        { 
+          preset: "islands#grayDotIcon" // Аккуратная стандартная точка вместо серой капсулы
+        }
       );
       basesCollectionRef.current.add(pm);
     }
