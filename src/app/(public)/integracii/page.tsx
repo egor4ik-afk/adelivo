@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     description: "Битрикс24, RetailCRM, Telegram, Яндекс Карты, Консоль.Про и открытый вебхук.",
     url: `${SITE_URL}${PATH}`,
     siteName: "ADelivo",
-    images: [{ url: "/og-image.jpg", width: 1200, height: 630, alt: "Интеграции ADelivo" }],
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Интеграции ADelivo" }],
     locale: "ru_RU",
     type: "website",
   },

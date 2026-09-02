@@ -53,7 +53,7 @@ export const metadata: Metadata = {
     siteName: "ADelivo",
     images: [
       {
-        url: "/og-image.jpg",
+        url: "/og-image.png",
         width: 1200,
         height: 630,
         alt: "ADelivo — Система диспетчеризации и логистики",
@@ -68,7 +68,7 @@ export const metadata: Metadata = {
     title: "ADelivo — Диспетчеризация курьеров",
     description:
       "Система управления курьерами и доставкой в реальном времени. Интеграция с любой CRM.",
-    images: ["/og-image.jpg"],
+    images: ["/og-image.png"],
   },
 
   robots: {

@@ -286,7 +286,7 @@ export function LandingPage() {
                 {/* Dashboard mockup */}
                 <div>
                 <Image
-                    src="/og-image.jpg"
+                    src="/og-image.png"
                     alt="ADelivo — интерфейс системы диспетчеризации курьеров"
                     width={1200} height={630}
                     style={{ width: "100%", height: "auto", display: "block" }}

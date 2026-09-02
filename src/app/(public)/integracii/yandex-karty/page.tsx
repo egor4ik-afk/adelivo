@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     description: "Координаты адресов, зоны из KML, карта курьеров и маршрут в один тап.",
     url: `${SITE_URL}${PATH}`,
     siteName: "ADelivo",
-    images: [{ url: "/og-image.jpg", width: 1200, height: 630, alt: "ADelivo и Яндекс Карты" }],
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "ADelivo и Яндекс Карты" }],
     locale: "ru_RU",
     type: "website",
   },

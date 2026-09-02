@@ -104,7 +104,7 @@ export default function CourierProfilePage() {
   const [newLastName, setNewLastName] = useState("");
   const [newHomeAddress, setNewHomeAddress] = useState(""); 
   const [isAuto, setIsAuto] = useState(false);
-  const [showExchange, setShowExchange] = useState(true);
+  const [showExchange, setShowExchange] = useState(false);
   
   const [konsolModalOpen, setKonsolModalOpen] = useState(false);
   const [inputKonsolPhone, setInputKonsolPhone] = useState("");
@@ -173,7 +173,7 @@ export default function CourierProfilePage() {
       setNewLastName(data.lastName || "");
       setNewHomeAddress(data.homeAddress || "");
       setIsAuto(data.isAuto || false);
-      setShowExchange(data.showExchange ?? true);
+      setShowExchange(data.showExchange ?? false);
     });
 
     fetch("/api/courier/my-stats").then(r => r.json()).then(data => {

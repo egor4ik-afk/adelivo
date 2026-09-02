@@ -26,7 +26,7 @@ export const metadata: Metadata = {
     description: "Маршруты на день собираются за минуту: зоны, слоты, загрузка, тип передвижения.",
     url: `${SITE_URL}${PATH}`,
     siteName: "ADelivo",
-    images: [{ url: "/og-image.jpg", width: 1200, height: 630, alt: "AI-маршрутизация ADelivo" }],
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "AI-маршрутизация ADelivo" }],
     locale: "ru_RU",
     type: "website",
   },

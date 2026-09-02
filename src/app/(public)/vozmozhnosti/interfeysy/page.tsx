@@ -26,7 +26,7 @@ export const metadata: Metadata = {
     description: "Дашборд администратора, экран заявок менеджера и PWA курьера в одном контуре.",
     url: `${SITE_URL}${PATH}`,
     siteName: "ADelivo",
-    images: [{ url: "/og-image.jpg", width: 1200, height: 630, alt: "Три интерфейса ADelivo" }],
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Три интерфейса ADelivo" }],
     locale: "ru_RU",
     type: "website",
   },

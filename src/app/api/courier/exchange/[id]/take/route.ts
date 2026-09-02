@@ -16,7 +16,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (!courier.isApproved) {
     return NextResponse.json({ error: "Профиль ещё не подтверждён администратором" }, { status: 403 });
   }
-  if (!courier.konsolContractorId || !courier.isSelfEmployed) {
+  // Тот же критерий, что и в списке и в профиле: наличие konsolContractorId
+  if (!courier.konsolContractorId) {
     return NextResponse.json(
       { error: "Привяжите Консоль.Про — без неё выплату отправить некуда" },
       { status: 403 }

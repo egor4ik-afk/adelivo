@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
   let konsolPhone: string | null = null;
   let isLinked = false;
   let isAuto = false;
-  let showExchange = true;
+  let showExchange = false;
 
   if (profile.email) {
     const courier = await prisma.courier.findFirst({ where: { email: profile.email } });

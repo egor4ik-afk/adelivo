@@ -15,10 +15,16 @@ export async function GET(req: NextRequest) {
 
   // Видят биржу все допущенные к работе, а берут — только с привязанной
   // Консолью: без неё выплату отправить некуда.
-  const canTake = courier.isApproved && !!courier.konsolContractorId && courier.isSelfEmployed;
+  // Признак привязки — только konsolContractorId, как и в остальном коде
+  // (my-stats отдаёт isLinked именно так, и профиль по нему рисует
+  // «✅ Консоль подключена»). Раньше я дополнительно требовал isSelfEmployed,
+  // и курьер с привязанной Консолью, но без этого флага видел просьбу
+  // привязать её ещё раз.
+  const linked = !!courier.konsolContractorId;
+  const canTake = courier.isApproved && linked;
   const reason = !courier.isApproved
     ? "Профиль ещё не подтверждён администратором"
-    : !courier.konsolContractorId || !courier.isSelfEmployed
+    : !linked
     ? "Привяжите Консоль.Про в профиле — без неё выплату отправить некуда"
     : null;
 

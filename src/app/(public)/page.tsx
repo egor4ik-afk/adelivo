@@ -20,7 +20,7 @@ export const metadata: Metadata = {
       "Система управления курьерами для любого доставочного бизнеса. Умные маршруты, контроль в реальном времени, PWA-приложение для курьеров.",
     url: SITE_URL,
     siteName: "ADelivo",
-    images: [{ url: "/og-image.jpg", width: 1200, height: 630, alt: "ADelivo — Система диспетчеризации" }],
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "ADelivo — Система диспетчеризации" }],
     locale: "ru_RU",
     type: "website",
   },

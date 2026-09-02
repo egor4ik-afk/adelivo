@@ -29,7 +29,7 @@ export const metadata: Metadata = {
       "Продукт, выросший из работающей доставки: как мы устроены, как внедряем и на чём зарабатываем.",
     url: `${SITE_URL}${PATH}`,
     siteName: "ADelivo",
-    images: [{ url: "/og-image.jpg", width: 1200, height: 630, alt: "О компании ADelivo" }],
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "О компании ADelivo" }],
     locale: "ru_RU",
     type: "website",
   },

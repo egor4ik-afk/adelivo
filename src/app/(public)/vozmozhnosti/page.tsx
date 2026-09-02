@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     description: "Заказы, курьеры, маршруты, карты, выплаты и три рабочих места.",
     url: `${SITE_URL}${PATH}`,
     siteName: "ADelivo",
-    images: [{ url: "/og-image.jpg", width: 1200, height: 630, alt: "Возможности ADelivo" }],
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Возможности ADelivo" }],
     locale: "ru_RU",
     type: "website",
   },

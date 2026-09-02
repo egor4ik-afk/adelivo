@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     description: "Цветочная доставка, интернет-магазин и курьерская служба — что изменилось после внедрения.",
     url: `${SITE_URL}${PATH}`,
     siteName: "ADelivo",
-    images: [{ url: "/og-image.jpg", width: 1200, height: 630, alt: "Кейсы ADelivo" }],
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Кейсы ADelivo" }],
     locale: "ru_RU",
     type: "website",
   },
