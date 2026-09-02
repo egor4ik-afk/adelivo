@@ -1,6 +1,52 @@
 // src/lib/maps.ts
+// Загрузка Яндекс.Карт 3.0 в одном месте.
+//
+// Почему отдельный файл, а не пара строк в компоненте:
+//
+// 1. Скрипт должен грузиться ОДИН раз на приложение. Если две страницы
+//    вставят свой <script>, ymaps3 инициализируется дважды и вторая карта
+//    молча не поднимется. Здесь загрузка мемоизирована промисом.
+// 2. Ключ у 3.0 отдельный (см. ниже), и держать его выбор в одном месте
+//    проще, чем искать по компонентам.
+// 3. Элементы управления в 3.0 лежат НЕ в ядре — их надо подгружать
+//    отдельно. Это и была причина, по которой карта не открывалась.
 
-export const MAPS_V3_KEY = process.env.NEXT_PUBLIC_YANDEX_MAPS_V3_KEY || "";
+/**
+ * Ключ для 3.0.
+ *
+ * У версии 3.0 обязательно должно быть заполнено «Ограничение по HTTP Referer»
+ * в кабинете разработчика — без него API отказывает. У ключей, выпущенных
+ * когда-то под 2.1, это поле обычно пустое, поэтому проще завести отдельный.
+ *
+ * Если NEXT_PUBLIC_YANDEX_MAPS_V3_KEY не задан, падаем на старый ключ:
+ * так дашборд на 2.1 продолжит работать, даже если новый ключ ещё не завели.
+ */
+export const MAPS_V3_KEY =
+  process.env.NEXT_PUBLIC_YANDEX_MAPS_V3_KEY ||
+  process.env.NEXT_PUBLIC_YANDEX_MAPS_KEY ||
+  "";
+
+/**
+ * Ключ маршрутизации.
+ *
+ * Яндекс ответил «Route requests is not allowed» — значит у ключа карты
+ * нет прав на маршрутизацию. Это отдельная услуга: в кабинете разработчика
+ * её нужно либо включить для существующего ключа, либо выпустить
+ * отдельный ключ и положить его в NEXT_PUBLIC_YANDEX_ROUTER_KEY.
+ *
+ * Пока прав нет, карта работает, а линия маршрута не рисуется — курьер
+ * пользуется кнопкой «Открыть в Навигаторе», она ключа не требует.
+ */
+const ROUTER_KEY = process.env.NEXT_PUBLIC_YANDEX_ROUTER_KEY || "";
+
+/**
+ * Маршруты в 3.0 строятся ТЕМ ЖЕ ключом, что и карта.
+ *
+ * Проверил по вашему дашборду на 2.1:
+ *   /2.1/?lang=ru_RU&apikey=<ключ>&suggest_apikey=<ключ саджеста>
+ * multiRouter там работает на основном ключе, отдельный нужен только
+ * саджесту. Поэтому никаких дополнительных параметров в URL не добавляем.
+ */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Ymaps3 = any;
@@ -11,6 +57,7 @@ declare global {
 
 let loader: Promise<Ymaps3> | null = null;
 
+/** Загружает скрипт 3.0 и дожидается готовности. Повторные вызовы бесплатны. */
 export function loadYmaps3(): Promise<Ymaps3> {
   if (typeof window === "undefined") {
     return Promise.reject(new Error("Карта доступна только в браузере"));
@@ -27,6 +74,8 @@ export function loadYmaps3(): Promise<Ymaps3> {
       try {
         await window.ymaps3!.ready;
 
+        // Без явного CDN ymaps3.import в отдельных сборках не находит пакеты.
+        // Вызов идемпотентный, повторно регистрировать безопасно.
         try {
           window.ymaps3!.import?.registerCdn?.(
             "https://cdn.jsdelivr.net/npm/{package}",
@@ -41,6 +90,7 @@ export function loadYmaps3(): Promise<Ymaps3> {
 
     if (window.ymaps3) { done(); return; }
 
+    // Скрипт мог быть добавлен другим компонентом раньше
     const existing = document.querySelector<HTMLScriptElement>('script[data-ymaps3="1"]');
     if (existing) {
       existing.addEventListener("load", done);
@@ -48,8 +98,10 @@ export function loadYmaps3(): Promise<Ymaps3> {
       return;
     }
 
-    // Собираем параметры только с одним супер-ключом
     const params = new URLSearchParams({ apikey: MAPS_V3_KEY, lang: "ru_RU" });
+    if (ROUTER_KEY && ROUTER_KEY !== MAPS_V3_KEY) {
+      params.set("router_apikey", ROUTER_KEY);
+    }
 
     const s = document.createElement("script");
     s.src = `https://api-maps.yandex.ru/v3/?${params.toString()}`;
@@ -60,7 +112,9 @@ export function loadYmaps3(): Promise<Ymaps3> {
     document.head.appendChild(s);
   });
 
+  // Неудачную попытку не кешируем: при следующем заходе попробуем снова
   loader.catch(() => { loader = null; });
+
   return loader;
 }
 
