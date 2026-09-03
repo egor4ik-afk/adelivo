@@ -85,8 +85,9 @@ export async function buildRoute21(
   const ymaps = await loadYmaps21();
 
   const route = await ymaps.route([from, to], {
-    // «mt» здесь исторически означает пеший режим курьера
-    routingMode: mode === "auto" ? "auto" : "pedestrian",
+    // Как было в 2.1 до переезда: auto или masstransit.
+    // Менять режим на pedestrian было моей самодеятельностью — вернул.
+    routingMode: mode === "auto" ? "auto" : "masstransit",
   });
 
   const distanceMeters: number = route.getLength();

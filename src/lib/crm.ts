@@ -4,6 +4,7 @@ import fs from "fs";
 import { prisma } from "./prisma";
 import { notify } from "./notifications";
 import { OrderStatus } from "@prisma/client";
+import { getCity, DEFAULT_CITY } from "./cities";
 
 const CRM_URL = process.env.RETAILCRM_API_URL;
 const CRM_KEY = process.env.RETAILCRM_API_KEY; 
@@ -349,7 +350,8 @@ export function checkAddressIssues(address: string = "", customerComment: string
   return null;
 }
 
-export async function geocodeAddress(address: string) {
+export async function geocodeAddress(address: string, cityCode?: string | null) {
+  const city = getCity(cityCode) ?? DEFAULT_CITY;
   if (!GEO_KEY || !address) return null;
   try {
     let cleanAddress = address;
@@ -366,7 +368,10 @@ export async function geocodeAddress(address: string) {
         geocode: searchAddress, 
         format: "json", 
         results: 1, 
-        ll: "37.6175,55.7520", 
+        // Центр поиска — город магазина, а не всегда Москва.
+        // Без этого «Ленина 42» для магазина в Новосибирске уверенно
+        // находится в Москве, и заказ уезжает за три тысячи километров.
+        ll: `${city.center[1]},${city.center[0]}`,
         spn: "1.0,1.0" 
       },
       // 🔥 ДОБАВЛЯЕМ ЗАГОЛОВОК СЮДА
@@ -518,6 +523,18 @@ export async function geocodeNewOrders() {
  */
 let shopCache: { at: number; map: Map<string, string> } | null = null;
 
+let cityCache: { at: number; map: Map<string, string | null> } | null = null;
+
+/** Город магазина по slug, с тем же пятиминутным кэшем. */
+async function resolveShopCity(slug?: string | null): Promise<string | null> {
+  if (!slug) return null;
+  if (!cityCache || Date.now() - cityCache.at > 5 * 60_000) {
+    const shops = await prisma.shop.findMany({ select: { slug: true, city: true } });
+    cityCache = { at: Date.now(), map: new Map(shops.map((s) => [s.slug, s.city])) };
+  }
+  return cityCache.map.get(slug) ?? null;
+}
+
 async function resolveShopId(slug?: string | null): Promise<string | null> {
   if (!slug) return null;
 
@@ -631,6 +648,8 @@ export async function upsertOrder(crmOrder: CrmOrder) {
   // пустым — заказ создастся, но будет виден только глобальному админу,
   // и это заметный сигнал, что нужно завести магазин в разделе «Компания».
   const shopId = await resolveShopId(data.shop);
+  // Город магазина: от него зависит, где геокодер будет искать адрес
+  const shopCity = data.shop ? await resolveShopCity(data.shop) : null;
   if (!shopId && data.shop) {
     console.warn(`[upsertOrder] магазин "${data.shop}" не найден в таблице Shop — заказ ${data.crmId} останется без привязки`);
   }
@@ -804,7 +823,7 @@ export async function pollCrmOrders() {
  */
 async function resolveCrmCreds(
   crmId: string
-): Promise<{ baseUrl: string; apiKey: string } | null> {
+): Promise<{ baseUrl: string; apiKey: string; site: string | null } | null> {
   // Локальные заказы в CRM не существуют по определению
   if (!/^\d+$/.test(crmId)) return null;
 
@@ -830,16 +849,16 @@ async function resolveCrmCreds(
   if (shopRef?.connector?.type === "RETAILCRM" && shopRef.connector.apiKey) {
     const baseUrl = shopRef.connector.baseUrl || shopRef.crmUrl || CRM_URL;
     if (!baseUrl) return null;
-    return { baseUrl, apiKey: shopRef.connector.apiKey };
+    return { baseUrl, apiKey: shopRef.connector.apiKey, site: shopRef.slug ?? order.shop };
   }
 
   // 2. Исторические магазины на переменных окружения
   const slug = shopRef?.slug ?? order.shop ?? "";
   if (MEURA_SHOPS.includes(slug)) {
-    return CRM_URL && CRM_KEY_MEURA ? { baseUrl: CRM_URL, apiKey: CRM_KEY_MEURA } : null;
+    return CRM_URL && CRM_KEY_MEURA ? { baseUrl: CRM_URL, apiKey: CRM_KEY_MEURA, site: slug } : null;
   }
   if (BUNCH_SHOPS.includes(slug)) {
-    return CRM_URL && CRM_KEY ? { baseUrl: CRM_URL, apiKey: CRM_KEY } : null;
+    return CRM_URL && CRM_KEY ? { baseUrl: CRM_URL, apiKey: CRM_KEY, site: slug } : null;
   }
 
   // 3. Магазин к RetailCRM не подключён — молча выходим.
@@ -935,8 +954,8 @@ export async function updateCrmOrder(
   const params = new URLSearchParams();
   params.append("apiKey", apiKeyToUse);
 
-  if (orderInDb?.shop) {
-    params.append("site", orderInDb.shop); 
+  if (creds.site) {
+    params.append("site", creds.site); 
   }
   params.append("order", JSON.stringify(orderPayload));
   params.append("by", "id");
@@ -968,8 +987,8 @@ export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: numb
   const params = new URLSearchParams();
   params.append("apiKey", apiKeyToUse);
   
-  if (orderInDb?.shop) {
-    params.append("site", orderInDb.shop); 
+  if (creds.site) {
+    params.append("site", creds.site); 
   }
 
   params.append("order", JSON.stringify({ delivery: { netCost: calculatedNetCost } }));

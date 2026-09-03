@@ -6,11 +6,12 @@ import Link from "next/link";
 import { CONNECTORS, type ConnectorType } from "@/lib/connectors/catalog";
 import { TelegramSources } from "./TelegramSources";
 import { AddressSuggest } from "@/components/AddressSuggest";
+import { CITIES } from "@/lib/cities";
 
 type Shop = {
   id: string; slug: string; name: string; isActive: boolean;
   connectorType: string | null; storeAddress: string | null;
-  storeLat: number | null; storeLng: number | null; ordersCount: number;
+  storeLat: number | null; storeLng: number | null; city: string | null; ordersCount: number;
   connector: {
     type: string; isActive: boolean; baseUrl: string | null;
     hasKey: boolean; lastSyncAt: string | null; lastError: string | null;
@@ -50,7 +51,7 @@ export function CompanyClient({ siteUrl }: { siteUrl: string }) {
   const [addingShop, setAddingShop] = useState(false);
   // настройка подключения
   const [editing, setEditing] = useState<string | null>(null);
-  const [form, setForm] = useState({ connectorType: "RETAILCRM" as ConnectorType, baseUrl: "", apiKey: "", storeAddress: "" });
+  const [form, setForm] = useState({ connectorType: "RETAILCRM" as ConnectorType, baseUrl: "", apiKey: "", storeAddress: "", city: "msk" });
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -114,6 +115,7 @@ export function CompanyClient({ siteUrl }: { siteUrl: string }) {
       baseUrl: s.connector?.baseUrl ?? "",
       apiKey: "",
       storeAddress: s.storeAddress ?? "",
+      city: s.city ?? "msk",
     });
   };
 
@@ -299,6 +301,7 @@ export function CompanyClient({ siteUrl }: { siteUrl: string }) {
                     <div className="font-bold text-[14px] text-[var(--color-text)]">{s.name}</div>
                     <div className="text-[11px] text-[var(--color-text-3)] mt-0.5">
                       {s.slug} · {conf?.label ?? "не настроено"} · заказов: {s.ordersCount}
+                      {s.city ? ` · ${CITIES.find((c) => c.code === s.city)?.name ?? s.city}` : ""}
                       {s.storeAddress ? ` · база: ${s.storeAddress}` : " · база не указана"}
                     </div>
                     {s.connector?.lastError && (
@@ -361,6 +364,24 @@ export function CompanyClient({ siteUrl }: { siteUrl: string }) {
                         )}
                       </>
                     )}
+
+                    <div>
+                      <label className={label}>Город</label>
+                      <select
+                        className={input}
+                        value={form.city}
+                        onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))}
+                      >
+                        {CITIES.map((c) => (
+                          <option key={c.code} value={c.code}>{c.name}</option>
+                        ))}
+                      </select>
+                      <p className="text-[11px] text-[var(--color-text-3)] mt-1.5 leading-relaxed">
+                        Задаёт центр карты и, что важнее, город поиска адресов.
+                        Без него «Ленина 42» уверенно находится в Москве, даже
+                        если магазин в Новосибирске.
+                      </p>
+                    </div>
 
                     <div>
                       <label className={label}>Адрес базы</label>

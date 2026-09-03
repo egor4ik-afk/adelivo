@@ -143,7 +143,7 @@ export async function PATCH(req: NextRequest) {
 
     if (b.storeAddress !== undefined && storeAddress !== shop.storeAddress) {
       if (storeAddress) {
-        const geo = await geocodeAddress(storeAddress);
+        const geo = await geocodeAddress(storeAddress, b.city ?? shop.city);
         storeLat = geo?.lat ?? null;
         storeLng = geo?.lng ?? null;
         if (!geo) {
@@ -166,6 +166,7 @@ export async function PATCH(req: NextRequest) {
         storeAddress,
         storeLat,
         storeLng,
+        ...(b.city !== undefined ? { city: b.city || null } : {}),
       },
     });
 
