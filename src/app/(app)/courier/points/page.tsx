@@ -292,14 +292,20 @@ export default function CourierPointsPage() {
     });
 
     // Метки баз: квадратные, чтобы не путались с точками доставки.
-    // База без координат тоже показывается — по центру своего города и
-    // полупрозрачной: курьер видит, что магазин есть, но адрес у него
-    // ещё не настроен.
-    bases.forEach((b) => {
-      const baseHasCoords = b.storeLat != null && b.storeLng != null;
-      const [bLat, bLng] = baseHasCoords
-        ? [b.storeLat as number, b.storeLng as number]
-        : getCity(b.city).center;
+    //
+    // Показываем только базы того города, в котором курьер сегодня работает,
+    // и только с реальными координатами. Без первого условия курьеру в
+    // Тбилиси прилетали московские магазины; без второго база без адреса
+    // рисовалась по центру города — два домика посреди Москвы, не имеющие
+    // отношения ни к одному заказу.
+    const visibleBases = bases.filter(
+      (b) =>
+        b.storeLat != null &&
+        b.storeLng != null &&
+        getCity(b.city).code === cityOfWork.code
+    );
+
+    visibleBases.forEach((b) => {
       const el = document.createElement("div");
       el.style.cssText = `
         width:26px;height:26px;border-radius:7px;
@@ -308,13 +314,13 @@ export default function CourierPointsPage() {
         display:flex;align-items:center;justify-content:center;
         color:#fff;font-size:13px;cursor:default;
         transform:translate(-50%,-50%);
-        opacity:${baseHasCoords ? 1 : 0.45};
       `;
       el.textContent = "🏠";
-      el.title = baseHasCoords
-        ? `База: ${b.name}${b.storeAddress ? ` — ${b.storeAddress}` : ""}`
-        : `База: ${b.name} — адрес не указан в настройках компании`;
-      const marker = new YMapMarker({ coordinates: toLngLat(bLat, bLng) }, el);
+      el.title = `База: ${b.name}${b.storeAddress ? ` — ${b.storeAddress}` : ""}`;
+      const marker = new YMapMarker(
+        { coordinates: toLngLat(b.storeLat as number, b.storeLng as number) },
+        el
+      );
       mapRef.current.addChild(marker);
       markersRef.current.set(`base-${b.id}`, marker);
     });
@@ -408,6 +414,12 @@ export default function CourierPointsPage() {
         return;
       }
 
+      // Время и расстояние показываем всегда. Линия — только если пришла
+      // геометрия: у транспортного маршрута её может не быть, и это не повод
+      // прятать от курьера, сколько ехать.
+      setRouteInfo({ distance: result.distanceText, duration: result.durationText });
+      if (result.coordinates.length === 0) return;
+
       const { YMapFeature } = ymaps3;
       const line = new YMapFeature({
         id: "active-route",
@@ -430,8 +442,6 @@ export default function CourierPointsPage() {
       });
       mapRef.current.addChild(line);
       routeRef.current = line;
-
-      setRouteInfo({ distance: result.distanceText, duration: result.durationText });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error("[Карта] маршрут не построился:", msg, e);
@@ -586,7 +596,7 @@ export default function CourierPointsPage() {
                       color: routeType === m ? "var(--color-text)" : "var(--color-text-3)",
                     }}
                   >
-                    {m === "mt" ? "🚶 Пешком" : "🚗 Авто"}
+                    {m === "mt" ? "🚌 Транспорт" : "🚗 Авто"}
                   </button>
                 ))}
               </div>
