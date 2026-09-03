@@ -4,7 +4,7 @@ import fs from "fs";
 import { prisma } from "./prisma";
 import { notify } from "./notifications";
 import { OrderStatus } from "@prisma/client";
-import { getCity, DEFAULT_CITY } from "./cities";
+import { getCity, bboxParam, DEFAULT_CITY } from "./cities";
 
 const CRM_URL = process.env.RETAILCRM_API_URL;
 const CRM_KEY = process.env.RETAILCRM_API_KEY; 
@@ -351,8 +351,9 @@ export function checkAddressIssues(address: string = "", customerComment: string
 }
 
 export async function geocodeAddress(address: string, cityCode?: string | null) {
-  const city = getCity(cityCode) ?? DEFAULT_CITY;
+  const city = getCity(cityCode);
   if (!GEO_KEY || !address) return null;
+  
   try {
     let cleanAddress = address;
     const match = address.match(/^(.*?)(?:,\s*(кв\.|квартира|кв\s|подъезд|под\.|пд\.|этаж|эт\.|домофон|код|дф\.).*)/i);
@@ -360,7 +361,9 @@ export async function geocodeAddress(address: string, cityCode?: string | null) 
       cleanAddress = match[1].trim();
     }
 
-    const searchAddress = cleanAddress.toLowerCase().includes("москва") ? cleanAddress : `Москва, ${cleanAddress}`;
+    const searchAddress = cleanAddress.toLowerCase().includes(city.name.toLowerCase()) 
+      ? cleanAddress 
+      : `${city.name}, ${cleanAddress}`;
     
     const res = await axios.get("https://geocode-maps.yandex.ru/1.x/", {
       params: { 
@@ -368,13 +371,10 @@ export async function geocodeAddress(address: string, cityCode?: string | null) 
         geocode: searchAddress, 
         format: "json", 
         results: 1, 
-        // Центр поиска — город магазина, а не всегда Москва.
-        // Без этого «Ленина 42» для магазина в Новосибирске уверенно
-        // находится в Москве, и заказ уезжает за три тысячи километров.
-        ll: `${city.center[1]},${city.center[0]}`,
-        spn: "1.0,1.0" 
+        // 🔥 ИСПОЛЬЗУЕМ ТВОИ ГРАНИЦЫ ИЗ cities.ts
+        bbox: bboxParam(city),
+        rspn: 1 // Принудительно ограничиваем поиск этим bbox
       },
-      // 🔥 ДОБАВЛЯЕМ ЗАГОЛОВОК СЮДА
       headers: {
         "Referer": "https://adelivo.ru"
       },
@@ -388,7 +388,9 @@ export async function geocodeAddress(address: string, cityCode?: string | null) 
     
     const [lng, lat] = point.split(" ").map(Number);
     const precision = members[0]?.GeoObject?.metaDataProperty?.GeocoderMetaData?.precision;
-    const distanceKm = getDistanceFromLatLonInKm(55.755864, 37.617698, lat, lng);
+    
+    // 🔥 Дистанцию считаем от центра ВЫБРАННОГО города!
+    const distanceKm = getDistanceFromLatLonInKm(city.center[0], city.center[1], lat, lng);
     
     return {
       lat, lng, precision,
@@ -397,7 +399,6 @@ export async function geocodeAddress(address: string, cityCode?: string | null) 
     };
   } catch (_) { return null; }
 }
-
 export async function geocodeNewOrders() {
   const orders = await prisma.order.findMany({
     where: { 
@@ -407,7 +408,17 @@ export async function geocodeNewOrders() {
     },
     take: 20,
   });
+  
   if (orders.length === 0) return;
+
+  // 🔥 1. Вытаскиваем все города для магазинов из этих заказов
+  const shopSlugs = [...new Set(orders.map(o => o.shop).filter(Boolean))] as string[];
+  const shops = await prisma.shop.findMany({
+    where: { slug: { in: shopSlugs } },
+    select: { slug: true, city: true }
+  });
+  // Создаем словарь: "slug-магазина" -> "VRN"
+  const shopCities = new Map(shops.map(s => [s.slug, s.city]));
 
   const invalidOrders: Array<{ externalId: string | null; address: string | null; reason: string }> = [];
 
@@ -425,7 +436,11 @@ export async function geocodeNewOrders() {
     }
 
     try {
-      const geo = await geocodeAddress(order.address);
+      // 🔥 2. Достаем код города для конкретного заказа из нашего словаря
+      const cityCode = order.shop ? shopCities.get(order.shop) : null;
+      
+      // Передаем город в геокодер
+      const geo = await geocodeAddress(order.address, cityCode);
 
       if (!geo) {
         await prisma.order.update({ where: { id: order.id }, data: { geocoded: true, isInvalid: true, invalidReason: "Адрес не найден" } });
@@ -434,7 +449,7 @@ export async function geocodeNewOrders() {
       }
 
       if (geo.distanceKm > 75) {
-        const reason = `Вне зоны доставки (найдено в ${Math.round(geo.distanceKm)} км от МСК)`;
+        const reason = `Вне зоны доставки (найдено в ${Math.round(geo.distanceKm)} км от центра города)`;
         await prisma.order.update({ where: { id: order.id }, data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: true, invalidReason: reason } });
         invalidOrders.push({ externalId: order.externalId, address: order.address, reason });
         continue;

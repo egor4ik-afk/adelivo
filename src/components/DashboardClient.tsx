@@ -12,6 +12,7 @@ import "react-datepicker/dist/react-datepicker.css";
 import { ru } from "date-fns/locale";
 import { MiddlewareReturn } from "@floating-ui/core";
 import { MiddlewareState } from "@floating-ui/dom";
+import { getCity } from "@/lib/cities"; // 🔥 Импортируем
 
 // Запасные координаты на случай, если у магазина не заполнена база.
 // Раньше это был единственный источник, и адрес Банча подставлялся всем.
@@ -207,7 +208,7 @@ export function DashboardClient({ user }: { user: User }) {
   const [orders, setOrders] = useState<DashboardOrder[]>([]);
   // Базы доступных магазинов: адрес и координаты приходят из настроек компании
   const [shopBases, setShopBases] = useState<
-    { id: string; name: string; slug: string; storeLat: number | null; storeLng: number | null; storeAddress: string | null }[]
+    { id: string; name: string; slug: string; storeLat: number | null; storeLng: number | null; storeAddress: string | null; city: string | null }[]
   >([]);
   const [dbCouriers, setDbCouriers] = useState<DbCourier[]>([]);
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
@@ -588,13 +589,26 @@ export function DashboardClient({ user }: { user: User }) {
     loadYMaps().then(() => {
       if (!mounted || !mapRef.current || ymapRef.current) return;
 
-      const map = new window.ymaps.Map(mapRef.current, {
-        center: [STORE_LAT, STORE_LNG], // Оставляем дефолт, мы его перебьем на шаге 2
-        zoom: 11,
-        controls: ["zoomControl"]
-      }, {});
+      // Находим текущий магазин из заказов
+      const currentShopSlug = dateAndStatusOrders?.[0]?.shop;
+      const shopOfRoute = shopBases?.find((s) => s.slug === currentShopSlug) || shopBases?.[0];
+      
+      // 🔥 Берем город магазина, а фоллбэком будет DEFAULT_CITY (Москва) из твоего файла
+      const city = getCity(shopOfRoute?.city);
+      
+      // Координаты базы, либо центр города
+      const finalLat = shopOfRoute?.storeLat ?? city.center[0];
+      const finalLng = shopOfRoute?.storeLng ?? city.center[1];
 
-      map.events.add('boundschange', (e: any) => { if (e.get('newZoom') !== e.get('oldZoom')) setCurrentZoom(e.get('newZoom')); });
+      const map = new window.ymaps.Map(mapRef.current, { 
+        center: [finalLat, finalLng], 
+        zoom: city.zoom, // 🔥 Зум тоже берем из твоих настроек!
+        controls: ["zoomControl"] 
+      }, {});
+      
+      map.events.add('boundschange', (e: any) => { 
+        if (e.get('newZoom') !== e.get('oldZoom')) setCurrentZoom(e.get('newZoom')); 
+      });
 
       const clusterer = new window.ymaps.Clusterer({
         clusterIconLayout: "default#pieChart",

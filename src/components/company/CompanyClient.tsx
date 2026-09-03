@@ -51,7 +51,7 @@ export function CompanyClient({ siteUrl }: { siteUrl: string }) {
   const [addingShop, setAddingShop] = useState(false);
   // настройка подключения
   const [editing, setEditing] = useState<string | null>(null);
-  const [form, setForm] = useState({ connectorType: "RETAILCRM" as ConnectorType, baseUrl: "", apiKey: "", storeAddress: "", city: "msk" });
+  const [form, setForm] = useState({ connectorType: "RETAILCRM" as ConnectorType, baseUrl: "", apiKey: "", storeAddress: "", city: "" });
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -115,7 +115,7 @@ export function CompanyClient({ siteUrl }: { siteUrl: string }) {
       baseUrl: s.connector?.baseUrl ?? "",
       apiKey: "",
       storeAddress: s.storeAddress ?? "",
-      city: s.city ?? "msk",
+      city: s.city ?? "", // 🔥 Если города нет, оставляем пустым, чтобы показался "Выберите город..."
     });
   };
 
