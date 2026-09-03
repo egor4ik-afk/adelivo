@@ -45,7 +45,7 @@ function mapStatus(raw: string | null, statusMap: Record<string, string> | null)
 
 /** Сохранить нормализованный заказ. Возвращает true, если заказ новый. */
 export async function upsertNormalized(
-  shop: { id: string; slug: string },
+  shop: { id: string; slug: string; city?: string | null },
   o: NormalizedOrder,
   creds: ConnectorCreds
 ): Promise<boolean> {
@@ -59,7 +59,8 @@ export async function upsertNormalized(
   const addressChanged = !!o.address && existing?.address !== o.address;
   let geo: { lat: number; lng: number } | null = null;
   if (o.address && (!existing || addressChanged)) {
-    geo = await geocodeAddress(o.address);
+    // Город магазина: тот же адрес в Тбилиси и в Москве — разные точки
+    geo = await geocodeAddress(o.address, shop.city);
   }
 
   const slot = o.slotRaw ? parseSlot(o.slotRaw) : null;
@@ -77,7 +78,7 @@ export async function upsertNormalized(
           geocoded: true,
           isInvalid: false,
           invalidReason: null,
-          costPrice: calcBaseDeliveryPrice(geo.lat, geo.lng),
+          costPrice: calcBaseDeliveryPrice(geo.lat, geo.lng, shop.city),
         }
       : addressChanged
       ? { geocoded: false, isInvalid: true, invalidReason: "Адрес не определился" }

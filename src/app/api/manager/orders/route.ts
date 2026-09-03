@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
 
     const shop = await prisma.shop.findUnique({
       where: { id: b.shopId },
-      select: { id: true, slug: true },
+      select: { id: true, slug: true, city: true },
     });
     if (!shop) return NextResponse.json({ error: "Магазин не найден" }, { status: 404 });
 
@@ -63,10 +63,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Геокодинг сразу при создании — чтобы заказ не висел «непроверенным»
-    const geo = await geocodeAddress(String(b.address));
+    // Геокодинг сразу при создании — чтобы заказ не висел «непроверенным».
+    // Город берём у магазина: без него «Ленина 42» для тбилисского магазина
+    // уверенно находится в Москве.
+    const geo = await geocodeAddress(String(b.address), shop.city);
     const costPrice =
-      geo?.lat && geo?.lng ? calcBaseDeliveryPrice(geo.lat, geo.lng) : null;
+      geo?.lat && geo?.lng ? calcBaseDeliveryPrice(geo.lat, geo.lng, shop.city) : null;
 
     const slotFrom = b.slotFrom || null;
     const slotTo = b.slotTo || null;

@@ -12,13 +12,12 @@ import "react-datepicker/dist/react-datepicker.css";
 import { ru } from "date-fns/locale";
 import { MiddlewareReturn } from "@floating-ui/core";
 import { MiddlewareState } from "@floating-ui/dom";
-import { getCity } from "@/lib/cities"; // 🔥 Импортируем
+import { getCity } from "@/lib/cities";
 
-// Запасные координаты на случай, если у магазина не заполнена база.
-// Раньше это был единственный источник, и адрес Банча подставлялся всем.
-const STORE_LAT = 55.749511;
-const STORE_LNG = 37.596205;
-const STORE_COORDS = `${STORE_LAT},${STORE_LNG}`;
+// Координат по умолчанию больше нет. Точка старта маршрута — база магазина
+// из настроек компании, а если она не заполнена — центр города магазина
+// из cities.ts. Раньше здесь лежал адрес Банча на Пресне и подставлялся
+// всем: воронежский маршрут строился из Москвы.
 
 interface User { id: string; email: string; role: string; avatarUrl?: string | null; firstName?: string | null; lastName?: string | null; }
 interface DbCourier {
@@ -210,6 +209,9 @@ export function DashboardClient({ user }: { user: User }) {
   const [shopBases, setShopBases] = useState<
     { id: string; name: string; slug: string; storeLat: number | null; storeLng: number | null; storeAddress: string | null; city: string | null }[]
   >([]);
+  // Карту нельзя инициализировать раньше, чем известен город магазина:
+  // иначе она встанет на дефолт (Москву) и там и останется.
+  const [basesLoaded, setBasesLoaded] = useState(false);
   const [dbCouriers, setDbCouriers] = useState<DbCourier[]>([]);
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
   // СТАЛО:
@@ -391,7 +393,7 @@ export function DashboardClient({ user }: { user: User }) {
 
     try {
       const cached = sessionStorage.getItem(CACHE_KEY);
-      if (cached) setShopBases(JSON.parse(cached));
+      if (cached) { setShopBases(JSON.parse(cached)); setBasesLoaded(true); }
     } catch { /* приватный режим — просто грузим с сервера */ }
 
     fetch("/api/company/shops")
@@ -402,7 +404,10 @@ export function DashboardClient({ user }: { user: User }) {
         setShopBases(shops);
         try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(shops)); } catch { /* ignore */ }
       })
-      .catch(() => { /* при ошибке остаёмся на кэше */ });
+      .catch(() => { /* при ошибке остаёмся на кэше */ })
+      // Даже если запрос упал, карту рисуем: пустой список даст город
+      // по умолчанию, но экран не останется белым навсегда.
+      .finally(() => setBasesLoaded(true));
   }, []);
 
   useEffect(() => { fetchData(); const t = setInterval(fetchData, 30_000); return () => clearInterval(t); }, [fetchData]);
@@ -583,27 +588,53 @@ export function DashboardClient({ user }: { user: User }) {
 
   const handleSort = (key: string) => { setSortConfig(prev => ({ key, dir: prev.key === key && prev.dir === 'asc' ? 'desc' : 'asc' })); };
 
+  // ── Город и база: единственный источник координат на весь экран ──────────
+  //
+  // Раньше в компоненте было три разных места с константой 55.749511/37.596205
+  // (оптимизатор, линия маршрута, расчёт ETA) и одно правильное — ссылка в
+  // Яндекс.Карты. Из-за этого маршрут в Воронеже считался из Москвы,
+  // а карта открывалась над Кремлём.
+
+  /** Магазин, на который сейчас смотрит оператор. */
+  const activeShop = useMemo(() => {
+    const slug = dateAndStatusOrders?.[0]?.shop;
+    return shopBases.find((s) => s.slug === slug) ?? shopBases[0] ?? null;
+  }, [shopBases, dateAndStatusOrders]);
+
+  /** Город активного магазина. getCity никогда не возвращает null. */
+  const activeCity = useMemo(() => getCity(activeShop?.city), [activeShop]);
+
+  /**
+   * Координаты базы для конкретного магазина: сначала адрес из настроек,
+   * потом центр его города. Хардкода нет ни на одной ветке.
+   */
+  const baseCoordsFor = useCallback((shopSlug?: string | null): [number, number] => {
+    const shop = shopSlug ? shopBases.find((s) => s.slug === shopSlug) : null;
+    const target = shop ?? activeShop;
+    if (target?.storeLat != null && target?.storeLng != null) {
+      return [target.storeLat, target.storeLng];
+    }
+    return getCity(target?.city).center;
+  }, [shopBases, activeShop]);
+
   // 1. Инициализация карты и зон
   useEffect(() => {
+    // Вот здесь и была причина «город не отображается»: эффект стоял с
+    // пустым списком зависимостей и отрабатывал на первом рендере, когда
+    // shopBases ещё пустой. getCity(undefined) давала Москву, карта
+    // вставала над Кремлём и больше никогда не пересоздавалась.
+    if (!basesLoaded) return;
+
     let mounted = true;
     loadYMaps().then(() => {
       if (!mounted || !mapRef.current || ymapRef.current) return;
 
-      // Находим текущий магазин из заказов
-      const currentShopSlug = dateAndStatusOrders?.[0]?.shop;
-      const shopOfRoute = shopBases?.find((s) => s.slug === currentShopSlug) || shopBases?.[0];
-      
-      // 🔥 Берем город магазина, а фоллбэком будет DEFAULT_CITY (Москва) из твоего файла
-      const city = getCity(shopOfRoute?.city);
-      
-      // Координаты базы, либо центр города
-      const finalLat = shopOfRoute?.storeLat ?? city.center[0];
-      const finalLng = shopOfRoute?.storeLng ?? city.center[1];
+      const [finalLat, finalLng] = baseCoordsFor(activeShop?.slug);
 
-      const map = new window.ymaps.Map(mapRef.current, { 
-        center: [finalLat, finalLng], 
-        zoom: city.zoom, // 🔥 Зум тоже берем из твоих настроек!
-        controls: ["zoomControl"] 
+      const map = new window.ymaps.Map(mapRef.current, {
+        center: [finalLat, finalLng],
+        zoom: activeCity.zoom,
+        controls: ["zoomControl"]
       }, {});
       
       map.events.add('boundschange', (e: any) => { 
@@ -622,7 +653,16 @@ export function DashboardClient({ user }: { user: User }) {
       const courierColl = new window.ymaps.GeoObjectCollection();
       map.geoObjects.add(courierColl);
 
-      // Загрузка зон kml
+      // Зоны нарисованы только для Москвы. В остальных городах KML грузить
+      // бессмысленно — полигоны легли бы поверх чужой карты.
+      if (!activeCity.hasZones) {
+        clustererRef.current = clusterer;
+        couriersGeoObjectsRef.current = courierColl;
+        ymapRef.current = map;
+        setMapReady(true);
+        return;
+      }
+
       const constructorUrl = "/zones.kml";
       (window.ymaps as any).geoXml?.load?.(constructorUrl)
         .then((res: any) => {
@@ -654,7 +694,7 @@ export function DashboardClient({ user }: { user: User }) {
       setMapReady(true);
     });
     return () => { mounted = false; };
-  }, []);
+  }, [basesLoaded, activeCity, activeShop, baseCoordsFor]);
 
   // 2. Отрисовка баз магазинов (только с заполненными координатами)
   useEffect(() => {
@@ -727,8 +767,10 @@ export function DashboardClient({ user }: { user: User }) {
       const validOrders = prev.map(id => orders.find(o => o.id === id)).filter(Boolean) as DashboardOrder[];
       const dist = (lat1: number, lng1: number, lat2: number, lng2: number) => Math.sqrt(Math.pow(lat1 - lat2, 2) + Math.pow(lng1 - lng2, 2));
 
-      let currentLat = STORE_LAT;
-      let currentLng = STORE_LNG;
+      // Старт — база магазина этих заказов, а не константа Москвы
+      const [currentLatInit, currentLngInit] = baseCoordsFor(validOrders[0]?.shop);
+      let currentLat = currentLatInit;
+      let currentLng = currentLngInit;
       const sorted: string[] = [];
       const remaining = [...validOrders];
 
@@ -751,6 +793,8 @@ export function DashboardClient({ user }: { user: User }) {
   };
   // Реф для хранения временной метки предпросмотра
   const previewPlacemarkRef = useRef<any>(null);
+  // Один авто-фокус на сессию карты. Дальше зумом управляет только человек.
+  const didAutoFitRef = useRef(false);
 
   // 🔥 Эффект для отрисовки точки FIX
   useEffect(() => {
@@ -935,13 +979,29 @@ export function DashboardClient({ user }: { user: User }) {
     if (placemarks.length > 0) {
       clusterer.add(placemarks as any);
 
-      // 🔥 АВТО-ФОКУС: Как только заказы появились, камера летит к ним (в Воронеж и т.д.)
-      // Делаем это только если ничего не выбрано (чтобы не сбивать зум при клике на заказ)
-      if (!selectedId && !previewGeo && ymapRef.current) {
-        ymapRef.current.setBounds(clusterer.getBounds(), {
-          checkZoomRange: true,
-          zoomMargin: 30
-        });
+      // Авто-фокус ровно ОДИН раз за сессию карты, при первой пачке заказов.
+      //
+      // Раньше setBounds висел без всякого флага и срабатывал на каждое
+      // изменение фильтров, слотов и режима сборки: стоило снять галочку
+      // со статуса — карта перестраивала охват и уезжала в произвольный
+      // зум. А если хоть один заказ геокодился в другой город, охват
+      // растягивался на полстраны. Отсюда и «идиотский зум вместо города».
+      if (!didAutoFitRef.current && !selectedId && !previewGeo && ymapRef.current) {
+        const bounds = clusterer.getBounds();
+        if (bounds) {
+          const [[swLat, swLng], [neLat, neLng]] = bounds;
+          const spanLat = Math.abs(neLat - swLat);
+          const spanLng = Math.abs(neLng - swLng);
+
+          // Больше градуса разброса — это не город, а кривая точка.
+          // Остаёмся на центре города, а не показываем глобус.
+          if (spanLat < 1 && spanLng < 1) {
+            ymapRef.current.setBounds(bounds, { checkZoomRange: true, zoomMargin: 30 });
+          } else {
+            ymapRef.current.setCenter(baseCoordsFor(activeShop?.slug), activeCity.zoom, { duration: 300 });
+          }
+          didAutoFitRef.current = true;
+        }
       }
     }
   }, [filteredForMap, selectedId, previewGeo, currentZoom, selectedSlots, isBulkMode, bulkSelectedIds, showTime, showCourierNames, isMobile, mapReady, routeTabMode]);
@@ -964,8 +1024,9 @@ export function DashboardClient({ user }: { user: User }) {
       // Собираем координаты по порядку кликов
       const points = [];
 
-      // Сначала всегда ставим Базу
-      points.push([STORE_LAT, STORE_LNG]);
+      // Сначала всегда ставим Базу — того магазина, чьи это заказы
+      const firstOrder = orders.find(o => o.id === bulkSelectedIds[0]);
+      points.push(baseCoordsFor(firstOrder?.shop));
 
       // Затем перебираем выбранные ID и достаем их координаты
       bulkSelectedIds.forEach(id => {
@@ -1168,8 +1229,9 @@ export function DashboardClient({ user }: { user: User }) {
 
     if (validOrders.length === 0) return;
 
-    const points = [[STORE_LAT, STORE_LNG], ...validOrders.map(o => [o.lat!, o.lng!])];
-    points.push([STORE_LAT, STORE_LNG]); // 🔥 всегда, чтобы знать время возврата 
+    const base = baseCoordsFor(validOrders[0]?.shop);
+    const points = [base, ...validOrders.map(o => [o.lat!, o.lng!])];
+    points.push(base); // всегда, чтобы знать время возврата
 
     setIsCalculatingRoute(true); setDepartureAdvice(null);
     let multiRoute: any = null;
@@ -1331,10 +1393,8 @@ export function DashboardClient({ user }: { user: User }) {
     if (validOrders.length === 0) return null;
     if (validOrders.length > 50) validOrders.length = 50;
 
-    // Ищем магазин и корректно фоллбэчимся, если координаты в БД пока NULL
-    const shopOfRoute = shopBases.find((s) => s.slug === validOrders[0]?.shop);
-    const baseLat = shopOfRoute?.storeLat ?? STORE_LAT;
-    const baseLng = shopOfRoute?.storeLng ?? STORE_LNG;
+    // База магазина, а если её координат в БД нет — центр его города
+    const [baseLat, baseLng] = baseCoordsFor(validOrders[0]?.shop);
     const base = `${baseLat},${baseLng}`;
 
     const rtextArr = [base, ...validOrders.map(o => `${o.lat},${o.lng}`)];

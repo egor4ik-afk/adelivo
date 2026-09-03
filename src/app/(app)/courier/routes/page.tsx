@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { NAV_HEIGHT } from "@/components/CourierNav";
 import { uploadOrderPhoto } from "@/lib/upload-photo";
+import { getCity } from "@/lib/cities";
 
 interface RouteOrder {
   id: string; externalId: string; crmId: string; address: string; status: string;
@@ -14,6 +15,8 @@ interface RouteOrder {
   comment: string | null;
   opComment: string | null;
   routeId: string | null; routeOrder: number | null;
+  /** База магазина: точка старта маршрута. Приходит из my-orders. */
+  shopRef?: { storeLat: number | null; storeLng: number | null; storeAddress: string | null; name: string; city: string | null } | null;
   deliveryDate: string | null;
   deliveredAt?: string | null;
   pickedUpAt?: string | null;
@@ -37,7 +40,14 @@ const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> =
   DELIVERED: { label: "✅ Доставлен", color: "var(--color-text-2)", bg: "var(--color-bg)" },
 };
 
-const STORE_COORDS = "55.749511,37.596205";
+// Координаты базы приходят с заказом (shopRef), а если магазин их ещё
+// не заполнил — берём центр его города. Константы Москвы больше нет:
+// курьеру в Тбилиси строился маршрут от склада на Пресне.
+function baseCoords(o?: RouteOrder | null): string {
+  const b = o?.shopRef;
+  if (b?.storeLat != null && b?.storeLng != null) return `${b.storeLat},${b.storeLng}`;
+  return getCity(b?.city).center.join(",");
+}
 
 export default function CourierRoutesPage() {
   const [orders, setOrders] = useState<RouteOrder[]>([]);
@@ -504,11 +514,11 @@ const syncPendingStatuses = async () => {
                     {(() => {
                       const validPoints = routePoints.filter(o => o.lat && o.lng);
                       const routeUrl = validPoints.length > 0
-                        ? `https://yandex.ru/maps/?rtext=${[STORE_COORDS, ...validPoints.map(o => `${o.lat},${o.lng}`)].join("~")}&rtt=mt`
+                        ? `https://yandex.ru/maps/?rtext=${[baseCoords(validPoints[0]), ...validPoints.map(o => `${o.lat},${o.lng}`)].join("~")}&rtt=mt`
                         : routeLink;
                       const last = validPoints[validPoints.length - 1];
                       const toBaseUrl = last
-                        ? `https://yandex.ru/maps/?mode=routes&rtext=${last.lat},${last.lng}~${STORE_COORDS}&rtt=mt`
+                        ? `https://yandex.ru/maps/?mode=routes&rtext=${last.lat},${last.lng}~${baseCoords(last)}&rtt=mt`
                         : null;
 
                       return (
@@ -635,7 +645,7 @@ const syncPendingStatuses = async () => {
 
                     const isFirst = idx === 0;
                     const isLast = idx === routePoints.length - 1;
-                    const prevAddressStr = isFirst ? STORE_COORDS : getRoutePointCoords(routePoints[idx - 1]);
+                    const prevAddressStr = isFirst ? baseCoords(o) : getRoutePointCoords(routePoints[idx - 1]);
                     const currentAddressStr = getRoutePointCoords(o);
 
                     const isCollapsed = collapsedOrders[o.id] !== undefined ? collapsedOrders[o.id] : isDelivered;
@@ -814,7 +824,7 @@ const syncPendingStatuses = async () => {
                                 </a>
                                 {isLast && (
                                   <a
-                                    href={`https://yandex.ru/maps/?mode=routes&rtext=${currentAddressStr}~${STORE_COORDS}`}
+                                    href={`https://yandex.ru/maps/?mode=routes&rtext=${currentAddressStr}~${baseCoords(o)}`}
                                     target="_blank"
                                     style={{ fontSize: 11, background: "var(--color-bg)", color: "var(--color-text-2)", padding: "4px 10px", borderRadius: 6, textDecoration: "none", fontWeight: 700, display: "inline-flex", alignItems: "center" }}
                                   >

@@ -4,7 +4,7 @@ import fs from "fs";
 import { prisma } from "./prisma";
 import { notify } from "./notifications";
 import { OrderStatus } from "@prisma/client";
-import { getCity, bboxParam, DEFAULT_CITY } from "./cities";
+import { getCity, bboxParam } from "./cities";
 
 const CRM_URL = process.env.RETAILCRM_API_URL;
 const CRM_KEY = process.env.RETAILCRM_API_KEY; 
@@ -305,8 +305,24 @@ function getZones(): { zone0: Zone | null; zone10: Zone | null; zone20: Zone | n
   return _zonesCache ?? { zone0: null, zone10: null, zone20: null };
 }
 
-export function calcBaseDeliveryPrice(lat: number, lng: number): number {
-  const distFromCenter = getDistanceFromLatLonInKm(55.755864, 37.617698, lat, lng);
+/**
+ * Базовая цена доставки по зонам.
+ *
+ * Считается ТОЛЬКО для Москвы: zones.kml нарисован под неё, и тарифы
+ * 500/900/1300 — тоже её. Для любого другого города возвращаем null,
+ * то есть «цену не считаем». Раньше функция молча мерила расстояние
+ * от Кремля и выдавала воронежским заказам 1300 ₽ за доставку через
+ * дорогу, а тбилисским — за доставку в другую страну.
+ */
+export function calcBaseDeliveryPrice(
+  lat: number,
+  lng: number,
+  cityCode?: string | null
+): number | null {
+  const city = getCity(cityCode);
+  if (!city.hasZones) return null;
+
+  const distFromCenter = getDistanceFromLatLonInKm(city.center[0], city.center[1], lat, lng);
   const distFromMkad = Math.max(distFromCenter - 17, 0);
   const { zone0, zone10, zone20 } = getZones();
   const pt: [number, number] = [lng, lat];
@@ -371,9 +387,12 @@ export async function geocodeAddress(address: string, cityCode?: string | null) 
         geocode: searchAddress, 
         format: "json", 
         results: 1, 
-        // 🔥 ИСПОЛЬЗУЕМ ТВОИ ГРАНИЦЫ ИЗ cities.ts
+        // bbox — приоритет города при разборе адреса.
         bbox: bboxParam(city),
-        rspn: 1 // Принудительно ограничиваем поиск этим bbox
+        // rspn=0 обязательно. С rspn=1 Яндекс ЖЁСТКО отсекает всё за рамкой:
+        // Мурино под Питером, Шилово под Воронежем и любой пригород просто
+        // переставали находиться, и геокодер отдавал пустой ответ.
+        rspn: 0
       },
       headers: {
         "Referer": "https://adelivo.ru"
@@ -396,6 +415,7 @@ export async function geocodeAddress(address: string, cityCode?: string | null) 
       lat, lng, precision,
       isExact: ["exact", "number", "near", "range"].includes(precision),
       distanceKm,
+      city,
     };
   } catch (_) { return null; }
 }
@@ -417,8 +437,12 @@ export async function geocodeNewOrders() {
     where: { slug: { in: shopSlugs } },
     select: { slug: true, city: true }
   });
-  // Создаем словарь: "slug-магазина" -> "VRN"
-  const shopCities = new Map(shops.map(s => [s.slug, s.city]));
+  // Словарь «slug магазина -> код города»: { "bunch": "msk", "vrn-shop": "vrn" }.
+  // Тип указан явно: без него вывод Map зависит от того, сгенерирован ли
+  // Prisma Client, и сборка падала на `Argument of type '{} | null'`.
+  const shopCities = new Map<string, string | null>(
+    shops.map((s) => [s.slug as string, (s.city as string | null) ?? null])
+  );
 
   const invalidOrders: Array<{ externalId: string | null; address: string | null; reason: string }> = [];
 
@@ -437,8 +461,9 @@ export async function geocodeNewOrders() {
 
     try {
       // 🔥 2. Достаем код города для конкретного заказа из нашего словаря
-      const cityCode = order.shop ? shopCities.get(order.shop) : null;
-      
+      const cityCode = order.shop ? shopCities.get(order.shop) ?? null : null;
+      const city = getCity(cityCode);
+
       // Передаем город в геокодер
       const geo = await geocodeAddress(order.address, cityCode);
 
@@ -448,8 +473,10 @@ export async function geocodeNewOrders() {
         continue;
       }
 
-      if (geo.distanceKm > 75) {
-        const reason = `Вне зоны доставки (найдено в ${Math.round(geo.distanceKm)} км от центра города)`;
+      // Проверка удалённости — только там, где есть зоны доставки (Москва).
+      // Для остальных городов лимит не задан и заказ не бракуется.
+      if (city.hasZones && city.maxDistanceKm && geo.distanceKm > city.maxDistanceKm) {
+        const reason = `Вне зоны доставки (найдено в ${Math.round(geo.distanceKm)} км от центра — ${city.name})`;
         await prisma.order.update({ where: { id: order.id }, data: { lat: geo.lat, lng: geo.lng, geocoded: true, isInvalid: true, invalidReason: reason } });
         invalidOrders.push({ externalId: order.externalId, address: order.address, reason });
         continue;
@@ -465,9 +492,15 @@ export async function geocodeNewOrders() {
       const issueReason = checkAddressIssues(order.address || "", order.comment || "", order.opComment || "");
       const isTextInvalid = !!issueReason;
 
-      const basePrice = calcBaseDeliveryPrice(geo.lat, geo.lng);
+      // Цена по зонам есть только у Москвы. Где её нет — basePrice === null,
+      // и расхождение цены не проверяем вовсе.
+      const basePrice = calcBaseDeliveryPrice(geo.lat, geo.lng, cityCode);
       const crmPrice = order.price ?? 0;
-      const wrongPrice = crmPrice > 0 && crmPrice !== basePrice && crmPrice !== basePrice + 100;
+      const wrongPrice =
+        basePrice !== null &&
+        crmPrice > 0 &&
+        crmPrice !== basePrice &&
+        crmPrice !== basePrice + 100;
 
       await prisma.order.update({
         where: { id: order.id },
@@ -486,7 +519,7 @@ export async function geocodeNewOrders() {
         invalidOrders.push({ externalId: order.externalId, address: order.address, reason: issueReason! });
       }
 
-      if (wrongPrice) {
+      if (wrongPrice && basePrice !== null) {
         const tgToken = process.env.TELEGRAM_BOT_TOKEN?.replace(/\s+/g, "")?.replace(/^bot/i, "");
         const tgChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
         const proxyUrl = process.env.PROXY_URL;
@@ -541,14 +574,6 @@ let shopCache: { at: number; map: Map<string, string> } | null = null;
 let cityCache: { at: number; map: Map<string, string | null> } | null = null;
 
 /** Город магазина по slug, с тем же пятиминутным кэшем. */
-async function resolveShopCity(slug?: string | null): Promise<string | null> {
-  if (!slug) return null;
-  if (!cityCache || Date.now() - cityCache.at > 5 * 60_000) {
-    const shops = await prisma.shop.findMany({ select: { slug: true, city: true } });
-    cityCache = { at: Date.now(), map: new Map(shops.map((s) => [s.slug, s.city])) };
-  }
-  return cityCache.map.get(slug) ?? null;
-}
 
 async function resolveShopId(slug?: string | null): Promise<string | null> {
   if (!slug) return null;
@@ -663,8 +688,6 @@ export async function upsertOrder(crmOrder: CrmOrder) {
   // пустым — заказ создастся, но будет виден только глобальному админу,
   // и это заметный сигнал, что нужно завести магазин в разделе «Компания».
   const shopId = await resolveShopId(data.shop);
-  // Город магазина: от него зависит, где геокодер будет искать адрес
-  const shopCity = data.shop ? await resolveShopCity(data.shop) : null;
   if (!shopId && data.shop) {
     console.warn(`[upsertOrder] магазин "${data.shop}" не найден в таблице Shop — заказ ${data.crmId} останется без привязки`);
   }

@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
 
   const source = await prisma.telegramSource.findUnique({
     where: { chatId },
-    include: { shop: { select: { id: true, slug: true, name: true } } },
+    include: { shop: { select: { id: true, slug: true, name: true, city: true } } },
   });
 
   if (!source || !source.isActive) {
@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
         geocoded: !!geo,
         isInvalid: !geo,
         invalidReason: geo ? null : "Адрес не определился при разборе из Telegram",
-        costPrice: geo?.lat && geo?.lng ? calcBaseDeliveryPrice(geo.lat, geo.lng) : null,
+        costPrice: geo?.lat && geo?.lng ? calcBaseDeliveryPrice(geo.lat, geo.lng, source.shop.city) : null,
         price: parsed.price,
         name: parsed.name,
         recipientPhone: parsed.recipientPhone,

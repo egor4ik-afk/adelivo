@@ -61,6 +61,12 @@ export async function GET(req: NextRequest) {
     isActive: s.isActive,
     connectorType: s.connectorType,
     storeAddress: s.storeAddress,
+    // Эти три поля CompanyClient объявляет в типе Shop и ждёт от сервера.
+    // Их здесь не было — поэтому в форме настройки город всегда приходил
+    // пустым, а подпись «Координаты определены» не появлялась никогда.
+    storeLat: s.storeLat,
+    storeLng: s.storeLng,
+    city: s.city,
     ordersCount: s._count.orders,
     connector: s.connector
       ? {

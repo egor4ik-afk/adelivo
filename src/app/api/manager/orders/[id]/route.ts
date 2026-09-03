@@ -47,13 +47,17 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     // Адрес изменили — перегеокодируем и пересчитаем себестоимость
     if (b.address !== undefined && b.address !== order.address) {
       data.address = String(b.address).trim();
-      const geo = await geocodeAddress(data.address);
+      // Город магазина заказа, а не Москва по умолчанию
+      const shopCity = order.shop
+        ? (await prisma.shop.findUnique({ where: { slug: order.shop }, select: { city: true } }))?.city ?? null
+        : null;
+      const geo = await geocodeAddress(data.address, shopCity);
       data.lat = geo?.lat ?? null;
       data.lng = geo?.lng ?? null;
       data.geocoded = !!geo;
       data.isInvalid = !geo;
       data.invalidReason = geo ? null : "Адрес не определился после ручного изменения";
-      if (geo?.lat && geo?.lng) data.costPrice = calcBaseDeliveryPrice(geo.lat, geo.lng);
+      if (geo?.lat && geo?.lng) data.costPrice = calcBaseDeliveryPrice(geo.lat, geo.lng, shopCity);
     }
 
     if (b.name !== undefined) data.name = b.name?.trim() || null;

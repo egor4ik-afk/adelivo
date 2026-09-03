@@ -231,7 +231,6 @@ export async function GET(req: NextRequest) {
         storeLat: true,
         storeLng: true,
         storeAddress: true,
-        city: true, // 🔥 ВОТ ЭТОГО НЕ ХВАТАЛО! Без этого фронт слеп.
         companyId: true, // Полезно видеть, к какой компании относится магазин
       },
       orderBy: {

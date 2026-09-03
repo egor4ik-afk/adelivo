@@ -12,7 +12,7 @@ import { recalcRouteOfOrder } from "@/lib/route-order";
 // Координаты базы берутся из магазина заказа. Значение ниже — запасное,
 // на случай незаполненной базы: раньше оно было единственным, и маршрут
 // любого магазина строился от адреса Банча.
-const FALLBACK_STORE_COORDS = "55.749511,37.596205";
+import { getCity } from "@/lib/cities";
 
 export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const user = await getSession(req as any);
@@ -135,14 +135,15 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
       : "auto";
     const freshCoords = await prisma.order.findUnique({
       where: { id },
-      select: { lat: true, lng: true, shopRef: { select: { storeLat: true, storeLng: true } } },
+      select: { lat: true, lng: true, shopRef: { select: { storeLat: true, storeLng: true, city: true } } },
     });
 
     const shopBase = freshCoords?.shopRef;
     const storeCoords =
       shopBase?.storeLat != null && shopBase?.storeLng != null
         ? `${shopBase.storeLat},${shopBase.storeLng}`
-        : FALLBACK_STORE_COORDS;
+        // База не заполнена — берём центр города магазина, а не Пресню
+        : getCity(shopBase?.city).center.join(",");
     const finalCourier = updateData.courier !== undefined ? updateData.courier : order.courier;
     if (finalCourier && (body.courier !== undefined || body.address !== undefined)) {
       if (freshCoords?.lat && freshCoords?.lng) {

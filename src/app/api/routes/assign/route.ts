@@ -4,7 +4,10 @@ import { notify, createManagerPlaque } from "@/lib/notifications"; // 🔥 ДО�
 import { updateCrmOrder } from "@/lib/crm";
 import { getSession } from "@/lib/auth"; // 🔥 ДОБАВЛЕН ИМПОРТ СЕССИИ (чтобы знать, кто логист)
 
-const STORE_COORDS = "55.749511,37.596205";
+import { getCity } from "@/lib/cities";
+
+// Константы координат больше нет: старт маршрута — база магазина заказов,
+// а если она не заполнена — центр города этого магазина.
 
 export async function POST(req: Request) {
   try {
@@ -96,7 +99,7 @@ export async function POST(req: Request) {
 
     const orders = await prisma.order.findMany({
       where: { id: { in: orderIds } },
-      select: { id: true, externalId: true, lat: true, lng: true, crmId: true, deliveryDate: true, crmCreatedAt: true, status: true, opComment: true, price: true, courierId: true, recipientPhone: true } // 🔥 ДОБАВЛЕНО recipientPhone
+      select: { id: true, externalId: true, lat: true, lng: true, crmId: true, deliveryDate: true, crmCreatedAt: true, status: true, opComment: true, price: true, courierId: true, recipientPhone: true, shop: true, shopRef: { select: { storeLat: true, storeLng: true, city: true } } }
     });
 
     const sortedOrders = orderIds.map((id: string) => orders.find((o) => o.id === id)).filter(Boolean);
@@ -106,8 +109,15 @@ export async function POST(req: Request) {
     const courierFullName = courierDb?.fullName || "";
     const rttMode = courierDb?.isAuto ? "auto" : "mt";
 
-    const rtextArr = [STORE_COORDS, ...coordsList];
-    if (returnToBase) rtextArr.push(STORE_COORDS);
+    // База магазина этих заказов; нет координат — центр его города
+    const baseShop = (sortedOrders[0] as any)?.shopRef;
+    const storeCoords =
+      baseShop?.storeLat != null && baseShop?.storeLng != null
+        ? `${baseShop.storeLat},${baseShop.storeLng}`
+        : getCity(baseShop?.city).center.join(",");
+
+    const rtextArr = [storeCoords, ...coordsList];
+    if (returnToBase) rtextArr.push(storeCoords);
     
     const link = `https://yandex.ru/maps/?rtext=${rtextArr.join("~")}&rtt=${rttMode}`;
 
