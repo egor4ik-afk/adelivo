@@ -309,11 +309,10 @@ export function CompanyClient({ siteUrl }: { siteUrl: string }) {
                     )}
                   </div>
 
-                  <span className={`text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider ${
-                    s.connector?.isActive
-                      ? "bg-green-100 text-green-800"
-                      : "bg-gray-100 text-gray-700"
-                  }`}>
+                  <span className={`text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider ${s.connector?.isActive
+                    ? "bg-green-100 text-green-800"
+                    : "bg-gray-100 text-gray-700"
+                    }`}>
                     {s.connector?.isActive ? "активен" : "выключен"}
                   </span>
 
@@ -369,9 +368,10 @@ export function CompanyClient({ siteUrl }: { siteUrl: string }) {
                       <label className={label}>Город</label>
                       <select
                         className={input}
-                        value={form.city}
+                        value={form.city || ""}
                         onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))}
                       >
+                        <option value="" disabled>Выберите город...</option>
                         {CITIES.map((c) => (
                           <option key={c.code} value={c.code}>{c.name}</option>
                         ))}
@@ -400,11 +400,10 @@ export function CompanyClient({ siteUrl }: { siteUrl: string }) {
                     </div>
 
                     {testResult && (
-                      <div className={`rounded-lg px-3 py-2.5 text-[12px] font-medium border ${
-                        testResult.ok
-                          ? "bg-green-50 border-green-200 text-green-800"
-                          : "bg-red-50 border-red-200 text-red-700"
-                      }`}>
+                      <div className={`rounded-lg px-3 py-2.5 text-[12px] font-medium border ${testResult.ok
+                        ? "bg-green-50 border-green-200 text-green-800"
+                        : "bg-red-50 border-red-200 text-red-700"
+                        }`}>
                         {testResult.message}
                       </div>
                     )}

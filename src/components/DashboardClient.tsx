@@ -367,18 +367,18 @@ export function DashboardClient({ user }: { user: User }) {
         fetch(`/api/orders?t=${Date.now()}`),
         fetch(`/api/couriers?t=${Date.now()}`),
       ]);
-      
-      if (ordersRes.ok) { 
-        setOrders(await ordersRes.json()); 
-        setLastSync(new Date().toLocaleTimeString("ru", { timeZone: "Europe/Moscow" })); 
+
+      if (ordersRes.ok) {
+        setOrders(await ordersRes.json());
+        setLastSync(new Date().toLocaleTimeString("ru", { timeZone: "Europe/Moscow" }));
       }
       if (couriersRes.ok) {
         setDbCouriers(await couriersRes.json());
       }
-    } catch (e) { 
-      console.error(e); 
-    } finally { 
-      setLoading(false); 
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -587,7 +587,13 @@ export function DashboardClient({ user }: { user: User }) {
     let mounted = true;
     loadYMaps().then(() => {
       if (!mounted || !mapRef.current || ymapRef.current) return;
-      const map = new window.ymaps.Map(mapRef.current, { center: [STORE_LAT, STORE_LNG], zoom: 11, controls: ["zoomControl"] }, {});
+
+      const map = new window.ymaps.Map(mapRef.current, {
+        center: [STORE_LAT, STORE_LNG], // Оставляем дефолт, мы его перебьем на шаге 2
+        zoom: 11,
+        controls: ["zoomControl"]
+      }, {});
+
       map.events.add('boundschange', (e: any) => { if (e.get('newZoom') !== e.get('oldZoom')) setCurrentZoom(e.get('newZoom')); });
 
       const clusterer = new window.ymaps.Clusterer({
@@ -655,11 +661,11 @@ export function DashboardClient({ user }: { user: User }) {
     for (const b of validBases) {
       const pm = new window.ymaps.Placemark(
         [b.storeLat as number, b.storeLng as number],
-        { 
+        {
           hintContent: `🏪 ${b.name}\n📍 ${b.storeAddress || "Адрес не указан"}`,
           balloonContent: `<b>${b.name}</b><br/>${b.storeAddress || ""}`
         },
-        { 
+        {
           preset: "islands#grayDotIcon" // Аккуратная стандартная точка вместо серой капсулы
         }
       );
@@ -748,15 +754,15 @@ export function DashboardClient({ user }: { user: User }) {
     if (previewGeo && previewGeo.lat && previewGeo.lng) {
       const pm = new window.ymaps.Placemark(
         [previewGeo.lat, previewGeo.lng],
-        { 
+        {
           hintContent: "📍 Новая координата",
           balloonContent: "Исправленная позиция заказа"
         },
-        { 
+        {
           preset: "islands#redDotIcon" // Красная заметная точка
         }
       );
-      
+
       map.geoObjects.add(pm);
       previewPlacemarkRef.current = pm;
 
@@ -912,9 +918,19 @@ export function DashboardClient({ user }: { user: User }) {
       return pm;
     });
 
-    if (placemarks.length > 0) clusterer.add(placemarks as any);
-  }, [filteredForMap, selectedId, previewGeo, currentZoom, selectedSlots, isBulkMode, bulkSelectedIds, showTime, showCourierNames, isMobile, mapReady, routeTabMode]);
+    if (placemarks.length > 0) {
+      clusterer.add(placemarks as any);
 
+      // 🔥 АВТО-ФОКУС: Как только заказы появились, камера летит к ним (в Воронеж и т.д.)
+      // Делаем это только если ничего не выбрано (чтобы не сбивать зум при клике на заказ)
+      if (!selectedId && !previewGeo && ymapRef.current) {
+        ymapRef.current.setBounds(clusterer.getBounds(), {
+          checkZoomRange: true,
+          zoomMargin: 30
+        });
+      }
+    }
+  }, [filteredForMap, selectedId, previewGeo, currentZoom, selectedSlots, isBulkMode, bulkSelectedIds, showTime, showCourierNames, isMobile, mapReady, routeTabMode]);
   // 🔥 ЭФФЕКТ ДЛЯ ОТРИСОВКИ ЛИНИЙ МАРШРУТА (multiRouter)
   useEffect(() => {
     if (!mapReady || typeof window === "undefined" || !(window as any).ymaps) return;
@@ -1300,7 +1316,7 @@ export function DashboardClient({ user }: { user: User }) {
     const validOrders = ordersToRoute.filter(o => o.lat && o.lng && !o.isInvalid);
     if (validOrders.length === 0) return null;
     if (validOrders.length > 50) validOrders.length = 50;
-    
+
     // Ищем магазин и корректно фоллбэчимся, если координаты в БД пока NULL
     const shopOfRoute = shopBases.find((s) => s.slug === validOrders[0]?.shop);
     const baseLat = shopOfRoute?.storeLat ?? STORE_LAT;
@@ -2105,7 +2121,7 @@ export function DashboardClient({ user }: { user: User }) {
                           }}
                           style={{ accentColor: "var(--color-accent)", width: 16, height: 16 }}
                         />
-                        {st === "NEW" ? "Новые" :  st === "ASSIGNED" ? "Назначены" : st === "ASSEMBLING" ? "В сборке" : st === "IN_DELIVERY" ? "В пути" : "Доставлены"}
+                        {st === "NEW" ? "Новые" : st === "ASSIGNED" ? "Назначены" : st === "ASSEMBLING" ? "В сборке" : st === "IN_DELIVERY" ? "В пути" : "Доставлены"}
                       </label>
                     ))}
                   </div>
@@ -2278,7 +2294,7 @@ export function DashboardClient({ user }: { user: User }) {
                   <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.2)" }} onClick={() => setIsStatusMenuOpen(false)} />
                   <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "var(--color-card)", borderRadius: "16px 16px 0 0", padding: "16px 16px 24px", zIndex: 1000, display: "flex", flexDirection: "column", gap: 4, maxHeight: "60vh", overflowY: "auto", boxShadow: "0 -8px 24px rgba(0,0,0,0.15)" }}>
                     <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Статусы</div>
-                    {["NEW", "ASSIGNED",  "ASSEMBLING", "IN_DELIVERY", "DELIVERED"].map(st => (
+                    {["NEW", "ASSIGNED", "ASSEMBLING", "IN_DELIVERY", "DELIVERED"].map(st => (
                       <label key={st} style={s.dropdownItem}>
                         <input
                           type="checkbox"
@@ -2289,7 +2305,7 @@ export function DashboardClient({ user }: { user: User }) {
                           }}
                           style={{ accentColor: "var(--color-accent)", width: 16, height: 16 }}
                         />
-                        {st === "NEW" ? "Новые" : st === "ASSIGNED" ? "Назначены" : st === "ASSEMBLING" ? "В сборке" :  st === "IN_DELIVERY" ? "В пути" : "Доставлены"}
+                        {st === "NEW" ? "Новые" : st === "ASSIGNED" ? "Назначены" : st === "ASSEMBLING" ? "В сборке" : st === "IN_DELIVERY" ? "В пути" : "Доставлены"}
                       </label>
                     ))}
                   </div>
