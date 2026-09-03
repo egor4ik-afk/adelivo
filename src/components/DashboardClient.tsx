@@ -820,7 +820,7 @@ export function DashboardClient({ user }: { user: User }) {
       `;
 
       let pm;
-      const basePointColor = isOtherSlot ? 'var(--color-text)' : color;
+      const basePointColor = isOtherSlot ? '#1a1a18' : color;
 
       if (displayTime) {
         let pinColor = basePointColor;
