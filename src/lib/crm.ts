@@ -369,6 +369,10 @@ export async function geocodeAddress(address: string) {
         ll: "37.6175,55.7520", 
         spn: "1.0,1.0" 
       },
+      // 🔥 ДОБАВЛЯЕМ ЗАГОЛОВОК СЮДА
+      headers: {
+        "Referer": "https://adelivo.ru"
+      },
       timeout: 5000,
     });
     
