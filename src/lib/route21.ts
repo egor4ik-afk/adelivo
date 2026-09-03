@@ -76,6 +76,13 @@ const fmtDuration = (s: number) => {
 /**
  * Считает маршрут между двумя точками.
  * Вход — [широта, долгота], как принято в 2.1 и во всём остальном коде.
+ *
+ * Считаем через multiRouter.MultiRoute — ровно тем же способом, что и
+ * дашборд. Раньше здесь был `ymaps.route(points, { routingMode })`, и
+ * режим до маршрутизатора не доезжал: «Пешком» и «Авто» давали одно и то
+ * же время. У MultiRoute параметры маршрутизации лежат в `params` внутри
+ * модели, и там они работают — это видно по дашборду, где переключение
+ * режимов считает сразу и правильно.
  */
 export async function buildRoute21(
   from: [number, number],
@@ -84,31 +91,76 @@ export async function buildRoute21(
 ): Promise<RouteResult | null> {
   const ymaps = await loadYmaps21();
 
-  const route = await ymaps.route([from, to], {
-    // Как было в 2.1 до переезда: auto или masstransit.
-    // Менять режим на pedestrian было моей самодеятельностью — вернул.
-    routingMode: mode === "auto" ? "auto" : "masstransit",
+  return new Promise<RouteResult | null>((resolve, reject) => {
+    const multiRoute = new ymaps.multiRouter.MultiRoute(
+      {
+        referencePoints: [from, to],
+        params: {
+          routingMode: mode === "auto" ? "auto" : "masstransit",
+          results: 1,
+        },
+      },
+      // Карту рисуем сами, поэтому объект нужен только как калькулятор:
+      // на карту он не добавляется и охват не трогает
+      { boundsAutoApply: false }
+    );
+
+    let settled = false;
+    const cleanup = () => {
+      clearTimeout(timer);
+      try { multiRoute.destroy(); } catch { /* уже уничтожен */ }
+    };
+
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error("маршрутизатор не ответил"));
+    }, 15_000);
+
+    multiRoute.model.events.add("requestsuccess", () => {
+      if (settled) return;
+      settled = true;
+
+      const active = multiRoute.getActiveRoute();
+      if (!active) { cleanup(); resolve(null); return; }
+
+      // У автомобильного маршрута есть время с пробками, у транспортного нет
+      const duration = active.properties.get("durationInTraffic")
+        ?? active.properties.get("duration");
+      const distance = active.properties.get("distance");
+
+      const distanceMeters: number = distance?.value ?? 0;
+      const durationSeconds: number = duration?.value ?? 0;
+
+      // Геометрия лежит по частям маршрута; собираем в одну линию
+      const coordinates: [number, number][] = [];
+      active.getPaths().each((path: { geometry?: { getCoordinates: () => number[][] } }) => {
+        const coords = path.geometry?.getCoordinates?.() ?? [];
+        for (const c of coords) {
+          // 2.1 отдаёт [широта, долгота], карте 3.0 нужно наоборот
+          coordinates.push([c[1], c[0]]);
+        }
+      });
+
+      cleanup();
+
+      if (coordinates.length === 0) { resolve(null); return; }
+
+      resolve({
+        coordinates,
+        distanceMeters,
+        durationSeconds,
+        distanceText: distance?.text ?? fmtDistance(distanceMeters),
+        durationText: duration?.text ?? fmtDuration(durationSeconds),
+      });
+    });
+
+    multiRoute.model.events.add("requestfail", () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error("маршрут не построен"));
+    });
   });
-
-  const distanceMeters: number = route.getLength();
-  const durationSeconds: number = route.getTime();
-
-  // Геометрия лежит по частям маршрута; собираем в одну линию
-  const coordinates: [number, number][] = [];
-  route.getPaths().each((path: { geometry: { getCoordinates: () => number[][] } }) => {
-    for (const c of path.geometry.getCoordinates()) {
-      // 2.1 отдаёт [широта, долгота], карте 3.0 нужно наоборот
-      coordinates.push([c[1], c[0]]);
-    }
-  });
-
-  if (coordinates.length === 0) return null;
-
-  return {
-    coordinates,
-    distanceMeters,
-    durationSeconds,
-    distanceText: fmtDistance(distanceMeters),
-    durationText: fmtDuration(durationSeconds),
-  };
 }

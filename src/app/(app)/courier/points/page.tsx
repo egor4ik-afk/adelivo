@@ -17,13 +17,14 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { NAV_HEIGHT } from "@/components/CourierNav";
 import { loadYmaps3, loadMapControls, toLngLat } from "@/lib/maps";
 import { buildRoute21 } from "@/lib/route21";
+import { getCity } from "@/lib/cities";
 
 interface CourierOrder {
   id: string; externalId: string; crmId: string; address: string; status: string;
   lat: number | null; lng: number | null; slotRaw: string | null;
   routeId: string | null; routeOrder: number | null;
   route?: { id: string; name: string } | null;
-  shopRef?: { storeLat: number | null; storeLng: number | null; storeAddress: string | null; name: string } | null;
+  shopRef?: { storeLat: number | null; storeLng: number | null; storeAddress: string | null; name: string; city: string | null } | null;
   deliveryDate?: string | null; crmCreatedAt?: string | null;
   // заказ с биржи, а не свой
   isExchange?: boolean;
@@ -55,11 +56,14 @@ export default function CourierPointsPage() {
   const routeRef = useRef<any>(null);
   const initedRef = useRef(false);
   const boundsDone = useRef(false);
+  // Город, в котором курьер работает сегодня. Держим в ref, потому что карта
+  // создаётся один раз, а заказы приезжают асинхронно.
+  const cityOfWorkRef = useRef(getCity(null));
 
   const [orders, setOrders] = useState<CourierOrder[]>([]);
   const [exchange, setExchange] = useState<CourierOrder[]>([]);
   const [bases, setBases] = useState<
-    { id: string; name: string; storeLat: number | null; storeLng: number | null; storeAddress: string | null }[]
+    { id: string; name: string; storeLat: number | null; storeLng: number | null; storeAddress: string | null; city: string | null }[]
   >([]);
   const [canTake, setCanTake] = useState(false);
   const [showExchange, setShowExchange] = useState(false);
@@ -76,6 +80,9 @@ export default function CourierPointsPage() {
   const [routeInfo, setRouteInfo] = useState<{ distance: string; duration: string } | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
+  // Карту нельзя создавать раньше, чем известны заказы: город берётся из них.
+  // Иначе она открывается в городе по умолчанию и потом дёргается к заказам.
+  const [dataReady, setDataReady] = useState(false);
 
   /* ── данные ────────────────────────────────────────────── */
 
@@ -83,7 +90,12 @@ export default function CourierPointsPage() {
     try {
       const res = await fetch("/api/courier/my-orders");
       if (res.ok) setOrders(await res.json());
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      // Даже если запрос упал — карту рисуем, иначе экран останется пустым
+      setDataReady(true);
+    }
   }, []);
 
   const fetchExchange = useCallback(async () => {
@@ -104,12 +116,24 @@ export default function CourierPointsPage() {
   }, []);
 
   useEffect(() => {
-    // Базы магазинов — курьеру полезно видеть, откуда забирать заказ
+    // Все доступные базы, а не только те, у кого проставлены координаты.
+    // Раньше магазин без заполненного адреса просто пропадал с карты, и
+    // курьер не понимал, существует ли он вообще.
     fetch("/api/company")
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setBases((d?.shops ?? []).filter((s: { storeLat: number | null }) => s.storeLat != null)))
+      .then((d) => setBases(d?.shops ?? []))
       .catch(() => setBases([]));
   }, []);
+
+  // Город определяем по заказам: у первого заказа берём магазин, у магазина —
+  // город. Если заказов ещё нет, смотрим на единственную доступную базу.
+  const cityOfWork = (() => {
+    const withShop = orders.find((o) => o.shopRef?.city) ?? exchange.find((o) => o.shopRef?.city);
+    if (withShop?.shopRef?.city) return getCity(withShop.shopRef.city);
+    if (bases.length === 1) return getCity(bases[0].city);
+    return getCity(null);
+  })();
+  cityOfWorkRef.current = cityOfWork;
 
   useEffect(() => {
     fetchOrders();
@@ -153,6 +177,7 @@ export default function CourierPointsPage() {
   /* ── инициализация карты ───────────────────────────────── */
 
   useEffect(() => {
+    if (!dataReady) return;
     if (initedRef.current || typeof window === "undefined") return;
 
     const init = async () => {
@@ -167,8 +192,13 @@ export default function CourierPointsPage() {
           YMap, YMapDefaultSchemeLayer, YMapDefaultFeaturesLayer, YMapControls,
         } = ymaps3;
 
+        // Центр — город заказов курьера. Константа Москвы отсюда убрана:
+        // курьер в Воронеже открывал карту над Кремлём и ждал, пока
+        // сработает подгонка охвата.
+        const startCity = cityOfWorkRef.current;
+
         const map = new YMap(mapEl.current, {
-          location: { center: toLngLat(55.75, 37.61), zoom: 11 },
+          location: { center: toLngLat(startCity.center[0], startCity.center[1]), zoom: startCity.zoom },
           // Ради этого и переезжали: pinchRotate — поворот двумя пальцами,
           // panTilt — наклон карты. В 2.1 их не было вообще.
           behaviors: ["drag", "pinchZoom", "scrollZoom", "dblClick", "pinchRotate", "panTilt"],
@@ -209,7 +239,7 @@ export default function CourierPointsPage() {
     };
 
     init();
-  }, []);
+  }, [dataReady]);
 
   /* ── маркеры ───────────────────────────────────────────── */
 
@@ -261,9 +291,15 @@ export default function CourierPointsPage() {
       markersRef.current.set(o.id, marker);
     });
 
-    // Метки баз: квадратные, чтобы не путались с точками доставки
+    // Метки баз: квадратные, чтобы не путались с точками доставки.
+    // База без координат тоже показывается — по центру своего города и
+    // полупрозрачной: курьер видит, что магазин есть, но адрес у него
+    // ещё не настроен.
     bases.forEach((b) => {
-      if (b.storeLat == null || b.storeLng == null) return;
+      const baseHasCoords = b.storeLat != null && b.storeLng != null;
+      const [bLat, bLng] = baseHasCoords
+        ? [b.storeLat as number, b.storeLng as number]
+        : getCity(b.city).center;
       const el = document.createElement("div");
       el.style.cssText = `
         width:26px;height:26px;border-radius:7px;
@@ -272,10 +308,13 @@ export default function CourierPointsPage() {
         display:flex;align-items:center;justify-content:center;
         color:#fff;font-size:13px;cursor:default;
         transform:translate(-50%,-50%);
+        opacity:${baseHasCoords ? 1 : 0.45};
       `;
       el.textContent = "🏠";
-      el.title = `База: ${b.name}${b.storeAddress ? ` — ${b.storeAddress}` : ""}`;
-      const marker = new YMapMarker({ coordinates: toLngLat(b.storeLat, b.storeLng) }, el);
+      el.title = baseHasCoords
+        ? `База: ${b.name}${b.storeAddress ? ` — ${b.storeAddress}` : ""}`
+        : `База: ${b.name} — адрес не указан в настройках компании`;
+      const marker = new YMapMarker({ coordinates: toLngLat(bLat, bLng) }, el);
       mapRef.current.addChild(marker);
       markersRef.current.set(`base-${b.id}`, marker);
     });
@@ -284,18 +323,44 @@ export default function CourierPointsPage() {
       boundsDone.current = true;
       const lngs = visibleOrders.map((o) => o.lng!);
       const lats = visibleOrders.map((o) => o.lat!);
-      mapRef.current.update({
-        location: {
-          bounds: [
-            [Math.min(...lngs), Math.max(...lats)],
-            [Math.max(...lngs), Math.min(...lats)],
-          ],
-          duration: 300,
-        },
-      });
+
+      const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+      const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+      const spanLat = maxLat - minLat, spanLng = maxLng - minLng;
+
+      if (spanLat > 1 || spanLng > 1) {
+        // Разброс больше градуса — где-то кривой геокод. Показываем город,
+        // а не глобус.
+        mapRef.current.update({
+          location: {
+            center: toLngLat(cityOfWork.center[0], cityOfWork.center[1]),
+            zoom: cityOfWork.zoom,
+            duration: 300,
+          },
+        });
+      } else {
+        // Минимальный охват: при одном-двух заказах карта иначе приближалась
+        // вплотную к точке, и вместо города курьер видел один двор.
+        const MIN_SPAN = 0.1;
+        const cLat = (minLat + maxLat) / 2, cLng = (minLng + maxLng) / 2;
+        const halfLat = Math.max(spanLat, MIN_SPAN) / 2;
+        // Градус долготы короче широтного — делим на косинус, иначе на
+        // широте Питера обзор по горизонтали был бы вдвое уже
+        const halfLng = Math.max(spanLng, MIN_SPAN / Math.cos((cLat * Math.PI) / 180)) / 2;
+
+        mapRef.current.update({
+          location: {
+            bounds: [
+              [cLng - halfLng, cLat + halfLat],
+              [cLng + halfLng, cLat - halfLat],
+            ],
+            duration: 300,
+          },
+        });
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders, exchange, showExchange, filterStatus, filterDate, mapReady, activeOrderId, bases]);
+  }, [orders, exchange, showExchange, filterStatus, filterDate, mapReady, activeOrderId, bases, cityOfWork]);
 
   /* ── маршрут ───────────────────────────────────────────── */
 
@@ -328,6 +393,11 @@ export default function CourierPointsPage() {
     }
     setRouteInfo(null);
 
+    // Тему берём в момент отрисовки: её можно переключить без перезагрузки
+    const isDarkMap =
+      typeof document !== "undefined" &&
+      document.documentElement.getAttribute("data-ew-theme") === "dark";
+
     try {
       // Считаем в 2.1: там маршрутизатор входит в JS API и работает
       // обычным ключом карты. В 3.0 это отдельная платная услуга,
@@ -343,12 +413,19 @@ export default function CourierPointsPage() {
         id: "active-route",
         geometry: { type: "LineString", coordinates: result.coordinates },
         style: {
-          stroke: [
-            // Тёмный контур снизу: без него линия теряется поверх
-            // светлых улиц и зелёных зон парков
-            { color: "rgba(0,0,0,0.35)", width: 9 },
-            { color: "#5b87ff", width: 5 },
-          ],
+          // Контур и цвет — под тему карты. Раньше и то, и другое было
+          // зашито под светлую: чёрный контур на тёмной подложке сливался
+          // с фоном, а синий #5b87ff по нему не читался, и линии будто не
+          // было вовсе. Контур всегда контрастен подложке, а не «тёмный».
+          stroke: isDarkMap
+            ? [
+                { color: "rgba(255,255,255,0.45)", width: 9 },
+                { color: "#8AB4FF", width: 5 },
+              ]
+            : [
+                { color: "rgba(0,0,0,0.35)", width: 9 },
+                { color: "#2B5BD7", width: 5 },
+              ],
         },
       });
       mapRef.current.addChild(line);
@@ -461,10 +538,14 @@ export default function CourierPointsPage() {
         )}
       </div>
 
-      {/* Карточка заказа */}
+      {/* Карточка заказа.
+          Раньше висела внизу, где её перекрывала нижняя навигация. Теперь —
+          сразу под фильтрами. maxHeight с прокруткой: длинный состав заказа
+          иначе закрывал карту целиком. */}
       {activeOrder && (
         <div style={{
-          position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 15,
+          position: "absolute", left: 10, right: 10, top: 62, zIndex: 15,
+          maxHeight: "calc(100% - 80px)", overflowY: "auto",
           background: "var(--color-card)", border: "1px solid var(--color-border)",
           borderRadius: 16, padding: 14, boxShadow: "0 8px 30px rgba(0,0,0,0.35)",
         }}>

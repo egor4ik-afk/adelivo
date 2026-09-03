@@ -995,10 +995,25 @@ export function DashboardClient({ user }: { user: User }) {
 
           // Больше градуса разброса — это не город, а кривая точка.
           // Остаёмся на центре города, а не показываем глобус.
-          if (spanLat < 1 && spanLng < 1) {
-            ymapRef.current.setBounds(bounds, { checkZoomRange: true, zoomMargin: 30 });
-          } else {
+          if (spanLat > 1 || spanLng > 1) {
             ymapRef.current.setCenter(baseCoordsFor(activeShop?.slug), activeCity.zoom, { duration: 300 });
+          } else {
+            // Минимальный охват. setBounds честно подгонял рамку под заказы,
+            // и при двух-трёх точках в Воронеже это давало не город, а один
+            // двор. MIN_SPAN ≈ 11 км по широте — примерно тот обзор, что
+            // раньше получался у Москвы, где заказов много и они разбросаны.
+            const MIN_SPAN = 0.1;
+            const cLat = (swLat + neLat) / 2;
+            const cLng = (swLng + neLng) / 2;
+            const halfLat = Math.max(spanLat, MIN_SPAN) / 2;
+            // Градус долготы короче широтного, поэтому делим на косинус:
+            // без этого на широте Питера обзор по горизонтали был бы вдвое уже
+            const halfLng = Math.max(spanLng, MIN_SPAN / Math.cos((cLat * Math.PI) / 180)) / 2;
+
+            ymapRef.current.setBounds(
+              [[cLat - halfLat, cLng - halfLng], [cLat + halfLat, cLng + halfLng]],
+              { checkZoomRange: true, zoomMargin: 30 }
+            );
           }
           didAutoFitRef.current = true;
         }
