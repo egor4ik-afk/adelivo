@@ -707,6 +707,41 @@ export function DashboardClient({ user }: { user: User }) {
       return sorted;
     });
   };
+  // Реф для хранения временной метки предпросмотра
+  const previewPlacemarkRef = useRef<any>(null);
+
+  // 🔥 Эффект для отрисовки точки FIX
+  useEffect(() => {
+    if (!mapReady || !ymapRef.current || !window.ymaps) return;
+
+    const map = ymapRef.current;
+
+    // Очищаем старую метку превью, если она есть
+    if (previewPlacemarkRef.current) {
+      map.geoObjects.remove(previewPlacemarkRef.current);
+      previewPlacemarkRef.current = null;
+    }
+
+    // Если есть координаты для предпросмотра — рисуем метку
+    if (previewGeo && previewGeo.lat && previewGeo.lng) {
+      const pm = new window.ymaps.Placemark(
+        [previewGeo.lat, previewGeo.lng],
+        { 
+          hintContent: "📍 Новая координата",
+          balloonContent: "Исправленная позиция заказа"
+        },
+        { 
+          preset: "islands#redDotIcon" // Красная заметная точка
+        }
+      );
+      
+      map.geoObjects.add(pm);
+      previewPlacemarkRef.current = pm;
+
+      // Плавно приближаем карту к новой точке
+      map.setCenter([previewGeo.lat, previewGeo.lng], 16, { duration: 300 });
+    }
+  }, [previewGeo, mapReady]);
   useEffect(() => {
     if (!mapReady) return;
     const clusterer = clustererRef.current;

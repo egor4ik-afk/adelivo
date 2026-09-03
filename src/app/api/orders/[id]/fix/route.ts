@@ -23,8 +23,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const body = await req.json();
     const { mode, manualAddress } = body;
 
-    // Эндпоинт правит адрес заказа и жжёт токены AI, а проверки не было
-    // вообще: по чужому id можно было и посмотреть заказ, и переписать адрес.
     const viewer = await getViewer();
     if (!viewer) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (!(await canViewOrder(viewer, id))) {
@@ -34,7 +32,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const order = await prisma.order.findUnique({ where: { id } });
     if (!order) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    // ── РЕЖИМ 1: ПРЕДПРОСМОТР AI (Только генерация и запрос координат, БЕЗ сохранения в БД) ──
+    // ── РЕЖИМ 1: ПРЕДПРОСМОТР AI ──
     if (mode === "ai_preview") {
       const prompt = `У нас есть грязный адрес доставки: "${order.address}". 
       Комментарий клиента: "${order.comment || ''}". 
@@ -65,7 +63,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
       const rawContent = response.choices[0]?.message?.content?.trim() || "{}";
       
-      // Пытаемся распарсить JSON. Если Yandex LLM вернул markdown обертку (```json ... ```), вырезаем её.
       const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
       const jsonString = jsonMatch ? jsonMatch[0] : "{}";
       
@@ -79,10 +76,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const suggestedAddress = parsedData.cleanAddress || order.address || "";
       const suggestedDetails = parsedData.deliveryDetails || "";
       
-      // Геокодируем ЧИСТУЮ строку
       const geo = await geocodeAddress(suggestedAddress);
       
-      // Возвращаем на фронт и чистый адрес, и детали, чтобы фронтенд мог склеить их в комментарий
       return NextResponse.json({ 
           suggestedAddress, 
           suggestedDetails,
@@ -90,9 +85,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       });
     }
 
-    // ── РЕЖИМ 2: РУЧНОЙ ПРЕДПРОСМОТР НА КАРТЕ (БЕЗ сохранения в БД) ──
+    // ── РЕЖИМ 2: РУЧНОЙ ПРЕДПРОСМОТР НА КАРТЕ ──
     if (mode === "manual_preview") {
       const geo = await geocodeAddress(manualAddress);
+      if (!geo) return NextResponse.json({ error: "Координаты не найдены" }, { status: 400 });
       return NextResponse.json({ geo });
     }
 
@@ -104,12 +100,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
       if (!geo) {
         updateData.isInvalid = true;
-        updateData.invalidReason = "Адрес не найден";
+        updateData.invalidReason = "Адрес не найден на карте";
       } else if (!geo.isExact) {
+        // 🔥 ОПТИМИЗАЦИЯ: Координаты сохраняем (чтобы точка была на карте),
+        // но оставляем понятное предупреждение для логиста!
         updateData.lat = geo.lat;
         updateData.lng = geo.lng;
         updateData.isInvalid = true;
-        updateData.invalidReason = `Неточный геокод: ${geo.precision}`;
+        updateData.invalidReason = "Уточните номер дома/строения"; 
       } else {
         updateData.lat = geo.lat;
         updateData.lng = geo.lng;
