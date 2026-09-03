@@ -117,7 +117,7 @@ export default function RootLayout({
   return (
     <html lang="ru">
       <head>
-        {/* Ставит data-ew-theme на <html> до первой отрисовки — и в публичной части,
+        {/* Ставит data-ew-theme на <html> до первxxой отрисовки — и в публичной части,
             и в кабинетах. Без этого светлая тема мигает тёмной при загрузке. */}
         <ThemeScript />
       </head>
