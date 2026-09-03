@@ -787,6 +787,66 @@ export async function pollCrmOrders() {
 // ОБНОВЛЕНИЕ ЗАКАЗА В CRM
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Ключ RetailCRM для конкретного заказа.
+ *
+ * Здесь и была утечка. Раньше выбор выглядел так:
+ *
+ *   const isMeura = shop === 'kaktusfiori' || shop === 'meura-flowers';
+ *   const apiKeyToUse = isMeura ? CRM_KEY_MEURA : CRM_KEY;
+ *
+ * То есть «всё, что не Meura» уезжало в CRM Банча — включая ручные заказы,
+ * заказы из Telegram и заказы чужих компаний. Отсюда и запросы вида
+ * filter[ids][]=MAN-shop-975512-954288 в чужую CRM, и ошибки 400.
+ *
+ * Теперь наоборот: ключ ищется по магазину заказа, и если магазин
+ * к RetailCRM не подключён — запрос не отправляется вообще.
+ */
+async function resolveCrmCreds(
+  crmId: string
+): Promise<{ baseUrl: string; apiKey: string } | null> {
+  // Локальные заказы в CRM не существуют по определению
+  if (!/^\d+$/.test(crmId)) return null;
+
+  const order = await prisma.order.findUnique({
+    where: { crmId },
+    select: {
+      shop: true,
+      shopRef: {
+        select: {
+          slug: true,
+          crmUrl: true,
+          connectorType: true,
+          connector: { select: { type: true, baseUrl: true, apiKey: true, isActive: true } },
+        },
+      },
+    },
+  });
+  if (!order) return null;
+
+  const shopRef = order.shopRef;
+
+  // 1. Магазин настроен в кабинете — берём его подключение
+  if (shopRef?.connector?.type === "RETAILCRM" && shopRef.connector.apiKey) {
+    const baseUrl = shopRef.connector.baseUrl || shopRef.crmUrl || CRM_URL;
+    if (!baseUrl) return null;
+    return { baseUrl, apiKey: shopRef.connector.apiKey };
+  }
+
+  // 2. Исторические магазины на переменных окружения
+  const slug = shopRef?.slug ?? order.shop ?? "";
+  if (MEURA_SHOPS.includes(slug)) {
+    return CRM_URL && CRM_KEY_MEURA ? { baseUrl: CRM_URL, apiKey: CRM_KEY_MEURA } : null;
+  }
+  if (BUNCH_SHOPS.includes(slug)) {
+    return CRM_URL && CRM_KEY ? { baseUrl: CRM_URL, apiKey: CRM_KEY } : null;
+  }
+
+  // 3. Магазин к RetailCRM не подключён — молча выходим.
+  //    Это нормальный случай: ручные заказы, Telegram, новые компании.
+  return null;
+}
+
 export async function updateCrmOrder(
   crmId: string,
   data: {
@@ -804,11 +864,9 @@ export async function updateCrmOrder(
 ) {
   if (!CRM_URL) return;
 
-  const orderInDb = await prisma.order.findUnique({ where: { crmId }, select: { shop: true } });
-  const isMeura = orderInDb?.shop === 'kaktusfiori' || orderInDb?.shop === 'meura-flowers';
-  const apiKeyToUse = isMeura ? CRM_KEY_MEURA : CRM_KEY;
-
-  if (!apiKeyToUse) return;
+  const creds = await resolveCrmCreds(crmId);
+  if (!creds) return;
+  const apiKeyToUse = creds.apiKey;
 
   const orderPayload: any = {};
 
@@ -864,7 +922,7 @@ export async function updateCrmOrder(
       resetParams.append("apiKey", apiKeyToUse);
       resetParams.append("order", JSON.stringify({ delivery: { code: "self-delivery" } }));
       resetParams.append("by", "id");
-      await axios.post(`${CRM_URL}/api/v5/orders/${crmId}/edit`, resetParams.toString(), {
+      await axios.post(`${creds.baseUrl}/api/v5/orders/${crmId}/edit`, resetParams.toString(), {
         headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 5000,
       }).catch(() => {});
       orderPayload.delivery = { code: "logisty", typeId: 5 };
@@ -884,7 +942,7 @@ export async function updateCrmOrder(
   params.append("by", "id");
 
   try {
-    await axios.post(`${CRM_URL}/api/v5/orders/${crmId}/edit`, params.toString(), {
+    await axios.post(`${creds.baseUrl}/api/v5/orders/${crmId}/edit`, params.toString(), {
       headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 5000,
     });
   } catch (err: any) {
@@ -898,11 +956,9 @@ export async function updateCrmOrder(
 export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: number) {
   if (!CRM_URL) return;
 
-  const orderInDb = await prisma.order.findUnique({ where: { crmId }, select: { shop: true } });
-  const isMeura = orderInDb?.shop === 'kaktusfiori' || orderInDb?.shop === 'meura-flowers';
-  const apiKeyToUse = isMeura ? CRM_KEY_MEURA : CRM_KEY;
-
-  if (!apiKeyToUse) return;
+  const creds = await resolveCrmCreds(crmId);
+  if (!creds) return;
+  const apiKeyToUse = creds.apiKey;
 
   const NET_COST_MAP: Record<number, number> = {
     500: 732, 600: 838, 900: 1157, 1000: 1264, 1300: 1583, 1400: 1689,
@@ -920,7 +976,7 @@ export async function updateCrmOrderDeliveryPrice(crmId: string, basePrice: numb
   params.append("by", "id");
 
   try {
-    await axios.post(`${CRM_URL}/api/v5/orders/${crmId}/edit`, params.toString(), {
+    await axios.post(`${creds.baseUrl}/api/v5/orders/${crmId}/edit`, params.toString(), {
       headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 5000,
     });
   } catch (err: any) {

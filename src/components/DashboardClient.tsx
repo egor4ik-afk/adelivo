@@ -359,10 +359,13 @@ export function DashboardClient({ user }: { user: User }) {
 
   const fetchData = useCallback(async () => {
     try {
-      const [ordersRes, couriersRes, shopsRes] = await Promise.all([
+      // Магазины отсюда убраны намеренно: fetchData крутится каждые
+      // 30 секунд, а базы меняются раз в год. Тянуть их вместе с заказами —
+      // лишний запрос к базе каждые полминуты на каждой открытой вкладке.
+      // Они грузятся один раз, отдельным эффектом ниже, и кэшируются.
+      const [ordersRes, couriersRes] = await Promise.all([
         fetch(`/api/orders?t=${Date.now()}`),
         fetch(`/api/couriers?t=${Date.now()}`),
-        fetch(`/api/company/shops?t=${Date.now()}`) // 🔥 ДОБАВИЛИ ЗАПРОС БАЗ
       ]);
       
       if (ordersRes.ok) { 
@@ -372,14 +375,33 @@ export function DashboardClient({ user }: { user: User }) {
       if (couriersRes.ok) {
         setDbCouriers(await couriersRes.json());
       }
-      if (shopsRes.ok) {
-        setShopBases(await shopsRes.json()); // 🔥 СОХРАНИЛИ В СТЕЙТ
-      }
     } catch (e) { 
       console.error(e); 
     } finally { 
       setLoading(false); 
     }
+  }, []);
+
+  // Базы магазинов: один раз за сессию, с кэшем.
+  // Из кэша экран рисуется сразу, запрос уходит фоном и обновляет данные,
+  // если магазин добавили или поменяли адрес.
+  useEffect(() => {
+    const CACHE_KEY = "adelivo:shop-bases";
+
+    try {
+      const cached = sessionStorage.getItem(CACHE_KEY);
+      if (cached) setShopBases(JSON.parse(cached));
+    } catch { /* приватный режим — просто грузим с сервера */ }
+
+    fetch("/api/company/shops")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        const shops = Array.isArray(d) ? d : d.shops ?? [];
+        setShopBases(shops);
+        try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(shops)); } catch { /* ignore */ }
+      })
+      .catch(() => { /* при ошибке остаёмся на кэше */ });
   }, []);
 
   useEffect(() => { fetchData(); const t = setInterval(fetchData, 30_000); return () => clearInterval(t); }, [fetchData]);

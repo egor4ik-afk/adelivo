@@ -15,7 +15,8 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { NAV_HEIGHT } from "@/components/CourierNav";
-import { loadYmaps3, loadMapControls, toLngLat, formatDistance, formatDuration } from "@/lib/maps";
+import { loadYmaps3, loadMapControls, toLngLat } from "@/lib/maps";
+import { buildRoute21 } from "@/lib/route21";
 
 interface CourierOrder {
   id: string; externalId: string; crmId: string; address: string; status: string;
@@ -302,10 +303,8 @@ export default function CourierPointsPage() {
     const ymaps3 = window.ymaps3;
     if (!mapRef.current || !ymaps3) return;
 
-    // Маршрут строится ОТ БАЗЫ магазина, а не от текущего положения курьера.
-    // Курьеру нужен путь развоза «база → адрес»: утром он дома, днём —
-    // на предыдущей точке, и маршрут от него самого мало что значит.
-    // Геопозиция остаётся запасным вариантом, если база не заполнена.
+    // Старт — база магазина заказа. Курьеру нужен путь развоза,
+    // а не дорога от места, где он сейчас стоит.
     const current = [...orders, ...exchange].find((o) => o.id === activeOrderId);
     const base = current?.shopRef;
     const from: [number, number] | null =
@@ -316,54 +315,37 @@ export default function CourierPointsPage() {
     if (!from) {
       setRouteInfo({
         distance: "нет точки старта",
-        duration: "укажите адрес базы магазина в разделе «Компания»",
+        duration: "укажите адрес базы магазина",
       });
       return;
     }
 
-    // Снимаем прошлую линию до запроса: иначе при быстром переключении
-    // точек на карте остаются две
+    // Убираем прошлую линию до запроса: при быстром переключении точек
+    // иначе остаются две
     if (routeRef.current) {
       try { mapRef.current.removeChild(routeRef.current); } catch {}
       routeRef.current = null;
     }
     setRouteInfo(null);
 
-    if (typeof ymaps3.route !== "function") {
-      console.warn("[Карта] ymaps3.route недоступен — линия не строится");
-      return;
-    }
-
     try {
-      // Порядок именно такой: points — массив LngLat, type — строка.
-      // bounds: true просит вернуть габариты маршрута, чтобы подогнать камеру.
-      const response = await ymaps3.route({
-        points: [
-          toLngLat(from[0], from[1]),
-          toLngLat(to[0], to[1]),
-        ],
-        type: mode === "mt" ? "walking" : "driving",
-        bounds: true,
-      });
-
-      if (!response?.[0]) {
-        console.warn("[Карта] маршрут не найден");
+      // Считаем в 2.1: там маршрутизатор входит в JS API и работает
+      // обычным ключом карты. В 3.0 это отдельная платная услуга,
+      // и ключ отвечает «Route requests is not allowed».
+      const result = await buildRoute21(from, to, mode);
+      if (!result) {
+        setRouteInfo({ distance: "маршрут не найден", duration: "" });
         return;
       }
-
-      // Ответ роутера — не геометрия. Превращаем в RouteFeature,
-      // и только у него есть geometry для отрисовки.
-      const route = response[0].toRoute();
-      if (!route?.geometry?.coordinates?.length) return;
 
       const { YMapFeature } = ymaps3;
       const line = new YMapFeature({
         id: "active-route",
-        geometry: route.geometry,
+        geometry: { type: "LineString", coordinates: result.coordinates },
         style: {
           stroke: [
-            // Две линии: широкая тёмная снизу даёт контур, из-за него
-            // маршрут читается и поверх светлых улиц, и поверх парков
+            // Тёмный контур снизу: без него линия теряется поверх
+            // светлых улиц и зелёных зон парков
             { color: "rgba(0,0,0,0.35)", width: 9 },
             { color: "#5b87ff", width: 5 },
           ],
@@ -372,29 +354,11 @@ export default function CourierPointsPage() {
       mapRef.current.addChild(line);
       routeRef.current = line;
 
-      const props = route.properties ?? response[0].properties ?? {};
-      setRouteInfo({
-        distance: props.distance?.text ?? formatDistance(props.distance?.value ?? props.distance),
-        duration: props.duration?.text ?? formatDuration(props.duration?.value ?? props.duration),
-      });
-
-      // Подгоняем камеру под маршрут, сохраняя текущий наклон и поворот
-      const bounds = response[0].bounds ?? props.bounds;
-      if (bounds) {
-        mapRef.current.update({ location: { bounds, duration: 400 } });
-      }
+      setRouteInfo({ distance: result.distanceText, duration: result.durationText });
     } catch (e) {
-      // Текст ошибки от Яндекса важен: «Invalid key», «Forbidden» и
-      // «route not found» лечатся по-разному, а без него остаётся гадать
       const msg = e instanceof Error ? e.message : String(e);
       console.error("[Карта] маршрут не построился:", msg, e);
-      // «Route requests is not allowed» значит, что у ключа нет прав
-      // на маршрутизацию — это отдельная услуга в кабинете разработчика
-      const noRights = /not allowed|forbidden|403/i.test(msg);
-      setRouteInfo({
-        distance: noRights ? "маршрутизация не подключена" : "маршрут не построен",
-        duration: noRights ? "включите её для ключа в кабинете Яндекса" : msg.slice(0, 60),
-      });
+      setRouteInfo({ distance: "маршрут не построен", duration: msg.slice(0, 60) });
     }
   }, [userLocation, orders, exchange, activeOrderId]);
 
