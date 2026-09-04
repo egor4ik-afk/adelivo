@@ -413,7 +413,17 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     let crmStatus = body.status ?? updateData.status;
     if (crmStatus === "ASSIGNED") crmStatus = undefined;
 
-    await updateCrmOrder(order.crmId, { status: crmStatus as OrderStatus | undefined, courier: updateData.courier ?? body.courier, opComment: body.opComment, address: body.address });
+    await updateCrmOrder(order.crmId, {
+      status: crmStatus as OrderStatus | undefined,
+      courier: updateData.courier ?? body.courier,
+      // Id курьера у нас уже есть — передаём его, чтобы CRM не искала
+      // человека по имени и не сохраняла заказ без курьера
+      courierId: (updateData.courierId as number | null | undefined) ?? undefined,
+      opComment: body.opComment,
+      address: body.address,
+    }).catch((e) => {
+      console.error(`[Order] Не удалось обновить заказ ${order.crmId} в CRM:`, e?.response?.data ?? e?.message);
+    });
 
     return NextResponse.json(updatedOrder);
   } catch (e) {

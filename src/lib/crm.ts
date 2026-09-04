@@ -26,8 +26,19 @@ async function resolveCourierId(name: string): Promise<number | null> {
   if (!name) return null;
   const normalized = name.toLowerCase().trim();
   const allCouriers = await prisma.courier.findMany();
-  const match = allCouriers.find(c => c.fullName.toLowerCase().includes(normalized));
-  return match ? match.id : null;
+
+  // Точное совпадение в приоритете. Поиск по подстроке оставлен запасным,
+  // но он выбирал первого попавшегося: «Иван Петров» находил «Иван Петрова»,
+  // и заказ в CRM уезжал не тому курьеру.
+  const exact = allCouriers.find(c => c.fullName.toLowerCase().trim() === normalized);
+  if (exact) return exact.id;
+
+  const partial = allCouriers.filter(c => c.fullName.toLowerCase().includes(normalized));
+  if (partial.length === 1) return partial[0].id;
+  if (partial.length > 1) {
+    console.warn(`[CRM] Имя «${name}» подходит нескольким курьерам, id не определён`);
+  }
+  return null;
 }
 
 export function parseSlot(raw: unknown) {
@@ -667,6 +678,29 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     if (!updateFields.customerPhone && existing.customerPhone) updateFields.customerPhone = existing.customerPhone;
     if (!updateFields.shop && existing.shop) updateFields.shop = existing.shop;
 
+    // Курьер: пустое значение из CRM не затирает назначенного у нас.
+    //
+    // Назначение курьера отправляется в CRM через delivery.data, и CRM его
+    // принимает не всегда — например, если курьера ещё нет в её справочнике
+    // или её ответ потерялся. При следующем опросе CRM отдавала пустого
+    // курьера, и назначение молча слетало: заказ снова оказывался ничьим,
+    // маршрут у курьера пропадал.
+    //
+    // Логика такая: пустоту игнорируем, а другого курьера принимаем —
+    // если человека переназначили прямо в CRM, это осознанное действие
+    // и оно должно доехать.
+    const crmHasCourier = !!(data.courierId || data.courier);
+    const weHaveCourier = !!(existing.courierId || existing.courier);
+
+    if (!crmHasCourier && weHaveCourier) {
+      updateFields.courierId = existing.courierId;
+      updateFields.courier = existing.courier;
+      console.warn(
+        `[CRM] Заказ ${data.crmId}: в CRM курьера нет, оставляем назначенного у нас — ` +
+        `${existing.courier ?? existing.courierId}. Проверьте, что курьер заведён в справочнике CRM.`
+      );
+    }
+
     const dbAddr  = existing.address?.trim() || "";
     const crmAddr = (data.address ?? "").trim();  
 
@@ -963,6 +997,11 @@ export async function updateCrmOrder(
     status?: OrderStatus;
     crmStatus?: string;
     courier?: string;
+    /**
+     * Id курьера в справочнике CRM. Передавайте его всегда, когда он известен:
+     * поиск по имени ниже — только запасной вариант и он ошибается.
+     */
+    courierId?: number | null;
     opComment?: string;
     address?: string;
     deliveryType?: string | null;
@@ -1022,7 +1061,10 @@ export async function updateCrmOrder(
     orderPayload.delivery.code = "logisty";
 
     if (courierName) {
-      const courierId = await resolveCourierId(courierName);
+      // Явно переданный id надёжнее поиска по имени: resolveCourierId берёт
+      // первое совпадение по подстроке, и у двух курьеров с похожими именами
+      // заказ уезжал не тому. Если id не передали — ищем по имени, как раньше.
+      const courierId = data.courierId ?? (await resolveCourierId(courierName));
       if (courierId) {
         orderPayload.delivery.data = { id: courierId, courierId: courierId, courier: courierId };
       }
@@ -1056,7 +1098,11 @@ export async function updateCrmOrder(
       headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 5000,
     });
   } catch (err: any) {
+    // Раньше ошибка просто уходила в лог, и снаружи всё выглядело успешным.
+    // Из-за этого «курьер не сохранился в CRM» замечали только по тому,
+    // что назначение слетело через несколько минут.
     console.error(`[CRM] Ошибка обновления заказа ${crmId}:`, err?.response?.data ?? err.message);
+    throw err;
   }
 }
 
