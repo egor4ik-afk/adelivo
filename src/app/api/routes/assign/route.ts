@@ -235,10 +235,9 @@ export async function POST(req: Request) {
         const finalPlannedTime = plannedDepartureTime !== undefined ? plannedDepartureTime : fallbackPlannedTime;
         await updateCrmOrder(orderToUpdate.crmId, {
           courier: courierFullName,
-          // Id передаём явно. Раньше уходило только имя, и crm.ts искала
-          // курьера по подстроке среди всех — для нового курьера могла не
-          // найти вовсе, тогда CRM сохраняла заказ без него, а следующий
-          // опрос затирал назначение у нас.
+          // Id передаём явно, но в CRM он уйдёт только если положительный:
+          // у локально заведённых курьеров id отрицательный и в справочнике
+          // RetailCRM его нет. Отсечка — в updateCrmOrder.
           courierId: courierDb?.id ?? null,
           routeName: newRoute.name,
           returnTime: finalPlannedTime || undefined,   // 🔥 теперь это plannedDepartureTime, а не estimatedReturnTime

@@ -1065,7 +1065,20 @@ export async function updateCrmOrder(
       // первое совпадение по подстроке, и у двух курьеров с похожими именами
       // заказ уезжал не тому. Если id не передали — ищем по имени, как раньше.
       const courierId = data.courierId ?? (await resolveCourierId(courierName));
-      if (courierId) {
+
+      // В delivery.data кладём id ТОЛЬКО если он из справочника CRM.
+      //
+      // Courier.id у нас — это id из RetailCRM, но курьеров можно завести и
+      // локально: по ссылке-приглашению или галочкой в кабинете. Такие
+      // получают отрицательный id, и он в CRM не существует. Раньше он
+      // уходил в delivery.data как есть, CRM запрос отвергала, заказ
+      // сохранялся без курьера — и следующий опрос затирал назначение
+      // у нас. Отсюда «новый курьер слетает».
+      //
+      // Для локального курьера отправляем только имя в customFields:
+      // CRM его принимает, оператор видит, кто везёт, а связка с
+      // конкретным курьером остаётся на нашей стороне.
+      if (courierId && courierId > 0) {
         orderPayload.delivery.data = { id: courierId, courierId: courierId, courier: courierId };
       }
       orderPayload.customFields = { ...orderPayload.customFields, courier: courierName, kurier: courierName };

@@ -12,7 +12,7 @@ import { ThemeScript } from "@/components/theme/ThemeScript";
 const inter = Inter({ subsets: ["latin", "cyrillic"] });
 
 export const viewport: Viewport = {
-  themeColor: "#38BDF8",
+  themeColor: "#ffffff",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -59,7 +59,7 @@ export const metadata: Metadata = {
       {
         // Стандартный размер превью: 1200×630, соотношение 1.91:1.
         //
-        url: "/og-image.jpg",
+        url: "/og-image.webp",
         width: 1200,
         height: 630,
         type: "image/jpeg",
@@ -75,7 +75,7 @@ export const metadata: Metadata = {
     title: "ADelivo — Диспетчеризация курьеров",
     description:
       "Система управления курьерами и доставкой в реальном времени. Интеграция с любой CRM.",
-    images: ["/og-image.jpg"],
+    images: ["/og-image.webp"],
   },
 
   robots: {
@@ -90,6 +90,11 @@ export const metadata: Metadata = {
     },
   },
 
+  // site.webmanifest, а не manifest.json. Оба файла лежат в public/ и оба
+  // прописаны в precache-листе public/sw.js — удалять ни один нельзя:
+  // отсутствующий файл роняет precacheAndRoute целиком, service worker не
+  // ставится, и вместе с ним отваливаются иконки и офлайн-режим.
+  manifest: "/site.webmanifest",
 
   appleWebApp: {
     capable: true,
@@ -103,14 +108,16 @@ export const metadata: Metadata = {
 
   icons: {
     icon: [
-      { url: '/favicon.svg', type: 'image/svg+xml' },
-      { url: '/favicon.ico', sizes: 'any' },
-      { url: '/favicon-96x96.png', sizes: '96x96', type: 'image/png' },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      // sizes: "any" у .ico обязателен, иначе браузер считает его иконкой
+      // неизвестного размера и в части случаев предпочитает ему ничего
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-96x96.png", sizes: "96x96", type: "image/png" },
     ],
-    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
+    // Строкой Next отдаёт apple-touch-icon без sizes и type. iOS такой
+    // тег берёт, но масштабирует наугад; с явными 180×180 берёт как есть.
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
-  manifest: '/site.webmanifest',
-  
 };
 
 export default function RootLayout({
