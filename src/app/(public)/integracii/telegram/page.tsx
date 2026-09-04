@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     description: "Чаты, бот и уведомления операторам. Push курьерам без SMS.",
     url: `${SITE_URL}${PATH}`,
     siteName: "ADelivo",
-    images: [{ url: "/og-image.webp", width: 1200, height: 630, alt: "ADelivo и Telegram" }],
+    images: [{ url: "/og-image.jpg", width: 1200, height: 630, alt: "ADelivo и Telegram" }],
     locale: "ru_RU",
     type: "website",
   },

@@ -26,7 +26,7 @@ export const metadata: Metadata = {
     description: "Регистрация за 5 минут, свой график, выплаты на карту через Консоль.Про.",
     url: `${SITE_URL}${PATH}`,
     siteName: "ADelivo",
-    images: [{ url: "/og-image.webp", width: 1200, height: 630, alt: "Работа курьером в ADelivo" }],
+    images: [{ url: "/og-image.jpg", width: 1200, height: 630, alt: "Работа курьером в ADelivo" }],
     locale: "ru_RU",
     type: "website",
   },

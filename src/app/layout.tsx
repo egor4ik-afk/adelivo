@@ -27,7 +27,11 @@ export const metadata: Metadata = {
 
   title: {
     default: "ADelivo — Система диспетчеризации и управления курьерами",
-    template: "%s | ADelivo",
+    // Раньше здесь было "%s | ADelivo". Заголовки страниц уже содержат
+    // бренд, и в выдаче получалось «Система диспетчеризации … | ADelivo»
+    // с дублем и обрезанием хвоста: Google показывает около 60 символов,
+    // а лишние 10 съедала повторная приписка.
+    template: "%s",
   },
 
   description:
@@ -55,18 +59,7 @@ export const metadata: Metadata = {
       {
         // Стандартный размер превью: 1200×630, соотношение 1.91:1.
         //
-        // Формат здесь принципиален: JPEG, не WebP.
-        //
-        // Первая версия бага: в og:image был указан .jpg, которого в public/
-        // не было — Telegram получал 404 и рисовал карточку без картинки.
-        // VK ошибку не замечал, потому что при недоступном og:image сам
-        // сканирует страницу и берёт первую подходящую картинку из вёрстки.
-        //
-        // Вторая версия: файл заменили на WebP. Формат легче, но превью
-        // ссылок в Telegram его разбирает не во всех клиентах — карточка
-        // снова оставалась пустой. og-image.webp можно держать для сайта,
-        // а в разметку превью отдавать jpg.
-        url: "/og-image.webp",
+        url: "/og-image.jpg",
         width: 1200,
         height: 630,
         type: "image/jpeg",
@@ -82,7 +75,7 @@ export const metadata: Metadata = {
     title: "ADelivo — Диспетчеризация курьеров",
     description:
       "Система управления курьерами и доставкой в реальном времени. Интеграция с любой CRM.",
-    images: ["/og-image.webp"],
+    images: ["/og-image.jpg"],
   },
 
   robots: {
@@ -97,7 +90,6 @@ export const metadata: Metadata = {
     },
   },
 
-  manifest: "/manifest.json",
 
   appleWebApp: {
     capable: true,
@@ -111,12 +103,14 @@ export const metadata: Metadata = {
 
   icons: {
     icon: [
-      { url: "/favicon.svg", type: "image/svg+xml" },
-      { url: "/favicon-96x96.png", sizes: "96x96", type: "image/png" },
-      { url: "/favicon.ico" },
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/favicon-96x96.png', sizes: '96x96', type: 'image/png' },
     ],
-    apple: "/apple-touch-icon.png",
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
   },
+  manifest: '/site.webmanifest',
+  
 };
 
 export default function RootLayout({
@@ -174,7 +168,25 @@ export default function RootLayout({
               url: SITE_URL,
               description: "Профессиональная система диспетчеризации и управления курьерами. До 1000 заказов в день, интеграция с любой CRM.",
               provider: { "@type": "Organization", name: "ADelivo", url: SITE_URL },
-              offers: { "@type": "Offer", price: "0", priceCurrency: "RUB" },
+              // Бесплатного тарифа нет — есть бесплатная пробная неделя.
+              // price: "0" без пояснения Google трактует как «продукт
+              // бесплатен», и в выдаче появлялась некорректная плашка.
+              offers: {
+                "@type": "Offer",
+                price: "0",
+                priceCurrency: "RUB",
+                description: "Пробный период 7 дней без оплаты и без банковской карты. Далее — оплата за фактические заказы, от 10 ₽ за заказ.",
+                url: `${SITE_URL}/register-company`,
+                availability: "https://schema.org/InStock",
+              },
+              inLanguage: "ru-RU",
+              // Прямая ссылка на целевое действие: поисковики и AI-ассистенты
+              // используют её как «где попробовать»
+              potentialAction: {
+                "@type": "RegisterAction",
+                name: "Попробовать 7 дней бесплатно",
+                target: `${SITE_URL}/register-company`,
+              },
             }),
           }}
         />

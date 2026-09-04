@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     description: "Единая таблица заказов, статусы в реальном времени, слоты, история изменений.",
     url: `${SITE_URL}${PATH}`,
     siteName: "ADelivo",
-    images: [{ url: "/og-image.webp", width: 1200, height: 630, alt: "Экран заказов ADelivo" }],
+    images: [{ url: "/og-image.jpg", width: 1200, height: 630, alt: "Экран заказов ADelivo" }],
     locale: "ru_RU",
     type: "website",
   },

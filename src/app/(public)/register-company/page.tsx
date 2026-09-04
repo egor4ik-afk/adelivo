@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     description: "Свой магазин, свои сотрудники, своя диспетчерская. Подключение бесплатно.",
     url: `${SITE_URL}${PATH}`,
     siteName: "ADelivo",
-    images: [{ url: "/og-image.webp", width: 1200, height: 630, alt: "Регистрация компании в ADelivo" }],
+    images: [{ url: "/og-image.jpg", width: 1200, height: 630, alt: "Регистрация компании в ADelivo" }],
     locale: "ru_RU",
     type: "website",
   },
@@ -39,7 +39,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Регистрация компании — ADelivo",
     description: "Свой магазин, свои сотрудники, своя диспетчерская. Подключение бесплатно.",
-    images: ["/og-image.webp"],
+    images: ["/og-image.jpg"],
   },
 };
 
@@ -116,7 +116,7 @@ export default async function Page() {
             <div>
               <HeroVideo
                 src="https://cdn.relaxdev.ru/admin/2.mp4"
-                poster="/og-image.webp"
+                poster="/og-image.jpg"
                 caption="Кабинет компании и оператора"
               />
               <p style={{ fontSize: "0.82rem", color: "var(--color-text-3)", marginTop: "0.7rem", lineHeight: 1.6 }}>
@@ -126,7 +126,7 @@ export default async function Page() {
             <div>
               <HeroVideo
                 src="https://cdn.relaxdev.ru/admin/1.mp4"
-                poster="/og-image.webp"
+                poster="/og-image.jpg"
                 caption="Менеджер и курьер в работе"
               />
               <p style={{ fontSize: "0.82rem", color: "var(--color-text-3)", marginTop: "0.7rem", lineHeight: 1.6 }}>
