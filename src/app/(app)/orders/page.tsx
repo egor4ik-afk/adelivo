@@ -321,11 +321,13 @@ export default function OrdersPage() {
   return (
     <div style={{ fontFamily: "Manrope, system-ui, sans-serif", background: "var(--color-bg)", minHeight: "100vh", paddingBottom: selectedIds.size > 0 ? 80 : 0 }}>
 
-      {/* Своей шапки здесь нет: логотип, «Дашборд» и «Курьеры» дублировали
-          общую AppTopBar, которая теперь показывается и на этой странице.
-          Осталась строка с заголовком и кнопкой синхронизации. */}
-      <div style={{ padding: "16px 24px 0", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 17, fontWeight: 700, color: "var(--color-text)" }}>Все заказы</span>
+      {/* Шапка */}
+      <div style={{ background: "var(--color-card)", borderBottom: "1px solid var(--color-border)", padding: "0 24px", height: 56, display: "flex", alignItems: "center", gap: 16, overflowX: "auto" }}>
+        {/* Логотип и кнопки «Дашборд» и «Курьеры» убраны: они дублировали
+            общую AppTopBar, которая теперь есть и на этой странице. Сама
+            полоса и её высота оставлены как были — прошлый раз я снёс её
+            целиком, и страница из-за этого визуально просела. */}
+        <span style={{ fontSize: 15, fontWeight: 700, color: "var(--color-text)", whiteSpace: "nowrap" }}>Все заказы</span>
         <div style={{ flex: 1 }} />
         <button onClick={handleSync} disabled={syncing} style={{ ...syncBtn, background: syncing ? "var(--color-border)" : "var(--color-contrast-bg)" }}>
           {syncing ? "Синхронизация..." : "↻ Обновить из CRM"}
@@ -547,7 +549,6 @@ export default function OrdersPage() {
 }
 
 // Стили
-const navBtn = { padding: "5px 10px", borderRadius: 6, border: "1px solid var(--color-border)", background: "var(--color-surface)", fontSize: 11, fontWeight: 600, color: "var(--color-text)", textDecoration: "none" };
 const syncBtn = { padding: "6px 14px", color: "var(--color-contrast-fg)", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer" };
 const inputStyle = { padding: "7px 10px", borderRadius: 7, border: "1px solid #e0dfd7", fontSize: 12, outline: "none", color: "var(--color-text)", background: "var(--color-card)", maxWidth: 160 };
 const inlineInputStyle = { width: "100%", padding: "4px 6px", borderRadius: 4, border: "1px solid var(--color-accent)", outline: "none", fontWeight: 600, fontSize: 12 };

@@ -47,37 +47,39 @@ export function HeroVideo({
         style={{ width: "100%", height: "auto", display: "block" }}
       />
 
-      {/* Правый нижний угол ролика занят вотермаркой генератора.
-          Перекрываем её плашкой с нашим favicon и на неё же вешаем
-          управление звуком: две кнопки в одном углу мешали друг другу. */}
+      {/* Плашка садится точно на вотермарку генератора в правом нижнем углу
+          ролика и перекрывает её целиком: отступы почти нулевые, размер
+          заметно больше самого знака. С отступом в 12px она вставала ниже
+          и правее, и знак торчал из-под неё сверху слева. */}
       <button
         onClick={toggleSound}
         aria-label={muted ? "Включить звук" : "Выключить звук"}
         title={muted ? "Включить звук" : "Выключить звук"}
         style={{
-          position: "absolute", right: 8, bottom: 8,
-          width: 46, height: 46, borderRadius: 12,
-          border: "1px solid rgba(255,255,255,0.25)",
-          background: "rgba(12,14,20,0.88)", color: "#fff",
-          cursor: "pointer", display: "flex",
-          alignItems: "center", justifyContent: "center",
+          position: "absolute", right: 2, bottom: 2,
+          width: 62, height: 62, borderRadius: 14,
+          border: "none",
+          background: "rgba(10,12,18,0.95)", color: "#fff",
+          cursor: "pointer",
+          display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center", gap: 4,
           padding: 0, overflow: "hidden",
         }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/favicon.svg" alt="" width={22} height={22} style={{ display: "block" }} />
+        <img src="/favicon.svg" alt="" width={26} height={26} style={{ display: "block" }} />
 
-        {/* Состояние звука — маленьким значком в углу плашки, чтобы логотип
-            оставался читаемым */}
+        {/* Состояние звука — подписью, а не значком в углу. Кружок 14px
+            поверх логотипа на тёмном фоне было просто не разглядеть. */}
         <span style={{
-          position: "absolute", right: 3, bottom: 3,
-          width: 14, height: 14, borderRadius: 999,
-          background: muted ? "rgba(255,255,255,0.9)" : "var(--color-accent, #2B5BD7)",
-          color: muted ? "#0C0E14" : "#fff",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 9, lineHeight: 1, fontWeight: 900,
+          fontSize: 8,
+          lineHeight: 1,
+          fontWeight: 800,
+          letterSpacing: "0.03em",
+          color: muted ? "rgba(255,255,255,0.7)" : "#8AB4FF",
+          whiteSpace: "nowrap",
         }}>
-          {muted ? "✕" : "♪"}
+          {muted ? "БЕЗ ЗВУКА" : "ЗВУК ВКЛ"}
         </span>
       </button>
 
@@ -87,7 +89,7 @@ export function HeroVideo({
           padding: "5px 10px", borderRadius: 8,
           background: "rgba(0,0,0,0.55)", color: "#fff",
           fontSize: "0.72rem", fontWeight: 600, lineHeight: 1.3,
-          backdropFilter: "blur(6px)", maxWidth: "70%",
+          backdropFilter: "blur(6px)", maxWidth: "calc(100% - 80px)",
         }}>
           {caption}
         </div>

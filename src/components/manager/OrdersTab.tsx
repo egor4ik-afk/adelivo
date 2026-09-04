@@ -53,6 +53,9 @@ export function OrdersTab() {
   const [busy, setBusy] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<FilterId>("all");
+  // Магазинов стало несколько и в разных городах. Поиск по строке магазин
+  // тоже находил, но только если помнить слаг и не перепутать его с адресом.
+  const [shop, setShop] = useState("ALL");
   // Право выкладывать на биржу выдаётся в матрице доступов.
   // У менеджера Банча кнопки быть не должно, у админа она есть всегда.
   const [canPost, setCanPost] = useState(false);
@@ -134,11 +137,20 @@ export function OrdersTab() {
       if (filter === "exchange" && !o.onExchange) return false;
       if (filter === "active" && (done.includes(o.status) || !o.courierId)) return false;
       if (filter === "done" && !done.includes(o.status)) return false;
+      if (shop !== "ALL" && (o.shop || "") !== shop) return false;
       if (!q.trim()) return true;
       const hay = `${o.externalId ?? ""} ${o.crmId} ${o.address ?? ""} ${o.name ?? ""} ${o.recipientPhone ?? ""} ${o.courier ?? ""} ${o.shop ?? ""}`.toLowerCase();
       return hay.includes(q.toLowerCase().trim());
     });
-  }, [orders, filter, q]);
+  }, [orders, filter, shop, q]);
+
+  // Список для выпадающего меню собираем из самих заказов: так в нём
+  // заведомо только те магазины, чьи заказы менеджер видит, и новый
+  // магазин появляется сам, без правки справочника.
+  const shops = useMemo(
+    () => Array.from(new Set(orders.map((o) => o.shop).filter(Boolean) as string[])).sort(),
+    [orders]
+  );
 
   const slot = (o: Order) => (o.slotFrom && o.slotTo ? `${o.slotFrom}–${o.slotTo}` : o.slotFrom || "—");
 
@@ -173,6 +185,20 @@ export function OrdersTab() {
             </button>
           ))}
         </div>
+        {/* Показываем, только когда магазинов больше одного: одинокий
+            выпадающий список с единственным пунктом лишь занимает место */}
+        {shops.length > 1 && (
+          <select
+            value={shop}
+            onChange={(e) => setShop(e.target.value)}
+            className="px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] text-[13px] font-bold text-[var(--color-text)] outline-none focus:border-[var(--color-accent)]"
+          >
+            <option value="ALL">Все магазины</option>
+            {shops.map((sl) => (
+              <option key={sl} value={sl}>{sl}</option>
+            ))}
+          </select>
+        )}
         <button onClick={load} className="px-3 py-2 rounded-lg border border-[var(--color-border)] text-[12px] font-bold text-[var(--color-text-2)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)] transition-colors">
           Обновить
         </button>

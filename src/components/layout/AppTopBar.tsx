@@ -26,8 +26,16 @@ type Me = {
   isSuperAdmin?: boolean;
 };
 
-/** Экраны курьера: там своя нижняя навигация, верхняя шапка мешает. */
-const COURIER_AREA = "/courier";
+/**
+ * Экраны курьера: там своя нижняя навигация, верхняя шапка мешает.
+ *
+ * Проверять через startsWith("/courier") нельзя: под условие попадает и
+ * «/couriers» — админский раздел с выплатами и сменами. Из-за одной буквы
+ * шапка там не показывалась вовсе, ни меню, ни профиля.
+ */
+function isCourierArea(pathname: string): boolean {
+  return pathname === "/courier" || pathname.startsWith("/courier/");
+}
 
 /** Дашборд рисует навигацию сам — иначе поверх карты было бы две шапки. */
 const OWN_HEADER = ["/dashboard"];
@@ -47,7 +55,7 @@ export function AppTopBar() {
   const hidden =
     !me ||
     pathname === "/login" ||
-    pathname.startsWith(COURIER_AREA) ||
+    isCourierArea(pathname) ||
     OWN_HEADER.includes(pathname);
 
   if (hidden) return null;
