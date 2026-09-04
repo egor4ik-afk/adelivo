@@ -267,8 +267,8 @@ export function LandingPage() {
                   {/* Главное действие — пробный период, а не «оставить заявку»:
                       заявка ни к чему не обязывает, но и ничего не обещает,
                       а семь дней без оплаты — понятный повод начать. */}
-                  <a
-                    href="#request"
+                  <Link
+                    href="/register-company"
                     className="btn-pri"
                     style={{
                       display: "inline-flex", alignItems: "center", justifyContent: "center",
@@ -277,7 +277,7 @@ export function LandingPage() {
                     }}
                   >
                     Попробовать 7 дней бесплатно →
-                  </a>
+                  </Link>
                   <div style={{ color: C.muted, fontSize: "0.8rem", marginBottom: "1.6rem" }}>
                     Без карты и предоплаты. Подключим магазин и покажем, как это работает на ваших заказах.
                   </div>
@@ -377,19 +377,6 @@ export function LandingPage() {
           <div className="divider" />
           <section id="features" className="sec">
             <div className="wrap">
-              {/* Ролик про менеджера и курьера — здесь, а не в первом экране.
-                  Первый экран показывает интерфейс скриншотом, а этот раздел
-                  как раз отвечает на вопрос «как это выглядит в работе».
-                  Стартует беззвучно: автозапуск со звуком браузеры блокируют,
-                  звук включается кнопкой на самом ролике. */}
-              <div style={{ maxWidth: 720, margin: "0 auto 3rem" }}>
-                <HeroVideo
-                  src="https://cdn.relaxdev.ru/admin/1.mp4"
-                  poster="/og-image.webp"
-                  caption="Менеджер и курьер в работе — 10 секунд"
-                />
-              </div>
-
               <div className="g2r">
                 <div>
                   <Label t="Платформа" />
@@ -850,7 +837,7 @@ export function LandingPage() {
 
         {/* Кнопка пробного периода поверх страницы: видна с любого места,
             прячется на самой форме, чтобы не перекрывать поля */}
-        <TrialCta targetId="request" />
+        <TrialCta href="/register-company" hideNearId="request" />
       </div>
     </>
   );

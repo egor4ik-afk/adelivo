@@ -6,6 +6,7 @@ import {
   FaqSection, Related, breadcrumbJsonLd, faqJsonLd, type Faq, type Crumb,
 } from "@/components/seo/ui";
 import { CompanyRegisterForm } from "@/components/company/CompanyRegisterForm";
+import { HeroVideo } from "@/components/landing/HeroVideo";
 import { getSession } from "@/lib/auth";
 
 const PATH = "/register-company";
@@ -26,7 +27,7 @@ export const metadata: Metadata = {
     description: "Свой магазин, свои сотрудники, своя диспетчерская. Подключение бесплатно.",
     url: `${SITE_URL}${PATH}`,
     siteName: "ADelivo",
-    images: [{ url: "/og-image.webp", width: 1200, height: 630, alt: "Регистрация компании в ADelivo" }],
+    images: [{ url: "/og-image.jpg", width: 1200, height: 630, alt: "Регистрация компании в ADelivo" }],
     locale: "ru_RU",
     type: "website",
   },
@@ -85,6 +86,43 @@ export default async function Page() {
               />
             </div>
             <CompanyRegisterForm />
+          </div>
+        </div>
+      </section>
+
+      {/* Оба ролика здесь, на целевой странице пробного периода.
+          На лендинге они были разбросаны по середине страницы, а на
+          /company стояли под авторизацией — рекламировать продукт тому,
+          кто им уже пользуется, смысла нет. */}
+      <div className="divider" />
+      <section className="sec">
+        <div className="wrap">
+          <div style={{ textAlign: "center", marginBottom: "2rem" }}>
+            <Label t="Как это выглядит" />
+            <H2>Две стороны системы за 20 секунд</H2>
+          </div>
+
+          <div style={{ display: "grid", gap: "1.5rem", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
+            <div>
+              <HeroVideo
+                src="https://cdn.relaxdev.ru/admin/2.mp4"
+                poster="/og-image.jpg"
+                caption="Кабинет компании и оператора"
+              />
+              <p style={{ fontSize: "0.82rem", color: "var(--color-text-3)", marginTop: "0.7rem", lineHeight: 1.6 }}>
+                Подключение магазина, распределение заказов по курьерам, карта и зоны.
+              </p>
+            </div>
+            <div>
+              <HeroVideo
+                src="https://cdn.relaxdev.ru/admin/1.mp4"
+                poster="/og-image.jpg"
+                caption="Менеджер и курьер в работе"
+              />
+              <p style={{ fontSize: "0.82rem", color: "var(--color-text-3)", marginTop: "0.7rem", lineHeight: 1.6 }}>
+                Сборка маршрута, приложение курьера, статусы и фото доставки.
+              </p>
+            </div>
           </div>
         </div>
       </section>

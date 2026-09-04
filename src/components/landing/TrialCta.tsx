@@ -2,14 +2,18 @@
 
 import { useEffect, useState } from "react";
 
-export function TrialCta({ targetId = "request" }: { targetId?: string }) {
+export function TrialCta({
+  href = "/register-company",
+  /** Якорь, рядом с которым кнопку нужно спрятать, чтобы не мешать форме. */
+  hideNearId = "request",
+}: { href?: string; hideNearId?: string }) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     // Не показываем в самом верху (там своя большая кнопка в первом экране)
     // и на самой форме — иначе кнопка перекрывала бы поля.
     const onScroll = () => {
-      const form = document.getElementById(targetId);
+      const form = document.getElementById(hideNearId);
       const formTop = form ? form.getBoundingClientRect().top : Infinity;
       setVisible(window.scrollY > 500 && formTop > window.innerHeight * 0.6);
     };
@@ -20,11 +24,14 @@ export function TrialCta({ targetId = "request" }: { targetId?: string }) {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
     };
-  }, [targetId]);
+  }, [hideNearId]);
 
   return (
     <a
-      href={`#${targetId}`}
+      // Ведём на регистрацию компании: это целевая страница пробного
+      // периода. Раньше кнопка скроллила к форме заявки, из которой
+      // начать самому было нельзя — только ждать менеджера.
+      href={href}
       style={{
         position: "fixed",
         // На мобиле кнопка растягивается по ширине: попасть пальцем в узкую

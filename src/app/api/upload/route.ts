@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getSession } from "@/lib/auth";
+import { publicFileUrl } from "@/lib/file-url";
 
 const s3 = new S3Client({
   region: process.env.YANDEX_REGION || "ru-central1",
@@ -32,8 +33,10 @@ export async function POST(req: NextRequest) {
     // Генерируем ссылку для загрузки, которая действительна 1 час (3600 секунд)
     const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
     
-    // 🔥 ИЗМЕНЕНО: Итоговая публичная ссылка на файл теперь использует ваш CDN домен
-    const fileUrl = `https://cdn.relaxdev.ru/${key}`;
+    // Ссылка ведёт прямо в Object Storage, а не через cdn.relaxdev.ru.
+    // Через CDN Telegram не забирал картинку и вместо превью показывал
+    // текст со ссылкой.
+    const fileUrl = publicFileUrl(process.env.YANDEX_BUCKET_NAME!, key);
 
     return NextResponse.json({ uploadUrl, fileUrl });
   } catch (e) {

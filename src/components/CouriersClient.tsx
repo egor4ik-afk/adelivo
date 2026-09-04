@@ -2,10 +2,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { OrderDetail } from "./OrderDetail";
 import { RouteEditor } from "./RouteEditor";
-import Link from "next/link";
 
 interface CourierShift {
   id: string;
@@ -50,7 +48,6 @@ function formatDay(dateStr: string) {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function CouriersClient({ user }: { user: any }) {
-  const router = useRouter();
   const [isMobile, setIsMobile] = useState(false);
   const [couriers, setCouriers] = useState<Courier[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -537,17 +534,10 @@ export function CouriersClient({ user }: { user: any }) {
 
   return (
     <div style={s.app}>
-      <div style={s.topbar}>
-        <Link href="/dashboard" style={{ textDecoration: "none" }}>
-          <div style={s.logo}>
-            <img src="/favicon.svg" alt="Logo" style={{ width: 22, height: 22 }} />
-            ADelivo
-          </div>
-        </Link>
-        <button onClick={() => router.push('/dashboard')} style={s.navBtn}>🗺️ Дашборд</button>
-        <button onClick={() => router.push('/orders')} style={s.navBtn}>≡ Заказы</button>
-        <div style={{ flex: 1 }} />
-      </div>
+      {/* Своей шапки здесь больше нет. Она перекрывала общую AppTopBar
+          и была единственным местом, где не было ни бургера, ни профиля:
+          только логотип и две кнопки на «Дашборд» и «Заказы». Обе есть
+          в общем меню. */}
 
       <div style={{ ...s.content, padding: isMobile ? "16px 12px" : "24px" }}>
         <div style={{ ...s.headerRow, flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "flex-end" }}>
@@ -1263,7 +1253,9 @@ export function CouriersClient({ user }: { user: any }) {
 }
 
 const s: Record<string, React.CSSProperties> = {
-  app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "var(--color-bg)", overflow: "auto" },
+  // height было 100vh — вместе с общей шапкой страница получалась выше
+  // экрана ровно на её высоту и всегда прокручивалась вхолостую
+  app: { display: "flex", flexDirection: "column", minHeight: "calc(100vh - 56px)", fontFamily: "Manrope, system-ui, sans-serif", background: "var(--color-bg)", overflow: "auto" },
   topbar: { display: "flex", alignItems: "center", gap: 8, padding: "0 16px", height: 52, background: "var(--color-card)", borderBottom: "1px solid var(--color-border)", flexShrink: 0 },
   logo: { fontSize: 15, fontWeight: 600, color: "var(--color-text)", display: "flex", alignItems: "center", gap: 7, marginRight: "auto", flexShrink: 0 },
   navBtn: { padding: "5px 10px", borderRadius: 6, border: "1px solid var(--color-border)", background: "var(--color-surface)", fontSize: 11, fontWeight: 600, cursor: "pointer", color: "var(--color-text)", whiteSpace: "nowrap" },

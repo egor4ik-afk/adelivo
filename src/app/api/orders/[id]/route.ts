@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { toStorageUrl } from "@/lib/file-url";
 import { getSession } from "@/lib/auth";
 import { updateCrmOrder, updateCrmOrderDeliveryPrice } from "@/lib/crm";
 import { OrderStatus } from "@prisma/client";
@@ -376,42 +377,30 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
           .filter(Boolean).join(", ");
         console.warn(`[Photo] Не отправлено в Telegram, не задано: ${missing}`);
       } else {
-        const caption =
-          `📸 *Фото к заказу ${order.externalId || order.crmId}*\n` +
-          `📍 *Адрес:* ${order.address || "—"}` +
-          (updatedOrder.courier ? `\n🚚 *Курьер:* ${updatedOrder.courier}` : "");
+        // Ссылка на файл: в базе она может быть ещё старой, через
+        // cdn.relaxdev.ru. Приводим к адресу хранилища — по нему Telegram
+        // сам строит превью, и картинка снова видна в чате.
+        const photoUrl = toStorageUrl(body.photoUrl, process.env.YANDEX_BUCKET_NAME || "izipost");
+
+        // Без Markdown: в адресах и именах файлов попадаются _ и *, на
+        // которых разбор падает, и сообщение не уходило вовсе.
+        const text =
+          `📸 Фото к заказу ${order.externalId || order.crmId}\n` +
+          `📍 Адрес: ${order.address || "—"}` +
+          (updatedOrder.courier ? `\n🚚 Курьер: ${updatedOrder.courier}` : "") +
+          `\n\n${photoUrl}`;
 
         // Не блокируем ответ курьеру: телефон должен получить ответ сразу,
         // а доставка сообщения админу может занять секунды
         void (async () => {
           try {
-            const res = await fetch(`https://api.telegram.org/bot${tgToken}/sendPhoto`, {
+            const res = await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                chat_id: tgChat,
-                photo: body.photoUrl,
-                caption,
-                parse_mode: "Markdown",
-              }),
+              body: JSON.stringify({ chat_id: tgChat, text }),
             });
-
             if (!res.ok) {
-              const err = await res.text().catch(() => "");
-              console.error("[Photo] Telegram sendPhoto:", res.status, err);
-
-              // Частый случай: Telegram не смог сам скачать файл по ссылке
-              // (приватный бакет, медленный ответ хранилища). Тогда хотя бы
-              // отправляем ссылку текстом — админ откроет её руками.
-              await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  chat_id: tgChat,
-                  text: `${caption}\n\n🔗 ${body.photoUrl}`,
-                  parse_mode: "Markdown",
-                }),
-              }).catch((e) => console.error("[Photo] Telegram fallback:", e));
+              console.error("[Photo] Telegram sendMessage:", res.status, await res.text().catch(() => ""));
             }
           } catch (e) {
             console.error("[Photo] Telegram недоступен:", e);

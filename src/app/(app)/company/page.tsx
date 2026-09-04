@@ -3,7 +3,6 @@
 import { redirect } from "next/navigation";
 import { getViewer } from "@/lib/access";
 import { CompanyClient } from "@/components/company/CompanyClient";
-import { HeroVideo } from "@/components/landing/HeroVideo";
 
 export const metadata = { title: "Компания" };
 
@@ -27,17 +26,6 @@ export default async function CompanyPage() {
       </div>
 
       <main className="max-w-[900px] mx-auto p-3 sm:p-6">
-        {/* Короткий ролик про кабинет компании и оператора: страница
-            настроек — единственное место, куда админ заходит редко и
-            каждый раз заново вспоминает, что здесь к чему. */}
-        <div className="mb-5">
-          <HeroVideo
-            src="https://cdn.relaxdev.ru/admin/2.mp4"
-            poster="/og-image.webp"
-            caption="Кабинет компании и оператора — 10 секунд"
-          />
-        </div>
-
         <CompanyClient siteUrl={SITE_URL} />
       </main>
     </div>

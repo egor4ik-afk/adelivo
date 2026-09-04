@@ -1,6 +1,7 @@
 // src/components/GlobalChat.tsx
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
+import { storageKeyOf } from "@/lib/file-url";
 import imageCompression from "browser-image-compression";
 import { usePathname } from "next/navigation";
 
@@ -134,8 +135,10 @@ export function GlobalChat({ currentUserId, isCourier = false }: { currentUserId
 
   const forceDownload = async (url: string, filename: string) => {
     try {
-      // Вырезаем key из CDN URL: cdn.relaxdev.ru/chat/123.jpg → chat/123.jpg
-      const key = new URL(url).pathname.replace(/^\//, "");
+      // Ключ объекта. Ссылки бывают двух видов: старые через cdn.relaxdev.ru
+      // (в пути только key) и новые через storage.yandexcloud.net, где первым
+      // сегментом идёт имя бакета. storageKeyOf разбирает оба.
+      const key = storageKeyOf(url, "izipost");
 
       // Дёргаем iziposta для получения presigned download URL
       const IZIPOSTA_URL = "https://izipost.ru";
