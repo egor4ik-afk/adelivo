@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     description: "Двусторонний обмен заказами, статусами и курьерами между RetailCRM и ADelivo.",
     url: `${SITE_URL}${PATH}`,
     siteName: "ADelivo",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "ADelivo и RetailCRM" }],
+    images: [{ url: "/og-image.webp", width: 1200, height: 630, alt: "ADelivo и RetailCRM" }],
     locale: "ru_RU",
     type: "website",
   },

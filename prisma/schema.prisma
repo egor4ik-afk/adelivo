@@ -203,6 +203,10 @@ model User {
   accessRestricted Boolean @default(false)
   canPostExchange  Boolean @default(false)
   companyId        String?
+
+  /// Смены сотрудника (менеджера, оператора, админа). У курьеров свой
+  /// CourierShift: он привязан к Courier из CRM, а не к учётной записи.
+  staffShifts      StaffShift[]
   company          Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   shopAccess       ShopAccess[]
   /// Кэш связи с профилем курьера. Сейчас связь ищется по email
@@ -322,6 +326,25 @@ model CourierShift {
   courier Courier @relation(fields: [courierId], references: [id], onDelete: Cascade)
 
   @@unique([courierId, date])
+}
+
+/// График сотрудников офиса: те же недельные смены, что у курьеров,
+/// но привязанные к User. Курьерские смены сюда не дублируются —
+/// они остаются в CourierShift, страница показывает их отдельной вкладкой.
+model StaffShift {
+  id        String @id @default(cuid())
+  userId    String
+  /// Дата в формате YYYY-MM-DD — как в CourierShift, чтобы сравнения
+  /// не зависели от часового пояса
+  date      String
+
+  startTime String? @default("10:00")
+  endTime   String? @default("22:00")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([date])
 }
 
 model CourierPayment {

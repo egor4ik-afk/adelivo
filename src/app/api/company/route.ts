@@ -53,8 +53,25 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ company: null, shops: [], canCreate: true });
   }
 
+  // Глобальный админ видит магазины всех компаний, а не только своей.
+  //
+  // Раньше выборка всегда шла через company.shops, то есть жёстко по
+  // viewer.companyId. Отсюда же росла жалоба «у курьера в Тбилиси на карте
+  // одна московская база»: карта берёт базы из этого эндпоинта, а он отдаёт
+  // магазины только той компании, к которой человек привязан.
+  const rawShops = viewer.isSuperAdmin
+    ? await prisma.shop.findMany({
+        include: {
+          connector: true,
+          _count: { select: { orders: true } },
+          company: { select: { name: true } },
+        },
+        orderBy: [{ companyId: "asc" }, { createdAt: "asc" }],
+      })
+    : company.shops;
+
   // Ключи наружу не отдаём — только признак, что они заполнены
-  const shops = company.shops.map((s) => ({
+  const shops = rawShops.map((s) => ({
     id: s.id,
     slug: s.slug,
     name: s.name,
@@ -68,6 +85,9 @@ export async function GET(req: NextRequest) {
     storeLng: s.storeLng,
     city: s.city,
     ordersCount: s._count.orders,
+    // Есть только в выборке глобального админа: без названия компании
+    // список из десятка чужих магазинов невозможно читать
+    companyName: (s as { company?: { name: string } }).company?.name ?? null,
     connector: s.connector
       ? {
           type: s.connector.type,
@@ -93,6 +113,9 @@ export async function GET(req: NextRequest) {
     },
     shops,
     isAdmin: viewer.role === "ADMIN" || viewer.isSuperAdmin,
+    // Клиент по этому признаку показывает колонку с компанией и поясняет,
+    // что список глобальный, а не «мои магазины»
+    isSuperAdmin: viewer.isSuperAdmin,
   });
 }
 

@@ -26,7 +26,7 @@ export const metadata: Metadata = {
     description: "Свой магазин, свои сотрудники, своя диспетчерская. Подключение бесплатно.",
     url: `${SITE_URL}${PATH}`,
     siteName: "ADelivo",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Регистрация компании в ADelivo" }],
+    images: [{ url: "/og-image.webp", width: 1200, height: 630, alt: "Регистрация компании в ADelivo" }],
     locale: "ru_RU",
     type: "website",
   },

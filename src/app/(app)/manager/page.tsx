@@ -2,7 +2,6 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { ProfilePanel } from '@/components/ProfilePanel';
 import Link from 'next/link';
 import { OrdersTab } from '@/components/manager/OrdersTab';
 
@@ -103,9 +102,7 @@ export default function ManagerDashboard() {
   const [history, setHistory] = useState<any[]>([]);
   const [routes, setRoutes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(false);
-  const [headerProfile, setHeaderProfile] = useState<{ firstName?: string | null; lastName?: string | null; email?: string; avatarUrl?: string | null } | null>(null);
 
   // Состояния для аккордеонов (разворачивания маршрутов)
   const [expandedRoutes, setExpandedRoutes] = useState<Record<string, boolean>>({});
@@ -143,14 +140,9 @@ export default function ManagerDashboard() {
       .catch((err) => { if (err.message === 'Not logged in') window.location.replace('/login'); });
   }, []);
 
-  // Аватарка/инициалы для кнопки в шапке — те же данные, что и в ProfilePanel
-  useEffect(() => {
-    if (!isAuthorized) return;
-    fetch('/api/profile')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => { if (data) setHeaderProfile(data); })
-      .catch(() => { });
-  }, [isAuthorized]);
+  // Запрос профиля отсюда убран: аватар и панель профиля теперь живут
+  // в общей шапке AppTopBar, которая тянет /api/profile сама. Здесь это
+  // был второй такой же запрос на каждую загрузку страницы.
 
   const loadData = useCallback(async (showLoadingState = true) => {
     if (showLoadingState) setLoading(true);
@@ -313,39 +305,23 @@ export default function ManagerDashboard() {
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)]">
-      <header className="bg-[var(--color-card)] shadow-sm border-b border-[var(--color-border)] px-6 py-4 flex justify-between items-center sticky top-0 z-20">
-        <div className="flex items-center gap-3">
-          <img src="/favicon.svg" alt="Logo" className="w-8 h-8" />
-          <h1 className="text-xl font-bold text-[var(--color-text)] tracking-tight">Кабинет менеджера</h1>
-        </div>
-        <div className="flex items-center gap-2 sm:gap-3">
-          <Link
-            href="/manager/orders/new"
-            className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-[12px] sm:text-sm font-bold shadow-sm hover:bg-[var(--color-accent-dark)] transition-colors shrink-0"
-            title="Создать заказ вручную"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            <span className="hidden sm:inline">Заказ</span>
-          </Link>
-
-          <div className="relative">
-          <button onClick={() => setIsProfileOpen(!isProfileOpen)} className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center hover:opacity-90 transition-opacity shrink-0" title="Профиль">
-            {headerProfile?.avatarUrl ? (
-              <img src={headerProfile.avatarUrl} alt="Профиль" className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full bg-[var(--color-accent)] text-white flex items-center justify-center text-[15px] font-semibold">
-                {headerProfile
-                  ? (((headerProfile.firstName?.[0] ?? '') + (headerProfile.lastName?.[0] ?? '')).toUpperCase() || (headerProfile.email?.slice(0, 2).toUpperCase() ?? '??'))
-                  : '··'}
-              </div>
-            )}
-          </button>
-          {isProfileOpen && <div className="absolute right-0 top-14 z-50"><ProfilePanel onClose={() => setIsProfileOpen(false)} /></div>}
-          </div>
-        </div>
-      </header>
+      {/* Собственной шапки с профилем здесь больше нет: её роль взял общий
+          AppTopBar, одинаковый на всех разделах. Осталась только строка
+          заголовка и кнопка создания заказа — то, что относится именно
+          к менеджеру. */}
+      <div className="max-w-[1600px] mx-auto w-full px-3 sm:px-6 pt-4 flex items-center justify-between gap-3">
+        <h1 className="text-lg sm:text-xl font-bold text-[var(--color-text)] tracking-tight">Кабинет менеджера</h1>
+        <Link
+          href="/manager/orders/new"
+          className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-[12px] sm:text-sm font-bold shadow-sm hover:bg-[var(--color-accent-dark)] transition-colors shrink-0"
+          title="Создать заказ вручную"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          <span className="hidden sm:inline">Заказ</span>
+        </Link>
+      </div>
 
       <main className="max-w-[1600px] mx-auto p-3 sm:p-6 w-full overflow-hidden">
         <div className="w-full overflow-x-auto hide-scrollbar mb-4 sm:mb-6 pb-2">

@@ -1,10 +1,21 @@
 // src/components/layout/AppTopBar.tsx
+// Единая шапка авторизованных разделов: логотип, навигация, профиль.
+//
+// Прежде она пряталась на /manager и /dashboard, потому что у тех экранов
+// была своя шапка со своим набором ссылок. Из-за этого меню отличалось от
+// раздела к разделу. Теперь шапка одна и показывается везде, кроме входа
+// и курьерских экранов (там своя нижняя навигация).
+//
+// Дашборд — исключение по месту, а не по составу: там карта на весь экран,
+// поэтому он рисует у себя компактный AppMenu с тем же списком разделов.
 "use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ProfilePanel } from "@/components/ProfilePanel";
+import { AppMenu } from "./AppMenu";
+import { navFor, isActiveNav } from "./navItems";
 
 type Me = {
   id: string;
@@ -15,25 +26,11 @@ type Me = {
   isSuperAdmin?: boolean;
 };
 
-/**
- * Разделы, где панель профиля уже встроена в собственную шапку.
- * Проверено по коду: ProfilePanel есть в manager/page.tsx и DashboardClient.
- * Остальные экраны — /couriers, /courier/*, /company, /admin, формы заказа —
- * своей панели не имели, попасть в профиль оттуда было нельзя.
- */
-const OWN_HEADER = ["/manager", "/dashboard"];
-
 /** Экраны курьера: там своя нижняя навигация, верхняя шапка мешает. */
 const COURIER_AREA = "/courier";
 
-const NAV = [
-  { href: "/dashboard", label: "Дашборд", roles: ["ADMIN", "OPERATOR"] },
-  { href: "/manager", label: "Менеджер", roles: ["ADMIN", "OPERATOR"] },
-  { href: "/couriers", label: "Курьеры", roles: ["ADMIN", "OPERATOR"] },
-  { href: "/courier/routes", label: "Мои маршруты", roles: ["COURIER"] },
-  { href: "/company", label: "Компания", roles: ["ADMIN"] },
-  { href: "/admin", label: "Пользователи", roles: ["ADMIN"] },
-];
+/** Дашборд рисует навигацию сам — иначе поверх карты было бы две шапки. */
+const OWN_HEADER = ["/dashboard"];
 
 export function AppTopBar() {
   const pathname = usePathname();
@@ -47,34 +44,46 @@ export function AppTopBar() {
       .catch(() => setMe(null));
   }, []);
 
-  // На страницах с собственной шапкой и на экранах входа не показываем
   const hidden =
     !me ||
     pathname === "/login" ||
     pathname.startsWith(COURIER_AREA) ||
-    // Форма заказа лежит внутри /manager, но своей шапки с профилем не имеет —
-    // поэтому исключаем только сам /manager, а не всё поддерево
-    pathname === "/manager" ||
     OWN_HEADER.includes(pathname);
 
   if (hidden) return null;
+
+  const items = navFor(me.role, me.isSuperAdmin);
+  // В горизонтальной строке — только основные пункты; остальные живут
+  // в бургере, который на узком экране заменяет её целиком
+  const primary = items.filter((n) => !n.secondary);
 
   const initials =
     [me.firstName?.[0], me.lastName?.[0]].filter(Boolean).join("").toUpperCase() || "?";
 
   return (
-    <header className="bg-[var(--color-card)] border-b border-[var(--color-border)] px-4 sm:px-6 py-3 flex items-center justify-between gap-3 sticky top-0 z-30">
-      <div className="flex items-center gap-3 min-w-0">
-        <Link href={me.role === "COURIER" ? "/courier/routes" : "/dashboard"} className="font-extrabold text-[15px] tracking-tight text-[var(--color-text)] shrink-0">
+    <header className="bg-[var(--color-card)] border-b border-[var(--color-border)] px-3 sm:px-6 py-3 flex items-center justify-between gap-2 sm:gap-3 sticky top-0 z-30">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        {/* На мобиле навигация целиком уезжает в бургер: горизонтальный
+            список из шести пунктов на 360px превращался в неудобную
+            горизонтальную прокрутку, где половина ссылок была за краем */}
+        <div className="md:hidden">
+          <AppMenu role={me.role} isSuperAdmin={me.isSuperAdmin} compact />
+        </div>
+
+        <Link
+          href={me.role === "COURIER" ? "/courier/routes" : "/dashboard"}
+          className="font-extrabold text-[15px] tracking-tight text-[var(--color-text)] shrink-0"
+        >
           ADelivo
         </Link>
-        <nav className="flex gap-1 overflow-x-auto hide-scrollbar">
-          {NAV.filter((n) => n.roles.includes(me.role)).map((n) => (
+
+        <nav className="hidden md:flex gap-1">
+          {primary.map((n) => (
             <Link
               key={n.href}
               href={n.href}
               className={`px-3 py-1.5 rounded-lg text-[12px] font-bold whitespace-nowrap transition-colors ${
-                pathname.startsWith(n.href)
+                isActiveNav(n, pathname, items)
                   ? "bg-[var(--color-surface)] text-[var(--color-text)]"
                   : "text-[var(--color-text-2)] hover:text-[var(--color-text)]"
               }`}
@@ -83,6 +92,11 @@ export function AppTopBar() {
             </Link>
           ))}
         </nav>
+
+        {/* Второстепенные пункты на широком экране — тоже в бургере */}
+        <div className="hidden md:block">
+          <AppMenu role={me.role} isSuperAdmin={me.isSuperAdmin} compact />
+        </div>
       </div>
 
       <div className="relative shrink-0">

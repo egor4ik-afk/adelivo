@@ -26,7 +26,7 @@ export const metadata: Metadata = {
     description: "Карточка курьера, смены, ставки по зонам, автоматический расчёт и карта в реальном времени.",
     url: `${SITE_URL}${PATH}`,
     siteName: "ADelivo",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Управление курьерами в ADelivo" }],
+    images: [{ url: "/og-image.webp", width: 1200, height: 630, alt: "Управление курьерами в ADelivo" }],
     locale: "ru_RU",
     type: "website",
   },

@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     description: "Сделки из Битрикс24 → маршруты курьеров → статус обратно в карточку сделки.",
     url: `${SITE_URL}${PATH}`,
     siteName: "ADelivo",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "ADelivo и Битрикс24" }],
+    images: [{ url: "/og-image.webp", width: 1200, height: 630, alt: "ADelivo и Битрикс24" }],
     locale: "ru_RU",
     type: "website",
   },

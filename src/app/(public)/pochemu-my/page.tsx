@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     description: "Excel и чаты, коробка, своя разработка или ADelivo: что выбрать и почему.",
     url: `${SITE_URL}${PATH}`,
     siteName: "ADelivo",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Почему ADelivo" }],
+    images: [{ url: "/og-image.webp", width: 1200, height: 630, alt: "Почему ADelivo" }],
     locale: "ru_RU",
     type: "website",
   },

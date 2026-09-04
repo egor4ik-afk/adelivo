@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     description: "Расчёт, акт, подписание и перевод на карту — без ручной работы бухгалтера.",
     url: `${SITE_URL}${PATH}`,
     siteName: "ADelivo",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "ADelivo и Консоль.Про" }],
+    images: [{ url: "/og-image.webp", width: 1200, height: 630, alt: "ADelivo и Консоль.Про" }],
     locale: "ru_RU",
     type: "website",
   },

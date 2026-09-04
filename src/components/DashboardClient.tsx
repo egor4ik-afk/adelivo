@@ -19,7 +19,7 @@ import { getCity } from "@/lib/cities";
 // из cities.ts. Раньше здесь лежал адрес Банча на Пресне и подставлялся
 // всем: воронежский маршрут строился из Москвы.
 
-interface User { id: string; email: string; role: string; avatarUrl?: string | null; firstName?: string | null; lastName?: string | null; }
+interface User { id: string; email: string; role: string; avatarUrl?: string | null; firstName?: string | null; lastName?: string | null; isSuperAdmin?: boolean; }
 interface DbCourier {
   id: number; fullName: string; isActive: boolean; shifts: { date: string, startTime?: string, endTime?: string }[];
   lat?: number | null; lng?: number | null;
@@ -2159,7 +2159,7 @@ export function DashboardClient({ user }: { user: User }) {
             «Заказы» и «Курьеры» переехали сюда из топбара: они занимали
             место, которого на мобильном не хватало фильтрам и датам,
             а нажимают их несколько раз за смену, не постоянно. */}
-        <AppMenu isAdmin={user.role === "ADMIN"} compact={isMobile} />
+        <AppMenu role={user.role} isSuperAdmin={user.isSuperAdmin} compact={isMobile} />
 
         {/* 🔥 ПОКАЗЫВАЕМ ЭТО ТОЛЬКО НА ДЕСКТОПЕ (На мобилке они уедут во 2-й ряд) */}
         {!isMobile && (

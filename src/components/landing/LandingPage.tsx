@@ -1,7 +1,9 @@
-// src/app/about/page.tsx
-import Image from "next/image";
+// src/components/landing/LandingPage.tsx
 import Link from "next/link";
+import Image from "next/image";
 import { RequestForm } from "@/components/RequestForm";
+import { HeroVideo } from "@/components/landing/HeroVideo";
+import { TrialCta } from "@/components/landing/TrialCta";
 import { C } from "@/components/theme/theme";
 
 const SITE_URL = "https://adelivo.ru";
@@ -262,8 +264,25 @@ export function LandingPage() {
                     Интеграция с CRM и Консоль.Про — <strong style={{ color: C.text }}>вся бухгалтерия на нас</strong>.
                     Работа в белую: СЗ, ИП, ГПХ.
                   </p>
+                  {/* Главное действие — пробный период, а не «оставить заявку»:
+                      заявка ни к чему не обязывает, но и ничего не обещает,
+                      а семь дней без оплаты — понятный повод начать. */}
+                  <a
+                    href="#request"
+                    className="btn-pri"
+                    style={{
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      fontSize: "clamp(1rem,2vw,1.15rem)", padding: "1rem 1.8rem",
+                      marginBottom: "0.7rem", width: "100%", maxWidth: 420, textAlign: "center",
+                    }}
+                  >
+                    Попробовать 7 дней бесплатно →
+                  </a>
+                  <div style={{ color: C.muted, fontSize: "0.8rem", marginBottom: "1.6rem" }}>
+                    Без карты и предоплаты. Подключим магазин и покажем, как это работает на ваших заказах.
+                  </div>
+
                   <div style={{ display: "flex", gap: "0.8rem", flexWrap: "wrap", marginBottom: "3rem" }}>
-                    <a href="#request" className="btn-pri">Оставить заявку →</a>
                     <Link href="/stat-kurerom" className="btn-courier">🛵 Стать курьером</Link>
                     <a href="https://t.me/adelivo" target="_blank" rel="noopener noreferrer" className="btn-ghost">Написать в Telegram</a>
                   </div>
@@ -285,8 +304,8 @@ export function LandingPage() {
 
                 {/* Dashboard mockup */}
                 <div>
-                <Image
-                    src="/og-image.png"
+                  <Image
+                    src="/og-image.webp"
                     alt="ADelivo — интерфейс системы диспетчеризации курьеров"
                     width={1200} height={630}
                     style={{ width: "100%", height: "auto", display: "block" }}
@@ -358,6 +377,19 @@ export function LandingPage() {
           <div className="divider" />
           <section id="features" className="sec">
             <div className="wrap">
+              {/* Ролик про менеджера и курьера — здесь, а не в первом экране.
+                  Первый экран показывает интерфейс скриншотом, а этот раздел
+                  как раз отвечает на вопрос «как это выглядит в работе».
+                  Стартует беззвучно: автозапуск со звуком браузеры блокируют,
+                  звук включается кнопкой на самом ролике. */}
+              <div style={{ maxWidth: 720, margin: "0 auto 3rem" }}>
+                <HeroVideo
+                  src="https://cdn.relaxdev.ru/admin/1.mp4"
+                  poster="/og-image.webp"
+                  caption="Менеджер и курьер в работе — 10 секунд"
+                />
+              </div>
+
               <div className="g2r">
                 <div>
                   <Label t="Платформа" />
@@ -600,7 +632,7 @@ export function LandingPage() {
               <H2>Прозрачное ценообразование</H2>
               <Desc>Выберите формат сотрудничества который подходит вашему бизнесу. Платите только за реальные заказы.</Desc>
 
-              <div className="g4" style={{ marginTop: "3rem" }}>
+              <div className="g3" style={{ marginTop: "3rem" }}>
                 {/* Полный аутсорс */}
                 <div className="price-card">
                   <div className="price-name">Полный аутсорс</div>
@@ -636,37 +668,23 @@ export function LandingPage() {
                   </ul>
                 </div>
 
-                {/* Есть логисты */}
+                {/* Тарифы «Есть логисты» и «Есть курьеры» убраны: они дробили
+                    выбор на четыре варианта, три из которых отличались только
+                    тем, чего у клиента нет. Всё промежуточное закрывает
+                    смешанный формат — он договорной, и о нём написано ниже. */}
                 <div className="price-card">
-                  <div className="price-name">Есть логисты</div>
+                  <div className="price-name">Смешанный формат</div>
                   <div>
-                    <div className="price-amount">от 50</div>
-                    <div className="price-unit">₽ за заказ</div>
+                    <div className="price-amount">договорная</div>
+                    <div className="price-unit">под задачу</div>
                   </div>
-                  <div className="price-desc">Есть логисты и операторы — нужны курьеры и бухгалтерия по СЗ/ИП/ГПХ.</div>
+                  <div className="price-desc">Часть команды ваша, часть наша. Соберём тот набор, которого не хватает, и посчитаем по факту.</div>
                   <ul className="price-features">
-                    <li><span className="x">—</span>Ваши логисты</li>
-                    <li><span className="check">✓</span>Наши курьеры</li>
-                    <li><span className="check">✓</span>Расчёт ЗП</li>
-                    <li><span className="check">✓</span>Акты и выплаты</li>
-                    <li><span className="check">✓</span>Консоль.Про</li>
-                  </ul>
-                </div>
-
-                {/* Есть курьеры */}
-                <div className="price-card">
-                  <div className="price-name">Есть курьеры</div>
-                  <div>
-                    <div className="price-amount">от 100</div>
-                    <div className="price-unit">₽ за заказ</div>
-                  </div>
-                  <div className="price-desc">Есть курьеры — нужны логисты, операторы и платформа для управления.</div>
-                  <ul className="price-features">
-                    <li><span className="check">✓</span>Наши логисты</li>
-                    <li><span className="x">—</span>Ваши курьеры</li>
-                    <li><span className="check">✓</span>Дашборд</li>
-                    <li><span className="check">✓</span>Маршрутизация</li>
-                    <li><span className="check">✓</span>Синх. с CRM</li>
+                    <li><span className="check">✓</span>Курьеры под пики</li>
+                    <li><span className="check">✓</span>Операторы на смену</li>
+                    <li><span className="check">✓</span>Бухгалтерия по СЗ/ИП/ГПХ</li>
+                    <li><span className="check">✓</span>Платформа целиком</li>
+                    <li><span className="check">✓</span>Обсудим в Telegram</li>
                   </ul>
                 </div>
               </div>
@@ -753,11 +771,13 @@ export function LandingPage() {
           <section id="request" className="sec-alt">
             <div className="wrap">
               <div style={{ textAlign: "center", marginBottom: "3rem" }}>
-                <Label t="Оставить заявку" />
-                <H2>Расчёт под ваш бизнес</H2>
+                <Label t="7 дней бесплатно" />
+                <H2>Начните с пробной недели</H2>
                 <p style={{ color: C.muted, fontSize: "0.95rem", lineHeight: 1.8, maxWidth: 560, margin: "0 auto" }}>
-                  Заполните форму — наш менеджер свяжется в Telegram и рассчитает стоимость под ваши объёмы.
+                  Заполните форму — подключим ваш магазин, а менеджер свяжется в Telegram
+                  и рассчитает стоимость под ваши объёмы. Первая неделя без оплаты и без карты.
                 </p>
+
               </div>
 
               <div className="form-wrap">
@@ -827,6 +847,10 @@ export function LandingPage() {
           </section>
 
         </main>
+
+        {/* Кнопка пробного периода поверх страницы: видна с любого места,
+            прячется на самой форме, чтобы не перекрывать поля */}
+        <TrialCta targetId="request" />
       </div>
     </>
   );
