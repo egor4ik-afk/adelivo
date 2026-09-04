@@ -293,36 +293,64 @@ export default function CourierPointsPage() {
 
     // Метки баз: квадратные, чтобы не путались с точками доставки.
     //
-    // Показываем только базы того города, в котором курьер сегодня работает,
-    // и только с реальными координатами. Без первого условия курьеру в
-    // Тбилиси прилетали московские магазины; без второго база без адреса
-    // рисовалась по центру города — два домика посреди Москвы, не имеющие
-    // отношения ни к одному заказу.
-    const visibleBases = bases.filter(
-      (b) =>
-        b.storeLat != null &&
-        b.storeLng != null &&
-        getCity(b.city).code === cityOfWork.code
-    );
+    // Базы собираются из самих заказов, а не из списка магазинов компании.
+    //
+    // /api/company отдаёт магазины только той компании, к которой привязан
+    // человек, поэтому у курьера на карте всегда была ровно одна база —
+    // независимо от того, из какого магазина его заказы. У каждого заказа
+    // в shopRef уже лежит база его магазина: это та самая точка, от которой
+    // строится линия маршрута, и она приходит вместе с заказом.
+    //
+    // Список магазинов компании остаётся вторым источником — чтобы курьер
+    // видел и базы своего города, откуда заказов сегодня нет.
+    type BasePoint = { lat: number; lng: number; name: string; address: string | null; active: boolean };
 
-    visibleBases.forEach((b) => {
+    const basePoints = new Map<string, BasePoint>();
+    const addBase = (
+      b: { storeLat: number | null; storeLng: number | null; name: string; storeAddress: string | null } | null | undefined,
+      active = false
+    ) => {
+      if (!b || b.storeLat == null || b.storeLng == null) return;
+      const key = `${b.storeLat.toFixed(5)},${b.storeLng.toFixed(5)}`;
+      const prev = basePoints.get(key);
+      basePoints.set(key, {
+        lat: b.storeLat,
+        lng: b.storeLng,
+        name: b.name,
+        address: b.storeAddress,
+        // Повторная встреча точки не должна гасить подсветку
+        active: active || prev?.active || false,
+      });
+    };
+
+    // Первой — база активного заказа: от неё рисуется маршрут, её и подсвечиваем
+    const activeShopRef = [...orders, ...exchange].find((o) => o.id === activeOrderId)?.shopRef;
+    addBase(activeShopRef, true);
+
+    for (const o of visibleOrders) addBase(o.shopRef);
+    for (const b of bases) {
+      if (getCity(b.city).code === cityOfWork.code) addBase(b);
+    }
+
+    basePoints.forEach((b, key) => {
       const el = document.createElement("div");
       el.style.cssText = `
-        width:26px;height:26px;border-radius:7px;
+        width:${b.active ? 32 : 26}px;height:${b.active ? 32 : 26}px;border-radius:7px;
         background:var(--color-contrast-bg);border:2px solid #fff;
         box-shadow:0 2px 6px rgba(0,0,0,0.4);
         display:flex;align-items:center;justify-content:center;
-        color:#fff;font-size:13px;cursor:default;
+        color:#fff;font-size:${b.active ? 16 : 13}px;cursor:default;
         transform:translate(-50%,-50%);
+        ${b.active ? "outline:3px solid rgba(93,135,255,0.45);" : ""}
       `;
       el.textContent = "🏠";
-      el.title = `База: ${b.name}${b.storeAddress ? ` — ${b.storeAddress}` : ""}`;
-      const marker = new YMapMarker(
-        { coordinates: toLngLat(b.storeLat as number, b.storeLng as number) },
-        el
-      );
+      el.title = b.active
+        ? `Старт маршрута — база: ${b.name}${b.address ? ` — ${b.address}` : ""}`
+        : `База: ${b.name}${b.address ? ` — ${b.address}` : ""}`;
+      const marker = new YMapMarker({ coordinates: toLngLat(b.lat, b.lng) }, el);
       mapRef.current.addChild(marker);
-      markersRef.current.set(`base-${b.id}`, marker);
+      // Ключ координатный: источников три, и id есть не у всех
+      markersRef.current.set(`base-${key}`, marker);
     });
 
     if (visibleOrders.length > 0 && !boundsDone.current) {

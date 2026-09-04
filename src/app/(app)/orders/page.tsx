@@ -82,6 +82,9 @@ export default function OrdersPage() {
     localStorage.setItem("orders_filterDate", newDate);
   };
   const [fCourier, setFCourier] = useState("ALL");
+  // Магазинов стало несколько и в разных городах — без этого фильтра
+  // список приходилось разбирать глазами по колонке «Магазин»
+  const [fShop, setFShop] = useState("ALL");
   const [fSearch, setFSearch] = useState("");
 
   const [sortConfig, setSortConfig] = useState<{ key: SortKey | null, direction: 'asc' | 'desc' }>({ key: 'changedAt', direction: 'desc' });
@@ -198,10 +201,26 @@ export default function OrdersPage() {
     [orders]
   );
 
+  // Список для фильтра собираем из самих заказов, а не из справочника:
+  // так в нём заведомо только те магазины, чьи заказы человек видит
+  const shops = useMemo(() =>
+    Array.from(new Set(orders.map(o => o.shop).filter(Boolean) as string[])).sort(),
+    [orders]
+  );
+
+  // Названия магазинов приходят слагами. Знакомые подписываем по-человечески,
+  // незнакомый показываем как есть — новый магазин не должен пропадать
+  // из фильтра только потому, что его сюда не добавили.
+  const shopLabel = (slug: string) =>
+    slug === "kaktusfiori" || slug === "meura-flowers" ? "🌸 Meura"
+      : slug === "bunch" ? "📦 Bunch"
+      : slug;
+
   const filtered = useMemo(() => {
     return dateOrders.filter(o => {
       if (fStatus !== "ALL" && o.status !== fStatus) return false;
       if (fCourier !== "ALL" && (o.courier || "UNASSIGNED") !== fCourier) return false;
+      if (fShop !== "ALL" && (o.shop || "") !== fShop) return false;
       if (fSearch) {
         const q = fSearch.toLowerCase();
         return (o.externalId || "").toLowerCase().includes(q) ||
@@ -212,7 +231,7 @@ export default function OrdersPage() {
       }
       return true;
     });
-  }, [dateOrders, fStatus, fCourier, fSearch]);
+  }, [dateOrders, fStatus, fCourier, fShop, fSearch]);
 
   const sortedAndFiltered = useMemo(() => {
     let result = [...filtered];
@@ -302,16 +321,11 @@ export default function OrdersPage() {
   return (
     <div style={{ fontFamily: "Manrope, system-ui, sans-serif", background: "var(--color-bg)", minHeight: "100vh", paddingBottom: selectedIds.size > 0 ? 80 : 0 }}>
 
-      {/* Шапка */}
-      <div style={{ background: "var(--color-card)", borderBottom: "1px solid var(--color-border)", padding: "0 24px", height: 56, display: "flex", alignItems: "center", gap: 16, overflowX: "auto" }}>
-        <Link href="/dashboard" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 7, color: "var(--color-text)", fontWeight: 600, fontSize: 15, flexShrink: 0 }}>
-          <img src="/favicon.svg" alt="Logo" style={{ width: 22, height: 22 }} />
-          ADelivo
-        </Link>
-        <div style={{ width: 1, height: 20, background: "var(--color-border)" }} />
-        <Link href="/dashboard" style={navBtn}>🗺️ Дашборд</Link>
-        <Link href="/couriers" style={navBtn}>🚚 Курьеры</Link>
-        <span style={{ fontSize: 15, fontWeight: 700, color: "var(--color-text)", marginLeft: 8, whiteSpace: "nowrap" }}>Все заказы</span>
+      {/* Своей шапки здесь нет: логотип, «Дашборд» и «Курьеры» дублировали
+          общую AppTopBar, которая теперь показывается и на этой странице.
+          Осталась строка с заголовком и кнопкой синхронизации. */}
+      <div style={{ padding: "16px 24px 0", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 17, fontWeight: 700, color: "var(--color-text)" }}>Все заказы</span>
         <div style={{ flex: 1 }} />
         <button onClick={handleSync} disabled={syncing} style={{ ...syncBtn, background: syncing ? "var(--color-border)" : "var(--color-contrast-bg)" }}>
           {syncing ? "Синхронизация..." : "↻ Обновить из CRM"}
@@ -330,6 +344,10 @@ export default function OrdersPage() {
           <option value="ALL">Все курьеры</option>
           <option value="UNASSIGNED">Не назначен</option>
           {couriers.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={fShop} onChange={e => setFShop(e.target.value)} style={inputStyle}>
+          <option value="ALL">Все магазины</option>
+          {shops.map(sl => <option key={sl} value={sl}>{shopLabel(sl)}</option>)}
         </select>
       </div>
 
@@ -389,10 +407,17 @@ export default function OrdersPage() {
                       <td style={{ padding: "10px 14px", fontFamily: "monospace", color: "var(--color-text-2)" }}>{o.externalId ?? o.crmId}</td>
 
                       <td style={{ padding: "10px 14px", fontWeight: 600 }}>
-                        {o.shop === 'kaktusfiori' || o.shop === 'meura-flowers'
-                          ? <span style={{ color: "#d63384" }}>🌸 Meura</span>
-                          : <span style={{ color: "#0d6efd" }}>📦 Bunch</span>
-                        }
+                        {/* Раньше здесь было «всё, что не Meura — это Bunch»:
+                            заказы Тбилиси и любого нового магазина
+                            подписывались как Bunch. Теперь слаг показывается
+                            как есть, если он не из двух известных. */}
+                        <span style={{
+                          color: o.shop === "kaktusfiori" || o.shop === "meura-flowers" ? "#d63384"
+                            : o.shop === "bunch" ? "#0d6efd"
+                            : "var(--color-text-2)",
+                        }}>
+                          {o.shop ? shopLabel(o.shop) : "—"}
+                        </span>
                       </td>
 
                       <td style={{ padding: "10px 14px" }}>

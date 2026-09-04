@@ -366,20 +366,73 @@ export function checkAddressIssues(address: string = "", customerComment: string
   return null;
 }
 
+/**
+ * Чистит адрес из CRM перед отправкой в геокодер.
+ *
+ * В карточку заказа операторы пишут в свободной форме, и в поле адреса
+ * регулярно приезжает лишнее: телефон получателя в начале строки, имя,
+ * почта, дубль номера через запятую. Яндекс на такую строку либо не
+ * отвечает ничего, либо цепляется за первое похожее на адрес. Заказ при
+ * этом приходит в базу нормально, но остаётся без координат и не
+ * попадает на карту — со стороны выглядит как «заказ не подсосался».
+ */
+function cleanupAddress(raw: string): string {
+  let a = raw;
+
+  // Телефоны в любом виде: +7 999 123-45-67, 8(999)1234567, 79991234567
+  a = a.replace(/(\+?[78][\s\-(]*\d{3}[\s\-)]*\d{3}[\s\-]*\d{2}[\s\-]*\d{2})/g, " ");
+  // Почта
+  a = a.replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, " ");
+  // Подъезд, этаж, квартира, домофон — геокодеру они только мешают
+  const cut = a.match(/^(.*?)(?:,\s*(кв\.|квартира|кв\s|подъезд|под\.|пд\.|этаж|эт\.|домофон|код|дф\.).*)/i);
+  if (cut) a = cut[1];
+
+  // Схлопываем мусор, оставшийся после вырезаний: «,,», « ,», двойные пробелы
+  a = a.replace(/\s+/g, " ").replace(/\s*,\s*/g, ", ").replace(/(,\s*)+/g, ", ");
+  return a.replace(/^[\s,;.-]+|[\s,;.-]+$/g, "").trim();
+}
+
+/**
+ * Есть ли в строке собственный населённый пункт.
+ *
+ * Если есть — город магазина подставлять нельзя. Иначе балашихинский адрес
+ * превращался в «Москва, Балашиха, ул. Ленина 5», и Яндекс на такое
+ * противоречие отвечал пустотой: заказ приходил, но оставался без
+ * координат и не появлялся на карте. Область у нас в зоне доставки,
+ * а bbox остаётся мягким приоритетом и Подмосковью не мешает.
+ */
+function hasOwnLocality(address: string): boolean {
+  // Явные маркеры: «г. Королёв», «Московская область», «пос. Северный»
+  if (/(^|[\s,])(г\.|г\s|город|пос\.|посёлок|поселок|пгт|мкр|микрорайон|дер\.|деревня|село|обл\.|область|район|р-н)/i.test(address)) {
+    return true;
+  }
+
+  // Маркера может и не быть: операторы пишут просто «Балашиха, ул. Ленина 5».
+  // Смотрим на первый сегмент до запятой: голое название с большой буквы,
+  // без цифр и без слов улицы — это населённый пункт, а не начало адреса.
+  const first = address.split(",")[0].trim();
+  if (!first || /\d/.test(first)) return false;
+  if (/(ул|улица|пр-т|проспект|пер|переулок|ш\.|шоссе|наб|бульвар|б-р|пл\.|площадь|проезд|тракт|линия|аллея)\b/i.test(first)) {
+    return false;
+  }
+  // До трёх слов: «Сергиев Посад», «Ростов-на-Дону»
+  return /^[А-ЯЁ][а-яё-]+(?:[- ][А-ЯЁа-яё-]+){0,2}$/.test(first);
+}
+
 export async function geocodeAddress(address: string, cityCode?: string | null) {
   const city = getCity(cityCode);
   if (!GEO_KEY || !address) return null;
   
   try {
-    let cleanAddress = address;
-    const match = address.match(/^(.*?)(?:,\s*(кв\.|квартира|кв\s|подъезд|под\.|пд\.|этаж|эт\.|домофон|код|дф\.).*)/i);
-    if (match) {
-      cleanAddress = match[1].trim();
-    }
+    const cleanAddress = cleanupAddress(address);
+    if (!cleanAddress) return null;
 
-    const searchAddress = cleanAddress.toLowerCase().includes(city.name.toLowerCase()) 
-      ? cleanAddress 
-      : `${city.name}, ${cleanAddress}`;
+    // Город магазина подставляем, только если в строке нет своего
+    // населённого пункта и самого города там ещё нет.
+    const alreadyHasCity =
+      cleanAddress.toLowerCase().includes(city.name.toLowerCase()) || hasOwnLocality(cleanAddress);
+
+    const searchAddress = alreadyHasCity ? cleanAddress : `${city.name}, ${cleanAddress}`;
     
     const res = await axios.get("https://geocode-maps.yandex.ru/1.x/", {
       params: { 

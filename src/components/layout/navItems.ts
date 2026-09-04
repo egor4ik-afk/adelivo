@@ -34,7 +34,9 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/admin/access", label: "Доступы", icon: "🔑", hint: "Кто какие магазины видит", roles: ["ADMIN"] },
 
   // Второстепенное: в шапке заняло бы место, в бургере пусть будет
-  { href: "/orders", label: "Заказы", icon: "≡", hint: "Все заказы списком", roles: ["ADMIN"], secondary: true },
+  // «Заказы» доступны и менеджеру: страница списка не админская, там
+  // те же заказы, что он ведёт в своём кабинете, только таблицей.
+  { href: "/orders", label: "Заказы", icon: "≡", hint: "Все заказы списком", roles: ["ADMIN", "OPERATOR"] },
   { href: "/manager/orders/new", label: "Создать заказ", icon: "＋", hint: "Вручную или вставкой текста", roles: ["ADMIN", "OPERATOR"], secondary: true },
 
   // Курьерские экраны
