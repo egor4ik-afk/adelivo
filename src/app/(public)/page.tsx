@@ -24,6 +24,16 @@ export const metadata: Metadata = {
     locale: "ru_RU",
     type: "website",
   },
+
+  // Telegram при разборе ссылки смешивал og-теги страницы с twitter-тегами
+  // из корневого layout: в карточке оказывались заголовок одной страницы
+  // и описание другой. Дублируем те же значения — конфликтовать нечему.
+  twitter: {
+    card: "summary_large_image",
+    title: "ADelivo — Диспетчеризация курьеров. До 1000 заказов/день",
+    description: "Система управления курьерами для любого доставочного бизнеса. Умные маршруты, контроль в реальном времени, PWA-приложение для курьеров.",
+    images: ["/og-image.webp"],
+  },
 };
 
 export default async function RootPage() {

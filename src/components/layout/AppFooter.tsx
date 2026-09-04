@@ -32,9 +32,26 @@ export function AppFooter() {
                 Универсальная платформа диспетчеризации для любой доставки: заказы, маршруты,
                 курьеры, выплаты и бухгалтерия в одном окне. Подключение к любой CRM — бесплатно за 3 дня.
               </p>
+
+              {/* Ссылки на регистрацию в футере не было вовсе, хотя это
+                  целевая страница всего лендинга. Ставим первой и кнопкой,
+                  а не строкой в списке. */}
+              <Link
+                href="/register-company"
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  marginTop: "1rem", padding: "0.7rem 1.2rem",
+                  borderRadius: 999, background: "var(--color-accent, #2B5BD7)",
+                  color: "#fff", fontSize: "0.85rem", fontWeight: 800,
+                  textDecoration: "none",
+                }}
+              >
+                Попробовать 7 дней бесплатно →
+              </Link>
             </div>
             <div>
               <p className="ftr-h">Платформа</p>
+              <Link className="ftr-l" href="/register-company">Регистрация компании</Link>
               <Link className="ftr-l" href="/sistema-upravleniya-kurerami">Система управления курьерами</Link>
               <Link className="ftr-l" href="/vozmozhnosti/zakazy">Заказы и диспетчеризация</Link>
               <Link className="ftr-l" href="/vozmozhnosti/kurery">Курьеры, выплаты, график</Link>

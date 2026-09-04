@@ -66,7 +66,7 @@ export const metadata: Metadata = {
         // ссылок в Telegram его разбирает не во всех клиентах — карточка
         // снова оставалась пустой. og-image.webp можно держать для сайта,
         // а в разметку превью отдавать jpg.
-        url: "/og-image.jpg",
+        url: "/og-image.webp",
         width: 1200,
         height: 630,
         type: "image/jpeg",
@@ -82,7 +82,7 @@ export const metadata: Metadata = {
     title: "ADelivo — Диспетчеризация курьеров",
     description:
       "Система управления курьерами и доставкой в реальном времени. Интеграция с любой CRM.",
-    images: ["/og-image.jpg"],
+    images: ["/og-image.webp"],
   },
 
   robots: {

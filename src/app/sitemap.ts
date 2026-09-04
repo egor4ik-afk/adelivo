@@ -17,8 +17,10 @@ const pages: Entry[] = [
   { path: "/about", priority: 0.6, changeFrequency: "monthly" }, // о компании
   { path: "/design", priority: 0.5, changeFrequency: "monthly" }, // мокап
 
-  // Пилларные посадочные
-  { path: "/register-company", priority: 0.9, changeFrequency: "monthly" },
+  // Пилларные посадочные.
+  // Регистрация компании — целевая страница пробного периода, на неё ведут
+  // все кнопки «Попробовать 7 дней бесплатно». Приоритет как у главной.
+  { path: "/register-company", priority: 1.0, changeFrequency: "weekly" },
   { path: "/sistema-upravleniya-kurerami", priority: 0.9, changeFrequency: "weekly" },
   { path: "/ai-marshrutizaciya", priority: 0.9, changeFrequency: "weekly" },
   { path: "/pochemu-my", priority: 0.8, changeFrequency: "monthly" },
@@ -40,6 +42,10 @@ const pages: Entry[] = [
   // Кейсы
   { path: "/keysy", priority: 0.8, changeFrequency: "monthly" },
   { path: "/keysy/bunch", priority: 0.8, changeFrequency: "monthly" },
+
+  // Страницы этой строки в карте сайта не было вовсе, хотя ссылка на неё
+  // стоит в футере и страница открыта для индексации
+  { path: "/stat-kurerom", priority: 0.8, changeFrequency: "monthly" },
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {
