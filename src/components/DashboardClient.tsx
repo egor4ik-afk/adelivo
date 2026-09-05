@@ -1678,7 +1678,7 @@ export function DashboardClient({ user }: { user: User }) {
                   setManualDepartureTime(r.plannedDepartureTime || "");
                   setIsDepartureEdited(!!r.plannedDepartureTime);
                 }}
-                style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "stretch", gap: 10, transition: "all 0.2s" }}
+                style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}
               >
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
                   {/* Иконка Drag & Drop */}
@@ -1754,33 +1754,7 @@ export function DashboardClient({ user }: { user: User }) {
                     )}
                   </div>
                 </div>
-                {/* Правая колонка: карандаш сверху, «На карте» прижата вниз */}
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "space-between", flexShrink: 0, gap: 8 }}>
-                  <div style={{ fontSize: 20, color: "var(--color-text-3)" }}>✏️</div>
-
-                  {/* Тот же переход, что и по клику на карточку, плюс сразу
-                      открывается карта. stopPropagation обязателен: без него
-                      сработал бы и onClick самой карточки, и мы бы дважды
-                      выставили одно и то же состояние. */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openRouteOnMap(r, rCourier);
-                    }}
-                    title="Показать маршрут на карте"
-                    style={{
-                      display: "flex", alignItems: "center", gap: 5,
-                      padding: "5px 9px", borderRadius: 7,
-                      border: "1px solid var(--color-border)",
-                      background: "var(--color-card)",
-                      color: "var(--color-text-2)",
-                      fontSize: 11, fontWeight: 700,
-                      cursor: "pointer", whiteSpace: "nowrap",
-                    }}
-                  >
-                    🗺️ На карте
-                  </button>
-                </div>
+                <div style={{ fontSize: 20, color: "var(--color-text-3)" }}>✏️</div>
               </div>
             )
           })}
@@ -2220,31 +2194,6 @@ export function DashboardClient({ user }: { user: User }) {
     boxSizing: "border-box",
     boxShadow: "0 1px 2px rgba(0,0,0,0.02)"
   };
-  /**
-   * Открыть существующий маршрут на карте.
-   *
-   * Ровно то же состояние, что выставляет клик по карточке, плюс переход
-   * на вкладку карты и включённые линии маршрута. Вынесено в функцию,
-   * чтобы карточка и кнопка не разъезжались: раньше набор из шести
-   * setState был записан прямо в onClick карточки.
-   */
-  const openRouteOnMap = (r: any, rCourier?: DbCourier) => {
-    setBulkSelectedIds(r.orders.map((o: any) => o.id));
-    setBulkCourier(String(r.courierId));
-    setEditingRouteId(r.id);
-    setRouteTabMode("new");
-    setRouteType(rCourier?.isAuto ? "auto" : "mt");
-    setManualDepartureTime(r.plannedDepartureTime || "");
-    setIsDepartureEdited(!!r.plannedDepartureTime);
-
-    // Линия рисуется только в режиме карты и при включённых линиях
-    setRouteTab("map");
-    setShowRouteLines(true);
-    // На мобильном список и карта — разные экраны, иначе кнопка сработает
-    // «вникуда»: состояние выставится, а человек останется в списке
-    if (isMobile) setMobileView("map");
-  };
-
   /** Плашка сводки: заказы и курьеры на смене. */
   const StatsChip = ({ compact }: { compact?: boolean }) => (
     <div
