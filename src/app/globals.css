@@ -304,3 +304,7 @@
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
 }
+/* Комментарии в карточках маршрута открываются нативным details.
+   listStyle: none в инлайновом стиле убирает маркер в Firefox,
+   но не в Safari и старом Chrome — там нужен ::-webkit-details-marker. */
+summary::-webkit-details-marker { display: none; }

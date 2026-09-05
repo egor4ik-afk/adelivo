@@ -2191,7 +2191,61 @@ export function DashboardClient({ user }: { user: User }) {
                             <div style={{ fontSize: 11, color: "var(--color-text-3)", marginTop: 4, display: "flex", flexDirection: "column", gap: 3 }}>
                               <div>
                                 Слот: <span style={{ color, fontWeight: 700 }}>{o.slotRaw}</span> · {o.externalId ?? o.crmId}
+                                {/* Состав — тут же, рядом с номером, но чёрным:
+                                    серым он терялся в строке со слотом, а
+                                    оператору при сборке маршрута нужно видеть,
+                                    что именно везём, не открывая заказ. */}
+                                {o.items && (
+                                  <>
+                                    {" · "}
+                                    <span
+                                      title={o.items}
+                                      style={{ color: "var(--color-text)", fontWeight: 600 }}
+                                    >
+                                      {o.items}
+                                    </span>
+                                  </>
+                                )}
                               </div>
+
+                              {/* Комментарии в сворачиваемом блоке.
+                                  Разворачивать их всегда нельзя: в маршруте
+                                  до двадцати точек, и два абзаца на каждой
+                                  превращают список в простыню. Нативный
+                                  details не требует состояния и закрывается
+                                  сам при перерисовке. */}
+                              {(o.comment || o.opComment) && (
+                                <details style={{ marginTop: 1 }}>
+                                  <summary
+                                    style={{
+                                      cursor: "pointer",
+                                      listStyle: "none",
+                                      color: "var(--color-text-2)",
+                                      fontWeight: 700,
+                                      fontSize: 11,
+                                      userSelect: "none",
+                                    }}
+                                  >
+                                    💬 Комментарии
+                                    {o.comment && o.opComment ? " (2)" : ""}
+                                  </summary>
+
+                                  <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 4 }}>
+                                    {o.comment && (
+                                      <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 6, padding: "5px 7px", color: "var(--color-text)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                                        <span style={{ color: "var(--color-text-3)", fontWeight: 700 }}>Клиент: </span>
+                                        {o.comment}
+                                      </div>
+                                    )}
+                                    {o.opComment && (
+                                      <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 6, padding: "5px 7px", color: "var(--color-text)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                                        <span style={{ color: "var(--color-text-3)", fontWeight: 700 }}>Оператор: </span>
+                                        {o.opComment}
+                                      </div>
+                                    )}
+                                  </div>
+                                </details>
+                              )}
 
                               {o.eta && (
                                 <div>
