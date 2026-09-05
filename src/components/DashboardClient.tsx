@@ -1787,16 +1787,23 @@ export function DashboardClient({ user }: { user: User }) {
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "space-between", flexShrink: 0, gap: 8 }}>
                   <div style={{ fontSize: 20, color: "var(--color-text-3)" }}>✏️</div>
 
-                  {/* Тот же переход, что и по клику на карточку, плюс сразу
-                      открывается карта. stopPropagation обязателен: без него
-                      сработал бы и onClick самой карточки, и мы бы дважды
-                      выставили одно и то же состояние. */}
+                  {/* Открывает маршрут в Яндекс.Картах — ровно как кнопка
+                      внутри маршрута. Карточка помечена draggable, и нажатие
+                      на дочерний элемент браузер трактует как начало
+                      перетаскивания: без draggable={false} и гашения
+                      mousedown клик до кнопки не доходил, срабатывал только
+                      onClick самой карточки. */}
                   <button
+                    type="button"
+                    draggable={false}
+                    onDragStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                    onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation();
-                      openRouteOnMap(r, rCourier);
+                      e.preventDefault();
+                      openRouteInYandex(r, rCourier);
                     }}
-                    title="Показать маршрут на карте"
+                    title={`Открыть в Яндекс.Картах (${rCourier?.isAuto ? "на авто" : "транспорт"})`}
                     style={{
                       display: "flex", alignItems: "center", gap: 5,
                       padding: "5px 9px", borderRadius: 7,
@@ -1807,7 +1814,7 @@ export function DashboardClient({ user }: { user: User }) {
                       cursor: "pointer", whiteSpace: "nowrap",
                     }}
                   >
-                    🗺️ На карте
+                    🗺️ В Яндексе
                   </button>
                 </div>
               </div>
@@ -2251,28 +2258,26 @@ export function DashboardClient({ user }: { user: User }) {
     boxShadow: "0 1px 2px rgba(0,0,0,0.02)"
   };
   /**
-   * Открыть существующий маршрут на карте.
+   * Открыть маршрут в Яндекс.Картах — то же, что кнопка «Открыть в Яндексе»
+   * внутри маршрута.
    *
-   * Ровно то же состояние, что выставляет клик по карточке, плюс переход
-   * на вкладку карты и включённые линии маршрута. Вынесено в функцию,
-   * чтобы карточка и кнопка не разъезжались: раньше набор из шести
-   * setState был записан прямо в onClick карточки.
+   * Ссылка строится тем же generateYandexUrl, но тип берётся не из
+   * состояния routeType (оно относится к маршруту, открытому в редакторе),
+   * а из признака isAuto самого курьера этой карточки: auto для машины,
+   * mt для остальных. Возврат на базу — из настройки маршрута.
    */
-  const openRouteOnMap = (r: any, rCourier?: DbCourier) => {
-    setBulkSelectedIds(Array.isArray(r.orders) ? r.orders.map((o: any) => o.id) : []);
-    setBulkCourier(String(r.courierId));
-    setEditingRouteId(r.id);
-    setRouteTabMode("new");
-    setRouteType(rCourier?.isAuto ? "auto" : "mt");
-    setManualDepartureTime(r.plannedDepartureTime || "");
-    setIsDepartureEdited(!!r.plannedDepartureTime);
+  const openRouteInYandex = (r: any, rCourier?: DbCourier) => {
+    const routeOrders: DashboardOrder[] = Array.isArray(r.orders) ? r.orders : [];
+    const type: "auto" | "mt" = rCourier?.isAuto ? "auto" : "mt";
 
-    // Линия рисуется только в режиме карты и при включённых линиях
-    setRouteTab("map");
-    setShowRouteLines(true);
-    // На мобильном список и карта — разные экраны, иначе кнопка сработает
-    // «вникуда»: состояние выставится, а человек останется в списке
-    if (isMobile) setMobileView("map");
+    const url = generateYandexUrl(routeOrders, type, returnToBase);
+    if (!url) {
+      alert("Нет координат для построения маршрута");
+      return;
+    }
+    // _blank: на телефоне Яндекс перехватит ссылку и откроет приложение,
+    // на десктопе откроется сайт — и в обоих случаях дашборд остаётся
+    window.open(url, "_blank");
   };
 
   /** Плашка сводки: заказы и курьеры на смене. */
