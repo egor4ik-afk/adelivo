@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef, Fragment, useMemo } fr
 import { useRouter } from "next/navigation";
 import { ProfilePanel } from "./ProfilePanel";
 import { AppMenu } from "./layout/AppMenu";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { OrderDetail } from "./OrderDetail";
 import { STATUS_OPTIONS, STATUS_LABELS, SLOTS, slotColor } from "@/lib/constants";
 import Link from "next/link";
@@ -1082,9 +1083,22 @@ export function DashboardClient({ user }: { user: User }) {
     const ymaps = (window as any).ymaps;
     if (!map || !ymaps.multiRouter) return;
 
-    // 1. Очищаем старую линию маршрута при каждом изменении
+    // Цвет линии под текущую тему приложения. Тему читаем здесь, чтобы
+    // переключение light/dark без перезагрузки подхватывалось.
+    const isDarkTheme =
+      typeof document !== "undefined" &&
+      document.documentElement.getAttribute("data-ew-theme") === "dark";
+    const routeLineColor = isDarkTheme ? "#7DA6FF" : "#2B5BD7";
+
+    // 1. Очищаем старую линию маршрута при каждом изменении.
+    // В try, потому что недостроенный объект при remove падает изнутри
+    // Яндекса, и это исключение выносило весь компонент.
     if (multiRouteRef.current) {
-      map.geoObjects.remove(multiRouteRef.current);
+      try {
+        map.geoObjects.remove(multiRouteRef.current);
+      } catch (e) {
+        console.warn("[Карта] Не удалось снять прошлую линию маршрута:", e);
+      }
       multiRouteRef.current = null;
     }
     // 🔥 ДОБАВЛЯЕМ ПРОВЕРКУ showRouteLines
@@ -1122,7 +1136,16 @@ export function DashboardClient({ user }: { user: User }) {
 
           // Настройки внешнего вида самой линии
           routeActiveStrokeWidth: 5,
-          routeActiveStrokeColor: 'var(--color-accent)', // Синий цвет линии
+          // Конкретный цвет, а не CSS-переменная.
+          //
+          // Яндекс разбирает это значение своим парсером graphics.RGBAColor,
+          // и на строке «var(--color-accent)» он бросает исключение
+          // «формат данных не распознан». Из-за этого multiRoute оставался
+          // недостроенным, следующее обращение к нему падало с
+          // «Cannot read properties of null (reading 'setContainerPane')»,
+          // React ловил это уже как ошибку рендера — и весь дашборд гас
+          // в чёрный экран до перезагрузки.
+          routeActiveStrokeColor: routeLineColor,
           routeStrokeStyle: 'solid',
           routeActivePedestrianSegmentStrokeStyle: 'solid'
         });
@@ -1624,30 +1647,34 @@ export function DashboardClient({ user }: { user: User }) {
       </div>
 
       {routeTabMode === "current" && (
+        <ErrorBoundary label="Текущие маршруты">
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {existingRoutes.length === 0 && <div style={{ textAlign: "center", color: "var(--color-text-3)", padding: 20 }}>Нет маршрутов на {filterDate}</div>}
           {existingRoutes.map((r: any) => {
+            // Подстраховка: дальше по карточке r.orders используется семь раз
+            // без проверок, и одна запись без заказов роняла весь список
+            const rOrders: any[] = Array.isArray(r.orders) ? r.orders : [];
             const isDraft = r.isDraft;
             const rCourier = dbCouriers.find(c => String(c.id) === String(r.courierId));
             const typeIcon = rCourier?.isAuto ? "🚗" : "🚶‍♂️";
             const courierName = courierOptions.find(c => String(c.value) === String(r.courierId))?.label || "Неизвестен";
 
-            const deliveredCount = r.orders.filter((o: any) => o.status === "DELIVERED").length;
+            const deliveredCount = rOrders.filter((o: any) => o.status === "DELIVERED").length;
 
-            const pickedUpTimes = r.orders.map((o: any) => o.pickedUpAt).filter(Boolean);
+            const pickedUpTimes = rOrders.map((o: any) => o.pickedUpAt).filter(Boolean);
             const actualDepartureMs = pickedUpTimes.length > 0 ? Math.min(...pickedUpTimes.map((d: string) => new Date(d).getTime())) : null;
             const estimatedBaseReturn = r.estimatedReturnTime;
-            const isAllDelivered = r.orders.length > 0 && r.orders.every((o: any) => o.status === "DELIVERED");
+            const isAllDelivered = rOrders.length > 0 && rOrders.every((o: any) => o.status === "DELIVERED");
 
             // 1. Считаем время завершения маршрута
             let finishedMs: number | null = null;
             if (isAllDelivered) {
-              const deliveryTimes = r.orders.map((o: any) => o.deliveredAt ? new Date(o.deliveredAt).getTime() : new Date(o.changedAt || o.updatedAt).getTime()).filter((t: number) => !isNaN(t));
+              const deliveryTimes = rOrders.map((o: any) => o.deliveredAt ? new Date(o.deliveredAt).getTime() : new Date(o.changedAt || o.updatedAt).getTime()).filter((t: number) => !isNaN(t));
               finishedMs = deliveryTimes.length > 0 ? Math.max(...deliveryTimes) : null;
             }
 
             // 🔥 2. ВОТ ТОТ САМЫЙ delaysCount, который потерялся
-            const delaysCount = r.orders.filter((o: any) => {
+            const delaysCount = rOrders.filter((o: any) => {
               if (["DELIVERED", "RETURNED", "CANCELLED"].includes(o.status)) return false;
               if (o.eta && o.slotTo) {
                 const [eH, eM] = o.eta.split(':').map(Number);
@@ -1668,7 +1695,7 @@ export function DashboardClient({ user }: { user: User }) {
                 onDragOver={handleRouteDragOver}
                 onDrop={(e) => handleRouteDrop(e, r.id)}
                 onClick={() => {
-                  setBulkSelectedIds(r.orders.map((o: any) => o.id));
+                  setBulkSelectedIds(rOrders.map((o: any) => o.id));
                   setBulkCourier(String(r.courierId));
                   setEditingRouteId(r.id);
                   setRouteTabMode("new");
@@ -1678,7 +1705,7 @@ export function DashboardClient({ user }: { user: User }) {
                   setManualDepartureTime(r.plannedDepartureTime || "");
                   setIsDepartureEdited(!!r.plannedDepartureTime);
                 }}
-                style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}
+                style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "stretch", gap: 10, transition: "all 0.2s" }}
               >
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
                   {/* Иконка Drag & Drop */}
@@ -1708,7 +1735,7 @@ export function DashboardClient({ user }: { user: User }) {
                       {/* 🔥 ДОБАВЛЕНО: Время выезда + ориентир на 1-й заказ */}
                       {r.plannedDepartureTime && (
                         <span style={{ background: "var(--color-accent-soft)", color: "var(--color-accent-fg)", padding: "2px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700, border: "1px solid #bfdbfe" }}>
-                          ⏱ Выезд: {r.plannedDepartureTime} {r.orders[0]?.slotFrom ? `(1-й к ${r.orders[0].slotFrom})` : ''}
+                          ⏱ Выезд: {r.plannedDepartureTime} {rOrders[0]?.slotFrom ? `(1-й к ${rOrders[0].slotFrom})` : ''}
                         </span>
                       )}
 
@@ -1718,10 +1745,12 @@ export function DashboardClient({ user }: { user: User }) {
                         </span>
                       )}
 
-                      <span style={{ fontSize: 11, color: "var(--color-text-3)", fontWeight: 500 }}>изм. {new Date(r.updatedAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</span>
+                      <span style={{ fontSize: 11, color: "var(--color-text-3)", fontWeight: 500 }}>
+                        изм. {r.updatedAt ? new Date(r.updatedAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }) : "—"}
+                      </span>
                     </div>
                     <div style={{ fontSize: 12, color: "var(--color-text-2)", marginTop: 4 }}>
-                      Курьер: {courierName} · {deliveredCount}/{r.orders.length} точек
+                      Курьер: {courierName} · {deliveredCount}/{rOrders.length} точек
                     </div>
 
                     {(actualDepartureMs || finishedMs || r.baseArrivalTime || estimatedBaseReturn) && (
@@ -1754,11 +1783,38 @@ export function DashboardClient({ user }: { user: User }) {
                     )}
                   </div>
                 </div>
-                <div style={{ fontSize: 20, color: "var(--color-text-3)" }}>✏️</div>
+                {/* Правая колонка: карандаш сверху, «На карте» прижата вниз */}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "space-between", flexShrink: 0, gap: 8 }}>
+                  <div style={{ fontSize: 20, color: "var(--color-text-3)" }}>✏️</div>
+
+                  {/* Тот же переход, что и по клику на карточку, плюс сразу
+                      открывается карта. stopPropagation обязателен: без него
+                      сработал бы и onClick самой карточки, и мы бы дважды
+                      выставили одно и то же состояние. */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openRouteOnMap(r, rCourier);
+                    }}
+                    title="Показать маршрут на карте"
+                    style={{
+                      display: "flex", alignItems: "center", gap: 5,
+                      padding: "5px 9px", borderRadius: 7,
+                      border: "1px solid var(--color-border)",
+                      background: "var(--color-card)",
+                      color: "var(--color-text-2)",
+                      fontSize: 11, fontWeight: 700,
+                      cursor: "pointer", whiteSpace: "nowrap",
+                    }}
+                  >
+                    🗺️ На карте
+                  </button>
+                </div>
               </div>
             )
           })}
         </div>
+        </ErrorBoundary>
       )}
 
       {routeTabMode === "new" && (
@@ -2194,6 +2250,31 @@ export function DashboardClient({ user }: { user: User }) {
     boxSizing: "border-box",
     boxShadow: "0 1px 2px rgba(0,0,0,0.02)"
   };
+  /**
+   * Открыть существующий маршрут на карте.
+   *
+   * Ровно то же состояние, что выставляет клик по карточке, плюс переход
+   * на вкладку карты и включённые линии маршрута. Вынесено в функцию,
+   * чтобы карточка и кнопка не разъезжались: раньше набор из шести
+   * setState был записан прямо в onClick карточки.
+   */
+  const openRouteOnMap = (r: any, rCourier?: DbCourier) => {
+    setBulkSelectedIds(Array.isArray(r.orders) ? r.orders.map((o: any) => o.id) : []);
+    setBulkCourier(String(r.courierId));
+    setEditingRouteId(r.id);
+    setRouteTabMode("new");
+    setRouteType(rCourier?.isAuto ? "auto" : "mt");
+    setManualDepartureTime(r.plannedDepartureTime || "");
+    setIsDepartureEdited(!!r.plannedDepartureTime);
+
+    // Линия рисуется только в режиме карты и при включённых линиях
+    setRouteTab("map");
+    setShowRouteLines(true);
+    // На мобильном список и карта — разные экраны, иначе кнопка сработает
+    // «вникуда»: состояние выставится, а человек останется в списке
+    if (isMobile) setMobileView("map");
+  };
+
   /** Плашка сводки: заказы и курьеры на смене. */
   const StatsChip = ({ compact }: { compact?: boolean }) => (
     <div
