@@ -5,6 +5,42 @@ import { NAV_HEIGHT } from "@/components/CourierNav";
 import { uploadOrderPhoto } from "@/lib/upload-photo";
 import { getCity } from "@/lib/cities";
 
+/**
+ * Варианты времени прибытия на базу: окно ±2 часа от текущего момента,
+ * шаг 10 минут.
+ *
+ * Уже выбранное значение добавляется всегда, даже если вышло за окно или
+ * не кратно десяти минутам: иначе select с value вне списка отрисовался бы
+ * пустым, и курьеру показалось бы, что время слетело.
+ */
+function baseTimeOptions(current?: string | null): string[] {
+  const STEP = 10;
+  const WINDOW_MIN = 120;
+
+  const now = new Date();
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const from = Math.max(0, Math.floor((nowMins - WINDOW_MIN) / STEP) * STEP);
+  const to = Math.min(24 * 60 - STEP, Math.ceil((nowMins + WINDOW_MIN) / STEP) * STEP);
+
+  const fmt = (m: number) =>
+    `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+
+  const list: string[] = [];
+  for (let m = from; m <= to; m += STEP) list.push(fmt(m));
+
+  if (current && !list.includes(current)) {
+    list.push(current);
+    // Сортировка по времени, а не лексикографическая: «09:50» и «9:50»
+    // из старых записей иначе встали бы в конец
+    list.sort((a, b) => {
+      const [ah, am] = a.split(":").map(Number);
+      const [bh, bm] = b.split(":").map(Number);
+      return ah * 60 + am - (bh * 60 + bm);
+    });
+  }
+  return list;
+}
+
 interface RouteOrder {
   id: string; externalId: string; crmId: string; address: string; status: string;
   lat: number | null; lng: number | null;
@@ -587,15 +623,14 @@ const syncPendingStatuses = async () => {
                           }}
                         >
                           <option value="" disabled>Выбрать...</option>
-                          {routeObj?.baseArrivalTime && Number(routeObj.baseArrivalTime.split(':')[1]) % 10 !== 0 && (
-                            <option value={routeObj.baseArrivalTime}>{routeObj.baseArrivalTime}</option>
-                          )}
-                          {Array.from({ length: 96 }).map((_, i) => {
-                            const hour = Math.floor(i / 6) + 8;
-                            const min = (i % 6) * 10;
-                            const val = `${hour.toString().padStart(2, "0")}:${min.toString().padStart(2, "0")}`;
-                            return <option key={val} value={val}>{val}</option>;
-                          })}
+                          {/* Раньше список шёл с 08:00 до 23:50 — 96 пунктов
+                              на весь день. Курьер отмечает, когда будет на
+                              базе прямо сейчас, и листать полсуток, чтобы
+                              найти ближайшие полчаса, неудобно. Оставили
+                              окно ±2 часа от текущего времени. */}
+                          {baseTimeOptions(routeObj?.baseArrivalTime).map((val) => (
+                            <option key={val} value={val}>{val}</option>
+                          ))}
                         </select>
                       </div>
                       <button

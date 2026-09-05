@@ -20,6 +20,67 @@ export function formatTimeStr(minutes: number) {
   return `${h}:${m}`;
 }
 
+
+/**
+ * Сколько закладываем на дорогу от последней точки до базы, если посчитать
+ * не из чего. Плановое значение обычно уже учтено в estimatedReturnTime —
+ * это число нужно только когда времени возврата вовсе не было.
+ */
+const RETURN_LEG_FALLBACK_MIN = 30;
+
+/**
+ * Держит время возврата на базу в актуальном состоянии.
+ *
+ * Раньше сдвиг применялся только если значение уже стояло в базе, и
+ * комментарий это честно фиксировал: «ТОЛЬКО если значение уже есть».
+ * Маршруты, созданные без расчёта возврата, так и оставались с пустым
+ * полем навсегда — снаружи, и в карточке дашборда, и у курьера, время
+ * возврата просто не показывалось.
+ *
+ * Теперь два случая:
+ *   — время есть: двигаем его на ту же разницу, что и остальные точки.
+ *     Так сохраняется заложенный в плане участок «последняя точка → база».
+ *   — времени нет: считаем от самой поздней ETA среди оставшихся точек
+ *     плюс дорога до базы. Когда все точки закрыты, берём последнюю
+ *     закрытую: маршрут окончен, и возврат считается от неё.
+ */
+async function syncReturnTime(
+  routeId: string,
+  currentReturnTime: string | null,
+  diffMinutes: number
+) {
+  if (currentReturnTime) {
+    const mins = parseTimeStr(currentReturnTime);
+    if (mins === null) return;
+    await prisma.route.update({
+      where: { id: routeId },
+      data: { estimatedReturnTime: formatTimeStr(mins + diffMinutes) },
+    });
+    return;
+  }
+
+  // Значения не было — собираем его с нуля по текущим ETA маршрута
+  const points = await prisma.order.findMany({
+    where: { routeId },
+    select: { eta: true, status: true, routeOrder: true },
+    orderBy: { routeOrder: "asc" },
+  });
+
+  const open = points.filter((p) => !["DELIVERED", "RETURNED", "CANCELLED"].includes(p.status));
+  const source = open.length > 0 ? open : points;
+
+  const etas = source
+    .map((p) => parseTimeStr(p.eta))
+    .filter((m): m is number => m !== null);
+
+  if (etas.length === 0) return;
+
+  await prisma.route.update({
+    where: { id: routeId },
+    data: { estimatedReturnTime: formatTimeStr(Math.max(...etas) + RETURN_LEG_FALLBACK_MIN) },
+  });
+}
+
 export async function applyUniversalEtaShift(orderId: string, newStatus: string, explicitEta?: string | null) {
   try {
     const order = await prisma.order.findUnique({
@@ -99,13 +160,26 @@ export async function applyUniversalEtaShift(orderId: string, newStatus: string,
 
     } else if (newStatus === "DELIVERED") {
       let deliveredMins = getCurrentMskMinutes();
-      
+
       if (explicitEta && explicitEta !== "—") {
           const parsed = parseTimeStr(explicitEta);
           if (parsed !== null) deliveredMins = parsed;
       }
 
       diffMinutesToShift = deliveredMins - oldEtaMins;
+
+      // Фактическое время закрытия точки записываем ей же.
+      //
+      // Раньше eta доставленного заказа оставалась плановой: в базе висело
+      // «должен был быть в 14:20», хотя привезли в 13:50. Разницу мы считали
+      // и раздавали дальше по маршруту, а сама точка врала.
+      if (diffMinutesToShift !== 0) {
+        updatedCurrentEta = formatTimeStr(deliveredMins);
+        await prisma.order.update({
+          where: { id: orderId },
+          data: { eta: updatedCurrentEta },
+        });
+      }
     }
 
     if (diffMinutesToShift !== 0) {
@@ -127,18 +201,7 @@ export async function applyUniversalEtaShift(orderId: string, newStatus: string,
         }
       }
 
-      // 🔥 ЛОГИКА ДЛЯ МАРШРУТА: Сдвигаем время на базе ТОЛЬКО если значение уже есть.
-      if (order.route?.estimatedReturnTime) {
-        const routeMins = parseTimeStr(order.route.estimatedReturnTime);
-        if (routeMins !== null) {
-          await prisma.route.update({
-            where: { id: order.routeId },
-            data: { 
-              estimatedReturnTime: formatTimeStr(routeMins + diffMinutesToShift) 
-            }
-          });
-        }
-      }
+      await syncReturnTime(order.routeId, order.route?.estimatedReturnTime ?? null, diffMinutesToShift);
     }
   } catch (err) { 
     console.error(`[ETA UNIVERSAL] Ошибка:`, err); 

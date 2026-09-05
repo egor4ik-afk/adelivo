@@ -1705,9 +1705,9 @@ export function DashboardClient({ user }: { user: User }) {
                   setManualDepartureTime(r.plannedDepartureTime || "");
                   setIsDepartureEdited(!!r.plannedDepartureTime);
                 }}
-                style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "stretch", gap: 10, transition: "all 0.2s" }}
+                style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, transition: "all 0.2s" }}
               >
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flex: 1, minWidth: 0 }}>
                   {/* Иконка Drag & Drop */}
                   <div style={{ fontSize: 16, color: "#d1d5db", cursor: "grab", marginTop: 2, paddingRight: 4 }} title="Потяните для изменения порядка">
                     ⠿
@@ -1754,7 +1754,7 @@ export function DashboardClient({ user }: { user: User }) {
                     </div>
 
                     {(actualDepartureMs || finishedMs || r.baseArrivalTime || estimatedBaseReturn) && (
-                      <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", rowGap: 6 }}>
 
                         {actualDepartureMs && (
                           <span style={{ fontSize: 11, background: "var(--color-warn-bg)", color: "#d97706", padding: "2px 6px", borderRadius: 4, fontWeight: 600, border: "1px solid #fde68a" }}>
@@ -1783,8 +1783,14 @@ export function DashboardClient({ user }: { user: User }) {
                     )}
                   </div>
                 </div>
-                {/* Правая колонка: карандаш сверху, «На карте» прижата вниз */}
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "space-between", flexShrink: 0, gap: 8 }}>
+                {/* Правая колонка прижата вверх.
+                    Была растянута через space-between, и кнопка уезжала на
+                    самый низ карточки. Когда снизу набиралось четыре плашки
+                    (выехал, на базе, завершил, возврат), они переставали
+                    помещаться в строку и переносились — кнопка тянула
+                    карточку вниз и отбирала ширину. Теперь она стоит сразу
+                    под карандашом, на уровне строки «Курьер · N точек». */}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "flex-start", flexShrink: 0, gap: 6 }}>
                   <div style={{ fontSize: 20, color: "var(--color-text-3)" }}>✏️</div>
 
                   {/* Открывает маршрут в Яндекс.Картах — ровно как кнопка

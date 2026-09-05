@@ -24,6 +24,7 @@ type Point = {
   lng: number | null;
   slotFrom: string | null;
   slotTo: string | null;
+  eta: string | null;
 };
 
 const DONE = ["DELIVERED", "RETURNED", "CANCELLED"];
@@ -57,7 +58,7 @@ export async function recalcRouteOrder(routeId: string): Promise<number> {
     where: { routeId },
     select: {
       id: true, routeOrder: true, status: true, deliveredAt: true,
-      lat: true, lng: true, slotFrom: true, slotTo: true,
+      lat: true, lng: true, slotFrom: true, slotTo: true, eta: true,
     },
   });
   if (points.length < 2) return 0;
@@ -105,17 +106,48 @@ export async function recalcRouteOrder(routeId: string): Promise<number> {
     if (next.lat != null && next.lng != null) cursor = { lat: next.lat, lng: next.lng };
   }
 
-  // 3. Записываем новую нумерацию, трогая только изменившиеся точки
+  // 3. ETA открытых точек переставляем вслед за новым порядком.
+  //
+  // Раньше пересчитывался только routeOrder, а расчётное время оставалось
+  // приклеенным к своему заказу. После перестановки маршрут выглядел так:
+  // точка №2 к 15:40, точка №3 к 15:10 — время шло назад. Курьер видел
+  // бессмыслицу, а плашка «опоздание» на дашборде считалась по чужому ETA.
+  //
+  // Новых значений не выдумываем: берём те же ETA, что уже были, и
+  // раскладываем по возрастанию вдоль нового порядка объезда. Сумма
+  // времени по маршруту не меняется, меняется только их привязка.
+  const openEtas = ordered
+    .map((p) => p.eta)
+    .filter((e): e is string => !!e)
+    .sort((a, b) => {
+      const [ah, am] = a.split(":").map(Number);
+      const [bh, bm] = b.split(":").map(Number);
+      return ah * 60 + am - (bh * 60 + bm);
+    });
+
+  const etaByPoint = new Map<string, string>();
+  let etaCursor = 0;
+  for (const p of ordered) {
+    // Точке без ETA новое время не назначаем: пустое поле означает, что
+    // маршрут ещё не считали, и придумывать за него нечего
+    if (!p.eta) continue;
+    etaByPoint.set(p.id, openEtas[etaCursor++]);
+  }
+
+  // 4. Записываем новую нумерацию и ETA, трогая только изменившиеся точки
   const final = [...closed, ...ordered];
   let changed = 0;
 
   await prisma.$transaction(
     final
-      .map((p, i) => ({ p, order: i + 1 }))
-      .filter(({ p, order }) => p.routeOrder !== order)
-      .map(({ p, order }) => {
+      .map((p, i) => ({ p, order: i + 1, eta: etaByPoint.get(p.id) }))
+      .filter(({ p, order, eta }) => p.routeOrder !== order || (eta !== undefined && eta !== p.eta))
+      .map(({ p, order, eta }) => {
         changed++;
-        return prisma.order.update({ where: { id: p.id }, data: { routeOrder: order } });
+        return prisma.order.update({
+          where: { id: p.id },
+          data: eta !== undefined && eta !== p.eta ? { routeOrder: order, eta } : { routeOrder: order },
+        });
       })
   );
 
