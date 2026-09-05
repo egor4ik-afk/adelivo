@@ -695,10 +695,6 @@ export async function upsertOrder(crmOrder: CrmOrder) {
     if (!crmHasCourier && weHaveCourier) {
       updateFields.courierId = existing.courierId;
       updateFields.courier = existing.courier;
-      console.warn(
-        `[CRM] Заказ ${data.crmId}: в CRM курьера нет, оставляем назначенного у нас — ` +
-        `${existing.courier ?? existing.courierId}. Проверьте, что курьер заведён в справочнике CRM.`
-      );
     }
 
     const dbAddr  = existing.address?.trim() || "";

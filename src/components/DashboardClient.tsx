@@ -178,6 +178,8 @@ export function DashboardClient({ user }: { user: User }) {
   const clustererRef = useRef<any>(null);
   const couriersGeoObjectsRef = useRef<any>(null);
   const basesCollectionRef = useRef<any>(null); // 🔥 ДОБАВИТЬ ЭТО
+  // Полигоны зон доставки: держим ссылку, чтобы снять их при смене города
+  const zonesRef = useRef<any>(null);
   const multiRouteRef = useRef<any>(null); // Для создания нового маршрута
   // 🔥 ДОБАВЛЯЕМ ЭТО (Для текущих активных маршрутов):
   const activeRoutesRefs = useRef<any[]>([]); const clickedFromMapRef = useRef(false); // пока не включено
@@ -475,6 +477,33 @@ export function DashboardClient({ user }: { user: User }) {
 
   const courierOptions = [{ value: "ALL", label: "Все курьеры" }, { value: "UNASSIGNED", label: "Не назначен" }, ...sortedCouriers];
 
+  /**
+   * Сводка дня: сколько заказов и сколько курьеров на смене.
+   *
+   * Считается по выбранной дате и без учёта фильтров: оператору нужна
+   * картина смены целиком, а не то, что осталось после отбора по статусу.
+   * «7 (5)» читается как «семь курьеров на смене, пятеро уже с заказами».
+   */
+  const dayStats = useMemo(() => {
+    const dayOrders = orders.filter((o) => {
+      const oDate = o.deliveryDate || (o.crmCreatedAt ? o.crmCreatedAt.split("T")[0] : null);
+      return oDate === filterDate;
+    });
+
+    const onShift = dbCouriers.filter(
+      (c) => c.isActive && c.shifts.some((sh) => sh.date === filterDate)
+    );
+    const busyNames = new Set(dayOrders.map((o) => o.courier).filter(Boolean));
+
+    return {
+      orders: dayOrders.length,
+      // Без курьера — то, что ещё предстоит раздать
+      unassigned: dayOrders.filter((o) => !o.courierId).length,
+      couriers: onShift.length,
+      couriersBusy: onShift.filter((c) => busyNames.has(c.fullName)).length,
+    };
+  }, [orders, dbCouriers, filterDate]);
+
   const dateAndStatusOrders = orders.filter(o => {
     const oDate = o.deliveryDate || (o.crmCreatedAt ? o.crmCreatedAt.split('T')[0] : null);
     if (oDate !== filterDate) return false;
@@ -653,41 +682,8 @@ export function DashboardClient({ user }: { user: User }) {
       const courierColl = new window.ymaps.GeoObjectCollection();
       map.geoObjects.add(courierColl);
 
-      // Зоны нарисованы только для Москвы. В остальных городах KML грузить
-      // бессмысленно — полигоны легли бы поверх чужой карты.
-      if (!activeCity.hasZones) {
-        clustererRef.current = clusterer;
-        couriersGeoObjectsRef.current = courierColl;
-        ymapRef.current = map;
-        setMapReady(true);
-        return;
-      }
-
-      const constructorUrl = "/zones.kml";
-      (window.ymaps as any).geoXml?.load?.(constructorUrl)
-        .then((res: any) => {
-          if (!mounted) return;
-          const applyStyles = (collection: any) => {
-            if (collection && typeof collection.each === 'function') {
-              collection.each((obj: any) => {
-                if (obj.geometry) {
-                  obj.options.set({
-                    fillOpacity: 0.15,
-                    strokeOpacity: 0.7,
-                    interactivityModel: 'default#transparent',
-                    hasBalloon: false,
-                    hasHint: false,
-                    openBalloonOnClick: false
-                  });
-                } else { applyStyles(obj); }
-              });
-            }
-          };
-          applyStyles(res.geoObjects);
-          map.geoObjects.add(res.geoObjects);
-        })
-        .catch((err: any) => console.error("Ошибка загрузки локальных зон:", err));
-
+      // Зоны доставки грузятся отдельным эффектом ниже: здесь карта ещё
+      // не знает, в каком городе окажутся заказы.
       clustererRef.current = clusterer;
       couriersGeoObjectsRef.current = courierColl;
       ymapRef.current = map;
@@ -695,6 +691,65 @@ export function DashboardClient({ user }: { user: User }) {
     });
     return () => { mounted = false; };
   }, [basesLoaded, activeCity, activeShop, baseCoordsFor]);
+
+  // 1a. Зоны доставки (zones.kml)
+  //
+  // Отдельным эффектом, а не внутри инициализации карты. Раньше загрузка
+  // стояла там же и пряталась за проверкой activeCity.hasZones. Проблема
+  // в моменте: карта создаётся сразу после загрузки баз, когда заказов
+  // ещё нет, и activeShop берётся как shopBases[0] — то есть первый
+  // магазин компании, вовсе не обязательно московский. Для немосковского
+  // hasZones === false, эффект уходил в ранний return, а второй раз карта
+  // не создаётся. Так зоны Москвы и перестали появляться.
+  //
+  // Теперь эффект следит за городом: город сменился — старые полигоны
+  // снимаются, новые грузятся, если для города они есть.
+  useEffect(() => {
+    const map = ymapRef.current;
+    if (!mapReady || !map) return;
+
+    // Снимаем зоны прошлого города
+    if (zonesRef.current) {
+      map.geoObjects.remove(zonesRef.current);
+      zonesRef.current = null;
+    }
+    if (!activeCity.hasZones) return;
+
+    let cancelled = false;
+    const geoXml = (window.ymaps as any)?.geoXml;
+    if (!geoXml?.load) {
+      console.warn("[Карта] Модуль geoXml недоступен, зоны не загружены");
+      return;
+    }
+
+    geoXml.load("/zones.kml")
+      .then((res: any) => {
+        if (cancelled || !ymapRef.current) return;
+
+        const applyStyles = (collection: any) => {
+          if (collection && typeof collection.each === "function") {
+            collection.each((obj: any) => {
+              if (obj.geometry) {
+                obj.options.set({
+                  fillOpacity: 0.15,
+                  strokeOpacity: 0.7,
+                  interactivityModel: "default#transparent",
+                  hasBalloon: false,
+                  hasHint: false,
+                  openBalloonOnClick: false,
+                });
+              } else { applyStyles(obj); }
+            });
+          }
+        };
+        applyStyles(res.geoObjects);
+        ymapRef.current.geoObjects.add(res.geoObjects);
+        zonesRef.current = res.geoObjects;
+      })
+      .catch((err: any) => console.error("Ошибка загрузки локальных зон:", err));
+
+    return () => { cancelled = true; };
+  }, [mapReady, activeCity]);
 
   // 2. Отрисовка баз магазинов (только с заполненными координатами)
   useEffect(() => {
@@ -1623,7 +1678,7 @@ export function DashboardClient({ user }: { user: User }) {
                   setManualDepartureTime(r.plannedDepartureTime || "");
                   setIsDepartureEdited(!!r.plannedDepartureTime);
                 }}
-                style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "all 0.2s" }}
+                style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "stretch", gap: 10, transition: "all 0.2s" }}
               >
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
                   {/* Иконка Drag & Drop */}
@@ -1699,7 +1754,33 @@ export function DashboardClient({ user }: { user: User }) {
                     )}
                   </div>
                 </div>
-                <div style={{ fontSize: 20, color: "var(--color-text-3)" }}>✏️</div>
+                {/* Правая колонка: карандаш сверху, «На карте» прижата вниз */}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "space-between", flexShrink: 0, gap: 8 }}>
+                  <div style={{ fontSize: 20, color: "var(--color-text-3)" }}>✏️</div>
+
+                  {/* Тот же переход, что и по клику на карточку, плюс сразу
+                      открывается карта. stopPropagation обязателен: без него
+                      сработал бы и onClick самой карточки, и мы бы дважды
+                      выставили одно и то же состояние. */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openRouteOnMap(r, rCourier);
+                    }}
+                    title="Показать маршрут на карте"
+                    style={{
+                      display: "flex", alignItems: "center", gap: 5,
+                      padding: "5px 9px", borderRadius: 7,
+                      border: "1px solid var(--color-border)",
+                      background: "var(--color-card)",
+                      color: "var(--color-text-2)",
+                      fontSize: 11, fontWeight: 700,
+                      cursor: "pointer", whiteSpace: "nowrap",
+                    }}
+                  >
+                    🗺️ На карте
+                  </button>
+                </div>
               </div>
             )
           })}
@@ -2139,6 +2220,74 @@ export function DashboardClient({ user }: { user: User }) {
     boxSizing: "border-box",
     boxShadow: "0 1px 2px rgba(0,0,0,0.02)"
   };
+  /**
+   * Открыть существующий маршрут на карте.
+   *
+   * Ровно то же состояние, что выставляет клик по карточке, плюс переход
+   * на вкладку карты и включённые линии маршрута. Вынесено в функцию,
+   * чтобы карточка и кнопка не разъезжались: раньше набор из шести
+   * setState был записан прямо в onClick карточки.
+   */
+  const openRouteOnMap = (r: any, rCourier?: DbCourier) => {
+    setBulkSelectedIds(r.orders.map((o: any) => o.id));
+    setBulkCourier(String(r.courierId));
+    setEditingRouteId(r.id);
+    setRouteTabMode("new");
+    setRouteType(rCourier?.isAuto ? "auto" : "mt");
+    setManualDepartureTime(r.plannedDepartureTime || "");
+    setIsDepartureEdited(!!r.plannedDepartureTime);
+
+    // Линия рисуется только в режиме карты и при включённых линиях
+    setRouteTab("map");
+    setShowRouteLines(true);
+    // На мобильном список и карта — разные экраны, иначе кнопка сработает
+    // «вникуда»: состояние выставится, а человек останется в списке
+    if (isMobile) setMobileView("map");
+  };
+
+  /** Плашка сводки: заказы и курьеры на смене. */
+  const StatsChip = ({ compact }: { compact?: boolean }) => (
+    <div
+      style={{
+        height: 34,
+        display: "flex",
+        alignItems: "center",
+        gap: compact ? 8 : 10,
+        padding: "0 10px",
+        borderRadius: 8,
+        border: "1px solid var(--color-border)",
+        background: "var(--color-surface)",
+        fontSize: 13,
+        fontWeight: 700,
+        whiteSpace: "nowrap",
+        flexShrink: 0,
+        boxSizing: "border-box",
+      }}
+      title={
+        `Заказов на ${filterDate.split("-").reverse().join(".")}: ${dayStats.orders}` +
+        (dayStats.unassigned > 0 ? `, из них без курьера: ${dayStats.unassigned}` : "") +
+        `. Курьеров на смене: ${dayStats.couriers}, из них с заказами: ${dayStats.couriersBusy}`
+      }
+    >
+      <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <span style={{ fontSize: 12 }}>📦</span>
+        <span style={{ color: "var(--color-text)" }}>{dayStats.orders}</span>
+        {/* Без курьера — то, что горит. Показываем только когда такие есть */}
+        {dayStats.unassigned > 0 && (
+          <span style={{ color: "#d94040", fontSize: 12 }}>({dayStats.unassigned})</span>
+        )}
+      </span>
+
+      <span style={{ width: 1, height: 16, background: "var(--color-border)" }} />
+
+      <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <span style={{ fontSize: 12 }}>🚚</span>
+        <span style={{ color: "var(--color-text)" }}>{dayStats.couriers}</span>
+        <span style={{ color: "var(--color-text-3)", fontSize: 12 }}>({dayStats.couriersBusy})</span>
+      </span>
+    </div>
+  );
+
   return (
     <div style={isMobile ? sm.app : s.app}>
 
@@ -2148,8 +2297,8 @@ export function DashboardClient({ user }: { user: User }) {
         onWheel={(e) => { e.currentTarget.scrollLeft += e.deltaY; e.preventDefault(); }}
       >
         {/* 1. Логотип */}
-        <Link href="/about" style={{ textDecoration: "none" }}>
-          <div style={s.logo}>
+        <Link href="/about" style={{ textDecoration: "none", flexShrink: 0 }}>
+          <div style={{ ...s.logo, gap: isMobile ? 0 : 7 }}>
             <img src="/favicon.svg" alt="Logo" style={{ width: 22, height: 22 }} />
             {!isMobile && "ADelivo"}
           </div>
@@ -2254,6 +2403,9 @@ export function DashboardClient({ user }: { user: User }) {
               )}
             </div>
 
+            {/* Сводка между фильтром курьеров и кнопкой маршрутов */}
+            <StatsChip />
+
             <button onClick={() => { setIsBulkMode(!isBulkMode); setRouteTab("map"); setBulkSelectedIds([]); setSelectedId(null); setIsDetailVisible(false); setRouteTabMode("new"); setEditingRouteId(null); setBulkCourier(""); setRouteType("mt"); }} style={{ ...topbarBtnStyle, background: isBulkMode ? "var(--color-text)" : "var(--color-card)", color: isBulkMode ? "#fff" : "var(--color-text)", borderColor: isBulkMode ? "var(--color-text)" : "var(--color-border)" }}>
               {isBulkMode ? "✕ Маршруты" : "📍 Маршруты"}
             </button>
@@ -2265,6 +2417,11 @@ export function DashboardClient({ user }: { user: User }) {
             </div>
           </>
         )}
+
+        {/* На мобильном первый ряд после логотипа и бургера пустовал —
+            фильтры уехали во второй ряд. Занимаем это место сводкой:
+            заказы и курьеры на смене нужны оператору постоянно. */}
+        {isMobile && <StatsChip compact />}
 
         {/* 🔥 ИСПРАВЛЕННЫЙ СПЕЙСЕР (БЕЗ 100% ШИРИНЫ НА МОБИЛКЕ) */}
         <div style={{ flex: 1 }} />
@@ -2296,9 +2453,13 @@ export function DashboardClient({ user }: { user: User }) {
 
         {invalid.length > 0 && <button style={s.alertBadge} onClick={() => { setAlertsOpen(!alertsOpen); setProfileOpen(false); }}>⚠ {!isMobile && `${invalid.length}`}</button>}
 
-        {!isMobile && lastSync && <span style={{ ...s.syncLabel, marginLeft: 'auto' }}>обновлено {lastSync}</span>}
+        {!isMobile && lastSync && <span style={s.syncLabel}>обновлено {lastSync}</span>}
 
-        <button style={{ ...s.userBtn, padding: 0, overflow: "hidden", marginLeft: isMobile ? "auto" : 0 }} onClick={() => { setProfileOpen(!profileOpen); setAlertsOpen(false); }}>
+        {/* marginLeft: auto здесь больше нет. Вместе со спейсером выше
+            получалось два растяжения подряд, и пустота уезжала между
+            колокольчиком и аватаром: правая группа кнопок разъезжалась.
+            Отступ держит один спейсер, кнопки идут вплотную. */}
+        <button style={{ ...s.userBtn, padding: 0, overflow: "hidden", flexShrink: 0 }} onClick={() => { setProfileOpen(!profileOpen); setAlertsOpen(false); }}>
           {user.avatarUrl ? (
             <img src={user.avatarUrl} alt="Profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           ) : (
@@ -2785,7 +2946,10 @@ const s: Record<string, React.CSSProperties> = {
 
 const sm: Record<string, React.CSSProperties> = {
   app: { display: "flex", flexDirection: "column", height: "100vh", fontFamily: "Manrope, system-ui, sans-serif", background: "var(--color-bg)", overflow: "hidden" },
-  topbar: { display: "flex", alignItems: "center", gap: 6, padding: "0 10px", height: 52, background: "var(--color-card)", borderBottom: "1px solid var(--color-border)", flexShrink: 0, zIndex: 100, position: "relative", overflow: "visible", flexWrap: "nowrap" },
+  // gap уменьшен с 6 до 5, отступы с 10 до 8: на 360px в ряд встают
+  // логотип, бургер, сводка, настройки карты, колокольчик и аватар.
+  // С прежними значениями аватар выдавливало за край экрана.
+  topbar: { display: "flex", alignItems: "center", gap: 5, padding: "0 8px", height: 52, background: "var(--color-card)", borderBottom: "1px solid var(--color-border)", flexShrink: 0, zIndex: 100, position: "relative", overflow: "visible", flexWrap: "nowrap" },
   mobileSlotsWrap: { display: "flex", gap: 4, padding: "6px 10px", background: "var(--color-card)", borderBottom: "1px solid var(--color-border)", overflowX: "auto", flexShrink: 0 },
   body: { display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", minHeight: 0 },
   map: { width: "100%", minHeight: 200 },
